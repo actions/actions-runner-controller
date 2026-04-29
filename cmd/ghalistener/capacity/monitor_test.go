@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -14,7 +15,11 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
+
+	"github.com/actions/actions-runner-controller/cmd/ghalistener/metrics"
 )
 
 // newTestMonitor creates a Monitor wired to a fake K8s client (with
@@ -45,6 +50,7 @@ func newTestMonitor(t *testing.T, cfg Config, hudRows []QueuedJobsForRunner) (*M
 		clientset:     cs,
 		setMaxRunners: setMax,
 		logger:        logger.With("component", "capacity-monitor"),
+		recorder:      metrics.DiscardCapacity,
 	}
 
 	if hudRows != nil {
@@ -450,4 +456,265 @@ func TestRetryWithBackoff_RespectsContextCancellation(t *testing.T) {
 	})
 	// First attempt runs (no backoff wait), fails, then backoff select sees ctx.Done()
 	assert.ErrorIs(t, err, context.Canceled)
+}
+
+// ---- capacity recorder wiring tests ----
+//
+// These tests assert that the monitor calls the right CapacityRecorder
+// methods at the right times. They do NOT exhaustively test every
+// metric — the metrics package has its own tests for that. The goal here
+// is to catch wiring drift: if the call site moves or is dropped, these
+// tests fail.
+
+// fakeCapacityRecorder is a CapacityRecorder that records every call so
+// tests can assert which methods were invoked and with what arguments.
+type fakeCapacityRecorder struct {
+	mu sync.Mutex
+
+	proactiveCapacity    int
+	hudEnabled           bool
+	queuedJobs           int
+	desiredPairs         int
+	pairs                int
+	runningPairs         int
+	advertisedMaxRunners int
+
+	// Map (role, phase) -> latest count.
+	placeholderPods map[string]map[string]int
+
+	// Map phase -> last successful time.
+	lastSuccess map[string]time.Time
+
+	// Counts of method invocations for assertions.
+	setProactiveCapacityCalls    int
+	setHUDEnabledCalls           int
+	setQueuedJobsCalls           int
+	setDesiredPairsCalls         int
+	setPairsCalls                int
+	setRunningPairsCalls         int
+	setPlaceholderPodsCalls      int
+	setAdvertisedMaxRunnersCalls int
+	setReconcileLastSuccessCalls map[string]int
+	observeReconcileCalls        map[string]int
+	observeHUDRequestCalls       map[string]int
+	incHUDRequestsCalls          map[string]int
+	incPairCreatesCalls          map[string]int
+	incPairDeletesCalls          map[string]int // key: reason+":"+result
+	incReconcileSkipsCalls       map[string]int
+}
+
+func newFakeCapacityRecorder() *fakeCapacityRecorder {
+	return &fakeCapacityRecorder{
+		placeholderPods:              make(map[string]map[string]int),
+		lastSuccess:                  make(map[string]time.Time),
+		setReconcileLastSuccessCalls: make(map[string]int),
+		observeReconcileCalls:        make(map[string]int),
+		observeHUDRequestCalls:       make(map[string]int),
+		incHUDRequestsCalls:          make(map[string]int),
+		incPairCreatesCalls:          make(map[string]int),
+		incPairDeletesCalls:          make(map[string]int),
+		incReconcileSkipsCalls:       make(map[string]int),
+	}
+}
+
+func (f *fakeCapacityRecorder) SetProactiveCapacity(v int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.proactiveCapacity = v
+	f.setProactiveCapacityCalls++
+}
+func (f *fakeCapacityRecorder) SetHUDEnabled(b bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.hudEnabled = b
+	f.setHUDEnabledCalls++
+}
+func (f *fakeCapacityRecorder) SetQueuedJobs(v int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.queuedJobs = v
+	f.setQueuedJobsCalls++
+}
+func (f *fakeCapacityRecorder) SetDesiredPairs(v int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.desiredPairs = v
+	f.setDesiredPairsCalls++
+}
+func (f *fakeCapacityRecorder) SetPairs(v int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.pairs = v
+	f.setPairsCalls++
+}
+func (f *fakeCapacityRecorder) SetRunningPairs(v int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.runningPairs = v
+	f.setRunningPairsCalls++
+}
+func (f *fakeCapacityRecorder) SetPlaceholderPods(role, phase string, v int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.placeholderPods[role] == nil {
+		f.placeholderPods[role] = make(map[string]int)
+	}
+	f.placeholderPods[role][phase] = v
+	f.setPlaceholderPodsCalls++
+}
+func (f *fakeCapacityRecorder) SetAdvertisedMaxRunners(v int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.advertisedMaxRunners = v
+	f.setAdvertisedMaxRunnersCalls++
+}
+func (f *fakeCapacityRecorder) SetReconcileLastSuccess(phase string, t time.Time) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.lastSuccess[phase] = t
+	f.setReconcileLastSuccessCalls[phase]++
+}
+func (f *fakeCapacityRecorder) ObserveReconcileDuration(phase string, _ time.Duration) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.observeReconcileCalls[phase]++
+}
+func (f *fakeCapacityRecorder) ObserveHUDRequest(result string, _ time.Duration) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.observeHUDRequestCalls[result]++
+}
+func (f *fakeCapacityRecorder) IncHUDRequests(result string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.incHUDRequestsCalls[result]++
+}
+func (f *fakeCapacityRecorder) IncPairCreates(result string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.incPairCreatesCalls[result]++
+}
+func (f *fakeCapacityRecorder) IncPairDeletes(reason, result string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.incPairDeletesCalls[reason+":"+result]++
+}
+func (f *fakeCapacityRecorder) IncReconcileSkips(reason string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.incReconcileSkipsCalls[reason]++
+}
+
+var _ metrics.CapacityRecorder = (*fakeCapacityRecorder)(nil)
+
+// newTestMonitorWithRecorder is like newTestMonitor but injects a custom
+// recorder so the test can assert metric calls. The fixture mirrors the
+// shape of newTestMonitor exactly — only the recorder changes.
+func newTestMonitorWithRecorder(
+	t *testing.T,
+	cfg Config,
+	rec metrics.CapacityRecorder,
+) (*Monitor, *fake.Clientset, *atomic.Int32) {
+	t.Helper()
+	m, cs, val := newTestMonitor(t, cfg, nil)
+	m.recorder = rec
+	return m, cs, val
+}
+
+// TestProvisioner_RecorderWiring exercises one full provisioner cycle and
+// asserts the gauges + last-success-timestamp landed.
+func TestProvisioner_RecorderWiring(t *testing.T) {
+	cfg := Config{
+		ProactiveCapacity:  3,
+		MaxRunners:         10,
+		PlaceholderTimeout: 5 * time.Minute,
+	}
+	rec := newFakeCapacityRecorder()
+	m, _, _ := newTestMonitorWithRecorder(t, cfg, rec)
+
+	m.reconcileProvisioning(context.Background())
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+
+	assert.Equal(t, 3, rec.desiredPairs, "desired pairs should be set to ProactiveCapacity")
+	assert.GreaterOrEqual(t, rec.setDesiredPairsCalls, 1)
+
+	assert.Equal(t, 0, rec.pairs, "no pairs existed before this cycle")
+	assert.GreaterOrEqual(t, rec.setPairsCalls, 1)
+
+	assert.Equal(t, 1, rec.setReconcileLastSuccessCalls[reconcilePhaseProvisioner],
+		"provisioner success timestamp must be recorded once on the success path")
+	assert.False(t, rec.lastSuccess[reconcilePhaseProvisioner].IsZero())
+
+	// Duration histogram is observed on every cycle (success or fail).
+	assert.Equal(t, 1, rec.observeReconcileCalls[reconcilePhaseProvisioner])
+
+	// Created 3 pairs successfully.
+	assert.Equal(t, 3, rec.incPairCreatesCalls[resultSuccess])
+}
+
+// TestReporter_RecorderWiring exercises one reporter cycle and asserts
+// the advertised-max-runners gauge + last-success-timestamp landed.
+func TestReporter_RecorderWiring(t *testing.T) {
+	cfg := Config{
+		ProactiveCapacity:  2,
+		MaxRunners:         10,
+		PlaceholderTimeout: 5 * time.Minute,
+	}
+	rec := newFakeCapacityRecorder()
+	m, _, _ := newTestMonitorWithRecorder(t, cfg, rec)
+
+	m.reconcileReporting(context.Background())
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+
+	assert.Equal(t, 0, rec.advertisedMaxRunners,
+		"no running pairs/runners yet, capacity is 0")
+	assert.GreaterOrEqual(t, rec.setAdvertisedMaxRunnersCalls, 1)
+
+	assert.Equal(t, 1, rec.setReconcileLastSuccessCalls[reconcilePhaseReporter],
+		"reporter success timestamp must be recorded once on the success path")
+	assert.False(t, rec.lastSuccess[reconcilePhaseReporter].IsZero())
+
+	assert.Equal(t, 1, rec.observeReconcileCalls[reconcilePhaseReporter])
+}
+
+// TestProvisioner_ListPairsError_RecordsSkip simulates a list-pairs error
+// in the provisioner and asserts the skip counter is incremented and
+// the success timestamp is NOT advanced.
+func TestProvisioner_ListPairsError_RecordsSkip(t *testing.T) {
+	cfg := Config{
+		ProactiveCapacity:  1,
+		MaxRunners:         10,
+		PlaceholderTimeout: 5 * time.Minute,
+	}
+	rec := newFakeCapacityRecorder()
+	m, cs, _ := newTestMonitorWithRecorder(t, cfg, rec)
+
+	// Make every Pods().List() call fail. retryWithBackoff will burn
+	// through all attempts, then the provisioner takes the skip path.
+	cs.PrependReactor("list", "pods",
+		func(action k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, fmt.Errorf("synthetic list pods error")
+		},
+	)
+
+	// Use a context with a short deadline so the retry backoffs (1s, 2s, 4s)
+	// are aborted quickly via ctx.Done() instead of running for 7+ seconds.
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	m.reconcileProvisioning(ctx)
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+
+	assert.Equal(t, 1, rec.incReconcileSkipsCalls[skipReasonProvisionerListPairs],
+		"list-pairs error must record a provisioner_list_pairs skip")
+	assert.Equal(t, 0, rec.setReconcileLastSuccessCalls[reconcilePhaseProvisioner],
+		"success timestamp must NOT be set on the skip path")
+	// Duration is still observed even on the skip path.
+	assert.Equal(t, 1, rec.observeReconcileCalls[reconcilePhaseProvisioner])
 }

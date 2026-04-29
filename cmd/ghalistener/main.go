@@ -157,7 +157,14 @@ func run(ctx context.Context, config *config.Config) error {
 			return fmt.Errorf("failed to create k8s client for capacity monitor: %w", err)
 		}
 
-		capMonitor, err := capacity.New(capConfig, k8sClient, listener.SetMaxRunners, logger)
+		// Pass the metrics exporter to the capacity monitor when one is
+		// configured. When metricsExporter is nil, capacity.New falls back
+		// to metrics.DiscardCapacity automatically.
+		var capOptions []capacity.Option
+		if metricsExporter != nil {
+			capOptions = append(capOptions, capacity.WithRecorder(metricsExporter))
+		}
+		capMonitor, err := capacity.New(capConfig, k8sClient, listener.SetMaxRunners, logger, capOptions...)
 		if err != nil {
 			return fmt.Errorf("failed to create capacity monitor: %w", err)
 		}

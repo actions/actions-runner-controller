@@ -25,6 +25,16 @@ const (
 	labelKeyJobWorkflowTarget       = "job_workflow_target"
 	labelKeyEventName               = "event_name"
 	labelKeyJobResult               = "job_result"
+
+	// Capacity-monitor specific label keys.
+	// Distinct value sets per metric (e.g. labelKeyPhase is
+	// {pending, running, failed, succeeded, unknown} on placeholder_pods
+	// but {provisioner, reporter} on the reconcile metrics) — Prometheus
+	// does not enforce shared value spaces across metrics.
+	labelKeyRole   = "role"
+	labelKeyPhase  = "phase"
+	labelKeyResult = "result"
+	labelKeyReason = "reason"
 )
 
 const (
@@ -48,6 +58,40 @@ const (
 	MetricJobExecutionDurationSeconds = "gha_job_execution_duration_seconds"
 )
 
+// Capacity-monitor metrics. These are emitted by the proactive-capacity
+// sub-system (see cmd/ghalistener/capacity) via the CapacityRecorder
+// interface. All entries below MUST also appear in the OSDC chart's
+// `listenerMetrics` block (modules/arc-runners/templates/runner.yaml.tpl)
+// — `installMetrics` silently drops anything missing from that block.
+// The parity test in metrics_test.go enforces this against a fixture
+// in testdata/listener_metrics.yaml.
+const (
+	MetricCapacityProactiveCapacity                = "gha_capacity_proactive_capacity"
+	MetricCapacityHUDEnabled                       = "gha_capacity_hud_enabled"
+	MetricCapacityQueuedJobs                       = "gha_capacity_queued_jobs"
+	MetricCapacityDesiredPairs                     = "gha_capacity_desired_pairs"
+	MetricCapacityPairs                            = "gha_capacity_pairs"
+	MetricCapacityRunningPairs                     = "gha_capacity_running_pairs"
+	MetricCapacityPlaceholderPods                  = "gha_capacity_placeholder_pods"
+	MetricCapacityAdvertisedMaxRunners             = "gha_capacity_advertised_max_runners"
+	MetricCapacityReconcileLastSuccessTimestampSec = "gha_capacity_reconcile_last_success_timestamp_seconds"
+	MetricCapacityReconcileDurationSeconds         = "gha_capacity_reconcile_duration_seconds"
+	MetricCapacityHUDRequestDurationSeconds        = "gha_capacity_hud_request_duration_seconds"
+	MetricCapacityHUDRequestsTotal                 = "gha_capacity_hud_requests_total"
+	MetricCapacityPairCreatesTotal                 = "gha_capacity_pair_creates_total"
+	MetricCapacityPairDeletesTotal                 = "gha_capacity_pair_deletes_total"
+	MetricCapacityReconcileSkipsTotal              = "gha_capacity_reconcile_skips_total"
+)
+
+// Explicit histogram bucket sets for capacity metrics. These are picked
+// for the expected latency distribution of the corresponding code paths
+// — defaultRuntimeBuckets (designed for job runtimes up to 1h) wastes
+// cardinality for sub-second reconcile / HTTP loops.
+var (
+	capacityReconcileBuckets  = []float64{0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60}
+	capacityHUDRequestBuckets = []float64{0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30}
+)
+
 type metricsHelpRegistry struct {
 	counters   map[string]string
 	gauges     map[string]string
@@ -58,6 +102,11 @@ var metricsHelp = metricsHelpRegistry{
 	counters: map[string]string{
 		MetricStartedJobsTotal:   "Total number of jobs started.",
 		MetricCompletedJobsTotal: "Total number of jobs completed.",
+
+		MetricCapacityHUDRequestsTotal:    "Total HUD API call attempts by the proactive-capacity monitor, by result.",
+		MetricCapacityPairCreatesTotal:    "Total runner+placeholder pair creation attempts, by result.",
+		MetricCapacityPairDeletesTotal:    "Total runner+placeholder pair deletion attempts, by reason and result.",
+		MetricCapacityReconcileSkipsTotal: "Total reconcile cycles aborted before completion, by reason.",
 	},
 	gauges: map[string]string{
 		MetricAssignedJobs:      "Number of jobs assigned to this scale set.",
@@ -68,10 +117,23 @@ var metricsHelp = metricsHelpRegistry{
 		MetricMaxRunners:        "Maximum number of runners.",
 		MetricDesiredRunners:    "Number of runners desired by the scale set.",
 		MetricIdleRunners:       "Number of registered runners not running a job.",
+
+		MetricCapacityProactiveCapacity:                "Configured proactiveCapacity value from listener config — target number of pre-warmed runner+placeholder pairs.",
+		MetricCapacityHUDEnabled:                       "1 if HUD API client + token are configured at startup, else 0. Distinguishes 'no HUD data' from 'HUD broken'.",
+		MetricCapacityQueuedJobs:                       "Queued jobs from PyTorch HUD API for this scale set's labels (external queue, distinct from gha_assigned_jobs).",
+		MetricCapacityDesiredPairs:                     "Number of runner+placeholder pairs desired after applying the maxRunners cap.",
+		MetricCapacityPairs:                            "Total existing runner+placeholder pairs (currentPairs).",
+		MetricCapacityRunningPairs:                     "Pairs where both the runner pod and placeholder pod are in Running phase.",
+		MetricCapacityPlaceholderPods:                  "Number of placeholder pods by role (runner|workflow) and phase (Pending|Running|Failed|Succeeded|Unknown). The phase values match Kubernetes corev1.PodPhase.",
+		MetricCapacityAdvertisedMaxRunners:             "X-ScaleSetMaxCapacity value sent to GitHub on the most recent reporter cycle.",
+		MetricCapacityReconcileLastSuccessTimestampSec: "Wall-clock seconds of last successful reconcile per sub-loop. Wedge-detection signal.",
 	},
 	histograms: map[string]string{
 		MetricJobStartupDurationSeconds:   "Time spent waiting for workflow job to get started on the runner owned by the scale set (in seconds).",
 		MetricJobExecutionDurationSeconds: "Time spent executing workflow jobs by the scale set (in seconds).",
+
+		MetricCapacityReconcileDurationSeconds:  "Reconcile loop latency in seconds, per sub-loop (provisioner|reporter).",
+		MetricCapacityHUDRequestDurationSeconds: "HUD API call latency in seconds per attempt, by result.",
 	},
 }
 
@@ -107,17 +169,50 @@ type Recorder interface {
 	RecordDesiredRunners(count int)
 }
 
+// CapacityRecorder is the metric surface used by the proactive-capacity
+// monitor (see cmd/ghalistener/capacity). It is intentionally separate
+// from Recorder so the listener does not have to implement capacity
+// methods. Implementations: *exporter (real) and *discard (no-op).
+//
+// All methods are scoped to the scale set that owns the exporter; the
+// exporter implementation injects the scale-set 5-tuple labels under
+// the hood. Callers only supply the metric-specific extra labels.
+type CapacityRecorder interface {
+	SetProactiveCapacity(value int)
+	SetHUDEnabled(enabled bool)
+	SetQueuedJobs(value int)
+	SetDesiredPairs(value int)
+	SetPairs(value int)
+	SetRunningPairs(value int)
+	SetPlaceholderPods(role, phase string, value int)
+	SetAdvertisedMaxRunners(value int)
+	SetReconcileLastSuccess(phase string, t time.Time)
+	ObserveReconcileDuration(phase string, d time.Duration)
+	ObserveHUDRequest(result string, d time.Duration)
+	IncHUDRequests(result string)
+	IncPairCreates(result string)
+	IncPairDeletes(reason, result string)
+	IncReconcileSkips(reason string)
+}
+
 type ServerExporter interface {
 	Recorder
+	CapacityRecorder
 	ListenAndServe(ctx context.Context) error
 }
 
 var (
-	_ Recorder       = &discard{}
-	_ ServerExporter = &exporter{}
+	_ Recorder         = &discard{}
+	_ CapacityRecorder = &discard{}
+	_ ServerExporter   = &exporter{}
+	_ CapacityRecorder = &exporter{}
 )
 
 var Discard Recorder = &discard{}
+
+// DiscardCapacity is the no-op CapacityRecorder. Use as the default
+// when capacity metrics are not wired up (e.g. in tests).
+var DiscardCapacity CapacityRecorder = &discard{}
 
 type exporter struct {
 	logger         *slog.Logger
@@ -159,6 +254,26 @@ type ExporterConfig struct {
 	Metrics           *v1alpha1.MetricsConfig
 }
 
+// scaleSetTupleLabels is the 5-tuple identifying a scale set, used as
+// the base label set for every capacity-monitor metric.
+var scaleSetTupleLabels = []string{
+	labelKeyRunnerScaleSetName,
+	labelKeyRunnerScaleSetNamespace,
+	labelKeyEnterprise,
+	labelKeyOrganization,
+	labelKeyRepository,
+}
+
+// withExtraLabels returns a new slice composed of the scale-set 5-tuple
+// followed by the provided extra labels — used to build per-metric label
+// lists for capacity metrics without mutating the shared slice.
+func withExtraLabels(extra ...string) []string {
+	out := make([]string, 0, len(scaleSetTupleLabels)+len(extra))
+	out = append(out, scaleSetTupleLabels...)
+	out = append(out, extra...)
+	return out
+}
+
 var defaultMetrics = v1alpha1.MetricsConfig{
 	Counters: map[string]*v1alpha1.CounterMetric{
 		MetricStartedJobsTotal: {
@@ -179,6 +294,18 @@ var defaultMetrics = v1alpha1.MetricsConfig{
 				labelKeyEventName,
 				labelKeyJobResult,
 			},
+		},
+		MetricCapacityHUDRequestsTotal: {
+			Labels: withExtraLabels(labelKeyResult),
+		},
+		MetricCapacityPairCreatesTotal: {
+			Labels: withExtraLabels(labelKeyResult),
+		},
+		MetricCapacityPairDeletesTotal: {
+			Labels: withExtraLabels(labelKeyReason, labelKeyResult),
+		},
+		MetricCapacityReconcileSkipsTotal: {
+			Labels: withExtraLabels(labelKeyReason),
 		},
 	},
 	Gauges: map[string]*v1alpha1.GaugeMetric{
@@ -254,6 +381,33 @@ var defaultMetrics = v1alpha1.MetricsConfig{
 				labelKeyRunnerScaleSetNamespace,
 			},
 		},
+		MetricCapacityProactiveCapacity: {
+			Labels: withExtraLabels(),
+		},
+		MetricCapacityHUDEnabled: {
+			Labels: withExtraLabels(),
+		},
+		MetricCapacityQueuedJobs: {
+			Labels: withExtraLabels(),
+		},
+		MetricCapacityDesiredPairs: {
+			Labels: withExtraLabels(),
+		},
+		MetricCapacityPairs: {
+			Labels: withExtraLabels(),
+		},
+		MetricCapacityRunningPairs: {
+			Labels: withExtraLabels(),
+		},
+		MetricCapacityPlaceholderPods: {
+			Labels: withExtraLabels(labelKeyRole, labelKeyPhase),
+		},
+		MetricCapacityAdvertisedMaxRunners: {
+			Labels: withExtraLabels(),
+		},
+		MetricCapacityReconcileLastSuccessTimestampSec: {
+			Labels: withExtraLabels(labelKeyPhase),
+		},
 	},
 	Histograms: map[string]*v1alpha1.HistogramMetric{
 		MetricJobStartupDurationSeconds: {
@@ -276,6 +430,14 @@ var defaultMetrics = v1alpha1.MetricsConfig{
 				labelKeyJobResult,
 			},
 			Buckets: defaultRuntimeBuckets,
+		},
+		MetricCapacityReconcileDurationSeconds: {
+			Labels:  withExtraLabels(labelKeyPhase),
+			Buckets: capacityReconcileBuckets,
+		},
+		MetricCapacityHUDRequestDurationSeconds: {
+			Labels:  withExtraLabels(labelKeyResult),
+			Buckets: capacityHUDRequestBuckets,
 		},
 	},
 }
@@ -504,6 +666,106 @@ func (e *exporter) RecordDesiredRunners(count int) {
 	e.setGauge(MetricDesiredRunners, e.scaleSetLabels, float64(count))
 }
 
+// capacityLabels returns a labels map composed of the scale-set 5-tuple
+// plus the provided extra label key/value pairs (variadic, alternating).
+// Caller is responsible for passing an even number of strings; a stray
+// trailing key is dropped silently to keep the helper a one-liner at
+// call sites (the metric registration step would already have failed
+// noisily if the label set were malformed).
+func (e *exporter) capacityLabels(extras ...string) prometheus.Labels {
+	labels := make(prometheus.Labels, len(e.scaleSetLabels)+len(extras)/2)
+	for k, v := range e.scaleSetLabels {
+		labels[k] = v
+	}
+	for i := 0; i+1 < len(extras); i += 2 {
+		labels[extras[i]] = extras[i+1]
+	}
+	return labels
+}
+
+func (e *exporter) SetProactiveCapacity(value int) {
+	e.setGauge(MetricCapacityProactiveCapacity, e.scaleSetLabels, float64(value))
+}
+
+func (e *exporter) SetHUDEnabled(enabled bool) {
+	v := 0.0
+	if enabled {
+		v = 1.0
+	}
+	e.setGauge(MetricCapacityHUDEnabled, e.scaleSetLabels, v)
+}
+
+func (e *exporter) SetQueuedJobs(value int) {
+	e.setGauge(MetricCapacityQueuedJobs, e.scaleSetLabels, float64(value))
+}
+
+func (e *exporter) SetDesiredPairs(value int) {
+	e.setGauge(MetricCapacityDesiredPairs, e.scaleSetLabels, float64(value))
+}
+
+func (e *exporter) SetPairs(value int) {
+	e.setGauge(MetricCapacityPairs, e.scaleSetLabels, float64(value))
+}
+
+func (e *exporter) SetRunningPairs(value int) {
+	e.setGauge(MetricCapacityRunningPairs, e.scaleSetLabels, float64(value))
+}
+
+func (e *exporter) SetPlaceholderPods(role, phase string, value int) {
+	e.setGauge(
+		MetricCapacityPlaceholderPods,
+		e.capacityLabels(labelKeyRole, role, labelKeyPhase, phase),
+		float64(value),
+	)
+}
+
+func (e *exporter) SetAdvertisedMaxRunners(value int) {
+	e.setGauge(MetricCapacityAdvertisedMaxRunners, e.scaleSetLabels, float64(value))
+}
+
+func (e *exporter) SetReconcileLastSuccess(phase string, t time.Time) {
+	e.setGauge(
+		MetricCapacityReconcileLastSuccessTimestampSec,
+		e.capacityLabels(labelKeyPhase, phase),
+		float64(t.Unix()),
+	)
+}
+
+func (e *exporter) ObserveReconcileDuration(phase string, d time.Duration) {
+	e.observeHistogram(
+		MetricCapacityReconcileDurationSeconds,
+		e.capacityLabels(labelKeyPhase, phase),
+		d.Seconds(),
+	)
+}
+
+func (e *exporter) ObserveHUDRequest(result string, d time.Duration) {
+	e.observeHistogram(
+		MetricCapacityHUDRequestDurationSeconds,
+		e.capacityLabels(labelKeyResult, result),
+		d.Seconds(),
+	)
+}
+
+func (e *exporter) IncHUDRequests(result string) {
+	e.incCounter(MetricCapacityHUDRequestsTotal, e.capacityLabels(labelKeyResult, result))
+}
+
+func (e *exporter) IncPairCreates(result string) {
+	e.incCounter(MetricCapacityPairCreatesTotal, e.capacityLabels(labelKeyResult, result))
+}
+
+func (e *exporter) IncPairDeletes(reason, result string) {
+	e.incCounter(
+		MetricCapacityPairDeletesTotal,
+		e.capacityLabels(labelKeyReason, reason, labelKeyResult, result),
+	)
+}
+
+func (e *exporter) IncReconcileSkips(reason string) {
+	e.incCounter(MetricCapacityReconcileSkipsTotal, e.capacityLabels(labelKeyReason, reason))
+}
+
 type discard struct{}
 
 func (*discard) RecordStatic(int, int)                              {}
@@ -511,6 +773,25 @@ func (*discard) RecordStatistics(*scaleset.RunnerScaleSetStatistic) {}
 func (*discard) RecordJobStarted(*scaleset.JobStarted)              {}
 func (*discard) RecordJobCompleted(*scaleset.JobCompleted)          {}
 func (*discard) RecordDesiredRunners(int)                           {}
+
+// CapacityRecorder no-op implementations. Each method is a stub so
+// callers can hold a CapacityRecorder of `&discard{}` (i.e. DiscardCapacity)
+// without nil-checking before every call.
+func (*discard) SetProactiveCapacity(int)                       {}
+func (*discard) SetHUDEnabled(bool)                             {}
+func (*discard) SetQueuedJobs(int)                              {}
+func (*discard) SetDesiredPairs(int)                            {}
+func (*discard) SetPairs(int)                                   {}
+func (*discard) SetRunningPairs(int)                            {}
+func (*discard) SetPlaceholderPods(string, string, int)         {}
+func (*discard) SetAdvertisedMaxRunners(int)                    {}
+func (*discard) SetReconcileLastSuccess(string, time.Time)      {}
+func (*discard) ObserveReconcileDuration(string, time.Duration) {}
+func (*discard) ObserveHUDRequest(string, time.Duration)        {}
+func (*discard) IncHUDRequests(string)                          {}
+func (*discard) IncPairCreates(string)                          {}
+func (*discard) IncPairDeletes(string, string)                  {}
+func (*discard) IncReconcileSkips(string)                       {}
 
 var defaultRuntimeBuckets []float64 = []float64{
 	0.01,

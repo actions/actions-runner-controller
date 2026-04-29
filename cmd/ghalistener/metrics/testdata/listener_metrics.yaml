@@ -1,0 +1,127 @@
+# This fixture mirrors the deployer's listenerMetrics allowlist; keep in sync with whatever chart/config consumes the metrics.
+# `listenerMetrics` block.
+# Keep this in sync with the chart template — the chart silently drops
+# any metric not listed here, so the parity test in metrics_test.go
+# uses this fixture to enforce the chart-side allowlist matches the
+# Go-side `metricsHelp` registry.
+listenerMetrics:
+  counters:
+    gha_started_jobs_total:
+      labels:
+        - repository
+        - organization
+        - enterprise
+        - job_workflow_name
+    gha_completed_jobs_total:
+      labels:
+        - repository
+        - organization
+        - enterprise
+        - job_result
+        - job_workflow_name
+    gha_capacity_hud_requests_total:
+      labels:
+        - name
+        - namespace
+        - repository
+        - organization
+        - enterprise
+        - result
+    gha_capacity_pair_creates_total:
+      labels:
+        - name
+        - namespace
+        - repository
+        - organization
+        - enterprise
+        - result
+    gha_capacity_pair_deletes_total:
+      labels:
+        - name
+        - namespace
+        - repository
+        - organization
+        - enterprise
+        - reason
+        - result
+    gha_capacity_reconcile_skips_total:
+      labels:
+        - name
+        - namespace
+        - repository
+        - organization
+        - enterprise
+        - reason
+  gauges:
+    gha_assigned_jobs:
+      labels: ["name", "namespace", "repository", "organization", "enterprise"]
+    gha_running_jobs:
+      labels: ["name", "namespace", "repository", "organization", "enterprise"]
+    gha_registered_runners:
+      labels: ["name", "namespace", "repository", "organization", "enterprise"]
+    gha_busy_runners:
+      labels: ["name", "namespace", "repository", "organization", "enterprise"]
+    gha_min_runners:
+      labels: ["name", "namespace", "repository", "organization", "enterprise"]
+    gha_max_runners:
+      labels: ["name", "namespace", "repository", "organization", "enterprise"]
+    gha_desired_runners:
+      labels: ["name", "namespace", "repository", "organization", "enterprise"]
+    gha_idle_runners:
+      labels: ["name", "namespace", "repository", "organization", "enterprise"]
+    gha_capacity_proactive_capacity:
+      labels: ["name", "namespace", "repository", "organization", "enterprise"]
+    gha_capacity_hud_enabled:
+      labels: ["name", "namespace", "repository", "organization", "enterprise"]
+    gha_capacity_queued_jobs:
+      labels: ["name", "namespace", "repository", "organization", "enterprise"]
+    gha_capacity_desired_pairs:
+      labels: ["name", "namespace", "repository", "organization", "enterprise"]
+    gha_capacity_pairs:
+      labels: ["name", "namespace", "repository", "organization", "enterprise"]
+    gha_capacity_running_pairs:
+      labels: ["name", "namespace", "repository", "organization", "enterprise"]
+    gha_capacity_placeholder_pods:
+      labels: ["name", "namespace", "repository", "organization", "enterprise", "role", "phase"]
+    gha_capacity_advertised_max_runners:
+      labels: ["name", "namespace", "repository", "organization", "enterprise"]
+    gha_capacity_reconcile_last_success_timestamp_seconds:
+      labels: ["name", "namespace", "repository", "organization", "enterprise", "phase"]
+  histograms:
+    gha_job_startup_duration_seconds:
+      labels:
+        - repository
+        - organization
+        - enterprise
+        - job_workflow_name
+      buckets:
+        [5, 10, 30, 60, 120, 300, 600, 1200, 1800, 3600]
+    gha_job_execution_duration_seconds:
+      labels:
+        - repository
+        - organization
+        - enterprise
+        - job_result
+        - job_workflow_name
+      buckets:
+        [5, 10, 30, 60, 120, 300, 600, 1200, 1800, 3600]
+    gha_capacity_reconcile_duration_seconds:
+      labels:
+        - name
+        - namespace
+        - repository
+        - organization
+        - enterprise
+        - phase
+      buckets:
+        [0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60]
+    gha_capacity_hud_request_duration_seconds:
+      labels:
+        - name
+        - namespace
+        - repository
+        - organization
+        - enterprise
+        - result
+      buckets:
+        [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30]

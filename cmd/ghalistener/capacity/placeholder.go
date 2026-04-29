@@ -140,46 +140,89 @@ func (pm *PlaceholderManager) ListPairs(ctx context.Context) (map[string]*Placeh
 }
 
 // CleanupTimedOut deletes pairs where any pod has been Pending longer
-// than PlaceholderTimeout. Returns the number of pairs deleted.
-func (pm *PlaceholderManager) CleanupTimedOut(ctx context.Context) (int, error) {
+// than PlaceholderTimeout. Returns (successful deletes, failed deletes,
+// error). The error is non-nil only for the initial ListPairs failure;
+// per-pair delete failures are surfaced via the failed count so the caller
+// can emit accurate per-pair success/error metrics. When the error is
+// non-nil, both counts are 0.
+func (pm *PlaceholderManager) CleanupTimedOut(ctx context.Context) (int, int, error) {
 	pairs, err := pm.ListPairs(ctx)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	deleted := 0
+	deleted, failed := 0, 0
 	for slotID, pair := range pairs {
 		if pair.AnyPendingTooLong(pm.config.PlaceholderTimeout) {
 			if err := pm.DeletePair(ctx, slotID); err != nil {
 				pm.logger.Error("failed to delete timed-out pair", "slotID", slotID, "error", err)
+				failed++
 				continue
 			}
 			deleted++
 		}
 	}
-	return deleted, nil
+	return deleted, failed, nil
 }
 
 // CleanupOrphans deletes placeholder pods and anchor ConfigMaps from
 // previous listener instances of the SAME scale set (different
 // listener-pod label value but same scale-set-name label).
-func (pm *PlaceholderManager) CleanupOrphans(ctx context.Context) error {
+//
+// Pods are deleted via DeleteCollection (one apiserver call regardless
+// of orphan count). The count returned reflects the pod-orphan count
+// observed by a single List immediately before the DeleteCollection call
+// (best effort — racing with another listener could under/over-count).
+//
+// Returns (count, error). The error is non-nil if EITHER the pod
+// DeleteCollection failed OR the ConfigMap DeleteCollection failed
+// (pod error wins if both fail). When only the ConfigMap delete fails,
+// the returned count is still the pod-orphan count — pods were
+// successfully removed.
+func (pm *PlaceholderManager) CleanupOrphans(ctx context.Context) (int, error) {
 	sel := fmt.Sprintf("%s=%s,%s=%s,%s!=%s",
 		labelManagedBy, managedByValue,
 		labelScaleSet, pm.config.ScaleSetName,
 		labelListenerPod, pm.listenerID,
 	)
-	if err := pm.clientset.CoreV1().Pods(pm.namespace).DeleteCollection(
+
+	pods, err := pm.clientset.CoreV1().Pods(pm.namespace).List(
 		ctx,
-		metav1.DeleteOptions{},
-		metav1.ListOptions{LabelSelector: sel},
-	); err != nil {
-		pm.logger.Error("failed to cleanup orphaned placeholder pods", "error", err)
-	}
-	return pm.clientset.CoreV1().ConfigMaps(pm.namespace).DeleteCollection(
-		ctx,
-		metav1.DeleteOptions{},
 		metav1.ListOptions{LabelSelector: sel},
 	)
+	if err != nil {
+		pm.logger.Error("failed to list orphaned placeholder pods", "error", err)
+		return 0, fmt.Errorf("listing orphaned placeholder pods: %w", err)
+	}
+	count := len(pods.Items)
+
+	if count > 0 {
+		if delErr := pm.clientset.CoreV1().Pods(pm.namespace).DeleteCollection(
+			ctx,
+			metav1.DeleteOptions{},
+			metav1.ListOptions{LabelSelector: sel},
+		); delErr != nil {
+			pm.logger.Error("failed to delete orphaned placeholder pods",
+				"error", delErr, "count", count)
+			return 0, fmt.Errorf("deleting orphaned placeholder pods: %w", delErr)
+		}
+	}
+
+	// Always attempt to clean up the corresponding anchor ConfigMaps
+	// even if no pods were present — the GC contract is independent.
+	if cmErr := pm.clientset.CoreV1().ConfigMaps(pm.namespace).DeleteCollection(
+		ctx,
+		metav1.DeleteOptions{},
+		metav1.ListOptions{LabelSelector: sel},
+	); cmErr != nil {
+		pm.logger.Error("failed to delete orphaned placeholder ConfigMaps",
+			"error", cmErr)
+		// Pods were already deleted (or none existed) — return the actual
+		// pod count. Caller can decide whether to surface the ConfigMap
+		// failure as a pair-delete error.
+		return count, fmt.Errorf("deleting orphaned placeholder ConfigMaps: %w", cmErr)
+	}
+
+	return count, nil
 }
 
 // CleanupAll deletes all placeholder pods owned by this listener.
