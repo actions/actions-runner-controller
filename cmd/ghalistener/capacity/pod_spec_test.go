@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -183,10 +184,10 @@ func TestPlaceholderPods_KarpenterDoNotDisruptAnnotation(t *testing.T) {
 	}
 }
 
-// Both placeholder containers must run `sleep infinity` (not `sleep 900`).
-// A finite sleep would let the placeholder exit and free the node, defeating
-// the purpose of pre-warming.
-func TestPlaceholderPods_SleepInfinityCommand(t *testing.T) {
+// Defensive fallback: when PlaceholderTimeout is unset (zero), the placeholder
+// container falls back to `sleep infinity`. This preserves behavior for tests
+// and any caller that constructs a Config{} without setting the timeout.
+func TestPlaceholderPods_SleepCommand_ZeroTimeoutFallsBackToInfinity(t *testing.T) {
 	pm, _ := newTestPM(t, Config{})
 	ctx := context.Background()
 
@@ -198,6 +199,42 @@ func TestPlaceholderPods_SleepInfinityCommand(t *testing.T) {
 		require.NotNil(t, pod)
 		require.Len(t, pod.Spec.Containers, 1)
 		assert.Equal(t, []string{"sleep", "infinity"}, pod.Spec.Containers[0].Command)
+	}
+}
+
+// When PlaceholderTimeout is set, the placeholder container's sleep argument
+// must be PlaceholderTimeout * 1.5 seconds. This is the defensive
+// self-terminate that bounds pod lifetime if the listener crashes before
+// CleanupAll/CleanupTimedOut run. 5min * 1.5 = 7.5min = 450s.
+func TestPlaceholderPods_SleepCommand_UsesTimeoutTimes1_5(t *testing.T) {
+	pm, _ := newTestPM(t, Config{PlaceholderTimeout: 5 * time.Minute})
+	ctx := context.Background()
+
+	require.NoError(t, pm.CreatePair(ctx, "cmd-slot"))
+	pairs, _ := pm.ListPairs(ctx)
+	pair := pairs["cmd-slot"]
+
+	for _, pod := range []*corev1.Pod{pair.RunnerPod, pair.WorkflowPod} {
+		require.NotNil(t, pod)
+		require.Len(t, pod.Spec.Containers, 1)
+		assert.Equal(t, []string{"sleep", "450"}, pod.Spec.Containers[0].Command)
+	}
+}
+
+// Sub-second timeouts truncate to zero seconds; the helper floors to 1 so the
+// resulting `sleep` argument is always a valid positive integer.
+func TestPlaceholderPods_SleepCommand_FloorsToOneSecond(t *testing.T) {
+	pm, _ := newTestPM(t, Config{PlaceholderTimeout: 100 * time.Millisecond})
+	ctx := context.Background()
+
+	require.NoError(t, pm.CreatePair(ctx, "cmd-slot"))
+	pairs, _ := pm.ListPairs(ctx)
+	pair := pairs["cmd-slot"]
+
+	for _, pod := range []*corev1.Pod{pair.RunnerPod, pair.WorkflowPod} {
+		require.NotNil(t, pod)
+		require.Len(t, pod.Spec.Containers, 1)
+		assert.Equal(t, []string{"sleep", "1"}, pod.Spec.Containers[0].Command)
 	}
 }
 

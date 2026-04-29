@@ -449,7 +449,7 @@ func (pm *PlaceholderManager) buildWorkflowAffinity() *corev1.Affinity {
 				{
 					MatchExpressions: []corev1.NodeSelectorRequirement{
 						{
-							Key:      "nvidia.com/gpu.present",
+							Key:      "nvidia.com/gpu",
 							Operator: corev1.NodeSelectorOpIn,
 							Values:   []string{"true"},
 						},
@@ -460,6 +460,20 @@ func (pm *PlaceholderManager) buildWorkflowAffinity() *corev1.Affinity {
 	}
 
 	return affinity
+}
+
+// sleepArg returns the sleep duration for placeholder containers as a
+// defensive self-terminate so pods don't leak if the listener crashes
+// before CleanupAll/CleanupTimedOut run.
+func (pm *PlaceholderManager) sleepArg() string {
+	if pm.config.PlaceholderTimeout <= 0 {
+		return "infinity"
+	}
+	seconds := int64(pm.config.PlaceholderTimeout * 3 / 2 / time.Second)
+	if seconds < 1 {
+		seconds = 1
+	}
+	return strconv.FormatInt(seconds, 10)
 }
 
 // placeholderPodShell returns a Pod with metadata, labels, and a single
@@ -498,7 +512,7 @@ func (pm *PlaceholderManager) placeholderPodShell(
 				{
 					Name:      "placeholder",
 					Image:     placeholderImage,
-					Command:   []string{"sleep", "infinity"},
+					Command:   []string{"sleep", pm.sleepArg()},
 					Resources: resources,
 				},
 			},
