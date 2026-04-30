@@ -64,6 +64,9 @@ args:
   - "--listener-metrics-endpoint="
   - "--metrics-addr=0"
 {{- end }}
+{{- if .Values.controller.pprof.addr }}
+  - "--pprof-addr={{ .Values.controller.pprof.addr }}"
+{{- end }}
 {{- range .Values.controller.manager.config.excludeLabelPropagationPrefixes }}
   - "--exclude-label-propagation-prefix={{ . }}"
 {{- end }}
@@ -85,6 +88,10 @@ args:
 {{- if .Values.controller.metrics }}
 {{- $metricsPort := dict "containerPort" ((regexReplaceAll ":([0-9]+)" .Values.controller.metrics.controllerManagerAddr "${1}") | int) "protocol" "TCP" "name" "metrics" -}}
 {{- $ports = append $ports $metricsPort -}}
+{{- end }}
+{{- if .Values.controller.pprof.addr }}
+{{- $pprofPort := dict "containerPort" ((required "Values.controller.pprof.addr must end with a numeric port" (regexFind "[0-9]+$" .Values.controller.pprof.addr)) | int) "protocol" "TCP" "name" "pprof" -}}
+{{- $ports = append $ports $pprofPort -}}
 {{- end }}
 {{- with .Values.controller.manager.container.extraPorts }}
 {{- if kindIs "slice" . }}

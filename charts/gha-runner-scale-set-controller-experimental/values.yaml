@@ -108,3 +108,7 @@ controller:
   #   listenerAddr: ":8080"
   #   listenerEndpoint: "/metrics"
 
+  # Pprof configuration. If omitted, pprof is disabled.
+  pprof: {}
+  #   addr: ":6060"
+

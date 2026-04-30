@@ -73,3 +73,64 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].args
           content: "--listener-metrics-endpoint=/metrics"
+
+  - it: should not include pprof arg by default
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: "--pprof-addr="
+
+  - it: should not render pprof port by default
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: pprof
+
+  - it: should include pprof arg when configured
+    set:
+      controller:
+        pprof:
+          addr: ":6060"
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--pprof-addr=:6060"
+
+  - it: should render pprof port when configured
+    set:
+      controller:
+        pprof:
+          addr: ":6060"
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: pprof
+            containerPort: 6060
+            protocol: TCP
+
+  - it: should fail when pprof addr is malformed (no numeric port)
+    set:
+      controller:
+        pprof:
+          addr: "localhost"
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - failedTemplate:
+          errorMessage: "Values.controller.pprof.addr must end with a numeric port"
+        template: deployment.yaml
