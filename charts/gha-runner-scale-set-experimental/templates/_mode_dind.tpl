@@ -1,4 +1,23 @@
 {{- define "runner-mode-dind.runner-container" -}}
+{{- $container := (.Values.runner.container | default dict) -}}
+{{- if and (hasKey .Values.runner "container") (not (kindIs "map" $container)) -}}
+  {{- fail "runner.container must be a map/object" -}}
+{{- end -}}
+{{- if and (hasKey $container "env") (not (kindIs "slice" $container.env)) -}}
+  {{- fail "runner.container.env must be a list" -}}
+{{- end -}}
+{{- if and (hasKey $container "volumeMounts") (not (kindIs "slice" $container.volumeMounts)) -}}
+  {{- fail "runner.container.volumeMounts must be a list" -}}
+{{- end -}}
+{{- if hasKey $container "volumes" -}}
+  {{- fail "runner.container.volumes is not supported; use runner.pod.spec.volumes" -}}
+{{- end -}}
+{{- if and (hasKey $container "args") (not (kindIs "slice" $container.args)) -}}
+  {{- fail "runner.container.args must be a list" -}}
+{{- end -}}
+{{- if and (hasKey $container "securityContext") (not (kindIs "map" $container.securityContext)) -}}
+  {{- fail "runner.container.securityContext must be a map/object" -}}
+{{- end -}}
 name: runner
 image: {{ include "runner.image" . | quote }}
 command: {{ include "runner.command" . }}
@@ -15,7 +34,11 @@ volumeMounts:
     mountPath: /home/runner/_work
   - name: dind-sock
     mountPath: {{ include "runner-mode-dind.sock-mount-dir" . | quote }}
-  {{ include "githubServerTLS.volumeMountItem" (dict "root" $ "existingVolumeMounts" (list)) | nindent 2 }}
+  {{ include "githubServerTLS.volumeMountItem" (dict "root" $ "existingVolumeMounts" (list)) | nindent 2 -}}
+{{- $extra := omit $container "name" "image" "command" "env" "volumeMounts" -}}
+{{- if not (empty $extra) }}
+{{ toYaml $extra -}}
+{{- end -}}
 {{- end }}
 
 {{- define "runner-mode-dind.dind-container" -}}

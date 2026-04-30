@@ -1,5 +1,24 @@
 {{- define "runner-mode-kubernetes.runner-container" -}}
 {{- $runner := (.Values.runner | default dict) -}}
+{{- $container := (.Values.runner.container | default dict) -}}
+{{- if and (hasKey $runner "container") (not (kindIs "map" $container)) -}}
+  {{- fail "runner.container must be a map/object" -}}
+{{- end -}}
+{{- if and (hasKey $container "env") (not (kindIs "slice" $container.env)) -}}
+  {{- fail "runner.container.env must be a list" -}}
+{{- end -}}
+{{- if and (hasKey $container "volumeMounts") (not (kindIs "slice" $container.volumeMounts)) -}}
+  {{- fail "runner.container.volumeMounts must be a list" -}}
+{{- end -}}
+{{- if hasKey $container "volumes" -}}
+  {{- fail "runner.container.volumes is not supported; use runner.pod.spec.volumes" -}}
+{{- end -}}
+{{- if and (hasKey $container "args") (not (kindIs "slice" $container.args)) -}}
+  {{- fail "runner.container.args must be a list" -}}
+{{- end -}}
+{{- if and (hasKey $container "securityContext") (not (kindIs "map" $container.securityContext)) -}}
+  {{- fail "runner.container.securityContext must be a map/object" -}}
+{{- end -}}
 {{- $kubeMode := (index $runner "kubernetesMode" | default dict) -}}
 {{- $hookPath := (index $kubeMode "hookPath" | default "/home/runner/k8s/index.js") -}}
 {{- $extensionRef := (index $kubeMode "extensionRef" | default "") -}}
@@ -82,7 +101,11 @@ volumeMounts:
     subPath: extension
     readOnly: true
   {{- end }}
-  {{ include "githubServerTLS.volumeMountItem" (dict "root" $ "existingVolumeMounts" (list)) | nindent 2 }}
+  {{ include "githubServerTLS.volumeMountItem" (dict "root" $ "existingVolumeMounts" (list)) | nindent 2 -}}
+{{- $extra := omit $container "name" "image" "command" "env" "volumeMounts" -}}
+{{- if not (empty $extra) }}
+{{ toYaml $extra -}}
+{{- end -}}
 {{- end }}
 
 {{- define "runner-mode-kubernetes.pod-volumes" -}}
