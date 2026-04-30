@@ -73,6 +73,11 @@ args:
 {{- with .Values.controller.manager.config.k8sClientRateLimiterBurst }}
   - "--k8s-client-rate-limiter-burst={{ . }}"
 {{- end }}
+{{- with .Values.controller.manager.config.rateLimiter }}
+{{- with .name }}
+  - "--workqueue-rate-limiter={{ . }}"
+{{- end }}
+{{- end }}
 {{- with .Values.controller.manager.config.healthProbeBindAddress }}
   - "--health-probe-bind-address={{ . }}"
 {{- end }}
