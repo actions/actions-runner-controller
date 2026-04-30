@@ -71,6 +71,8 @@ listenerMetrics:
       labels: ["name", "namespace", "repository", "organization", "enterprise"]
     gha_capacity_proactive_capacity:
       labels: ["name", "namespace", "repository", "organization", "enterprise"]
+    gha_capacity_max_burst_capacity:
+      labels: ["name", "namespace", "repository", "organization", "enterprise"]
     gha_capacity_hud_enabled:
       labels: ["name", "namespace", "repository", "organization", "enterprise"]
     gha_capacity_queued_jobs:

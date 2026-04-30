@@ -344,6 +344,9 @@ func TestExporterCapacityRecorder_Gauges(t *testing.T) {
 	e.SetProactiveCapacity(7)
 	assert.Equal(t, 7.0, gaugeValue(t, e, MetricCapacityProactiveCapacity))
 
+	e.SetMaxBurstCapacity(11)
+	assert.Equal(t, 11.0, gaugeValue(t, e, MetricCapacityMaxBurstCapacity))
+
 	e.SetHUDEnabled(true)
 	assert.Equal(t, 1.0, gaugeValue(t, e, MetricCapacityHUDEnabled))
 	e.SetHUDEnabled(false)
@@ -486,6 +489,7 @@ func TestDiscardCapacity_NoOpAndAlive(t *testing.T) {
 	d := DiscardCapacity
 	// Each method must return without panic.
 	assert.NotPanics(t, func() { d.SetProactiveCapacity(1) })
+	assert.NotPanics(t, func() { d.SetMaxBurstCapacity(1) })
 	assert.NotPanics(t, func() { d.SetHUDEnabled(true) })
 	assert.NotPanics(t, func() { d.SetHUDEnabled(false) })
 	assert.NotPanics(t, func() { d.SetQueuedJobs(2) })

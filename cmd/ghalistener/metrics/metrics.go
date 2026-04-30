@@ -67,6 +67,7 @@ const (
 // in testdata/listener_metrics.yaml.
 const (
 	MetricCapacityProactiveCapacity                = "gha_capacity_proactive_capacity"
+	MetricCapacityMaxBurstCapacity                 = "gha_capacity_max_burst_capacity"
 	MetricCapacityHUDEnabled                       = "gha_capacity_hud_enabled"
 	MetricCapacityQueuedJobs                       = "gha_capacity_queued_jobs"
 	MetricCapacityDesiredPairs                     = "gha_capacity_desired_pairs"
@@ -119,9 +120,10 @@ var metricsHelp = metricsHelpRegistry{
 		MetricIdleRunners:       "Number of registered runners not running a job.",
 
 		MetricCapacityProactiveCapacity:                "Configured proactiveCapacity value from listener config — target number of pre-warmed runner+placeholder pairs.",
+		MetricCapacityMaxBurstCapacity:                 "Configured maxBurstCapacity value from listener config — caps total placeholder pairs (running + pending) the provisioner will create per cycle, preventing burst node provisioning from overloading downstream services (git-cache, Harbor, pypi-cache).",
 		MetricCapacityHUDEnabled:                       "1 if HUD API client + token are configured at startup, else 0. Distinguishes 'no HUD data' from 'HUD broken'.",
 		MetricCapacityQueuedJobs:                       "Queued jobs from PyTorch HUD API for this scale set's labels (external queue, distinct from gha_assigned_jobs).",
-		MetricCapacityDesiredPairs:                     "Number of runner+placeholder pairs desired after applying the maxRunners cap.",
+		MetricCapacityDesiredPairs:                     "Number of placeholder pairs the provisioner wants to maintain (ProactiveCapacity + queuedJobs, then clamped by MaxRunners headroom and MaxBurstCapacity).",
 		MetricCapacityPairs:                            "Total existing runner+placeholder pairs (currentPairs).",
 		MetricCapacityRunningPairs:                     "Pairs where both the runner pod and placeholder pod are in Running phase.",
 		MetricCapacityPlaceholderPods:                  "Number of placeholder pods by role (runner|workflow) and phase (Pending|Running|Failed|Succeeded|Unknown). The phase values match Kubernetes corev1.PodPhase.",
@@ -179,6 +181,7 @@ type Recorder interface {
 // the hood. Callers only supply the metric-specific extra labels.
 type CapacityRecorder interface {
 	SetProactiveCapacity(value int)
+	SetMaxBurstCapacity(value int)
 	SetHUDEnabled(enabled bool)
 	SetQueuedJobs(value int)
 	SetDesiredPairs(value int)
@@ -382,6 +385,9 @@ var defaultMetrics = v1alpha1.MetricsConfig{
 			},
 		},
 		MetricCapacityProactiveCapacity: {
+			Labels: withExtraLabels(),
+		},
+		MetricCapacityMaxBurstCapacity: {
 			Labels: withExtraLabels(),
 		},
 		MetricCapacityHUDEnabled: {
@@ -687,6 +693,10 @@ func (e *exporter) SetProactiveCapacity(value int) {
 	e.setGauge(MetricCapacityProactiveCapacity, e.scaleSetLabels, float64(value))
 }
 
+func (e *exporter) SetMaxBurstCapacity(value int) {
+	e.setGauge(MetricCapacityMaxBurstCapacity, e.scaleSetLabels, float64(value))
+}
+
 func (e *exporter) SetHUDEnabled(enabled bool) {
 	v := 0.0
 	if enabled {
@@ -778,6 +788,7 @@ func (*discard) RecordDesiredRunners(int)                           {}
 // callers can hold a CapacityRecorder of `&discard{}` (i.e. DiscardCapacity)
 // without nil-checking before every call.
 func (*discard) SetProactiveCapacity(int)                       {}
+func (*discard) SetMaxBurstCapacity(int)                        {}
 func (*discard) SetHUDEnabled(bool)                             {}
 func (*discard) SetQueuedJobs(int)                              {}
 func (*discard) SetDesiredPairs(int)                            {}
