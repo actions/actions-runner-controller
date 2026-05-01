@@ -186,40 +186,34 @@ func (m *Monitor) listPairsWithRetry(ctx context.Context, maxRetries int) (map[s
 	return pairs, err
 }
 
-// countRunnersByPhaseWithRetry returns the number of real EphemeralRunner pods
-// for this scale set in the given phase (Running or Pending). The reporter
-// uses this with PodRunning to determine advertised capacity; the provisioner
-// uses it with both phases to clamp placeholder creation against MaxRunners
-// headroom (a placeholder pair only makes sense if there's room under the cap
-// once existing real runner pods are accounted for — without this, MaxRunners=N
-// could allow up to N placeholders on top of N real runners, doubling the cap).
+// countRunnersByPhaseWithRetry returns counts of real EphemeralRunner pods for
+// this scale set, keyed by PodPhase. Used by the reporter (Running for advertised
+// capacity) and the provisioner (Running+Pending for MaxRunners headroom).
 //
-// Phase filtering is enforced both via the apiserver FieldSelector (an
-// optimization for real clusters) and in-code (defence in depth, and
-// because the fake clientset used in tests does not honor FieldSelector).
-func (m *Monitor) countRunnersByPhaseWithRetry(ctx context.Context, phase corev1.PodPhase, maxRetries int) (int, error) {
-	var count int
-	err := retryWithBackoff(ctx, m.logger, "count-runners-"+string(phase), maxRetries, func() error {
+// Performs a single List with the label selector and groups in code — no
+// FieldSelector. Phases not present in the result map have count 0.
+func (m *Monitor) countRunnersByPhaseWithRetry(ctx context.Context, maxRetries int) (map[corev1.PodPhase]int, error) {
+	counts := make(map[corev1.PodPhase]int)
+	err := retryWithBackoff(ctx, m.logger, "count-runners", maxRetries, func() error {
 		sel := fmt.Sprintf("actions-ephemeral-runner=True,%s=%s",
 			labelScaleSet, m.config.ScaleSetName,
 		)
 		pods, e := m.clientset.CoreV1().Pods(m.config.Namespace).List(ctx, metav1.ListOptions{
 			LabelSelector: sel,
-			FieldSelector: "status.phase=" + string(phase),
 		})
 		if e != nil {
 			return e
 		}
-		c := 0
-		for i := range pods.Items {
-			if pods.Items[i].Status.Phase == phase {
-				c++
-			}
+		// Reset on each retry so partial counts from a failed attempt don't leak
+		for k := range counts {
+			delete(counts, k)
 		}
-		count = c
+		for i := range pods.Items {
+			counts[pods.Items[i].Status.Phase]++
+		}
 		return nil
 	})
-	return count, err
+	return counts, err
 }
 
 func (m *Monitor) queryHUDWithRetry(ctx context.Context) (int, error) {
@@ -405,19 +399,14 @@ func (m *Monitor) reconcileProvisioning(ctx context.Context) {
 	runningRunnerPods := 0
 	pendingRunnerPods := 0
 	if m.config.MaxRunners > 0 {
-		var rErr, pErr error
-		runningRunnerPods, rErr = m.countRunnersByPhaseWithRetry(ctx, corev1.PodRunning, provisionerMaxRetries)
-		if rErr != nil {
-			m.logger.Error("failed to count Running runner pods after retries, skipping provisioning cycle", "error", rErr)
+		counts, err := m.countRunnersByPhaseWithRetry(ctx, provisionerMaxRetries)
+		if err != nil {
+			m.logger.Error("failed to count runner pods after retries, skipping provisioning cycle", "error", err)
 			m.recorder.IncReconcileSkips(skipReasonProvisionerListRunners)
 			return
 		}
-		pendingRunnerPods, pErr = m.countRunnersByPhaseWithRetry(ctx, corev1.PodPending, provisionerMaxRetries)
-		if pErr != nil {
-			m.logger.Error("failed to count Pending runner pods after retries, skipping provisioning cycle", "error", pErr)
-			m.recorder.IncReconcileSkips(skipReasonProvisionerListRunners)
-			return
-		}
+		runningRunnerPods = counts[corev1.PodRunning]
+		pendingRunnerPods = counts[corev1.PodPending]
 	}
 
 	// 5. Calculate desired placeholder count.
@@ -429,7 +418,8 @@ func (m *Monitor) reconcileProvisioning(ctx context.Context) {
 	// runners, doubling the intended cap.
 	if m.config.MaxRunners > 0 {
 		totalRunnerPods := runningRunnerPods + pendingRunnerPods
-		desiredPairs = min(desiredPairs, m.config.MaxRunners-totalRunnerPods)
+		headroom := max(0, m.config.MaxRunners-totalRunnerPods)
+		desiredPairs = min(desiredPairs, headroom)
 	}
 
 	// Clamp burst so we don't spike the cluster (overload git-cache rsync,
@@ -444,17 +434,14 @@ func (m *Monitor) reconcileProvisioning(ctx context.Context) {
 	// 6. Adjust: create or delete pairs.
 	m.adjustPairs(ctx, pairs, currentPairs, desiredPairs)
 
-	logArgs := []any{
+	m.logger.Info("provisioning reconciled",
 		"queuedJobs", queuedJobs,
 		"desiredPairs", desiredPairs,
 		"currentPairs", currentPairs,
 		"runningRunnerPods", runningRunnerPods,
 		"pendingRunnerPods", pendingRunnerPods,
-	}
-	if m.config.MaxBurstCapacity > 0 {
-		logArgs = append(logArgs, "maxBurstCapacity", m.config.MaxBurstCapacity)
-	}
-	m.logger.Info("provisioning reconciled", logArgs...)
+		"maxBurstCapacity", m.config.MaxBurstCapacity,
+	)
 	// Mark success only at the end of a fully completed cycle. Early-exit
 	// paths above (list-pairs error) do NOT mark success — the whole point
 	// of this metric is to detect when reconciles stop succeeding.
@@ -486,12 +473,13 @@ func (m *Monitor) reconcileReporting(ctx context.Context) {
 	m.recorder.SetRunningPairs(runningPairs)
 
 	// 2. Count running runners with retry. On failure, keep previous capacity.
-	runningRunners, err := m.countRunnersByPhaseWithRetry(ctx, corev1.PodRunning, reporterMaxRetries)
+	counts, err := m.countRunnersByPhaseWithRetry(ctx, reporterMaxRetries)
 	if err != nil {
 		m.logger.Warn("failed to count runners, keeping previous capacity", "error", err)
 		m.recorder.IncReconcileSkips(skipReasonReporterCountRunners)
 		return
 	}
+	runningRunners := counts[corev1.PodRunning]
 
 	// 3. Report capacity to GitHub.
 	capacity := runningRunners + runningPairs
