@@ -28,6 +28,12 @@ type Config struct {
 	PlaceholderTimeout  time.Duration
 	MaxRunners          int
 
+	// MaxBurstCapacity caps the maximum number of placeholder pairs (running + pending)
+	// the provisioner will create per reconcile cycle. 0 means no cap.
+	// Used to prevent burst node provisioning from overloading downstream services
+	// (git-cache rsync connection pool, Harbor manifest fetches, pypi-cache).
+	MaxBurstCapacity int
+
 	// Workflow pod resources (for placeholder-workflow sizing)
 	WorkflowCPU    string
 	WorkflowMemory string
@@ -68,6 +74,7 @@ func ConfigFromEnv() Config {
 	c := Config{
 		Enabled:             envBool("CAPACITY_AWARE_ENABLED", false),
 		ProactiveCapacity:   envInt("CAPACITY_AWARE_PROACTIVE_CAPACITY", 0),
+		MaxBurstCapacity:    envInt("CAPACITY_AWARE_MAX_BURST_CAPACITY", 0),
 		RecalculateInterval: envDuration("CAPACITY_AWARE_RECALCULATE_INTERVAL", 30*time.Second),
 		ReportInterval:      envDuration("CAPACITY_AWARE_REPORT_INTERVAL", 5*time.Second),
 		PlaceholderTimeout:  envDuration("CAPACITY_AWARE_PLACEHOLDER_TIMEOUT", 5*time.Minute),
@@ -111,6 +118,10 @@ func (c *Config) Validate() error {
 		slog.Warn("MaxRunners is negative, clamping to 0",
 			"original", c.MaxRunners)
 		c.MaxRunners = 0
+	}
+	if c.MaxBurstCapacity < 0 {
+		slog.Warn("MaxBurstCapacity is negative, clamping to 0", "original", c.MaxBurstCapacity)
+		c.MaxBurstCapacity = 0
 	}
 
 	if c.Enabled && c.RunnerNodeFleet == "" {

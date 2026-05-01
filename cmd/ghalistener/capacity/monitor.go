@@ -35,10 +35,11 @@ const (
 	deleteReasonTimeout = "timeout"
 	deleteReasonExcess  = "excess"
 
-	skipReasonProvisionerListPairs = "provisioner_list_pairs"
-	skipReasonReporterListPairs    = "reporter_list_pairs"
-	skipReasonReporterCountRunners = "reporter_count_runners"
-	skipReasonHUDAPIFailed         = "hud_api_failed"
+	skipReasonProvisionerListPairs   = "provisioner_list_pairs"
+	skipReasonProvisionerListRunners = "provisioner_list_runners"
+	skipReasonReporterListPairs      = "reporter_list_pairs"
+	skipReasonReporterCountRunners   = "reporter_count_runners"
+	skipReasonHUDAPIFailed           = "hud_api_failed"
 
 	rolePlaceholderRunnerLabel   = "runner"
 	rolePlaceholderWorkflowLabel = "workflow"
@@ -134,6 +135,7 @@ func New(
 	// Static gauges set once at construction so they appear in Prometheus
 	// scrapes even before the first reconcile cycle runs.
 	m.recorder.SetProactiveCapacity(m.config.ProactiveCapacity)
+	m.recorder.SetMaxBurstCapacity(m.config.MaxBurstCapacity)
 	m.recorder.SetHUDEnabled(m.hudClient != nil && m.config.HUDAPIToken != "")
 	// Seed the reconcile-last-success gauges to listener-startup time so any
 	// `time() - metric` wedge alert has a sane floor (small at startup,
@@ -184,23 +186,34 @@ func (m *Monitor) listPairsWithRetry(ctx context.Context, maxRetries int) (map[s
 	return pairs, err
 }
 
-func (m *Monitor) countRunningRunnersWithRetry(ctx context.Context, maxRetries int) (int, error) {
-	var count int
+// countRunnersByPhaseWithRetry returns counts of real EphemeralRunner pods for
+// this scale set, keyed by PodPhase. Used by the reporter (Running for advertised
+// capacity) and the provisioner (Running+Pending for MaxRunners headroom).
+//
+// Performs a single List with the label selector and groups in code — no
+// FieldSelector. Phases not present in the result map have count 0.
+func (m *Monitor) countRunnersByPhaseWithRetry(ctx context.Context, maxRetries int) (map[corev1.PodPhase]int, error) {
+	counts := make(map[corev1.PodPhase]int)
 	err := retryWithBackoff(ctx, m.logger, "count-runners", maxRetries, func() error {
 		sel := fmt.Sprintf("actions-ephemeral-runner=True,%s=%s",
 			labelScaleSet, m.config.ScaleSetName,
 		)
 		pods, e := m.clientset.CoreV1().Pods(m.config.Namespace).List(ctx, metav1.ListOptions{
 			LabelSelector: sel,
-			FieldSelector: "status.phase=Running",
 		})
 		if e != nil {
 			return e
 		}
-		count = len(pods.Items)
+		// Reset on each retry so partial counts from a failed attempt don't leak
+		for k := range counts {
+			delete(counts, k)
+		}
+		for i := range pods.Items {
+			counts[pods.Items[i].Status.Phase]++
+		}
 		return nil
 	})
-	return count, err
+	return counts, err
 }
 
 func (m *Monitor) queryHUDWithRetry(ctx context.Context) (int, error) {
@@ -235,6 +248,7 @@ func (m *Monitor) Run(ctx context.Context) error {
 	m.logger.Info("starting capacity monitor",
 		"proactiveCapacity", m.config.ProactiveCapacity,
 		"maxRunners", m.config.MaxRunners,
+		"maxBurstCapacity", m.config.MaxBurstCapacity,
 		"labels", m.config.ScaleSetLabels,
 		"workflowNodeFleet", m.config.NodeFleet,
 		"runnerNodeFleet", m.config.RunnerNodeFleet,
@@ -370,21 +384,63 @@ func (m *Monitor) reconcileProvisioning(ctx context.Context) {
 	m.recorder.SetPairs(currentPairs)
 	m.emitPlaceholderPodPhases(pairs)
 
-	// 4. Calculate desired placeholder count.
-	desiredPairs := m.config.ProactiveCapacity + queuedJobs
+	// 4. Count real EphemeralRunner pods (Running + Pending) for headroom
+	// calculation. We need both phases so pods that exist but haven't
+	// started yet still consume the MaxRunners budget — otherwise a burst
+	// of Pending runners could double-book the cap.
+	//
+	// On list failure: skip the entire provisioning cycle. Treating a
+	// failed count as 0 here would allow up to MaxRunners placeholders on
+	// top of the actual real runners, doubling the cap during the failure
+	// window. Skipping is the safe posture — the next cycle will reconcile.
+	// The reporter has its own MaxRunners clamp on advertised capacity (belt
+	// and suspenders); the provisioner's headroom clamp here is tighter
+	// when real runners exist.
+	runningRunnerPods := 0
+	pendingRunnerPods := 0
 	if m.config.MaxRunners > 0 {
-		desiredPairs = min(desiredPairs, m.config.MaxRunners)
+		counts, err := m.countRunnersByPhaseWithRetry(ctx, provisionerMaxRetries)
+		if err != nil {
+			m.logger.Error("failed to count runner pods after retries, skipping provisioning cycle", "error", err)
+			m.recorder.IncReconcileSkips(skipReasonProvisionerListRunners)
+			return
+		}
+		runningRunnerPods = counts[corev1.PodRunning]
+		pendingRunnerPods = counts[corev1.PodPending]
 	}
+
+	// 5. Calculate desired placeholder count.
+	desiredPairs := m.config.ProactiveCapacity + queuedJobs
+
+	// Clamp by headroom against the hard runner cap. Real runner pods (running +
+	// pending) consume the cap, so the placeholder pool can only fill what's left.
+	// Without this, MaxRunners=N could allow up to N placeholders on top of N real
+	// runners, doubling the intended cap.
+	if m.config.MaxRunners > 0 {
+		totalRunnerPods := runningRunnerPods + pendingRunnerPods
+		headroom := max(0, m.config.MaxRunners-totalRunnerPods)
+		desiredPairs = min(desiredPairs, headroom)
+	}
+
+	// Clamp burst so we don't spike the cluster (overload git-cache rsync,
+	// Harbor manifest fetches, pypi-cache) when many jobs queue at once.
+	if m.config.MaxBurstCapacity > 0 {
+		desiredPairs = min(desiredPairs, m.config.MaxBurstCapacity)
+	}
+
 	desiredPairs = max(desiredPairs, 0)
 	m.recorder.SetDesiredPairs(desiredPairs)
 
-	// 5. Adjust: create or delete pairs.
+	// 6. Adjust: create or delete pairs.
 	m.adjustPairs(ctx, pairs, currentPairs, desiredPairs)
 
 	m.logger.Info("provisioning reconciled",
 		"queuedJobs", queuedJobs,
 		"desiredPairs", desiredPairs,
 		"currentPairs", currentPairs,
+		"runningRunnerPods", runningRunnerPods,
+		"pendingRunnerPods", pendingRunnerPods,
+		"maxBurstCapacity", m.config.MaxBurstCapacity,
 	)
 	// Mark success only at the end of a fully completed cycle. Early-exit
 	// paths above (list-pairs error) do NOT mark success — the whole point
@@ -417,12 +473,13 @@ func (m *Monitor) reconcileReporting(ctx context.Context) {
 	m.recorder.SetRunningPairs(runningPairs)
 
 	// 2. Count running runners with retry. On failure, keep previous capacity.
-	runningRunners, err := m.countRunningRunnersWithRetry(ctx, reporterMaxRetries)
+	counts, err := m.countRunnersByPhaseWithRetry(ctx, reporterMaxRetries)
 	if err != nil {
 		m.logger.Warn("failed to count runners, keeping previous capacity", "error", err)
 		m.recorder.IncReconcileSkips(skipReasonReporterCountRunners)
 		return
 	}
+	runningRunners := counts[corev1.PodRunning]
 
 	// 3. Report capacity to GitHub.
 	capacity := runningRunners + runningPairs

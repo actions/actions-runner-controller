@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -472,6 +473,7 @@ type fakeCapacityRecorder struct {
 	mu sync.Mutex
 
 	proactiveCapacity    int
+	maxBurstCapacity     int
 	hudEnabled           bool
 	queuedJobs           int
 	desiredPairs         int
@@ -487,6 +489,7 @@ type fakeCapacityRecorder struct {
 
 	// Counts of method invocations for assertions.
 	setProactiveCapacityCalls    int
+	setMaxBurstCapacityCalls     int
 	setHUDEnabledCalls           int
 	setQueuedJobsCalls           int
 	setDesiredPairsCalls         int
@@ -522,6 +525,12 @@ func (f *fakeCapacityRecorder) SetProactiveCapacity(v int) {
 	defer f.mu.Unlock()
 	f.proactiveCapacity = v
 	f.setProactiveCapacityCalls++
+}
+func (f *fakeCapacityRecorder) SetMaxBurstCapacity(v int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.maxBurstCapacity = v
+	f.setMaxBurstCapacityCalls++
 }
 func (f *fakeCapacityRecorder) SetHUDEnabled(b bool) {
 	f.mu.Lock()
@@ -717,4 +726,269 @@ func TestProvisioner_ListPairsError_RecordsSkip(t *testing.T) {
 		"success timestamp must NOT be set on the skip path")
 	// Duration is still observed even on the skip path.
 	assert.Equal(t, 1, rec.observeReconcileCalls[reconcilePhaseProvisioner])
+}
+
+// TestProvisioner_RunnerCountError_RecordsSkip simulates a failure when
+// counting real runner pods (Running/Pending phase) and asserts the
+// provisioner skips the cycle: the skip counter is incremented, the
+// success timestamp is NOT advanced, and no placeholder pairs are
+// created (the headroom calculation never ran, so we must not over-
+// create). This guards the doubling-the-cap regression that would
+// happen if a list failure was silently treated as 0 runners.
+func TestProvisioner_RunnerCountError_RecordsSkip(t *testing.T) {
+	cfg := Config{
+		ProactiveCapacity:  3,
+		MaxRunners:         10,
+		PlaceholderTimeout: 5 * time.Minute,
+	}
+	rec := newFakeCapacityRecorder()
+	m, cs, _ := newTestMonitorWithRecorder(t, cfg, rec)
+
+	// Fail ONLY the runner-count list calls (those use the
+	// "actions-ephemeral-runner=True,..." label selector). Placeholder
+	// list calls use a different selector and continue to succeed, so
+	// the cycle reaches the runner-count step before erroring out.
+	cs.PrependReactor("list", "pods",
+		func(action k8stesting.Action) (bool, runtime.Object, error) {
+			la, ok := action.(k8stesting.ListAction)
+			if !ok {
+				return false, nil, nil
+			}
+			sel := la.GetListRestrictions().Labels.String()
+			if strings.Contains(sel, "actions-ephemeral-runner=True") {
+				return true, nil, fmt.Errorf("synthetic count-runners error")
+			}
+			return false, nil, nil
+		},
+	)
+
+	// Short deadline so retry backoffs (1s, 2s, 4s) abort quickly via ctx.Done().
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	m.reconcileProvisioning(ctx)
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+
+	assert.Equal(t, 1, rec.incReconcileSkipsCalls[skipReasonProvisionerListRunners],
+		"runner-count error must record a provisioner_list_runners skip")
+	assert.Equal(t, 0, rec.setReconcileLastSuccessCalls[reconcilePhaseProvisioner],
+		"success timestamp must NOT be set on the skip path")
+	// Duration is still observed even on the skip path.
+	assert.Equal(t, 1, rec.observeReconcileCalls[reconcilePhaseProvisioner])
+	// SetDesiredPairs must NOT be called — the cycle bailed out before
+	// the headroom calculation.
+	assert.Equal(t, 0, rec.setDesiredPairsCalls,
+		"desiredPairs must not be set when the cycle is skipped")
+	// No placeholder pairs were created (the adjustPairs step never ran).
+	assert.Equal(t, 0, countPods(t, cs, "test-ns"),
+		"no placeholders must be created when the cycle is skipped")
+}
+
+// ---- MaxBurstCapacity / MaxRunners headroom tests ----
+
+// createRealRunnerPods creates n real EphemeralRunner pods for the scale set
+// in the given phase. Mirrors the label shape used by countRunnersByPhaseWithRetry
+// so the provisioner and reporter see them as "real".
+func createRealRunnerPods(
+	t *testing.T,
+	cs *fake.Clientset,
+	ns, scaleSetName string,
+	n int,
+	phase corev1.PodPhase,
+	namePrefix string,
+) {
+	t.Helper()
+	ctx := context.Background()
+	for i := 0; i < n; i++ {
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("%s-%d", namePrefix, i),
+				Namespace: ns,
+				Labels: map[string]string{
+					"actions-ephemeral-runner": "True",
+					labelScaleSet:              scaleSetName,
+				},
+			},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "runner", Image: "runner:latest"}},
+			},
+			Status: corev1.PodStatus{Phase: phase},
+		}
+		_, err := cs.CoreV1().Pods(ns).Create(ctx, pod, metav1.CreateOptions{})
+		require.NoError(t, err)
+	}
+}
+
+// MaxBurstCapacity = 0 means "no cap" — desiredPairs equals the proactive +
+// queued sum, just like before the cap was introduced.
+func TestReconcile_MaxBurstCapacity_ZeroIsNoCap(t *testing.T) {
+	hudRows := []QueuedJobsForRunner{
+		{RunnerLabel: "linux.2xlarge", NumQueuedJobs: 8},
+	}
+	cfg := Config{
+		ProactiveCapacity:  3,
+		MaxRunners:         0, // unlimited so headroom can't interfere
+		MaxBurstCapacity:   0, // unlimited
+		ScaleSetLabels:     []string{"linux.2xlarge"},
+		PlaceholderTimeout: 5 * time.Minute,
+	}
+	m, cs, _ := newTestMonitor(t, cfg, hudRows)
+
+	m.reconcileProvisioning(context.Background())
+
+	// desired = 3 + 8 = 11 pairs = 22 pods, no cap applied.
+	assert.Equal(t, 22, countPods(t, cs, "test-ns"),
+		"MaxBurstCapacity=0 must NOT cap placeholders")
+}
+
+// MaxBurstCapacity > 0 and desired exceeds it -> clamp to MaxBurstCapacity.
+func TestReconcile_MaxBurstCapacity_ClampsWhenExceeded(t *testing.T) {
+	hudRows := []QueuedJobsForRunner{
+		{RunnerLabel: "linux.2xlarge", NumQueuedJobs: 50},
+	}
+	cfg := Config{
+		ProactiveCapacity:  5,
+		MaxRunners:         0, // unlimited so MaxBurstCapacity is the only cap
+		MaxBurstCapacity:   7,
+		ScaleSetLabels:     []string{"linux.2xlarge"},
+		PlaceholderTimeout: 5 * time.Minute,
+	}
+	m, cs, _ := newTestMonitor(t, cfg, hudRows)
+
+	m.reconcileProvisioning(context.Background())
+
+	// desired = min(5+50, MaxBurstCapacity=7) = 7 pairs = 14 pods.
+	assert.Equal(t, 14, countPods(t, cs, "test-ns"),
+		"desired must be clamped to MaxBurstCapacity")
+}
+
+// MaxBurstCapacity > 0 but desired stays below the cap -> no clamp.
+func TestReconcile_MaxBurstCapacity_UnclampedWhenBelow(t *testing.T) {
+	hudRows := []QueuedJobsForRunner{
+		{RunnerLabel: "linux.2xlarge", NumQueuedJobs: 2},
+	}
+	cfg := Config{
+		ProactiveCapacity:  3,
+		MaxRunners:         0,
+		MaxBurstCapacity:   20,
+		ScaleSetLabels:     []string{"linux.2xlarge"},
+		PlaceholderTimeout: 5 * time.Minute,
+	}
+	m, cs, _ := newTestMonitor(t, cfg, hudRows)
+
+	m.reconcileProvisioning(context.Background())
+
+	// desired = 3 + 2 = 5 (well below MaxBurstCapacity=20). 5 pairs = 10 pods.
+	assert.Equal(t, 10, countPods(t, cs, "test-ns"),
+		"desired below MaxBurstCapacity must remain unclamped")
+}
+
+// Both MaxRunners-headroom and MaxBurstCapacity active; MaxRunners-headroom is
+// tighter (it leaves only 2 slots while MaxBurstCapacity allows 50) -> headroom wins.
+func TestReconcile_MaxRunnersHeadroom_TighterThanBurst(t *testing.T) {
+	hudRows := []QueuedJobsForRunner{
+		{RunnerLabel: "linux.2xlarge", NumQueuedJobs: 100},
+	}
+	cfg := Config{
+		ProactiveCapacity:  0,
+		MaxRunners:         10,
+		MaxBurstCapacity:   50,
+		ScaleSetLabels:     []string{"linux.2xlarge"},
+		PlaceholderTimeout: 5 * time.Minute,
+	}
+	m, cs, _ := newTestMonitor(t, cfg, hudRows)
+	// 8 real runner pods consume the cap, leaving only 2 slots of headroom.
+	createRealRunnerPods(t, cs, "test-ns", "test-sset", 8, corev1.PodRunning, "runner-r")
+
+	m.reconcileProvisioning(context.Background())
+
+	// MaxRunners-headroom = 10 - 8 = 2; MaxBurstCapacity = 50.
+	// desired = min(100, 2, 50) = 2 pairs = 4 pods (plus the 8 real pods = 12 total).
+	pairs, err := m.placeholders.ListPairs(context.Background())
+	require.NoError(t, err)
+	assert.Len(t, pairs, 2,
+		"MaxRunners-headroom (2) must win over MaxBurstCapacity (50)")
+}
+
+// Both MaxRunners-headroom and MaxBurstCapacity active; MaxBurstCapacity is
+// the tighter cap (allows 4 while headroom would allow 50) -> burst wins.
+func TestReconcile_MaxBurstCapacity_TighterThanHeadroom(t *testing.T) {
+	hudRows := []QueuedJobsForRunner{
+		{RunnerLabel: "linux.2xlarge", NumQueuedJobs: 100},
+	}
+	cfg := Config{
+		ProactiveCapacity:  0,
+		MaxRunners:         100, // headroom is wide open
+		MaxBurstCapacity:   4,   // burst is the tight one
+		ScaleSetLabels:     []string{"linux.2xlarge"},
+		PlaceholderTimeout: 5 * time.Minute,
+	}
+	m, cs, _ := newTestMonitor(t, cfg, hudRows)
+	// A few real runners exist but headroom (100-5=95) is still much larger than 4.
+	createRealRunnerPods(t, cs, "test-ns", "test-sset", 5, corev1.PodRunning, "runner-r")
+
+	m.reconcileProvisioning(context.Background())
+
+	// desired = min(100, 100-5=95, 4) = 4 pairs = 8 pods.
+	pairs, err := m.placeholders.ListPairs(context.Background())
+	require.NoError(t, err)
+	assert.Len(t, pairs, 4,
+		"MaxBurstCapacity (4) must win over MaxRunners-headroom (95)")
+}
+
+// Headroom-fix verification: with MaxRunners=10, 8 Running and 1 Pending real
+// runner pods, only 1 placeholder pair may be created (not 10 — that was the
+// pre-fix bug that allowed up to MaxRunners placeholders ON TOP OF the real
+// runners, doubling the cap).
+func TestReconcile_MaxRunnersHeadroom_CountsPendingTowardCap(t *testing.T) {
+	hudRows := []QueuedJobsForRunner{
+		{RunnerLabel: "linux.2xlarge", NumQueuedJobs: 50},
+	}
+	cfg := Config{
+		ProactiveCapacity:  0,
+		MaxRunners:         10,
+		ScaleSetLabels:     []string{"linux.2xlarge"},
+		PlaceholderTimeout: 5 * time.Minute,
+	}
+	m, cs, _ := newTestMonitor(t, cfg, hudRows)
+	createRealRunnerPods(t, cs, "test-ns", "test-sset", 8, corev1.PodRunning, "runner-r")
+	createRealRunnerPods(t, cs, "test-ns", "test-sset", 1, corev1.PodPending, "runner-p")
+
+	m.reconcileProvisioning(context.Background())
+
+	// MaxRunners-headroom = 10 - (8 Running + 1 Pending) = 1.
+	// desired = min(50, 1) = 1 pair = 2 pods.
+	pairs, err := m.placeholders.ListPairs(context.Background())
+	require.NoError(t, err)
+	assert.Len(t, pairs, 1,
+		"only 1 placeholder allowed: MaxRunners=10 minus 8 Running minus 1 Pending real runner pods")
+}
+
+// Edge case: real runner pods have already exhausted (or exceeded) MaxRunners.
+// The headroom subtraction goes negative -> max(0) clamps it -> desiredPairs=0,
+// no placeholders are created. Prevents over-provisioning when the cap is hit.
+func TestReconcile_MaxRunnersHeadroom_AtOrAboveCapFloorsAtZero(t *testing.T) {
+	hudRows := []QueuedJobsForRunner{
+		{RunnerLabel: "linux.2xlarge", NumQueuedJobs: 50},
+	}
+	cfg := Config{
+		ProactiveCapacity:  5,
+		MaxRunners:         10,
+		ScaleSetLabels:     []string{"linux.2xlarge"},
+		PlaceholderTimeout: 5 * time.Minute,
+	}
+	m, cs, _ := newTestMonitor(t, cfg, hudRows)
+	// 12 real runner pods: 6 Running + 6 Pending — already over the cap of 10.
+	createRealRunnerPods(t, cs, "test-ns", "test-sset", 6, corev1.PodRunning, "runner-r")
+	createRealRunnerPods(t, cs, "test-ns", "test-sset", 6, corev1.PodPending, "runner-p")
+
+	m.reconcileProvisioning(context.Background())
+
+	// MaxRunners-headroom = 10 - 12 = -2; max(...,0) -> 0 pairs.
+	pairs, err := m.placeholders.ListPairs(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, pairs,
+		"total runner pods (12) >= MaxRunners (10) must floor desiredPairs to 0")
 }

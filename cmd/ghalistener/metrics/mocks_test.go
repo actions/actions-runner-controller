@@ -742,6 +742,46 @@ func (_c *MockCapacityRecorder_SetPlaceholderPods_Call) RunAndReturn(run func(ro
 	return _c
 }
 
+// SetMaxBurstCapacity provides a mock function for the type MockCapacityRecorder
+func (_mock *MockCapacityRecorder) SetMaxBurstCapacity(value int) {
+	_mock.Called(value)
+	return
+}
+
+// MockCapacityRecorder_SetMaxBurstCapacity_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetMaxBurstCapacity'
+type MockCapacityRecorder_SetMaxBurstCapacity_Call struct {
+	*mock.Call
+}
+
+// SetMaxBurstCapacity is a helper method to define mock.On call
+//   - value int
+func (_e *MockCapacityRecorder_Expecter) SetMaxBurstCapacity(value interface{}) *MockCapacityRecorder_SetMaxBurstCapacity_Call {
+	return &MockCapacityRecorder_SetMaxBurstCapacity_Call{Call: _e.mock.On("SetMaxBurstCapacity", value)}
+}
+
+func (_c *MockCapacityRecorder_SetMaxBurstCapacity_Call) Run(run func(value int)) *MockCapacityRecorder_SetMaxBurstCapacity_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 int
+		if args[0] != nil {
+			arg0 = args[0].(int)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCapacityRecorder_SetMaxBurstCapacity_Call) Return() *MockCapacityRecorder_SetMaxBurstCapacity_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *MockCapacityRecorder_SetMaxBurstCapacity_Call) RunAndReturn(run func(value int)) *MockCapacityRecorder_SetMaxBurstCapacity_Call {
+	_c.Run(run)
+	return _c
+}
+
 // SetProactiveCapacity provides a mock function for the type MockCapacityRecorder
 func (_mock *MockCapacityRecorder) SetProactiveCapacity(value int) {
 	_mock.Called(value)
@@ -1658,6 +1698,46 @@ func (_c *MockServerExporter_SetPlaceholderPods_Call) Return() *MockServerExport
 }
 
 func (_c *MockServerExporter_SetPlaceholderPods_Call) RunAndReturn(run func(role string, phase string, value int)) *MockServerExporter_SetPlaceholderPods_Call {
+	_c.Run(run)
+	return _c
+}
+
+// SetMaxBurstCapacity provides a mock function for the type MockServerExporter
+func (_mock *MockServerExporter) SetMaxBurstCapacity(value int) {
+	_mock.Called(value)
+	return
+}
+
+// MockServerExporter_SetMaxBurstCapacity_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetMaxBurstCapacity'
+type MockServerExporter_SetMaxBurstCapacity_Call struct {
+	*mock.Call
+}
+
+// SetMaxBurstCapacity is a helper method to define mock.On call
+//   - value int
+func (_e *MockServerExporter_Expecter) SetMaxBurstCapacity(value interface{}) *MockServerExporter_SetMaxBurstCapacity_Call {
+	return &MockServerExporter_SetMaxBurstCapacity_Call{Call: _e.mock.On("SetMaxBurstCapacity", value)}
+}
+
+func (_c *MockServerExporter_SetMaxBurstCapacity_Call) Run(run func(value int)) *MockServerExporter_SetMaxBurstCapacity_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 int
+		if args[0] != nil {
+			arg0 = args[0].(int)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockServerExporter_SetMaxBurstCapacity_Call) Return() *MockServerExporter_SetMaxBurstCapacity_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *MockServerExporter_SetMaxBurstCapacity_Call) RunAndReturn(run func(value int)) *MockServerExporter_SetMaxBurstCapacity_Call {
 	_c.Run(run)
 	return _c
 }
