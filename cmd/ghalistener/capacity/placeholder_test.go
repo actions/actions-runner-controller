@@ -230,6 +230,142 @@ func TestCleanupTimedOut(t *testing.T) {
 	assert.Contains(t, pairs, "slot-new")
 }
 
+// TestCleanupBroken_DeletesSlotWithOnlyRunner verifies that a slot
+// missing its workflow pod is identified as broken, deleted, and
+// returned in the deleted slot list.
+func TestCleanupBroken_DeletesSlotWithOnlyRunner(t *testing.T) {
+	pm, cs := newTestPM(t, Config{})
+	ctx := context.Background()
+
+	// Create a healthy pair, then delete just the workflow pod to leave
+	// a broken slot with only the runner pod remaining.
+	require.NoError(t, pm.CreatePair(ctx, "broken-slot"))
+	pods, err := cs.CoreV1().Pods("test-ns").List(ctx, metav1.ListOptions{
+		LabelSelector: labelPlaceholderID + "=broken-slot," +
+			labelPlaceholderRole + "=" + rolePlaceholderWorkflow,
+	})
+	require.NoError(t, err)
+	require.Len(t, pods.Items, 1, "workflow pod must exist before delete")
+	require.NoError(t, cs.CoreV1().Pods("test-ns").Delete(
+		ctx, pods.Items[0].Name, metav1.DeleteOptions{},
+	))
+
+	pairs, err := pm.ListPairs(ctx)
+	require.NoError(t, err)
+	require.Len(t, pairs, 1)
+	require.NotNil(t, pairs["broken-slot"].RunnerPod)
+	require.Nil(t, pairs["broken-slot"].WorkflowPod)
+
+	deleted, failed, deletedSlots := pm.CleanupBroken(ctx, pairs)
+	assert.Equal(t, 1, deleted, "one broken slot deleted")
+	assert.Equal(t, 0, failed, "no failures")
+	assert.Equal(t, []string{"broken-slot"}, deletedSlots,
+		"deleted slot ID returned")
+
+	// All pods for that slot must be gone.
+	pods, err = cs.CoreV1().Pods("test-ns").List(ctx, metav1.ListOptions{
+		LabelSelector: labelPlaceholderID + "=broken-slot",
+	})
+	require.NoError(t, err)
+	assert.Empty(t, pods.Items, "no surviving pods for broken slot")
+}
+
+// TestCleanupBroken_DeletesSlotWithOnlyWorkflow is the symmetric case:
+// a slot missing its runner pod must also be deleted.
+func TestCleanupBroken_DeletesSlotWithOnlyWorkflow(t *testing.T) {
+	pm, cs := newTestPM(t, Config{})
+	ctx := context.Background()
+
+	require.NoError(t, pm.CreatePair(ctx, "broken-slot"))
+	pods, err := cs.CoreV1().Pods("test-ns").List(ctx, metav1.ListOptions{
+		LabelSelector: labelPlaceholderID + "=broken-slot," +
+			labelPlaceholderRole + "=" + rolePlaceholderRunner,
+	})
+	require.NoError(t, err)
+	require.Len(t, pods.Items, 1, "runner pod must exist before delete")
+	require.NoError(t, cs.CoreV1().Pods("test-ns").Delete(
+		ctx, pods.Items[0].Name, metav1.DeleteOptions{},
+	))
+
+	pairs, err := pm.ListPairs(ctx)
+	require.NoError(t, err)
+	require.Len(t, pairs, 1)
+	require.Nil(t, pairs["broken-slot"].RunnerPod)
+	require.NotNil(t, pairs["broken-slot"].WorkflowPod)
+
+	deleted, failed, deletedSlots := pm.CleanupBroken(ctx, pairs)
+	assert.Equal(t, 1, deleted, "one broken slot deleted")
+	assert.Equal(t, 0, failed, "no failures")
+	assert.Equal(t, []string{"broken-slot"}, deletedSlots)
+
+	pods, err = cs.CoreV1().Pods("test-ns").List(ctx, metav1.ListOptions{
+		LabelSelector: labelPlaceholderID + "=broken-slot",
+	})
+	require.NoError(t, err)
+	assert.Empty(t, pods.Items, "no surviving pods for broken slot")
+}
+
+// TestCleanupBroken_LeavesHealthyPairs verifies that fully populated
+// pairs (both runner + workflow pods present) are NOT deleted.
+func TestCleanupBroken_LeavesHealthyPairs(t *testing.T) {
+	pm, cs := newTestPM(t, Config{})
+	ctx := context.Background()
+
+	require.NoError(t, pm.CreatePair(ctx, "slot-a"))
+	require.NoError(t, pm.CreatePair(ctx, "slot-b"))
+
+	pairs, err := pm.ListPairs(ctx)
+	require.NoError(t, err)
+	require.Len(t, pairs, 2)
+
+	deleted, failed, deletedSlots := pm.CleanupBroken(ctx, pairs)
+	assert.Equal(t, 0, deleted, "no pairs deleted")
+	assert.Equal(t, 0, failed, "no failures")
+	assert.Empty(t, deletedSlots, "no slot IDs returned")
+
+	// All 4 pods (2 pairs × 2 pods) must still exist.
+	pods, err := cs.CoreV1().Pods("test-ns").List(ctx, metav1.ListOptions{})
+	require.NoError(t, err)
+	assert.Len(t, pods.Items, 4, "all healthy pair pods preserved")
+}
+
+// TestCleanupBroken_DeleteFailureStillExcludesSlot verifies that a
+// DeletePair error still causes the slot ID to be returned (so the
+// caller excludes it from currentPairs) and is recorded as failed.
+func TestCleanupBroken_DeleteFailureStillExcludesSlot(t *testing.T) {
+	pm, cs := newTestPM(t, Config{})
+	ctx := context.Background()
+
+	// Build a broken pair (only runner present).
+	require.NoError(t, pm.CreatePair(ctx, "broken-slot"))
+	wfPods, err := cs.CoreV1().Pods("test-ns").List(ctx, metav1.ListOptions{
+		LabelSelector: labelPlaceholderID + "=broken-slot," +
+			labelPlaceholderRole + "=" + rolePlaceholderWorkflow,
+	})
+	require.NoError(t, err)
+	require.NoError(t, cs.CoreV1().Pods("test-ns").Delete(
+		ctx, wfPods.Items[0].Name, metav1.DeleteOptions{},
+	))
+
+	pairs, err := pm.ListPairs(ctx)
+	require.NoError(t, err)
+	require.Len(t, pairs, 1)
+
+	// Inject a delete-collection failure for ALL subsequent calls.
+	cs.PrependReactor("delete-collection", "pods",
+		func(action k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, errors.New("simulated delete failure")
+		},
+	)
+
+	deleted, failed, deletedSlots := pm.CleanupBroken(ctx, pairs)
+	assert.Equal(t, 0, deleted, "delete failed -> 0 successful deletes")
+	assert.Equal(t, 1, failed, "one failed delete")
+	assert.Equal(t, []string{"broken-slot"}, deletedSlots,
+		"slot must still be returned so caller excludes it from currentPairs "+
+			"(counting it as healthy would mask the broken state)")
+}
+
 func TestCleanupOrphans(t *testing.T) {
 	cfg := Config{Namespace: "test-ns", ScaleSetName: "sset"}
 	cs := newFakeClientset()

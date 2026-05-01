@@ -428,7 +428,7 @@ func TestExporterCapacityRecorder_Counters(t *testing.T) {
 	assert.Equal(t, 2.0, counterValue(t, e, MetricCapacityPairCreatesTotal, labelKeyResult, "success"))
 	assert.Equal(t, 1.0, counterValue(t, e, MetricCapacityPairCreatesTotal, labelKeyResult, "error"))
 
-	for _, reason := range []string{"timeout", "orphan", "excess"} {
+	for _, reason := range []string{"timeout", "orphan", "excess", "broken"} {
 		e.IncPairDeletes(reason, "success")
 		e.IncPairDeletes(reason, "error")
 		e.IncPairDeletes(reason, "success")

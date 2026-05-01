@@ -459,6 +459,155 @@ func TestRetryWithBackoff_RespectsContextCancellation(t *testing.T) {
 	assert.ErrorIs(t, err, context.Canceled)
 }
 
+// TestProvisioner_BrokenPair_TriggersRecreation simulates a broken slot
+// (only the runner pod present, workflow pod has been deleted/evicted) and
+// asserts that the provisioner deletes the orphan pod, excludes the slot
+// from currentPairs in the SAME cycle, and creates a fresh full pair to
+// fill the freed slot — restoring the pre-warmed capacity.
+//
+// Without CleanupBroken, the slot would count as healthy and the provisioner
+// would think it was already at desired, leaving capacity permanently low.
+func TestProvisioner_BrokenPair_TriggersRecreation(t *testing.T) {
+	cfg := Config{
+		ProactiveCapacity:  5,
+		MaxRunners:         20,
+		PlaceholderTimeout: 5 * time.Minute,
+	}
+	rec := newFakeCapacityRecorder()
+	m, cs, _ := newTestMonitorWithRecorder(t, cfg, rec)
+	ctx := context.Background()
+
+	// Initial reconcile creates 5 healthy pairs (10 pods).
+	m.reconcileProvisioning(ctx)
+	assert.Equal(t, 10, countPods(t, cs, "test-ns"),
+		"5 healthy pairs after first reconcile")
+
+	// Break one slot by deleting just its workflow pod (simulating
+	// eviction/crash of the workflow placeholder).
+	pairs, err := m.placeholders.ListPairs(ctx)
+	require.NoError(t, err)
+	require.Len(t, pairs, 5)
+	var brokenSlotID string
+	for slotID := range pairs {
+		brokenSlotID = slotID
+		break
+	}
+	wfPods, err := cs.CoreV1().Pods("test-ns").List(ctx, metav1.ListOptions{
+		LabelSelector: labelPlaceholderID + "=" + brokenSlotID + "," +
+			labelPlaceholderRole + "=" + rolePlaceholderWorkflow,
+	})
+	require.NoError(t, err)
+	require.Len(t, wfPods.Items, 1)
+	require.NoError(t, cs.CoreV1().Pods("test-ns").Delete(
+		ctx, wfPods.Items[0].Name, metav1.DeleteOptions{},
+	))
+
+	// 4 pairs healthy + 1 surviving runner pod = 9 pods.
+	assert.Equal(t, 9, countPods(t, cs, "test-ns"),
+		"after break: 4 healthy pairs + 1 orphan runner pod")
+
+	// Run provisioning again. The broken slot should be detected,
+	// its surviving runner pod deleted, and a fresh full pair created
+	// in the SAME cycle (because CleanupBroken updates pairs and
+	// currentPairs in-place before adjustPairs runs).
+	m.reconcileProvisioning(ctx)
+
+	// End state: 5 healthy pairs (= 10 pods).
+	assert.Equal(t, 10, countPods(t, cs, "test-ns"),
+		"5 healthy pairs restored in the same cycle")
+
+	// The original broken slot must no longer exist (it was deleted).
+	finalPairs, err := m.placeholders.ListPairs(ctx)
+	require.NoError(t, err)
+	assert.Len(t, finalPairs, 5, "exactly 5 pairs in steady state")
+	assert.NotContains(t, finalPairs, brokenSlotID,
+		"broken slot must be gone (replaced by a fresh slot)")
+	for slotID, pair := range finalPairs {
+		assert.NotNilf(t, pair.RunnerPod, "slot %s must have runner pod", slotID)
+		assert.NotNilf(t, pair.WorkflowPod, "slot %s must have workflow pod", slotID)
+	}
+
+	// Metrics: one broken-success delete recorded, plus one new pair create.
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	assert.Equal(t, 1, rec.incPairDeletesCalls[deleteReasonBroken+":"+resultSuccess],
+		"one broken delete recorded as success")
+	assert.Equal(t, 0, rec.incPairDeletesCalls[deleteReasonBroken+":"+resultError],
+		"no broken delete failures")
+	// Pair creates: 5 (initial) + 1 (replacement). Cycles run twice.
+	assert.Equal(t, 6, rec.incPairCreatesCalls[resultSuccess],
+		"5 initial creates + 1 replacement create")
+}
+
+// TestProvisioner_BrokenPair_DeleteFailure simulates a DeletePair
+// failure during broken-pair cleanup. The cycle must not crash, the
+// slot must still be excluded from currentPairs (so the next cycle
+// re-detects it), and a broken-error metric must be recorded.
+func TestProvisioner_BrokenPair_DeleteFailure(t *testing.T) {
+	cfg := Config{
+		ProactiveCapacity:  3,
+		MaxRunners:         20,
+		PlaceholderTimeout: 5 * time.Minute,
+	}
+	rec := newFakeCapacityRecorder()
+	m, cs, _ := newTestMonitorWithRecorder(t, cfg, rec)
+	ctx := context.Background()
+
+	// Initial reconcile creates 3 healthy pairs.
+	m.reconcileProvisioning(ctx)
+	require.Equal(t, 6, countPods(t, cs, "test-ns"))
+
+	// Break one slot.
+	pairs, err := m.placeholders.ListPairs(ctx)
+	require.NoError(t, err)
+	var brokenSlotID string
+	for slotID := range pairs {
+		brokenSlotID = slotID
+		break
+	}
+	wfPods, err := cs.CoreV1().Pods("test-ns").List(ctx, metav1.ListOptions{
+		LabelSelector: labelPlaceholderID + "=" + brokenSlotID + "," +
+			labelPlaceholderRole + "=" + rolePlaceholderWorkflow,
+	})
+	require.NoError(t, err)
+	require.NoError(t, cs.CoreV1().Pods("test-ns").Delete(
+		ctx, wfPods.Items[0].Name, metav1.DeleteOptions{},
+	))
+
+	// Inject a delete-collection failure that targets only the broken
+	// slot (so the second-cycle replacement-create + the orphan-runner
+	// cleanup the next cycle does aren't blocked by the same reactor).
+	cs.PrependReactor("delete-collection", "pods",
+		func(action k8stesting.Action) (bool, runtime.Object, error) {
+			dca := action.(k8stesting.DeleteCollectionActionImpl)
+			sel := dca.GetListOptions().LabelSelector
+			if strings.Contains(sel, labelPlaceholderID+"="+brokenSlotID) {
+				return true, nil, fmt.Errorf("simulated delete failure")
+			}
+			return false, nil, nil
+		},
+	)
+
+	// Run the provisioner — must not crash even though delete fails.
+	assert.NotPanics(t, func() { m.reconcileProvisioning(ctx) })
+
+	// The broken slot must still have been excluded from currentPairs,
+	// so the provisioner created a replacement pair: total existing pairs
+	// = 4 (3 originals minus 1 still-broken + 1 new replacement).
+	pairs, err = m.placeholders.ListPairs(ctx)
+	require.NoError(t, err)
+	assert.Len(t, pairs, 4,
+		"4 pairs total: 2 untouched healthy + 1 still-broken (delete failed) + 1 new replacement")
+
+	// Metrics: one broken-error delete recorded.
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	assert.Equal(t, 0, rec.incPairDeletesCalls[deleteReasonBroken+":"+resultSuccess],
+		"delete failed -> no broken success")
+	assert.Equal(t, 1, rec.incPairDeletesCalls[deleteReasonBroken+":"+resultError],
+		"one broken delete failure recorded")
+}
+
 // ---- capacity recorder wiring tests ----
 //
 // These tests assert that the monitor calls the right CapacityRecorder

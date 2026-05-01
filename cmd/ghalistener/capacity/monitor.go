@@ -34,6 +34,7 @@ const (
 	deleteReasonOrphan  = "orphan"
 	deleteReasonTimeout = "timeout"
 	deleteReasonExcess  = "excess"
+	deleteReasonBroken  = "broken"
 
 	skipReasonProvisionerListPairs   = "provisioner_list_pairs"
 	skipReasonProvisionerListRunners = "provisioner_list_runners"
@@ -380,6 +381,27 @@ func (m *Monitor) reconcileProvisioning(ctx context.Context) {
 		m.recorder.IncReconcileSkips(skipReasonProvisionerListPairs)
 		return
 	}
+
+	// 3b. Cleanup broken pairs (slots with only one of two pods). Without
+	// this, currentPairs would count broken slots as healthy and the
+	// provisioner would not re-create capacity to replace them. The
+	// surviving orphan pod is deleted; the next adjustPairs step will
+	// create a fresh full pair to fill the freed slot in this same cycle.
+	brokenSuccess, brokenFailed, brokenSlots := m.placeholders.CleanupBroken(ctx, pairs)
+	for _, slotID := range brokenSlots {
+		delete(pairs, slotID)
+	}
+	for i := 0; i < brokenSuccess; i++ {
+		m.recorder.IncPairDeletes(deleteReasonBroken, resultSuccess)
+	}
+	for i := 0; i < brokenFailed; i++ {
+		m.recorder.IncPairDeletes(deleteReasonBroken, resultError)
+	}
+	if brokenSuccess > 0 || brokenFailed > 0 {
+		m.logger.Info("cleaned up broken placeholder pairs",
+			"success", brokenSuccess, "failed", brokenFailed)
+	}
+
 	currentPairs := len(pairs)
 	m.recorder.SetPairs(currentPairs)
 	m.emitPlaceholderPodPhases(pairs)

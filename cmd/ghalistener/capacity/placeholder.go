@@ -164,6 +164,50 @@ func (pm *PlaceholderManager) CleanupTimedOut(ctx context.Context) (int, int, er
 	return deleted, failed, nil
 }
 
+// CleanupBroken deletes pairs where only one of the two placeholder pods
+// exists (the other was evicted, deleted, or never landed). The surviving
+// orphan pod is deleted via DeletePair so the next reconcile cycle can
+// create a fresh full pair via the normal adjustPairs path.
+//
+// A broken pair cannot serve work — the missing pod means the slot reserves
+// a node but no workload can land. Without this cleanup, currentPairs would
+// count the broken slot as healthy and the provisioner would not re-create
+// capacity to replace it.
+//
+// Operates on the supplied pairs map (already fetched by the caller via
+// ListPairs) — no fresh List call. Returns (successful deletes, failed
+// deletes, deleted slot IDs). The caller should remove the returned slot
+// IDs from its local pairs map so the broken slots are excluded from
+// currentPairs in the same reconcile cycle (even on delete failure —
+// counting a broken slot as healthy here would mask the broken state;
+// the next cycle will re-detect any leftover state and retry).
+func (pm *PlaceholderManager) CleanupBroken(
+	ctx context.Context,
+	pairs map[string]*PlaceholderPair,
+) (int, int, []string) {
+	var deletedSlots []string
+	deleted, failed := 0, 0
+	for slotID, pair := range pairs {
+		if pair.RunnerPod != nil && pair.WorkflowPod != nil {
+			continue
+		}
+		if err := pm.DeletePair(ctx, slotID); err != nil {
+			pm.logger.Warn("failed to delete broken pair",
+				"slotID", slotID,
+				"hasRunner", pair.RunnerPod != nil,
+				"hasWorkflow", pair.WorkflowPod != nil,
+				"error", err,
+			)
+			failed++
+			deletedSlots = append(deletedSlots, slotID)
+			continue
+		}
+		deleted++
+		deletedSlots = append(deletedSlots, slotID)
+	}
+	return deleted, failed, deletedSlots
+}
+
 // CleanupOrphans deletes placeholder pods and anchor ConfigMaps from
 // previous listener instances of the SAME scale set (different
 // listener-pod label value but same scale-set-name label).
