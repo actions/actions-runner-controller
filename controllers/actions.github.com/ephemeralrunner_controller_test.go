@@ -725,6 +725,170 @@ var _ = Describe("EphemeralRunner", func() {
 			}
 		})
 
+		It("It should label the pod with job info when a job is assigned", func() {
+			pod := new(corev1.Pod)
+			Eventually(
+				func() (bool, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+					if err != nil {
+						return false, err
+					}
+					return true, nil
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(BeEquivalentTo(true))
+
+			// Simulate the listener patching job info onto the EphemeralRunner status
+			Eventually(func() error {
+				er := new(v1alpha1.EphemeralRunner)
+				if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, er); err != nil {
+					return err
+				}
+				er.Status.JobID = "12345"
+				er.Status.JobRepositoryName = "myorg/my-repo"
+				er.Status.JobDisplayName = "build"
+				er.Status.WorkflowRunID = 67890
+				return k8sClient.Status().Update(ctx, er)
+			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to update ephemeral runner status with job info")
+
+			// Set pod to running with a container status so the reconciler enters the running path
+			podCopy := pod.DeepCopy()
+			pod.Status.Phase = corev1.PodRunning
+			pod.Status.ContainerStatuses = []corev1.ContainerStatus{
+				{
+					Name:  v1alpha1.EphemeralRunnerContainerName,
+					State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+				},
+			}
+			err := k8sClient.Status().Patch(ctx, pod, client.MergeFrom(podCopy))
+			Expect(err).To(BeNil(), "failed to patch pod status to running")
+
+			// Verify pod gets labeled with job info (slash replaced with underscore)
+			Eventually(
+				func() (string, error) {
+					updatedPod := new(corev1.Pod)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updatedPod)
+					if err != nil {
+						return "", err
+					}
+					return updatedPod.Labels[LabelKeyGitHubJobRepository], nil
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(BeEquivalentTo("myorg_my-repo"))
+
+			// Verify all labels and annotations
+			updatedPod := new(corev1.Pod)
+			err = k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updatedPod)
+			Expect(err).To(BeNil())
+			Expect(updatedPod.Labels[LabelKeyGitHubJobDisplayName]).To(Equal("build"))
+			Expect(updatedPod.Annotations[AnnotationKeyGitHubJobID]).To(Equal("12345"))
+			Expect(updatedPod.Annotations[AnnotationKeyWorkflowRunID]).To(Equal("67890"))
+			Expect(updatedPod.Annotations[AnnotationKeyGitHubJobRepository]).To(Equal("myorg/my-repo"))
+		})
+
+		It("It should not label the pod when no job is assigned", func() {
+			pod := new(corev1.Pod)
+			Eventually(
+				func() (bool, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+					if err != nil {
+						return false, err
+					}
+					return true, nil
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(BeEquivalentTo(true))
+
+			// Set pod to running without any job info on the EphemeralRunner
+			podCopy := pod.DeepCopy()
+			pod.Status.Phase = corev1.PodRunning
+			pod.Status.ContainerStatuses = []corev1.ContainerStatus{
+				{
+					Name:  v1alpha1.EphemeralRunnerContainerName,
+					State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+				},
+			}
+			err := k8sClient.Status().Patch(ctx, pod, client.MergeFrom(podCopy))
+			Expect(err).To(BeNil(), "failed to patch pod status to running")
+
+			// Wait for the reconciler to process the pod status update
+			Eventually(
+				func() (v1alpha1.EphemeralRunnerPhase, error) {
+					updated := new(v1alpha1.EphemeralRunner)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated)
+					if err != nil {
+						return "", err
+					}
+					return updated.Status.Phase, nil
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(BeEquivalentTo(corev1.PodRunning))
+
+			// Verify pod does NOT have job labels
+			updatedPod := new(corev1.Pod)
+			err = k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updatedPod)
+			Expect(err).To(BeNil())
+			Expect(updatedPod.Labels[LabelKeyGitHubJobRepository]).To(BeEmpty())
+			Expect(updatedPod.Labels[LabelKeyGitHubJobDisplayName]).To(BeEmpty())
+			Expect(updatedPod.Annotations[AnnotationKeyGitHubJobID]).To(BeEmpty())
+		})
+
+		It("It should truncate long job label values", func() {
+			pod := new(corev1.Pod)
+			Eventually(
+				func() (bool, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+					if err != nil {
+						return false, err
+					}
+					return true, nil
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(BeEquivalentTo(true))
+
+			longName := "myorg/this-is-a-very-long-repository-name-that-exceeds-sixty-three-characters-limit"
+			Eventually(func() error {
+				er := new(v1alpha1.EphemeralRunner)
+				if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, er); err != nil {
+					return err
+				}
+				er.Status.JobID = "99"
+				er.Status.JobRepositoryName = longName
+				er.Status.JobDisplayName = "build"
+				er.Status.WorkflowRunID = 1
+				return k8sClient.Status().Update(ctx, er)
+			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to update ephemeral runner status with long job repo name")
+
+			podCopy := pod.DeepCopy()
+			pod.Status.Phase = corev1.PodRunning
+			pod.Status.ContainerStatuses = []corev1.ContainerStatus{
+				{
+					Name:  v1alpha1.EphemeralRunnerContainerName,
+					State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+				},
+			}
+			err := k8sClient.Status().Patch(ctx, pod, client.MergeFrom(podCopy))
+			Expect(err).To(BeNil(), "failed to patch pod status to running")
+
+			Eventually(
+				func() (string, error) {
+					updatedPod := new(corev1.Pod)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updatedPod)
+					if err != nil {
+						return "", err
+					}
+					return updatedPod.Labels[LabelKeyGitHubJobRepository], nil
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(Equal(sanitizeLabelValue(longName)))
+		})
+
 		It("It should update ready based on the latest condition", func() {
 			pod := new(corev1.Pod)
 			Eventually(func() (bool, error) {

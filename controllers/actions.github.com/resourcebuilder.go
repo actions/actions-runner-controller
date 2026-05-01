@@ -837,6 +837,11 @@ func trimLabelValue(val string) string {
 	return strings.Trim(val, "-_.")
 }
 
+func sanitizeLabelValue(val string) string {
+	val = strings.ReplaceAll(val, "/", "_")
+	return trimLabelValue(val)
+}
+
 func (b *ResourceBuilder) filterAndMergeLabels(base, overwrite map[string]string) map[string]string {
 	if base == nil && overwrite == nil {
 		return nil

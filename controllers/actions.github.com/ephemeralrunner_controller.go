@@ -362,6 +362,10 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			log.Info("Failed to update ephemeral runner status. Requeue to not miss this event")
 			return ctrl.Result{}, err
 		}
+		if err := r.labelPodWithJobInfo(ctx, ephemeralRunner, pod, log); err != nil {
+			log.Error(err, "Failed to label pod with job info")
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{}, nil
 
 	case cs.State.Terminated.ExitCode == 7: // outdated
@@ -823,6 +827,42 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 	}
 
 	log.Info("Updated ephemeral runner status")
+	return nil
+}
+
+func (r *EphemeralRunnerReconciler) labelPodWithJobInfo(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, pod *corev1.Pod, log logr.Logger) error {
+	if !ephemeralRunner.HasJob() {
+		return nil
+	}
+
+	if pod.Labels[LabelKeyGitHubJobRepository] != "" {
+		return nil
+	}
+
+	log.Info("Patching pod with job info labels",
+		"jobRepository", ephemeralRunner.Status.JobRepositoryName,
+		"jobDisplayName", ephemeralRunner.Status.JobDisplayName,
+	)
+
+	podPatch := client.MergeFrom(pod.DeepCopy())
+	if pod.Labels == nil {
+		pod.Labels = make(map[string]string)
+	}
+	if pod.Annotations == nil {
+		pod.Annotations = make(map[string]string)
+	}
+
+	pod.Labels[LabelKeyGitHubJobRepository] = sanitizeLabelValue(ephemeralRunner.Status.JobRepositoryName)
+	pod.Labels[LabelKeyGitHubJobDisplayName] = sanitizeLabelValue(ephemeralRunner.Status.JobDisplayName)
+	pod.Annotations[AnnotationKeyGitHubJobID] = ephemeralRunner.Status.JobID
+	pod.Annotations[AnnotationKeyWorkflowRunID] = strconv.FormatInt(ephemeralRunner.Status.WorkflowRunID, 10)
+	pod.Annotations[AnnotationKeyGitHubJobRepository] = ephemeralRunner.Status.JobRepositoryName
+
+	if err := r.Patch(ctx, pod, podPatch); err != nil {
+		return fmt.Errorf("failed to patch pod with job info: %w", err)
+	}
+
+	log.Info("Patched pod with job info labels")
 	return nil
 }
 
