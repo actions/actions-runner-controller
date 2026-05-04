@@ -115,9 +115,14 @@ args:
   - dockerd
   - --host=unix:///var/run/docker.sock
   - --group=$(DOCKER_GROUP_GID)
+  - --cgroup-parent=/kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod${POD_UID//-/_}.slice
 env:
   - name: DOCKER_GROUP_GID
     value: "123"
+  - name: POD_UID
+    valueFrom:
+      fieldRef:
+        fieldPath: metadata.uid
 securityContext:
   privileged: true
 {{- if (ge (.Capabilities.KubeVersion.Minor | int) 29) }}
