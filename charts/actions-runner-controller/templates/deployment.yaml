@@ -73,6 +73,9 @@ spec:
         {{- if .Values.dockerGID  }}
         - "--docker-gid={{ .Values.dockerGID }}"
         {{- end }}
+        {{- with .Values.healthProbeBindAddress }}
+        - "--health-probe-bind-address={{ . }}"
+        {{- end }}
         command:
         - "/manager"
         env:
@@ -143,6 +146,20 @@ spec:
         - containerPort: {{ .Values.metrics.port }}
           name: metrics-port
           protocol: TCP
+        {{- end }}
+        {{- with .Values.healthProbeBindAddress }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: {{ regexFind "[0-9]+$" . }}
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: {{ regexFind "[0-9]+$" . }}
+          initialDelaySeconds: 5
+          periodSeconds: 10
         {{- end }}
         resources:
           {{- toYaml .Values.resources | nindent 12 }}

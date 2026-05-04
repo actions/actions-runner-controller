@@ -335,6 +335,46 @@ func TestTemplateRenderedSetServiceAccountToKubeNoVolumeMode(t *testing.T) {
 	assert.Equal(t, expectedServiceAccountName, ars.Annotations[actionsgithubcom.AnnotationKeyKubernetesModeServiceAccountName])
 }
 
+func TestTemplateRenderedNoPermissionServiceAccountNotRenderedInKubernetesModes(t *testing.T) {
+	t.Parallel()
+
+	for _, mode := range []string{"kubernetes", "kubernetes-novolume"} {
+		t.Run("containerMode "+mode, func(t *testing.T) {
+			helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+			require.NoError(t, err)
+
+			releaseName := "test-runners"
+			namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+			options := &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"githubConfigUrl":                    "https://github.com/actions",
+					"githubConfigSecret.github_token":    "gh_token12345",
+					"controllerServiceAccount.name":      "arc",
+					"controllerServiceAccount.namespace": "arc-system",
+					"containerMode.type":                 mode,
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+			}
+
+			_, err = helm.RenderTemplateE(
+				t,
+				options,
+				helmChartPath,
+				releaseName,
+				[]string{"templates/no_permission_serviceaccount.yaml"},
+			)
+			assert.ErrorContains(
+				t,
+				err,
+				"could not find template templates/no_permission_serviceaccount.yaml in chart",
+				"no permission service account should not be rendered in "+mode+" mode",
+			)
+		})
+	}
+}
+
 func TestTemplateRenderedUserProvideSetServiceAccount(t *testing.T) {
 	t.Parallel()
 
@@ -472,6 +512,37 @@ func TestTemplateRenderedAutoScalingRunnerSet_RunnerScaleSetName(t *testing.T) {
 	assert.Len(t, ars.Spec.Template.Spec.Containers, 1, "Template.Spec should have 1 container")
 	assert.Equal(t, "runner", ars.Spec.Template.Spec.Containers[0].Name)
 	assert.Equal(t, "ghcr.io/actions/actions-runner:latest", ars.Spec.Template.Spec.Containers[0].Image)
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_ScaleSetLabels(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"githubConfigUrl":                    "https://github.com/actions",
+			"githubConfigSecret.github_token":    "gh_token12345",
+			"scaleSetLabels[0]":                  "linux",
+			"scaleSetLabels[1]":                  "x64",
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	assert.Equal(t, []string{"linux", "x64"}, ars.Spec.RunnerScaleSetLabels)
 }
 
 func TestTemplateRenderedAutoScalingRunnerSet_ProvideMetadata(t *testing.T) {

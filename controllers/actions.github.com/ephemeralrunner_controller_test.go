@@ -511,7 +511,7 @@ var _ = Describe("EphemeralRunner", func() {
 
 			updated := new(v1alpha1.EphemeralRunner)
 			Eventually(
-				func() (corev1.PodPhase, error) {
+				func() (v1alpha1.EphemeralRunnerPhase, error) {
 					err := k8sClient.Get(
 						ctx,
 						client.ObjectKey{Name: invalideEphemeralRunner.Name, Namespace: invalideEphemeralRunner.Namespace},
@@ -524,7 +524,7 @@ var _ = Describe("EphemeralRunner", func() {
 				},
 				ephemeralRunnerTimeout,
 				ephemeralRunnerInterval,
-			).Should(BeEquivalentTo(corev1.PodFailed))
+			).Should(BeEquivalentTo(v1alpha1.EphemeralRunnerPhaseFailed))
 
 			Expect(updated.Status.Reason).Should(Equal("InvalidPod"))
 			Expect(updated.Status.Message).Should(Equal("Failed to create the pod: pods \"invalid-ephemeral-runner\" is forbidden: no PriorityClass with name notexist was found"))
@@ -676,7 +676,7 @@ var _ = Describe("EphemeralRunner", func() {
 					if err != nil {
 						return 0, err
 					}
-					return updatedEphemeralRunner.Status.RunnerId, nil
+					return updatedEphemeralRunner.Status.RunnerID, nil
 				},
 				ephemeralRunnerTimeout,
 				ephemeralRunnerInterval,
@@ -711,7 +711,7 @@ var _ = Describe("EphemeralRunner", func() {
 
 				var updated *v1alpha1.EphemeralRunner
 				Eventually(
-					func() (corev1.PodPhase, error) {
+					func() (v1alpha1.EphemeralRunnerPhase, error) {
 						updated = new(v1alpha1.EphemeralRunner)
 						err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated)
 						if err != nil {
@@ -833,10 +833,10 @@ var _ = Describe("EphemeralRunner", func() {
 			Expect(err).To(BeNil(), "failed to patch pod status")
 
 			Consistently(
-				func() (corev1.PodPhase, error) {
+				func() (v1alpha1.EphemeralRunnerPhase, error) {
 					updated := new(v1alpha1.EphemeralRunner)
 					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated); err != nil {
-						return corev1.PodUnknown, err
+						return "Unknown", err
 					}
 					return updated.Status.Phase, nil
 				},
@@ -1059,7 +1059,7 @@ var _ = Describe("EphemeralRunner", func() {
 			Expect(err).To(BeNil())
 
 			Eventually(
-				func() (corev1.PodPhase, error) {
+				func() (v1alpha1.EphemeralRunnerPhase, error) {
 					updated := new(v1alpha1.EphemeralRunner)
 					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated); err != nil {
 						return "", err
@@ -1068,7 +1068,7 @@ var _ = Describe("EphemeralRunner", func() {
 				},
 				ephemeralRunnerTimeout,
 				ephemeralRunnerInterval,
-			).Should(BeEquivalentTo(corev1.PodRunning))
+			).Should(BeEquivalentTo(v1alpha1.EphemeralRunnerPhaseRunning))
 
 			// set phase to succeeded
 			pod.Status.Phase = corev1.PodSucceeded
@@ -1076,7 +1076,7 @@ var _ = Describe("EphemeralRunner", func() {
 			Expect(err).To(BeNil())
 
 			Consistently(
-				func() (corev1.PodPhase, error) {
+				func() (v1alpha1.EphemeralRunnerPhase, error) {
 					updated := new(v1alpha1.EphemeralRunner)
 					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated); err != nil {
 						return "", err
@@ -1084,7 +1084,7 @@ var _ = Describe("EphemeralRunner", func() {
 					return updated.Status.Phase, nil
 				},
 				ephemeralRunnerTimeout,
-			).Should(BeEquivalentTo(corev1.PodRunning))
+			).Should(BeEquivalentTo(v1alpha1.EphemeralRunnerPhaseRunning))
 		})
 	})
 

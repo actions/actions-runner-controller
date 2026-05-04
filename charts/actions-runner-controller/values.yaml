@@ -190,6 +190,10 @@ admissionWebHooks:
 
 # There may be alternatives to setting `hostNetwork: true`, see
 # https://github.com/actions/actions-runner-controller/issues/1005#issuecomment-993097155
+# The address the health probe endpoint binds to. Disabled if empty.
+# When set, liveness and readiness probes are added to the controller pod.
+#healthProbeBindAddress: ":8081"
+
 #hostNetwork: true
 
 # If you use `hostNetwork: true`, then you need dnsPolicy: ClusterFirstWithHostNet

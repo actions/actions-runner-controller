@@ -17,9 +17,6 @@ ARC_NAME="arc"
 ARC_NAMESPACE="arc-systems"
 
 function install_arc() {
-    echo "Creating namespace ${ARC_NAMESPACE}"
-    kubectl create namespace "${SCALE_SET_NAMESPACE}"
-
     echo "Installing ARC"
     helm install "${ARC_NAME}" \
         --namespace "${ARC_NAMESPACE}" \

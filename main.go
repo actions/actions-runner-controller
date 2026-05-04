@@ -39,10 +39,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	// +kubebuilder:scaffold:imports
 )
@@ -83,6 +86,8 @@ func main() {
 		listenerMetricsEndpoint string
 
 		metricsAddr              string
+		pprofAddr                string
+		probeAddr                string
 		autoScalingRunnerSetOnly bool
 		enableLeaderElection     bool
 		disableAdmissionWebhook  bool
@@ -110,6 +115,8 @@ func main() {
 
 		k8sClientRateLimiterQPS   int
 		k8sClientRateLimiterBurst int
+
+		workqueueRateLimiter string
 	)
 	var c github.Config
 	err = envconfig.Process("github", &c)
@@ -121,6 +128,8 @@ func main() {
 	flag.StringVar(&listenerMetricsAddr, "listener-metrics-addr", ":8080", "The address applied to AutoscalingListener metrics server")
 	flag.StringVar(&listenerMetricsEndpoint, "listener-metrics-endpoint", "/metrics", "The AutoscalingListener metrics server endpoint from which the metrics are collected")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
+	flag.StringVar(&pprofAddr, "pprof-addr", "", "The address the pprof endpoint binds to.")
+	flag.StringVar(&probeAddr, "health-probe-bind-address", "", "The address the health probe endpoint binds to. Disabled if empty.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&leaderElectionID, "leader-election-id", "actions-runner-controller", "Controller id for leader election.")
@@ -155,6 +164,7 @@ func main() {
 	flag.Var(&autoScalerImagePullSecrets, "auto-scaler-image-pull-secrets", "The default image-pull secret name for auto-scaler listener container.")
 	flag.IntVar(&k8sClientRateLimiterQPS, "k8s-client-rate-limiter-qps", 20, "The QPS value of the K8s client rate limiter.")
 	flag.IntVar(&k8sClientRateLimiterBurst, "k8s-client-rate-limiter-burst", 30, "The burst value of the K8s client rate limiter.")
+	flag.StringVar(&workqueueRateLimiter, "workqueue-rate-limiter", "", `The workqueue rate limiter to use. Valid values are "bucket_rate_limiter" (default) and "typed_rate_limiter" (per-item only, no global token bucket).`)
 	flag.Parse()
 
 	runnerPodDefaults.RunnerImagePullSecrets = runnerImagePullSecrets
@@ -239,9 +249,11 @@ func main() {
 			SyncPeriod:        &syncPeriod,
 			DefaultNamespaces: defaultNamespaces,
 		},
-		WebhookServer:    webhookServer,
-		LeaderElection:   enableLeaderElection,
-		LeaderElectionID: leaderElectionID,
+		PprofBindAddress:       pprofAddr,
+		WebhookServer:          webhookServer,
+		HealthProbeBindAddress: probeAddr,
+		LeaderElection:         enableLeaderElection,
+		LeaderElectionID:       leaderElectionID,
 		Client: client.Options{
 			Cache: &client.CacheOptions{
 				DisableFor: []client.Object{
@@ -254,6 +266,17 @@ func main() {
 	if err != nil {
 		log.Error(err, "unable to start manager")
 		os.Exit(1)
+	}
+
+	if probeAddr != "" {
+		if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+			log.Error(err, "unable to set up health check")
+			os.Exit(1)
+		}
+		if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+			log.Error(err, "unable to set up ready check")
+			os.Exit(1)
+		}
 	}
 
 	if autoScalingRunnerSetOnly {
@@ -293,6 +316,20 @@ func main() {
 
 		log.Info("Resource builder initializing")
 
+		var controllerOpts []actionsgithubcom.Option
+		switch workqueueRateLimiter {
+		case "typed_rate_limiter":
+			log.Info("Using typed rate limiter (per-item only, no global token bucket)")
+			controllerOpts = append(controllerOpts,
+				actionsgithubcom.WithTypedRateLimiter(workqueue.DefaultTypedItemBasedRateLimiter[reconcile.Request]()),
+			)
+		case "bucket_rate_limiter", "":
+			log.Info("Using default bucket rate limiter")
+		default:
+			log.Error(fmt.Errorf("unknown workqueue rate limiter: %s", workqueueRateLimiter), "invalid --workqueue-rate-limiter value")
+			os.Exit(1)
+		}
+
 		if err = (&actionsgithubcom.AutoscalingRunnerSetReconciler{
 			Client:                             mgr.GetClient(),
 			Log:                                log.WithName("AutoscalingRunnerSet").WithValues("version", build.Version),
@@ -302,17 +339,18 @@ func main() {
 			UpdateStrategy:                     actionsgithubcom.UpdateStrategy(updateStrategy),
 			DefaultRunnerScaleSetListenerImagePullSecrets: autoScalerImagePullSecrets,
 			ResourceBuilder: rb,
-		}).SetupWithManager(mgr); err != nil {
+		}).SetupWithManager(mgr, controllerOpts...); err != nil {
 			log.Error(err, "unable to create controller", "controller", "AutoscalingRunnerSet")
 			os.Exit(1)
 		}
 
+		runnerOpts := append(controllerOpts, actionsgithubcom.WithMaxConcurrentReconciles(opts.RunnerMaxConcurrentReconciles))
 		if err = (&actionsgithubcom.EphemeralRunnerReconciler{
 			Client:          mgr.GetClient(),
 			Log:             log.WithName("EphemeralRunner").WithValues("version", build.Version),
 			Scheme:          mgr.GetScheme(),
 			ResourceBuilder: rb,
-		}).SetupWithManager(mgr, actionsgithubcom.WithMaxConcurrentReconciles(opts.RunnerMaxConcurrentReconciles)); err != nil {
+		}).SetupWithManager(mgr, runnerOpts...); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunner")
 			os.Exit(1)
 		}
@@ -323,7 +361,7 @@ func main() {
 			Scheme:          mgr.GetScheme(),
 			PublishMetrics:  metricsAddr != "0",
 			ResourceBuilder: rb,
-		}).SetupWithManager(mgr); err != nil {
+		}).SetupWithManager(mgr, controllerOpts...); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunnerSet")
 			os.Exit(1)
 		}
@@ -335,7 +373,7 @@ func main() {
 			ListenerMetricsAddr:     listenerMetricsAddr,
 			ListenerMetricsEndpoint: listenerMetricsEndpoint,
 			ResourceBuilder:         rb,
-		}).SetupWithManager(mgr); err != nil {
+		}).SetupWithManager(mgr, controllerOpts...); err != nil {
 			log.Error(err, "unable to create controller", "controller", "AutoscalingListener")
 			os.Exit(1)
 		}

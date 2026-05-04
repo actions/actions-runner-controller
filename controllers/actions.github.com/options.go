@@ -1,8 +1,10 @@
 package actionsgithubcom
 
 import (
+	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // Options is the optional configuration for the controllers, which can be
@@ -34,6 +36,25 @@ type Option func(*controller.Options)
 func WithMaxConcurrentReconciles(n int) Option {
 	return func(b *controller.Options) {
 		b.MaxConcurrentReconciles = n
+	}
+}
+
+// WithTypedRateLimiter sets the rate limiter for the controller's workqueue.
+//
+// By default, the controller-runtime uses
+// workqueue.DefaultTypedControllerRateLimiter[reconcile.Request], which combines
+// an exponential backoff per-item limiter with a token bucket overall limiter
+// (10 QPS, 100 bucket size). In large-scale environments with many runner
+// scale sets, the token bucket limiter can become a bottleneck for
+// reconciliation throughput.
+//
+// Use this option to override the default rate limiter, for example, to use
+// workqueue.DefaultTypedItemBasedRateLimiter[reconcile.Request], which removes
+// the overall token bucket constraint while keeping the per-item exponential
+// backoff.
+func WithTypedRateLimiter(rateLimiter workqueue.TypedRateLimiter[reconcile.Request]) Option {
+	return func(b *controller.Options) {
+		b.RateLimiter = rateLimiter
 	}
 }
 

@@ -8385,6 +8385,10 @@ spec:
                   type: object
                 runnerGroup:
                   type: string
+                runnerScaleSetLabels:
+                  items:
+                    type: string
+                  type: array
                 runnerScaleSetName:
                   type: string
                 template:
@@ -16547,10 +16551,10 @@ spec:
                   type: integer
                 pendingEphemeralRunners:
                   type: integer
+                phase:
+                  type: string
                 runningEphemeralRunners:
                   type: integer
-                state:
-                  type: string
               type: object
           type: object
       served: true

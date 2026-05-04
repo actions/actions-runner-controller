@@ -291,9 +291,30 @@ func TestOwnershipRelationships(t *testing.T) {
 	ephemeralRunnerSet, err := b.newEphemeralRunnerSet(&autoscalingRunnerSet)
 	require.NoError(t, err)
 
+	// Create and test Listener Pod ownership
+	listener, err := b.newAutoScalingListener(&autoscalingRunnerSet, ephemeralRunnerSet, autoscalingRunnerSet.Namespace, "test:latest", nil)
+	require.NoError(t, err)
+	listener.UID = "test-listener-uid"
+	listenerServiceAccount := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-sa"},
+	}
+	listenerPod, err := b.newScaleSetListenerPod(listener, &corev1.Secret{}, listenerServiceAccount, nil)
+	require.NoError(t, err)
+
+	require.Len(t, listenerPod.OwnerReferences, 1, "Listener Pod should have exactly one owner reference")
+	ownerRef := listenerPod.OwnerReferences[0]
+	assert.Equal(t, v1alpha1.GroupVersion.String(), ownerRef.APIVersion, "Owner reference APIVersion should match GroupVersion")
+	assert.Equal(t, "AutoscalingListener", ownerRef.Kind, "Owner reference Kind should be AutoscalingListener")
+	assert.Equal(t, listener.GetName(), ownerRef.Name, "Owner reference name should match AutoscalingListener name")
+	assert.Equal(t, listener.GetUID(), ownerRef.UID, "Owner reference UID should match AutoscalingListener UID")
+	assert.Equal(t, true, *ownerRef.Controller, "Controller flag should be true")
+	assert.Equal(t, true, *ownerRef.BlockOwnerDeletion, "BlockOwnerDeletion flag should be true")
+
 	// Test EphemeralRunnerSet ownership
 	require.Len(t, ephemeralRunnerSet.OwnerReferences, 1, "EphemeralRunnerSet should have exactly one owner reference")
-	ownerRef := ephemeralRunnerSet.OwnerReferences[0]
+	ownerRef = ephemeralRunnerSet.OwnerReferences[0]
+	assert.Equal(t, v1alpha1.GroupVersion.String(), ownerRef.APIVersion, "Owner reference APIVersion should match GroupVersion")
+	assert.Equal(t, "AutoscalingRunnerSet", ownerRef.Kind, "Owner reference Kind should be AutoscalingRunnerSet")
 	assert.Equal(t, autoscalingRunnerSet.GetName(), ownerRef.Name, "Owner reference name should match AutoscalingRunnerSet name")
 	assert.Equal(t, autoscalingRunnerSet.GetUID(), ownerRef.UID, "Owner reference UID should match AutoscalingRunnerSet UID")
 	assert.Equal(t, true, *ownerRef.Controller, "Controller flag should be true")
@@ -305,6 +326,8 @@ func TestOwnershipRelationships(t *testing.T) {
 	// Test EphemeralRunner ownership
 	require.Len(t, ephemeralRunner.OwnerReferences, 1, "EphemeralRunner should have exactly one owner reference")
 	ownerRef = ephemeralRunner.OwnerReferences[0]
+	assert.Equal(t, v1alpha1.GroupVersion.String(), ownerRef.APIVersion, "Owner reference APIVersion should match GroupVersion")
+	assert.Equal(t, "EphemeralRunnerSet", ownerRef.Kind, "Owner reference Kind should be EphemeralRunnerSet")
 	assert.Equal(t, ephemeralRunnerSet.GetName(), ownerRef.Name, "Owner reference name should match EphemeralRunnerSet name")
 	assert.Equal(t, ephemeralRunnerSet.GetUID(), ownerRef.UID, "Owner reference UID should match EphemeralRunnerSet UID")
 	assert.Equal(t, true, *ownerRef.Controller, "Controller flag should be true")
@@ -321,6 +344,8 @@ func TestOwnershipRelationships(t *testing.T) {
 	// Test EphemeralRunnerPod ownership
 	require.Len(t, pod.OwnerReferences, 1, "EphemeralRunnerPod should have exactly one owner reference")
 	ownerRef = pod.OwnerReferences[0]
+	assert.Equal(t, v1alpha1.GroupVersion.String(), ownerRef.APIVersion, "Owner reference APIVersion should match GroupVersion")
+	assert.Equal(t, "EphemeralRunner", ownerRef.Kind, "Owner reference Kind should be EphemeralRunner")
 	assert.Equal(t, ephemeralRunner.GetName(), ownerRef.Name, "Owner reference name should match EphemeralRunner name")
 	assert.Equal(t, ephemeralRunner.GetUID(), ownerRef.UID, "Owner reference UID should match EphemeralRunner UID")
 	assert.Equal(t, true, *ownerRef.Controller, "Controller flag should be true")

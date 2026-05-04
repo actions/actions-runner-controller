@@ -44,6 +44,10 @@ controller:
       k8sClientRateLimiterQPS: null
       k8sClientRateLimiterBurst: null
 
+      # The address the health probe endpoint binds to. Disabled if empty/null.
+      # When set, liveness and readiness probes are added to the controller pod.
+      # healthProbeBindAddress: ":8081"
+
     container:
       image: "ghcr.io/actions/gha-runner-scale-set-controller:latest"
       pullPolicy: IfNotPresent
