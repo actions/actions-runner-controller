@@ -309,6 +309,11 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 
+	if err := r.labelPodWithJobInfo(ctx, ephemeralRunner, pod, log); err != nil {
+		log.Error(err, "Failed to label pod with job info")
+		return ctrl.Result{}, err
+	}
+
 	cs := runnerContainerStatus(pod)
 	switch {
 	case pod.Status.Phase == corev1.PodFailed: // All containers are stopped
@@ -360,10 +365,6 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		log.Info("Runner container is still running; updating ephemeral runner status")
 		if err := r.updateRunStatusFromPod(ctx, ephemeralRunner, pod, log); err != nil {
 			log.Info("Failed to update ephemeral runner status. Requeue to not miss this event")
-			return ctrl.Result{}, err
-		}
-		if err := r.labelPodWithJobInfo(ctx, ephemeralRunner, pod, log); err != nil {
-			log.Error(err, "Failed to label pod with job info")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -831,7 +832,7 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 }
 
 func (r *EphemeralRunnerReconciler) labelPodWithJobInfo(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, pod *corev1.Pod, log logr.Logger) error {
-	if !ephemeralRunner.HasJob() {
+	if ephemeralRunner.Status.JobRepositoryName == "" {
 		return nil
 	}
 

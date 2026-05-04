@@ -261,6 +261,33 @@ func TestGitHubURLTrimLabelValues(t *testing.T) {
 	})
 }
 
+func TestSanitizeLabelValue(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"simple", "my-repo", "my-repo"},
+		{"slashes replaced", "myorg/my-repo", "myorg_my-repo"},
+		{"spaces replaced", "Test default-runners", "Test_default-runners"},
+		{"multiple invalid chars", "org/repo name (test)", "org_repo_name__test"},
+		{"leading invalid stripped", "---my-repo", "my-repo"},
+		{"trailing invalid stripped", "my-repo...", "my-repo"},
+		{"all invalid chars", "///", ""},
+		{"empty string", "", ""},
+		{"truncated to 63", strings.Repeat("a", 100), strings.Repeat("a", 63)},
+		{"truncated trailing invalid stripped", strings.Repeat("a", 60) + "/..", strings.Repeat("a", 60)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := sanitizeLabelValue(tt.input)
+			assert.Equal(t, tt.expected, got)
+			assert.LessOrEqual(t, len(got), 63)
+		})
+	}
+}
+
 func TestOwnershipRelationships(t *testing.T) {
 	// Create an AutoscalingRunnerSet
 	autoscalingRunnerSet := v1alpha1.AutoscalingRunnerSet{
