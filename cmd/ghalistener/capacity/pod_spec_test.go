@@ -51,9 +51,10 @@ func TestRunnerPlaceholder_NoGPU_NoFleet_NoRunnerClass(t *testing.T) {
 
 // Workflow placeholder mirrors the job-pod.yaml ConfigMap template:
 // NO hard nodeSelector — uses preferredDuringScheduling node affinity
-// with weight 50 for node-fleet + workload-type. Tolerations:
-// instance-type Exists, optional node-fleet, optional GPU. NO
-// git-cache-not-ready (workflow waits for cache, doesn't tolerate the taint).
+// with weight 50 for node-fleet + workload-type, plus a REQUIRED runner-class
+// term (DoesNotExist when RunnerClass unset). Tolerations: instance-type Exists,
+// optional node-fleet, optional GPU. NO git-cache-not-ready (workflow waits
+// for cache, doesn't tolerate the taint).
 func TestWorkflowPlaceholder_NoGPU_NoFleet_NoRunnerClass(t *testing.T) {
 	pm, _ := newTestPM(t, Config{})
 	ctx := context.Background()
@@ -67,8 +68,18 @@ func TestWorkflowPlaceholder_NoGPU_NoFleet_NoRunnerClass(t *testing.T) {
 	require.NotNil(t, wf.Spec.Affinity)
 	require.NotNil(t, wf.Spec.Affinity.NodeAffinity)
 	preferred := wf.Spec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution
-	require.NotEmpty(t, preferred)
-	assert.Equal(t, int32(50), preferred[len(preferred)-1].Weight)
+	require.Len(t, preferred, 1, "only fleet preference; runner-class lives in required terms")
+	assert.Equal(t, int32(50), preferred[0].Weight)
+
+	// Required: runner-class DoesNotExist (matches workflow pod's required term
+	// for non-class fleets).
+	required := wf.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+	require.NotNil(t, required)
+	require.Len(t, required.NodeSelectorTerms, 1)
+	exprs := required.NodeSelectorTerms[0].MatchExpressions
+	require.Len(t, exprs, 1)
+	assert.Equal(t, "osdc.io/runner-class", exprs[0].Key)
+	assert.Equal(t, corev1.NodeSelectorOpDoesNotExist, exprs[0].Operator)
 
 	// Without NodeFleet/GPU: only instance-type toleration. No git-cache.
 	assert.Len(t, wf.Spec.Tolerations, 1)
@@ -152,13 +163,31 @@ func TestWorkflowPlaceholder_WithGPU_WithFleet_WithRunnerClass(t *testing.T) {
 	// Workflow has no hard nodeSelector regardless of config.
 	assert.Nil(t, wf.Spec.NodeSelector)
 
-	// Affinity: required GPU node selector + preferred runner-class + preferred fleet.
+	// Affinity: required {runner-class In + GPU In} (AND) + preferred fleet.
 	require.NotNil(t, wf.Spec.Affinity)
 	require.NotNil(t, wf.Spec.Affinity.NodeAffinity)
 	preferred := wf.Spec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution
-	assert.Len(t, preferred, 2, "runner-class preference + fleet preference")
-	require.NotNil(t, wf.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution,
-		"GPU workflow has required GPU node selector")
+	require.Len(t, preferred, 1, "only fleet preference; runner-class lives in required terms")
+	assert.Equal(t, int32(50), preferred[0].Weight)
+
+	required := wf.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+	require.NotNil(t, required, "GPU + runner-class required terms")
+	require.Len(t, required.NodeSelectorTerms, 1,
+		"both required exprs go in the SAME matchExpressions block (AND semantics)")
+	exprs := required.NodeSelectorTerms[0].MatchExpressions
+	require.Len(t, exprs, 2, "runner-class In + nvidia.com/gpu In, both in same block")
+	exprByKey := map[string]corev1.NodeSelectorRequirement{}
+	for _, e := range exprs {
+		exprByKey[e.Key] = e
+	}
+	rc, ok := exprByKey["osdc.io/runner-class"]
+	require.True(t, ok, "runner-class required expr must be present")
+	assert.Equal(t, corev1.NodeSelectorOpIn, rc.Operator)
+	assert.Equal(t, []string{"gpu-large"}, rc.Values)
+	gpu, ok := exprByKey["nvidia.com/gpu"]
+	require.True(t, ok, "GPU required expr must be present")
+	assert.Equal(t, corev1.NodeSelectorOpIn, gpu.Operator)
+	assert.Equal(t, []string{"true"}, gpu.Values)
 
 	// Tolerations: instance-type + node-fleet + GPU = 3.
 	assert.Len(t, wf.Spec.Tolerations, 3)
@@ -501,10 +530,104 @@ func TestRunnerPlaceholder_NeverIncludesRunnerClass(t *testing.T) {
 	}
 }
 
-// The workflow placeholder MUST still consume RunnerClass via its preferred
-// node affinity (weight 100). Only the runner placeholder drops runner-class —
-// the workflow pod's scheduling pattern is unchanged.
-func TestWorkflowPlaceholder_StillUsesRunnerClassInPreferredAffinity(t *testing.T) {
+// The workflow placeholder MUST express runner-class as a REQUIRED node
+// affinity term — not preferred. The actual workflow pod uses a required
+// term for runner-class (In when set, DoesNotExist when unset), so a
+// placeholder landing on a non-matching node cannot be followed by the
+// real pod and the reservation is wasted.
+//
+// When WorkflowGPU > 0, the GPU node-label requirement must be AND-combined
+// with the runner-class requirement in the SAME matchExpressions block.
+func TestWorkflowPlaceholder_RequiresRunnerClass(t *testing.T) {
+	cases := []struct {
+		name        string
+		runnerClass string
+		gpu         int
+		// expected runner-class expr
+		wantRCOp     corev1.NodeSelectorOperator
+		wantRCValues []string
+		// expected exprs count in the single matchExpressions block
+		wantExprCount int
+	}{
+		{
+			name:          "release without GPU",
+			runnerClass:   "release",
+			gpu:           0,
+			wantRCOp:      corev1.NodeSelectorOpIn,
+			wantRCValues:  []string{"release"},
+			wantExprCount: 1,
+		},
+		{
+			name:          "release with GPU",
+			runnerClass:   "release",
+			gpu:           1,
+			wantRCOp:      corev1.NodeSelectorOpIn,
+			wantRCValues:  []string{"release"},
+			wantExprCount: 2,
+		},
+		{
+			name:          "no runner-class without GPU",
+			runnerClass:   "",
+			gpu:           0,
+			wantRCOp:      corev1.NodeSelectorOpDoesNotExist,
+			wantExprCount: 1,
+		},
+		{
+			name:          "no runner-class with GPU",
+			runnerClass:   "",
+			gpu:           1,
+			wantRCOp:      corev1.NodeSelectorOpDoesNotExist,
+			wantExprCount: 2,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := Config{
+				NodeFleet:   "g4dn",
+				RunnerClass: tc.runnerClass,
+				WorkflowGPU: tc.gpu,
+			}
+			pm, _ := newTestPM(t, cfg)
+			ctx := context.Background()
+
+			require.NoError(t, pm.CreatePair(ctx, "wf-req-slot"))
+			pairs, _ := pm.ListPairs(ctx)
+			wf := pairs["wf-req-slot"].WorkflowPod
+			require.NotNil(t, wf)
+			require.NotNil(t, wf.Spec.Affinity)
+			require.NotNil(t, wf.Spec.Affinity.NodeAffinity)
+
+			required := wf.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+			require.NotNil(t, required, "workflow placeholder must have required affinity for runner-class")
+			require.Len(t, required.NodeSelectorTerms, 1,
+				"runner-class and GPU must AND together in a single matchExpressions block")
+			exprs := required.NodeSelectorTerms[0].MatchExpressions
+			require.Len(t, exprs, tc.wantExprCount)
+
+			exprByKey := map[string]corev1.NodeSelectorRequirement{}
+			for _, e := range exprs {
+				exprByKey[e.Key] = e
+			}
+			rc, ok := exprByKey["osdc.io/runner-class"]
+			require.True(t, ok, "runner-class required expr must be present")
+			assert.Equal(t, tc.wantRCOp, rc.Operator)
+			assert.Equal(t, tc.wantRCValues, rc.Values)
+
+			if tc.gpu > 0 {
+				gpu, ok := exprByKey["nvidia.com/gpu"]
+				require.True(t, ok, "GPU required expr must be present when WorkflowGPU > 0")
+				assert.Equal(t, corev1.NodeSelectorOpIn, gpu.Operator)
+				assert.Equal(t, []string{"true"}, gpu.Values)
+			}
+		})
+	}
+}
+
+// Regression guard: runner-class must live ONLY in required terms — never
+// in preferred. The earlier (buggy) implementation used a PreferredSchedulingTerm
+// (weight 100) which let the placeholder land on a non-class node where the
+// actual workflow pod (which uses a required term) cannot follow.
+func TestWorkflowPlaceholder_RunnerClassMustBeRequiredNotPreferred(t *testing.T) {
 	cfg := Config{
 		NodeFleet:   "g4dn",
 		RunnerClass: "release",
@@ -512,26 +635,19 @@ func TestWorkflowPlaceholder_StillUsesRunnerClassInPreferredAffinity(t *testing.
 	pm, _ := newTestPM(t, cfg)
 	ctx := context.Background()
 
-	require.NoError(t, pm.CreatePair(ctx, "wf-rc-slot"))
+	require.NoError(t, pm.CreatePair(ctx, "wf-guard-slot"))
 	pairs, _ := pm.ListPairs(ctx)
-	wf := pairs["wf-rc-slot"].WorkflowPod
+	wf := pairs["wf-guard-slot"].WorkflowPod
 	require.NotNil(t, wf)
 	require.NotNil(t, wf.Spec.Affinity)
 	require.NotNil(t, wf.Spec.Affinity.NodeAffinity)
 
-	var foundRC bool
 	for _, term := range wf.Spec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution {
 		for _, expr := range term.Preference.MatchExpressions {
-			if expr.Key == "osdc.io/runner-class" {
-				foundRC = true
-				assert.Equal(t, int32(100), term.Weight,
-					"workflow runner-class preferred affinity weight must be 100")
-				assert.Contains(t, expr.Values, "release")
-			}
+			assert.NotEqual(t, "osdc.io/runner-class", expr.Key,
+				"runner-class must NEVER appear in a PreferredSchedulingTerm — required only")
 		}
 	}
-	assert.True(t, foundRC,
-		"workflow placeholder must still include runner-class in preferred affinity")
 }
 
 func tolerationKeySet(tolerations []corev1.Toleration) map[string]struct{} {
