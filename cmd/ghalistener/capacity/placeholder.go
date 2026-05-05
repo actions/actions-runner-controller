@@ -470,27 +470,38 @@ func (pm *PlaceholderManager) buildWorkflowPlaceholder(slotID string) *corev1.Po
 	return pod
 }
 
-// buildWorkflowAffinity builds the soft node affinity for workflow placeholders,
+// buildWorkflowAffinity builds the node affinity for workflow placeholders,
 // mirroring the job-pod template:
+//   - required runner-class match (In when RunnerClass set, DoesNotExist when unset),
+//     so the placeholder lands where the actual workflow pod can follow it
+//   - required GPU node label (when WorkflowGPU > 0), AND-combined with runner-class
 //   - weight 50 preference for node-fleet + workload-type
-//   - optional weight 100 preference for runner-class (when set)
-//   - optional GPU node selector requirement (when WorkflowGPU > 0)
 func (pm *PlaceholderManager) buildWorkflowAffinity() *corev1.Affinity {
-	preferredTerms := []corev1.PreferredSchedulingTerm{}
-
-	// Optional runner-class preference (template uses higher weight for class match).
+	// Runner-class must be REQUIRED (not preferred): the actual workflow pod
+	// uses a required term here, so a placeholder landing on a non-matching
+	// node cannot be followed by the real pod and the reservation is wasted.
+	var runnerClassReq corev1.NodeSelectorRequirement
 	if pm.config.RunnerClass != "" {
-		preferredTerms = append(preferredTerms, corev1.PreferredSchedulingTerm{
-			Weight: 100,
-			Preference: corev1.NodeSelectorTerm{
-				MatchExpressions: []corev1.NodeSelectorRequirement{
-					{
-						Key:      "osdc.io/runner-class",
-						Operator: corev1.NodeSelectorOpIn,
-						Values:   []string{pm.config.RunnerClass},
-					},
-				},
-			},
+		runnerClassReq = corev1.NodeSelectorRequirement{
+			Key:      "osdc.io/runner-class",
+			Operator: corev1.NodeSelectorOpIn,
+			Values:   []string{pm.config.RunnerClass},
+		}
+	} else {
+		runnerClassReq = corev1.NodeSelectorRequirement{
+			Key:      "osdc.io/runner-class",
+			Operator: corev1.NodeSelectorOpDoesNotExist,
+		}
+	}
+
+	// Required terms: runner-class always; GPU label when WorkflowGPU > 0.
+	// Both go in the SAME matchExpressions block so they AND together.
+	requiredExprs := []corev1.NodeSelectorRequirement{runnerClassReq}
+	if pm.config.WorkflowGPU > 0 {
+		requiredExprs = append(requiredExprs, corev1.NodeSelectorRequirement{
+			Key:      "nvidia.com/gpu",
+			Operator: corev1.NodeSelectorOpIn,
+			Values:   []string{"true"},
 		})
 	}
 
@@ -511,37 +522,25 @@ func (pm *PlaceholderManager) buildWorkflowAffinity() *corev1.Affinity {
 			},
 		}, fleetMatchExpressions...)
 	}
-	preferredTerms = append(preferredTerms, corev1.PreferredSchedulingTerm{
-		Weight: 50,
-		Preference: corev1.NodeSelectorTerm{
-			MatchExpressions: fleetMatchExpressions,
+	preferredTerms := []corev1.PreferredSchedulingTerm{
+		{
+			Weight: 50,
+			Preference: corev1.NodeSelectorTerm{
+				MatchExpressions: fleetMatchExpressions,
+			},
 		},
-	})
+	}
 
-	affinity := &corev1.Affinity{
+	return &corev1.Affinity{
 		NodeAffinity: &corev1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+				NodeSelectorTerms: []corev1.NodeSelectorTerm{
+					{MatchExpressions: requiredExprs},
+				},
+			},
 			PreferredDuringSchedulingIgnoredDuringExecution: preferredTerms,
 		},
 	}
-
-	// Optional hard GPU node selector requirement.
-	if pm.config.WorkflowGPU > 0 {
-		affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution = &corev1.NodeSelector{
-			NodeSelectorTerms: []corev1.NodeSelectorTerm{
-				{
-					MatchExpressions: []corev1.NodeSelectorRequirement{
-						{
-							Key:      "nvidia.com/gpu",
-							Operator: corev1.NodeSelectorOpIn,
-							Values:   []string{"true"},
-						},
-					},
-				},
-			},
-		}
-	}
-
-	return affinity
 }
 
 // sleepArg returns the sleep duration for placeholder containers as a
