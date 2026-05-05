@@ -61,4 +61,4 @@ We welcome contributions from the community. For more details on contributing to
 
 ## Troubleshooting
 
-We are very happy to help you with any issues you have. Please refer to the "[Troubleshooting](https://github.com/actions/actions-runner-controller/blob/master/TROUBLESHOOTING.md)" section for common issues.
+We are very happy to help you with any issues you have. Please refer to the "[Troubleshooting](https://github.com/actions/actions-runner-controller/blob/master/TROUBLESHOOTING.md)" section for common issues. a1ddad5a2b7a1b9e0c609044982b3d4b5e27edf0
