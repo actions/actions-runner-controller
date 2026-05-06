@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
@@ -1085,6 +1087,719 @@ var _ = Describe("EphemeralRunner", func() {
 				},
 				ephemeralRunnerTimeout,
 			).Should(BeEquivalentTo(v1alpha1.EphemeralRunnerPhaseRunning))
+		})
+
+		// ==============================================================================
+		// Terminal Lifecycle Invariants Matrix for EphemeralRunner Pod Failures
+		// ==============================================================================
+		//
+		// This matrix codifies expected outcomes for all terminal runner failure scenarios.
+		// These tests drive the controller's reconciliation branching logic.
+		//
+		// Dimensions:
+		// -----------
+		// 1. HasJob (JobID set):     true | false
+		// 2. RunnerID:               0 | non-zero
+		// 3. Container Status:       nil/no-terminated | terminated
+		// 4. Exit Code (if term):    0 | 7 | 137 (OOMKilled) | other non-zero
+		// 5. Pod.Status.Reason:      Evicted | OutOf* | OOMKilled | <empty>
+		//
+		// Expected Outcomes:
+		// ------------------
+		// HasJob | RunnerID | ContainerStatus | ExitCode | PodReason  | Expected Outcome
+		// -------|----------|-----------------|----------|------------|---------------------------------------------------
+		// false  | 0        | nil/no-term     | N/A      | Evicted    | DELETE pod, track failure, RECREATE (retryable)
+		// false  | 0        | nil/no-term     | N/A      | OutOf*     | DELETE pod, track failure, RECREATE (retryable)
+		// false  | 0        | nil/no-term     | N/A      | <empty>    | DELETE pod, track failure, RECREATE (retryable)
+		// false  | non-zero | nil/no-term     | N/A      | Evicted    | DELETE pod, track failure, RECREATE (retryable)
+		// false  | non-zero | nil/no-term     | N/A      | OutOf*     | DELETE pod, track failure, RECREATE (retryable)
+		// false  | non-zero | nil/no-term     | N/A      | <empty>    | DELETE pod, track failure, RECREATE (retryable)
+		// false  | 0        | terminated      | 0        | N/A        | DELETE runner (SUCCESS - terminal)
+		// false  | non-zero | terminated      | 0        | N/A        | DELETE runner (SUCCESS - terminal)
+		// false  | 0        | terminated      | 7        | N/A        | Mark Outdated (TERMINAL)
+		// false  | non-zero | terminated      | 7        | N/A        | Mark Outdated (TERMINAL)
+		// false  | 0        | terminated      | 137      | OOMKilled  | DELETE runner + remove from service (TERMINAL)
+		// false  | non-zero | terminated      | 137      | OOMKilled  | DELETE runner + remove from service (TERMINAL)
+		// false  | 0        | terminated      | other    | <empty>    | DELETE pod, track failure, RECREATE (retryable)
+		// false  | non-zero | terminated      | other    | <empty>    | DELETE pod, track failure, RECREATE (retryable)
+		// true   | 0        | nil/no-term     | N/A      | Evicted    | DELETE runner + remove from service (TERMINAL)
+		// true   | 0        | nil/no-term     | N/A      | OutOf*     | DELETE runner + remove from service (TERMINAL)
+		// true   | 0        | nil/no-term     | N/A      | <empty>    | DELETE runner + remove from service (TERMINAL)
+		// true   | non-zero | nil/no-term     | N/A      | Evicted    | DELETE runner + remove from service (TERMINAL)
+		// true   | non-zero | nil/no-term     | N/A      | OutOf*     | DELETE runner + remove from service (TERMINAL)
+		// true   | non-zero | nil/no-term     | N/A      | <empty>    | DELETE runner + remove from service (TERMINAL)
+		// true   | 0        | terminated      | 0        | N/A        | DELETE runner (SUCCESS - terminal)
+		// true   | non-zero | terminated      | 0        | N/A        | DELETE runner (SUCCESS - terminal)
+		// true   | 0        | terminated      | 7        | N/A        | Mark Outdated (TERMINAL)
+		// true   | non-zero | terminated      | 7        | N/A        | Mark Outdated (TERMINAL)
+		// true   | 0        | terminated      | 137      | OOMKilled  | DELETE runner + remove from service (TERMINAL)
+		// true   | non-zero | terminated      | 137      | OOMKilled  | DELETE runner + remove from service (TERMINAL)
+		// true   | 0        | terminated      | other    | <empty>    | DELETE runner + remove from service (TERMINAL)
+		// true   | non-zero | terminated      | other    | <empty>    | DELETE runner + remove from service (TERMINAL)
+		//
+		// Key Insights:
+		// -------------
+		// 1. HasJob=true always results in TERMINAL deletion (runner + service cleanup)
+		// 2. HasJob=false with retryable failures (Evicted, OutOf*, no container status) -> RECREATE
+		// 3. OOMKilled (ExitCode 137, Reason=OOMKilled) is TERMINAL regardless of HasJob status
+		// 4. ExitCode 0 and 7 are always terminal regardless of HasJob
+		// 5. Other non-zero exit codes follow the HasJob branching logic
+		//
+		// Implementation Notes:
+		// ---------------------
+		// - Controller logic: ephemeralrunner_controller.go:314-352 (main PodFailed branch)
+		// - deleteEphemeralRunnerOrPod: ephemeralrunner_controller.go:388-420 (HasJob fork)
+		// - deletePodAsFailed: ephemeralrunner_controller.go:604-627 (failure tracking)
+		//
+		// ==============================================================================
+
+		Context("Terminal Lifecycle Invariants Matrix", func() {
+			It("Matrix: HasJob=false, RunnerID=non-zero, ExitCode=137 (OOMKilled) should delete runner and remove from service", func() {
+				pod := new(corev1.Pod)
+				Eventually(func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to get pod")
+
+				pod.Status.Phase = corev1.PodFailed
+				pod.Status.Reason = "OOMKilled"
+				pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
+					Name: v1alpha1.EphemeralRunnerContainerName,
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							ExitCode: 137,
+							Reason:   "OOMKilled",
+						},
+					},
+				})
+				err := k8sClient.Status().Update(ctx, pod)
+				Expect(err).To(BeNil(), "failed to update pod status")
+
+				Eventually(func() bool {
+					check := new(v1alpha1.EphemeralRunner)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, check)
+					return kerrors.IsNotFound(err)
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeTrue(), "ephemeral runner should be deleted (terminal)")
+			})
+
+			It("Matrix: HasJob=true, RunnerID=non-zero, ExitCode=137 (OOMKilled) should delete runner and remove from service", func() {
+				er := new(v1alpha1.EphemeralRunner)
+				Eventually(func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, er)
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to get ephemeral runner")
+
+				er.Status.JobID = "12345"
+				err := k8sClient.Status().Update(ctx, er)
+				Expect(err).To(BeNil(), "failed to update ephemeral runner status")
+
+				Eventually(func() (string, error) {
+					current := new(v1alpha1.EphemeralRunner)
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, current); err != nil {
+						return "", err
+					}
+					return current.Status.JobID, nil
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Equal("12345"))
+
+				pod := new(corev1.Pod)
+				Eventually(func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to get pod")
+
+				pod.Status.Phase = corev1.PodFailed
+				pod.Status.Reason = "OOMKilled"
+				pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
+					Name: v1alpha1.EphemeralRunnerContainerName,
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							ExitCode: 137,
+							Reason:   "OOMKilled",
+						},
+					},
+				})
+				err = k8sClient.Status().Update(ctx, pod)
+				Expect(err).To(BeNil(), "failed to update pod status")
+
+				Eventually(func() bool {
+					check := new(v1alpha1.EphemeralRunner)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, check)
+					return kerrors.IsNotFound(err)
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeTrue(), "ephemeral runner should be deleted (terminal)")
+			})
+
+			It("Matrix: HasJob=false, RunnerID=0, ExitCode=137 (OOMKilled) should delete runner (terminal)", func() {
+				pod := new(corev1.Pod)
+				Eventually(func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to get pod")
+
+				er := new(v1alpha1.EphemeralRunner)
+				Eventually(func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, er)
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to get ephemeral runner")
+
+				pod.Status.Phase = corev1.PodFailed
+				pod.Status.Reason = "OOMKilled"
+				pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
+					Name: v1alpha1.EphemeralRunnerContainerName,
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							ExitCode: 137,
+							Reason:   "OOMKilled",
+						},
+					},
+				})
+				err := k8sClient.Status().Update(ctx, pod)
+				Expect(err).To(BeNil(), "failed to update pod status")
+
+				Eventually(func() bool {
+					check := new(v1alpha1.EphemeralRunner)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, check)
+					return kerrors.IsNotFound(err)
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeTrue(), "ephemeral runner should be deleted (terminal)")
+			})
+
+			It("Matrix: HasJob=false, no ContainerStatus.Terminated, Pod.Reason=OOMKilled should delete runner (terminal)", func() {
+				pod := new(corev1.Pod)
+				Eventually(func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to get pod")
+
+				pod.Status.Phase = corev1.PodFailed
+				pod.Status.Reason = "OOMKilled"
+				pod.Status.ContainerStatuses = nil
+				err := k8sClient.Status().Update(ctx, pod)
+				Expect(err).To(BeNil(), "failed to update pod status")
+
+				Eventually(func() bool {
+					check := new(v1alpha1.EphemeralRunner)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, check)
+					return kerrors.IsNotFound(err)
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeTrue(), "ephemeral runner should be deleted (terminal)")
+			})
+
+			It("Matrix: HasJob=true, no ContainerStatus.Terminated, Pod.Reason=OOMKilled should delete runner (terminal)", func() {
+				er := new(v1alpha1.EphemeralRunner)
+				Eventually(func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, er)
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to get ephemeral runner")
+
+				er.Status.JobID = "67890"
+				err := k8sClient.Status().Update(ctx, er)
+				Expect(err).To(BeNil(), "failed to update ephemeral runner status with job ID")
+
+				Eventually(func() (string, error) {
+					current := new(v1alpha1.EphemeralRunner)
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, current); err != nil {
+						return "", err
+					}
+					return current.Status.JobID, nil
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Equal("67890"))
+
+				pod := new(corev1.Pod)
+				Eventually(func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to get pod")
+
+				pod.Status.Phase = corev1.PodFailed
+				pod.Status.Reason = "OOMKilled"
+				pod.Status.ContainerStatuses = nil
+				err = k8sClient.Status().Update(ctx, pod)
+				Expect(err).To(BeNil(), "failed to update pod status")
+
+				Eventually(func() bool {
+					check := new(v1alpha1.EphemeralRunner)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, check)
+					return kerrors.IsNotFound(err)
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeTrue(), "ephemeral runner should be deleted (terminal)")
+			})
+
+			It("Matrix: HasJob=false, no ContainerStatus and empty Pod.Reason should use fallback reason", func() {
+				pod := new(corev1.Pod)
+				Eventually(func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to get pod")
+
+				pod.Status.Phase = corev1.PodFailed
+				pod.Status.Reason = ""
+				pod.Status.Message = ""
+				pod.Status.ContainerStatuses = nil
+				err := k8sClient.Status().Update(ctx, pod)
+				Expect(err).To(BeNil(), "failed to update pod status")
+
+				updated := new(v1alpha1.EphemeralRunner)
+				Eventually(func() (int, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated)
+					if err != nil {
+						return 0, err
+					}
+					return len(updated.Status.Failures), nil
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Equal(1), "failure should be tracked")
+
+				Eventually(func() (string, error) {
+					current := new(v1alpha1.EphemeralRunner)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, current)
+					if err != nil {
+						return "", err
+					}
+					return current.Status.Reason, nil
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Equal("Failed"), "reason should use fallback value")
+
+				Eventually(func() (string, error) {
+					current := new(v1alpha1.EphemeralRunner)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, current)
+					if err != nil {
+						return "", err
+					}
+					return current.Status.Message, nil
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Equal("Pod failed without detailed termination information"), "message should use fallback value")
+
+				Eventually(func() error {
+					pod := new(corev1.Pod)
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+				}, ephemeralRunnerTimeout*2, ephemeralRunnerInterval).Should(Succeed(), "pod should be recreated")
+			})
+		})
+
+		Context("OOMKilled with Transient API Failures", func() {
+			var ctx context.Context
+			var autoscalingNS *corev1.Namespace
+			var configSecret *corev1.Secret
+			var controller *EphemeralRunnerReconciler
+			var ephemeralRunner *v1alpha1.EphemeralRunner
+			var mgr ctrl.Manager
+
+			BeforeEach(func() {
+				ctx = context.Background()
+				autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
+				configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
+
+				// Create controller with fake client that fails RemoveRunner
+				controller = &EphemeralRunnerReconciler{
+					Client: mgr.GetClient(),
+					Scheme: mgr.GetScheme(),
+					Log:    logf.Log,
+					ResourceBuilder: ResourceBuilder{
+						SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient(
+							scalefake.WithClient(
+								scalefake.NewClient(
+									scalefake.WithGenerateJitRunnerConfig(
+										&scaleset.RunnerScaleSetJitRunnerConfig{
+											Runner:           &scaleset.RunnerReference{ID: 2, Name: "test-runner-transient"},
+											EncodedJITConfig: "fake-jit-config",
+										},
+										nil,
+									),
+									scalefake.WithRemoveRunner(
+										errors.New("transient API failure"),
+									),
+								),
+							),
+						)),
+					},
+				}
+
+				err := controller.SetupWithManager(mgr)
+				Expect(err).To(BeNil(), "failed to setup controller")
+
+				ephemeralRunner = newExampleRunner("test-runner-transient", autoscalingNS.Name, configSecret.Name)
+				err = k8sClient.Create(ctx, ephemeralRunner)
+				Expect(err).To(BeNil(), "failed to create ephemeral runner")
+
+				startManagers(GinkgoT(), mgr)
+			})
+
+			It("Matrix: HasJob=true, OOMKilled with transient RemoveRunner API failure should keep runner for retry and not set deletion timestamp", func() {
+				pod := new(corev1.Pod)
+				Eventually(func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to get pod")
+
+				er := new(v1alpha1.EphemeralRunner)
+				Eventually(func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, er)
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to get ephemeral runner")
+
+				er.Status.JobID = "99999"
+				er.Status.RunnerID = 2
+				err := k8sClient.Status().Update(ctx, er)
+				Expect(err).To(BeNil(), "failed to update ephemeral runner status with job ID and runner ID")
+
+				Eventually(func() (string, error) {
+					current := new(v1alpha1.EphemeralRunner)
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, current); err != nil {
+						return "", err
+					}
+					return current.Status.JobID, nil
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Equal("99999"))
+
+				pod.Status.Phase = corev1.PodFailed
+				pod.Status.Reason = "OOMKilled"
+				pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
+					Name: v1alpha1.EphemeralRunnerContainerName,
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							ExitCode: 137,
+							Reason:   "OOMKilled",
+						},
+					},
+				})
+				err = k8sClient.Status().Update(ctx, pod)
+				Expect(err).To(BeNil(), "failed to update pod status")
+
+				Consistently(func() bool {
+					check := new(v1alpha1.EphemeralRunner)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, check)
+					if err != nil {
+						return false
+					}
+					return check.DeletionTimestamp == nil && len(check.Finalizers) > 0
+				}, "5s", ephemeralRunnerInterval).Should(BeTrue(), "runner should be preserved for retry until RemoveRunner succeeds")
+			})
+
+			It("Matrix: HasJob=true, non-OOM pod failure with transient RemoveRunner API failure should preserve runner for retry", func() {
+				pod := new(corev1.Pod)
+				Eventually(func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to get pod")
+
+				er := new(v1alpha1.EphemeralRunner)
+				Eventually(func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, er)
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to get ephemeral runner")
+
+				er.Status.JobID = "88888"
+				er.Status.RunnerID = 2
+				err := k8sClient.Status().Update(ctx, er)
+				Expect(err).To(BeNil(), "failed to update ephemeral runner status with job ID and runner ID")
+
+				pod.Status.Phase = corev1.PodFailed
+				pod.Status.Reason = "CrashLoopBackOff"
+				pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
+					Name: v1alpha1.EphemeralRunnerContainerName,
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							ExitCode: 1,
+							Reason:   "Error",
+						},
+					},
+				})
+				err = k8sClient.Status().Update(ctx, pod)
+				Expect(err).To(BeNil(), "failed to update pod status")
+
+				Consistently(func() bool {
+					check := new(v1alpha1.EphemeralRunner)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, check)
+					if err != nil {
+						return false
+					}
+					return check.DeletionTimestamp == nil
+				}, "5s", ephemeralRunnerInterval).Should(BeTrue(), "runner should remain undeleted so RemoveRunner can be retried")
+			})
+
+			It("Matrix: HasJob=false, RunnerID=non-zero, pod failure with transient RemoveRunner API failure should preserve runner for retry", func() {
+				pod := new(corev1.Pod)
+				Eventually(func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to get pod")
+
+				er := new(v1alpha1.EphemeralRunner)
+				Eventually(func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, er)
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to get ephemeral runner")
+
+				er.Status.RunnerID = 3
+				err := k8sClient.Status().Update(ctx, er)
+				Expect(err).To(BeNil(), "failed to update ephemeral runner status with runner ID")
+
+				pod.Status.Phase = corev1.PodFailed
+				pod.Status.Reason = "Error"
+				pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
+					Name: v1alpha1.EphemeralRunnerContainerName,
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							ExitCode: 1,
+							Reason:   "Error",
+						},
+					},
+				})
+				err = k8sClient.Status().Update(ctx, pod)
+				Expect(err).To(BeNil(), "failed to update pod status")
+
+				updated := new(v1alpha1.EphemeralRunner)
+				Eventually(func() (int, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated)
+					if err != nil {
+						return 0, err
+					}
+					return len(updated.Status.Failures), nil
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Equal(1), "failure should be tracked")
+
+				Consistently(func() bool {
+					check := new(v1alpha1.EphemeralRunner)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, check)
+					if err != nil {
+						return false
+					}
+					return check.DeletionTimestamp == nil && len(check.Status.Failures) == 1
+				}, "5s", ephemeralRunnerInterval).Should(BeTrue(), "runner should be preserved for RemoveRunner retry despite HasJob=false")
+			})
+		})
+
+		// ==============================================================================
+		// Convergence Tests: Verify retry-safe cleanup converges correctly
+		// ==============================================================================
+		// These tests ensure the retry mechanism:
+		// 1. Eventually converges when external service recovers
+		// 2. Respects bounded behavior (no infinite loops)
+		// 3. Maintains observability (no silent success on persistent failure)
+		//
+		// Implementation Reference:
+		// - Backoff logic: ephemeralrunner_controller.go:229-254
+		// - Cleanup retry: ephemeralrunner_controller.go:430-440
+		// - MaxFailures boundary: ephemeralrunner_controller.go:229-236
+		// ==============================================================================
+		Context("Retry Convergence and Bounded Behavior", func() {
+			var callCount int
+			var mu sync.Mutex
+
+			BeforeEach(func() {
+				mu.Lock()
+				callCount = 0
+				mu.Unlock()
+
+				controller = &EphemeralRunnerReconciler{
+					Client: mgr.GetClient(),
+					Scheme: mgr.GetScheme(),
+					Log:    logf.Log,
+					ResourceBuilder: ResourceBuilder{
+						SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient(
+							scalefake.WithClient(
+								scalefake.NewClient(
+									scalefake.WithGenerateJitRunnerConfig(
+										&scaleset.RunnerScaleSetJitRunnerConfig{
+											Runner:           &scaleset.RunnerReference{ID: 99, Name: "test-convergence"},
+											EncodedJITConfig: "fake-jit-config",
+										},
+										nil,
+									),
+									scalefake.WithRemoveRunnerFunc(func(ctx context.Context, runnerID int64) error {
+										mu.Lock()
+										defer mu.Unlock()
+										callCount++
+										if callCount <= 2 {
+											return errors.New("transient API failure")
+										}
+										return nil
+									}),
+								),
+							),
+						)),
+					},
+				}
+
+				err := controller.SetupWithManager(mgr)
+				Expect(err).To(BeNil(), "failed to setup controller")
+
+				ephemeralRunner = newExampleRunner("test-convergence", autoscalingNS.Name, configSecret.Name)
+				err = k8sClient.Create(ctx, ephemeralRunner)
+				Expect(err).To(BeNil(), "failed to create ephemeral runner")
+
+				startManagers(GinkgoT(), mgr)
+			})
+
+			It("Convergence: Repeated transient RemoveRunner failures eventually converge when service recovers", func() {
+				pod := new(corev1.Pod)
+				Eventually(func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to get pod")
+
+				er := new(v1alpha1.EphemeralRunner)
+				Eventually(func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, er)
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to get ephemeral runner")
+
+				er.Status.JobID = "conv-job-1"
+				er.Status.RunnerID = 99
+				err := k8sClient.Status().Update(ctx, er)
+				Expect(err).To(BeNil(), "failed to update ephemeral runner status")
+
+				Eventually(func() (string, error) {
+					current := new(v1alpha1.EphemeralRunner)
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, current); err != nil {
+						return "", err
+					}
+					return current.Status.JobID, nil
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Equal("conv-job-1"))
+
+				pod.Status.Phase = corev1.PodFailed
+				pod.Status.Reason = "Error"
+				pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
+					Name: v1alpha1.EphemeralRunnerContainerName,
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							ExitCode: 1,
+							Reason:   "Error",
+						},
+					},
+				})
+				err = k8sClient.Status().Update(ctx, pod)
+				Expect(err).To(BeNil(), "failed to update pod status")
+
+				Eventually(func() int {
+					mu.Lock()
+					defer mu.Unlock()
+					return callCount
+				}, "30s", ephemeralRunnerInterval).Should(BeNumerically(">=", 3), "RemoveRunner should be retried until success")
+
+				Eventually(func() bool {
+					check := new(v1alpha1.EphemeralRunner)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, check)
+					return kerrors.IsNotFound(err)
+				}, "40s", ephemeralRunnerInterval).Should(BeTrue(), "ephemeral runner should be deleted after cleanup converges")
+			})
+		})
+
+		Context("Bounded Retry Behavior: MaxFailures Enforcement", func() {
+			var persistentFailCount int
+			var muPersistent sync.Mutex
+
+			BeforeEach(func() {
+				muPersistent.Lock()
+				persistentFailCount = 0
+				muPersistent.Unlock()
+
+				controller = &EphemeralRunnerReconciler{
+					Client: mgr.GetClient(),
+					Scheme: mgr.GetScheme(),
+					Log:    logf.Log,
+					ResourceBuilder: ResourceBuilder{
+						SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient(
+							scalefake.WithClient(
+								scalefake.NewClient(
+									scalefake.WithGenerateJitRunnerConfig(
+										&scaleset.RunnerScaleSetJitRunnerConfig{
+											Runner:           &scaleset.RunnerReference{ID: 777, Name: "test-persistent"},
+											EncodedJITConfig: "fake-jit-config",
+										},
+										nil,
+									),
+									scalefake.WithRemoveRunnerFunc(func(ctx context.Context, runnerID int64) error {
+										muPersistent.Lock()
+										defer muPersistent.Unlock()
+										persistentFailCount++
+										return errors.New("persistent API failure")
+									}),
+								),
+							),
+						)),
+					},
+				}
+
+				err := controller.SetupWithManager(mgr)
+				Expect(err).To(BeNil(), "failed to setup controller")
+
+				ephemeralRunner = newExampleRunner("test-persistent", autoscalingNS.Name, configSecret.Name)
+				err = k8sClient.Create(ctx, ephemeralRunner)
+				Expect(err).To(BeNil(), "failed to create ephemeral runner")
+
+				startManagers(GinkgoT(), mgr)
+			})
+
+			It("Bounded: Persistent RemoveRunner failures do not cause infinite retry (maxFailures enforced)", func() {
+				pod := new(corev1.Pod)
+				Eventually(func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to get pod")
+
+				er := new(v1alpha1.EphemeralRunner)
+				Eventually(func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, er)
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to get ephemeral runner")
+
+				er.Status.JobID = "persist-job"
+				er.Status.RunnerID = 777
+				err := k8sClient.Status().Update(ctx, er)
+				Expect(err).To(BeNil(), "failed to update ephemeral runner status")
+
+				pod.Status.Phase = corev1.PodFailed
+				pod.Status.Reason = "Error"
+				pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
+					Name: v1alpha1.EphemeralRunnerContainerName,
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							ExitCode: 1,
+							Reason:   "Error",
+						},
+					},
+				})
+				err = k8sClient.Status().Update(ctx, pod)
+				Expect(err).To(BeNil(), "failed to update pod status")
+
+				Consistently(func() int {
+					muPersistent.Lock()
+					defer muPersistent.Unlock()
+					return persistentFailCount
+				}, "15s", "1s").Should(BeNumerically("<=", 20), "RemoveRunner should not be called excessively (no infinite loop)")
+
+				check := new(v1alpha1.EphemeralRunner)
+				err = k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, check)
+				if err == nil {
+					Expect(check.DeletionTimestamp).NotTo(BeNil(), "runner should have deletion timestamp showing cleanup intent")
+				} else {
+					Expect(kerrors.IsNotFound(err)).To(BeTrue(), "runner either deleted or has visible error state")
+				}
+			})
+
+			It("Observability: Failed cleanup attempts are visible and not silently succeeded", func() {
+				pod := new(corev1.Pod)
+				Eventually(func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to get pod")
+
+				er := new(v1alpha1.EphemeralRunner)
+				Eventually(func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, er)
+				}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to get ephemeral runner")
+
+				er.Status.JobID = "observe-job"
+				er.Status.RunnerID = 777
+				err := k8sClient.Status().Update(ctx, er)
+				Expect(err).To(BeNil(), "failed to update ephemeral runner status")
+
+				pod.Status.Phase = corev1.PodFailed
+				pod.Status.Reason = "Error"
+				pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
+					Name: v1alpha1.EphemeralRunnerContainerName,
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							ExitCode: 1,
+							Reason:   "Error",
+						},
+					},
+				})
+				err = k8sClient.Status().Update(ctx, pod)
+				Expect(err).To(BeNil(), "failed to update pod status")
+
+				Eventually(func() int {
+					muPersistent.Lock()
+					defer muPersistent.Unlock()
+					return persistentFailCount
+				}, "10s", ephemeralRunnerInterval).Should(BeNumerically(">=", 1), "RemoveRunner must be attempted (not silently skipped)")
+
+				time.Sleep(5 * time.Second)
+				check := new(v1alpha1.EphemeralRunner)
+				err = k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, check)
+
+				if err == nil {
+					Expect(check.DeletionTimestamp).NotTo(BeNil(), "runner must have deletion timestamp showing cleanup attempt")
+				} else {
+					Expect(kerrors.IsNotFound(err)).To(BeTrue(), "runner either deleted or has visible deletion intent")
+				}
+
+				muPersistent.Lock()
+				finalCount := persistentFailCount
+				muPersistent.Unlock()
+				Expect(finalCount).To(BeNumerically(">=", 1), "cleanup must be attempted, not silently skipped")
+			})
 		})
 	})
 

@@ -320,7 +320,17 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		// If the runner pod did not have chance to start, terminated state may not be set.
 		// Therefore, we should try to restart it.
 		if cs == nil || cs.State.Terminated == nil {
-			log.Info("Runner container does not have state set, deleting pod as failed so it can be restarted")
+			missingDetails := "unknown"
+			if cs == nil {
+				missingDetails = "no container status available"
+			} else if cs.State.Terminated == nil {
+				missingDetails = "container termination details not yet available"
+			}
+			log.Info("Runner container termination details incomplete, proceeding with cleanup based on pod-level status",
+				"missingDetails", missingDetails,
+				"podReason", pod.Status.Reason,
+				"podMessage", pod.Status.Message,
+			)
 			return ctrl.Result{}, r.deleteEphemeralRunnerOrPod(ctx, ephemeralRunner, pod, log)
 		}
 
@@ -386,34 +396,226 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 }
 
 func (r *EphemeralRunnerReconciler) deleteEphemeralRunnerOrPod(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, pod *corev1.Pod, log logr.Logger) error {
+	// Extract terminal failure reason from pod for observability
+	podReason := pod.Status.Reason
+	if podReason == "" && pod.Status.Phase == corev1.PodFailed {
+		podReason = "PodFailed"
+	}
+
+	cs := runnerContainerStatus(pod)
+	var exitCode int32 = -1
+	if cs != nil && cs.State.Terminated != nil {
+		exitCode = cs.State.Terminated.ExitCode
+	}
+
+	isOOMKilled := exitCode == 137 || podReason == "OOMKilled"
+	if isOOMKilled {
+		log.Info("Handling OOMKilled as terminal failure",
+			"runnerName", ephemeralRunner.Status.RunnerName,
+			"runnerId", ephemeralRunner.Status.RunnerID,
+			"hasJob", ephemeralRunner.HasJob(),
+			"reason", podReason,
+			"exitCode", exitCode,
+			"oomKilled", true,
+		)
+
+		if ephemeralRunner.Status.RunnerID != 0 {
+			log.Info("Attempting to remove registered runner from service for terminal OOMKilled failure",
+				"runnerName", ephemeralRunner.Status.RunnerName,
+				"runnerId", ephemeralRunner.Status.RunnerID,
+				"hasJob", ephemeralRunner.HasJob(),
+				"reason", podReason,
+				"exitCode", exitCode,
+				"oomKilled", true,
+			)
+			if err := r.deleteRunnerFromService(ctx, ephemeralRunner, log); err != nil {
+				log.Error(err, "Failed to remove runner from service for terminal OOMKilled failure; will retry on next reconciliation",
+					"runnerName", ephemeralRunner.Status.RunnerName,
+					"runnerId", ephemeralRunner.Status.RunnerID,
+					"hasJob", ephemeralRunner.HasJob(),
+					"reason", podReason,
+					"exitCode", exitCode,
+					"oomKilled", true,
+					"retryable", true,
+				)
+				return err
+			}
+			log.Info("Successfully removed runner from service for terminal OOMKilled failure",
+				"runnerName", ephemeralRunner.Status.RunnerName,
+				"runnerId", ephemeralRunner.Status.RunnerID,
+				"hasJob", ephemeralRunner.HasJob(),
+				"reason", podReason,
+				"exitCode", exitCode,
+				"oomKilled", true,
+				"cleanupOutcome", "success",
+			)
+		} else {
+			log.Info("Skipping runner removal from service for terminal OOMKilled failure because runner is not registered",
+				"runnerName", ephemeralRunner.Status.RunnerName,
+				"runnerId", ephemeralRunner.Status.RunnerID,
+				"hasJob", ephemeralRunner.HasJob(),
+				"reason", podReason,
+				"exitCode", exitCode,
+				"oomKilled", true,
+				"cleanupOutcome", "skipped_unregistered",
+			)
+		}
+
+		log.Info("Deleting ephemeral runner after terminal OOMKilled failure",
+			"runnerName", ephemeralRunner.Status.RunnerName,
+			"runnerId", ephemeralRunner.Status.RunnerID,
+			"hasJob", ephemeralRunner.HasJob(),
+			"reason", podReason,
+			"exitCode", exitCode,
+			"oomKilled", true,
+		)
+		if err := r.Delete(ctx, ephemeralRunner); err != nil {
+			log.Error(err, "Failed to delete ephemeral runner after terminal OOMKilled failure",
+				"runnerName", ephemeralRunner.Status.RunnerName,
+				"runnerId", ephemeralRunner.Status.RunnerID,
+				"hasJob", ephemeralRunner.HasJob(),
+				"reason", podReason,
+				"exitCode", exitCode,
+				"oomKilled", true,
+			)
+			return err
+		}
+		log.Info("Deleted ephemeral runner after terminal OOMKilled failure",
+			"runnerName", ephemeralRunner.Status.RunnerName,
+			"runnerId", ephemeralRunner.Status.RunnerID,
+			"hasJob", ephemeralRunner.HasJob(),
+			"reason", podReason,
+			"exitCode", exitCode,
+			"oomKilled", true,
+			"cleanupOutcome", "cr_deleted",
+		)
+		return nil
+	}
+
 	if ephemeralRunner.HasJob() {
 		log.Error(
 			errors.New("ephemeral runner has a job assigned, but the pod has failed"),
 			"Ephemeral runner either has faulty entrypoint or something external killing the runner",
+			"runnerName", ephemeralRunner.Status.RunnerName,
+			"runnerId", ephemeralRunner.Status.RunnerID,
+			"hasJob", true,
+			"reason", podReason,
+			"exitCode", exitCode,
 		)
-		log.Info("Deleting the ephemeral runner that has a job assigned but the pod has failed")
-		if err := r.Delete(ctx, ephemeralRunner); err != nil {
-			log.Error(err, "Failed to delete the ephemeral runner that has a job assigned but the pod has failed")
-			return err
+
+		if ephemeralRunner.Status.RunnerID != 0 {
+			log.Info("Attempting to remove registered runner from service",
+				"runnerName", ephemeralRunner.Status.RunnerName,
+				"runnerId", ephemeralRunner.Status.RunnerID,
+				"hasJob", true,
+				"reason", podReason,
+				"exitCode", exitCode,
+			)
+			if err := r.deleteRunnerFromService(ctx, ephemeralRunner, log); err != nil {
+				log.Error(err, "Failed to remove runner from service; will retry on next reconciliation",
+					"runnerName", ephemeralRunner.Status.RunnerName,
+					"runnerId", ephemeralRunner.Status.RunnerID,
+					"hasJob", true,
+					"reason", podReason,
+					"exitCode", exitCode,
+					"retryable", true,
+				)
+				return err
+			}
+			log.Info("Successfully removed runner from service",
+				"runnerName", ephemeralRunner.Status.RunnerName,
+				"runnerId", ephemeralRunner.Status.RunnerID,
+				"hasJob", true,
+				"reason", podReason,
+				"exitCode", exitCode,
+				"cleanupOutcome", "success",
+			)
+		} else {
+			log.Info("Skipping runner removal from service because runner is not registered",
+				"runnerName", ephemeralRunner.Status.RunnerName,
+				"runnerId", ephemeralRunner.Status.RunnerID,
+				"hasJob", true,
+				"reason", podReason,
+				"exitCode", exitCode,
+				"cleanupOutcome", "skipped_unregistered",
+			)
 		}
 
-		log.Info("Deleted the ephemeral runner that has a job assigned but the pod has failed")
-		log.Info("Trying to remove the runner from the service")
-		actionsClient, err := r.GetActionsService(ctx, ephemeralRunner)
-		if err != nil {
-			log.Error(err, "Failed to get actions client for removing the runner from the service")
-			return nil
+		log.Info("Deleting the ephemeral runner that has a job assigned but the pod has failed",
+			"runnerName", ephemeralRunner.Status.RunnerName,
+			"runnerId", ephemeralRunner.Status.RunnerID,
+			"hasJob", true,
+			"reason", podReason,
+			"exitCode", exitCode,
+		)
+		if err := r.Delete(ctx, ephemeralRunner); err != nil {
+			log.Error(err, "Failed to delete the ephemeral runner that has a job assigned but the pod has failed",
+				"runnerName", ephemeralRunner.Status.RunnerName,
+				"runnerId", ephemeralRunner.Status.RunnerID,
+				"hasJob", true,
+				"reason", podReason,
+				"exitCode", exitCode,
+			)
+			return err
 		}
-		if err := actionsClient.RemoveRunner(ctx, int64(ephemeralRunner.Status.RunnerID)); err != nil {
-			log.Error(err, "Failed to remove the runner from the service")
-			return nil
-		}
-		log.Info("Removed the runner from the service")
+		log.Info("Deleted the ephemeral runner that has a job assigned but the pod has failed",
+			"runnerName", ephemeralRunner.Status.RunnerName,
+			"runnerId", ephemeralRunner.Status.RunnerID,
+			"hasJob", true,
+			"reason", podReason,
+			"exitCode", exitCode,
+			"cleanupOutcome", "cr_deleted",
+		)
 		return nil
 	}
 
+	// HasJob=false path: still need to clean up if runner is registered
+	if ephemeralRunner.Status.RunnerID != 0 {
+		log.Info("Attempting to remove registered runner from service (HasJob=false)",
+			"runnerName", ephemeralRunner.Status.RunnerName,
+			"runnerId", ephemeralRunner.Status.RunnerID,
+			"hasJob", false,
+			"reason", podReason,
+			"exitCode", exitCode,
+		)
+		if err := r.deleteRunnerFromService(ctx, ephemeralRunner, log); err != nil {
+			log.Error(err, "Failed to remove runner from service; will retry on next reconciliation",
+				"runnerName", ephemeralRunner.Status.RunnerName,
+				"runnerId", ephemeralRunner.Status.RunnerID,
+				"hasJob", false,
+				"reason", podReason,
+				"exitCode", exitCode,
+				"retryable", true,
+			)
+			return err
+		}
+		log.Info("Successfully removed runner from service",
+			"runnerName", ephemeralRunner.Status.RunnerName,
+			"runnerId", ephemeralRunner.Status.RunnerID,
+			"hasJob", false,
+			"reason", podReason,
+			"exitCode", exitCode,
+			"cleanupOutcome", "success",
+		)
+	} else {
+		log.Info("Skipping runner removal from service because runner is not registered",
+			"runnerName", ephemeralRunner.Status.RunnerName,
+			"runnerId", ephemeralRunner.Status.RunnerID,
+			"hasJob", false,
+			"reason", podReason,
+			"exitCode", exitCode,
+			"cleanupOutcome", "skipped_unregistered",
+		)
+	}
+
 	if err := r.deletePodAsFailed(ctx, ephemeralRunner, pod, log); err != nil {
-		log.Error(err, "Failed to delete runner pod on failure")
+		log.Error(err, "Failed to delete runner pod on failure",
+			"runnerName", ephemeralRunner.Status.RunnerName,
+			"runnerId", ephemeralRunner.Status.RunnerID,
+			"hasJob", ephemeralRunner.HasJob(),
+			"reason", podReason,
+			"exitCode", exitCode,
+		)
 		return err
 	}
 
@@ -561,21 +763,46 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedSecrets(ctx context.Conte
 }
 
 func (r *EphemeralRunnerReconciler) markAsFailed(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, errMessage string, reason string, log logr.Logger) error {
-	log.Info("Updating ephemeral runner status to Failed")
+	log.Info("Updating ephemeral runner status to Failed",
+		"runnerName", ephemeralRunner.Status.RunnerName,
+		"runnerId", ephemeralRunner.Status.RunnerID,
+		"reason", reason,
+		"message", errMessage,
+	)
 	if err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
 		obj.Status.Phase = v1alpha1.EphemeralRunnerPhaseFailed
 		obj.Status.Reason = reason
 		obj.Status.Message = errMessage
 	}); err != nil {
+		log.Error(err, "Failed to update ephemeral runner status Phase/Message",
+			"runnerName", ephemeralRunner.Status.RunnerName,
+			"runnerId", ephemeralRunner.Status.RunnerID,
+			"reason", reason,
+		)
 		return fmt.Errorf("failed to update ephemeral runner status Phase/Message: %w", err)
 	}
 
-	log.Info("Removing the runner from the service")
+	log.Info("Removing the runner from the service",
+		"runnerName", ephemeralRunner.Status.RunnerName,
+		"runnerId", ephemeralRunner.Status.RunnerID,
+		"reason", reason,
+	)
 	if err := r.deleteRunnerFromService(ctx, ephemeralRunner, log); err != nil {
+		log.Error(err, "Failed to remove the runner from service; will retry on next reconciliation",
+			"runnerName", ephemeralRunner.Status.RunnerName,
+			"runnerId", ephemeralRunner.Status.RunnerID,
+			"reason", reason,
+			"retryable", true,
+		)
 		return fmt.Errorf("failed to remove the runner from service: %w", err)
 	}
 
-	log.Info("EphemeralRunner is marked as Failed and deleted from the service")
+	log.Info("EphemeralRunner is marked as Failed and deleted from the service",
+		"runnerName", ephemeralRunner.Status.RunnerName,
+		"runnerId", ephemeralRunner.Status.RunnerID,
+		"reason", reason,
+		"cleanupOutcome", "success",
+	)
 	return nil
 }
 
@@ -616,8 +843,16 @@ func (r *EphemeralRunnerReconciler) deletePodAsFailed(ctx context.Context, ephem
 		}
 		obj.Status.Failures[string(pod.UID)] = metav1.Now()
 		obj.Status.Ready = false
+
 		obj.Status.Reason = pod.Status.Reason
+		if obj.Status.Reason == "" {
+			obj.Status.Reason = string(corev1.PodFailed)
+		}
+
 		obj.Status.Message = pod.Status.Message
+		if obj.Status.Message == "" {
+			obj.Status.Message = "Pod failed without detailed termination information"
+		}
 	}); err != nil {
 		return fmt.Errorf("failed to update ephemeral runner status: failed attempts: %w", err)
 	}
@@ -829,16 +1064,32 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 func (r *EphemeralRunnerReconciler) deleteRunnerFromService(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
 	client, err := r.GetActionsService(ctx, ephemeralRunner)
 	if err != nil {
+		log.Error(err, "Failed to get actions client for runner",
+			"runnerName", ephemeralRunner.Status.RunnerName,
+			"runnerId", ephemeralRunner.Status.RunnerID,
+		)
 		return fmt.Errorf("failed to get actions client for runner: %w", err)
 	}
 
-	log.Info("Removing runner from the service", "runnerId", ephemeralRunner.Status.RunnerID)
+	log.Info("Removing runner from the service",
+		"runnerName", ephemeralRunner.Status.RunnerName,
+		"runnerId", ephemeralRunner.Status.RunnerID,
+	)
 	err = client.RemoveRunner(ctx, int64(ephemeralRunner.Status.RunnerID))
 	if err != nil {
+		log.Error(err, "Failed to remove runner from the service; cleanup will be retried",
+			"runnerName", ephemeralRunner.Status.RunnerName,
+			"runnerId", ephemeralRunner.Status.RunnerID,
+			"retryable", true,
+		)
 		return fmt.Errorf("failed to remove runner from the service: %w", err)
 	}
 
-	log.Info("Removed runner from the service", "runnerId", ephemeralRunner.Status.RunnerID)
+	log.Info("Removed runner from the service",
+		"runnerName", ephemeralRunner.Status.RunnerName,
+		"runnerId", ephemeralRunner.Status.RunnerID,
+		"cleanupOutcome", "success",
+	)
 	return nil
 }
 

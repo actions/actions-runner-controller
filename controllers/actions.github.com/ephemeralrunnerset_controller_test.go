@@ -1092,6 +1092,150 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 				ephemeralRunnerSetTestInterval,
 			).Should(BeEquivalentTo(desiredStatus), "Status is not eventually updated to the desired one")
 		})
+
+		It("Should handle repeated OOMKilled failures without unbounded stuck state growth", func() {
+			// This test validates that when child EphemeralRunners encounter repeated OOMKilled
+			// failures, the set-level aggregation remains correct and does not cause unbounded
+			// stuck state growth. This is a regression test for aggregated stuck-runner behavior.
+			//
+			// Pattern: controllers/actions.github.com/ephemeralrunnerset_controller.go:239 (status update aggregation)
+			// Pattern: controllers/actions.github.com/ephemeralrunnerset_controller.go:505 (deleteEphemeralRunnerWithActionsClient cleanup)
+
+			created := new(v1alpha1.EphemeralRunnerSet)
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunnerSet.Name, Namespace: ephemeralRunnerSet.Namespace}, created)
+				},
+				ephemeralRunnerSetTestTimeout,
+				ephemeralRunnerSetTestInterval,
+			).Should(Succeed(), "EphemeralRunnerSet should be created")
+
+			// Scale up to 3 runners
+			updated := created.DeepCopy()
+			updated.Spec.Replicas = 3
+			err := k8sClient.Update(ctx, updated)
+			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunnerSet replica count")
+
+			runnerList := new(v1alpha1.EphemeralRunnerList)
+			Eventually(
+				func() (int, error) {
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
+					if err != nil {
+						return -1, err
+					}
+					return len(runnerList.Items), nil
+				},
+				ephemeralRunnerSetTestTimeout,
+				ephemeralRunnerSetTestInterval,
+			).Should(BeEquivalentTo(3), "3 EphemeralRunners should be created")
+
+			// Simulate repeated OOMKilled failures on all 3 runners
+			// Each runner will transition: Pending -> Failed (OOMKilled) -> Pending -> Failed (OOMKilled) ...
+			var runners []*v1alpha1.EphemeralRunner
+			for i := range runnerList.Items {
+				runners = append(runners, runnerList.Items[i].DeepCopy())
+			}
+
+			// First cycle: transition all runners to Failed with OOMKilled
+			for i, runner := range runners {
+				runner.Status.RunnerID = 201 + i
+				runner.Status.Phase = v1alpha1.EphemeralRunnerPhaseFailed
+				runner.Status.Reason = "OOMKilled"
+				err = k8sClient.Status().Patch(ctx, runner, client.MergeFrom(&runnerList.Items[i]))
+				Expect(err).NotTo(HaveOccurred(), "failed to patch runner to failed state")
+			}
+
+			// Verify aggregated status shows 3 failed runners
+			desiredStatus := v1alpha1.EphemeralRunnerSetStatus{
+				Phase:                   v1alpha1.EphemeralRunnerSetPhaseRunning,
+				CurrentReplicas:         3,
+				PendingEphemeralRunners: 0,
+				RunningEphemeralRunners: 0,
+				FailedEphemeralRunners:  3,
+			}
+			Eventually(
+				func() (v1alpha1.EphemeralRunnerSetStatus, error) {
+					updated := new(v1alpha1.EphemeralRunnerSet)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunnerSet.Name, Namespace: ephemeralRunnerSet.Namespace}, updated)
+					if err != nil {
+						return v1alpha1.EphemeralRunnerSetStatus{}, err
+					}
+					return updated.Status, nil
+				},
+				ephemeralRunnerSetTestTimeout,
+				ephemeralRunnerSetTestInterval,
+			).Should(BeEquivalentTo(desiredStatus), "Status should show 3 failed runners after first OOMKilled cycle")
+
+			// Second cycle: simulate cleanup and recreation - runners transition back to Pending
+			// This validates that the set doesn't get stuck with unbounded failed count
+			runnerList = new(v1alpha1.EphemeralRunnerList)
+			err = listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
+			Expect(err).NotTo(HaveOccurred(), "failed to list runners after first OOMKilled cycle")
+
+			for i, runner := range runnerList.Items {
+				runner := runner.DeepCopy()
+				runner.Status.Phase = v1alpha1.EphemeralRunnerPhasePending
+				runner.Status.Reason = ""
+				err = k8sClient.Status().Patch(ctx, runner, client.MergeFrom(&runnerList.Items[i]))
+				Expect(err).NotTo(HaveOccurred(), "failed to patch runner back to pending state")
+			}
+
+			// Verify aggregated status shows 3 pending runners (not stuck with failed count)
+			desiredStatus = v1alpha1.EphemeralRunnerSetStatus{
+				Phase:                   v1alpha1.EphemeralRunnerSetPhaseRunning,
+				CurrentReplicas:         3,
+				PendingEphemeralRunners: 3,
+				RunningEphemeralRunners: 0,
+				FailedEphemeralRunners:  0,
+			}
+			Eventually(
+				func() (v1alpha1.EphemeralRunnerSetStatus, error) {
+					updated := new(v1alpha1.EphemeralRunnerSet)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunnerSet.Name, Namespace: ephemeralRunnerSet.Namespace}, updated)
+					if err != nil {
+						return v1alpha1.EphemeralRunnerSetStatus{}, err
+					}
+					return updated.Status, nil
+				},
+				ephemeralRunnerSetTestTimeout,
+				ephemeralRunnerSetTestInterval,
+			).Should(BeEquivalentTo(desiredStatus), "Status should show 3 pending runners after recovery cycle (no unbounded stuck growth)")
+
+			// Third cycle: simulate another OOMKilled failure to verify repeated cycles don't cause stuck state
+			runnerList = new(v1alpha1.EphemeralRunnerList)
+			err = listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
+			Expect(err).NotTo(HaveOccurred(), "failed to list runners for third cycle")
+
+			for i, runner := range runnerList.Items {
+				runner := runner.DeepCopy()
+				runner.Status.RunnerID = 301 + i
+				runner.Status.Phase = v1alpha1.EphemeralRunnerPhaseFailed
+				runner.Status.Reason = "OOMKilled"
+				err = k8sClient.Status().Patch(ctx, runner, client.MergeFrom(&runnerList.Items[i]))
+				Expect(err).NotTo(HaveOccurred(), "failed to patch runner to failed state in third cycle")
+			}
+
+			// Verify aggregated status shows 3 failed runners again (bounded, not growing)
+			desiredStatus = v1alpha1.EphemeralRunnerSetStatus{
+				Phase:                   v1alpha1.EphemeralRunnerSetPhaseRunning,
+				CurrentReplicas:         3,
+				PendingEphemeralRunners: 0,
+				RunningEphemeralRunners: 0,
+				FailedEphemeralRunners:  3,
+			}
+			Eventually(
+				func() (v1alpha1.EphemeralRunnerSetStatus, error) {
+					updated := new(v1alpha1.EphemeralRunnerSet)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunnerSet.Name, Namespace: ephemeralRunnerSet.Namespace}, updated)
+					if err != nil {
+						return v1alpha1.EphemeralRunnerSetStatus{}, err
+					}
+					return updated.Status, nil
+				},
+				ephemeralRunnerSetTestTimeout,
+				ephemeralRunnerSetTestInterval,
+			).Should(BeEquivalentTo(desiredStatus), "Status should show 3 failed runners in third cycle (bounded, not growing unbounded)")
+		})
 	})
 })
 

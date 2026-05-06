@@ -1,6 +1,8 @@
 {{- define "runner-mode-kubernetes.runner-container" -}}
 {{- $runner := (.Values.runner | default dict) -}}
 {{- $kubeMode := (index $runner "kubernetesMode" | default dict) -}}
+{{- $runnerContainer := (index $runner "container" | default dict) -}}
+{{- $runnerContainerVolumeMounts := (index $runnerContainer "volumeMounts" | default list) -}}
 {{- $hookPath := (index $kubeMode "hookPath" | default "/home/runner/k8s/index.js") -}}
 {{- $extensionRef := (index $kubeMode "extensionRef" | default "") -}}
 {{- $extension := (index $kubeMode "extension" | default dict) -}}
@@ -31,6 +33,9 @@
 {{- end -}}
 {{- if not (kindIs "string" $hookPath) -}}
   {{- fail "runner.kubernetesMode.hookPath must be a string" -}}
+{{- end -}}
+{{- if not (kindIs "slice" $runnerContainerVolumeMounts) -}}
+  {{- fail "runner.container.volumeMounts must be a list" -}}
 {{- end -}}
 {{- if not (kindIs "string" $extensionRef) -}}
   {{- fail "runner.kubernetesMode.extensionRef must be a string" -}}
@@ -81,6 +86,9 @@ volumeMounts:
     mountPath: {{ $hookTemplatePath | quote }}
     subPath: extension
     readOnly: true
+  {{- end }}
+  {{- with $runnerContainerVolumeMounts }}
+    {{- toYaml . | nindent 2 }}
   {{- end }}
   {{ include "githubServerTLS.volumeMountItem" (dict "root" $ "existingVolumeMounts" (list)) | nindent 2 }}
 {{- end }}

@@ -71,6 +71,13 @@ func WithRemoveRunner(err error) ClientOption {
 	}
 }
 
+// WithRemoveRunnerFunc configures a function to handle RemoveRunner calls dynamically
+func WithRemoveRunnerFunc(fn func(context.Context, int64) error) ClientOption {
+	return func(c *Client) {
+		c.removeRunnerFunc = fn
+	}
+}
+
 // WithGenerateJitRunnerConfig configures the result of GenerateJitRunnerConfig
 func WithGenerateJitRunnerConfig(result *scaleset.RunnerScaleSetJitRunnerConfig, err error) ClientOption {
 	return func(c *Client) {
@@ -113,6 +120,7 @@ func WithUpdateRunnerScaleSetFunc(fn func(context.Context, int, *scaleset.Runner
 type Client struct {
 	systemInfo               scaleset.SystemInfo
 	updateRunnerScaleSetFunc func(context.Context, int, *scaleset.RunnerScaleSet) (*scaleset.RunnerScaleSet, error)
+	removeRunnerFunc         func(context.Context, int64) error
 
 	getRunnerScaleSetResult struct {
 		*scaleset.RunnerScaleSet
@@ -196,6 +204,9 @@ func (c *Client) GetRunnerByName(ctx context.Context, runnerName string) (*scale
 }
 
 func (c *Client) RemoveRunner(ctx context.Context, runnerID int64) error {
+	if c.removeRunnerFunc != nil {
+		return c.removeRunnerFunc(ctx, runnerID)
+	}
 	return c.removeRunnerResult.err
 }
 
