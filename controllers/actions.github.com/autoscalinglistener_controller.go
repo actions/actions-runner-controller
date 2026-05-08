@@ -17,8 +17,10 @@ limitations under the License.
 package actionsgithubcom
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -210,6 +212,30 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 
 	// TODO: make sure the role binding has the up-to-date role and service account
 
+	// Reconcile listener config secret and detect drift
+	cert := ""
+	if autoscalingListener.Spec.GitHubServerTLS != nil {
+		var err error
+		cert, err = r.certificate(ctx, &autoscalingRunnerSet, autoscalingListener)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to create certificate env var for listener: %w", err)
+		}
+	}
+
+	var metricsConfig *listenerMetricsServerConfig
+	if r.ListenerMetricsAddr != "0" {
+		metricsConfig = &listenerMetricsServerConfig{
+			addr:     r.ListenerMetricsAddr,
+			endpoint: r.ListenerMetricsEndpoint,
+		}
+	}
+
+	secretChanged, err := r.reconcileListenerConfigSecret(ctx, autoscalingListener, appConfig, metricsConfig, cert, log)
+	if err != nil {
+		log.Error(err, "Failed to reconcile listener config secret")
+		return ctrl.Result{}, err
+	}
+
 	listenerPod := new(corev1.Pod)
 	if err := r.Get(
 		ctx,
@@ -232,6 +258,12 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		// Create a listener pod in the controller namespace
 		log.Info("Creating a listener pod")
 		return r.createListenerPod(ctx, &autoscalingRunnerSet, autoscalingListener, serviceAccount, appConfig, log)
+	}
+
+	// If listener config secret changed and pod exists, restart the pod
+	if secretChanged {
+		log.Info("Listener config secret changed, restarting listener pod")
+		return ctrl.Result{}, r.deleteListenerPod(ctx, autoscalingListener, listenerPod, log)
 	}
 
 	cs := listenerContainerStatus(listenerPod)
@@ -284,19 +316,6 @@ func (r *AutoscalingListenerReconciler) deleteListenerPod(ctx context.Context, a
 		if err := r.Delete(ctx, listenerPod); err != nil && !kerrors.IsNotFound(err) {
 			log.Error(err, "Unable to delete the listener pod", "namespace", listenerPod.Namespace, "name", listenerPod.Name)
 			return err
-		}
-
-		// delete the listener config secret as well, so it gets recreated when the listener pod is recreated, with any new data if it exists
-		var configSecret corev1.Secret
-		err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Namespace, Name: scaleSetListenerConfigName(autoscalingListener)}, &configSecret)
-		switch {
-		case err == nil && configSecret.DeletionTimestamp.IsZero():
-			log.Info("Deleting the listener config secret")
-			if err := r.Delete(ctx, &configSecret); err != nil {
-				return fmt.Errorf("failed to delete listener config secret: %w", err)
-			}
-		case !kerrors.IsNotFound(err):
-			return fmt.Errorf("failed to get the listener config secret: %w", err)
 		}
 	}
 	return nil
@@ -423,6 +442,47 @@ func (r *AutoscalingListenerReconciler) createServiceAccountForListener(ctx cont
 
 	logger.Info("Created listener service accounts", "namespace", newServiceAccount.Namespace, "name", newServiceAccount.Name)
 	return ctrl.Result{}, nil
+}
+
+func (r *AutoscalingListenerReconciler) reconcileListenerConfigSecret(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, appConfig *appconfig.AppConfig, metricsConfig *listenerMetricsServerConfig, cert string, logger logr.Logger) (changed bool, err error) {
+	desiredSecret, err := r.newScaleSetListenerConfig(autoscalingListener, appConfig, metricsConfig, cert)
+	if err != nil {
+		return false, fmt.Errorf("failed to build listener config secret: %w", err)
+	}
+
+	existingSecret := &corev1.Secret{}
+	err = r.Get(ctx, types.NamespacedName{Name: desiredSecret.Name, Namespace: desiredSecret.Namespace}, existingSecret)
+	if err != nil {
+		if kerrors.IsNotFound(err) {
+			if err := ctrl.SetControllerReference(autoscalingListener, desiredSecret, r.Scheme); err != nil {
+				return false, fmt.Errorf("failed to set controller reference: %w", err)
+			}
+
+			logger.Info("Creating listener config secret", "namespace", desiredSecret.Namespace, "name", desiredSecret.Name)
+			if err := r.Create(ctx, desiredSecret); err != nil {
+				return false, fmt.Errorf("failed to create listener config secret: %w", err)
+			}
+
+			return true, nil
+		}
+		return false, fmt.Errorf("failed to get listener config secret: %w", err)
+	}
+
+	if listenerConfigSecretDrifted(existingSecret, desiredSecret) {
+		updatedSecret := existingSecret.DeepCopy()
+		updatedSecret.Data = desiredSecret.Data
+		updatedSecret.Labels = desiredSecret.Labels
+		updatedSecret.Annotations = desiredSecret.Annotations
+
+		logger.Info("Updating listener config secret", "namespace", updatedSecret.Namespace, "name", updatedSecret.Name)
+		if err := r.Update(ctx, updatedSecret); err != nil {
+			return false, fmt.Errorf("failed to update listener config secret: %w", err)
+		}
+
+		return true, nil
+	}
+
+	return false, nil
 }
 
 func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, autoscalingListener *v1alpha1.AutoscalingListener, serviceAccount *corev1.ServiceAccount, appConfig *appconfig.AppConfig, logger logr.Logger) (ctrl.Result, error) {
@@ -689,6 +749,27 @@ func (r *AutoscalingListenerReconciler) publishRunningListener(autoscalingListen
 	}
 
 	return nil
+}
+
+// listenerConfigSecretDrifted detects if the listener config secret has drifted from the desired state.
+// It compares the config.json data, labels, and annotations deterministically.
+func listenerConfigSecretDrifted(existing *corev1.Secret, desired *corev1.Secret) bool {
+	// Compare config.json data
+	if !bytes.Equal(existing.Data["config.json"], desired.Data["config.json"]) {
+		return true
+	}
+
+	// Compare labels
+	if !maps.Equal(existing.Labels, desired.Labels) {
+		return true
+	}
+
+	// Compare annotations
+	if !maps.Equal(existing.Annotations, desired.Annotations) {
+		return true
+	}
+
+	return false
 }
 
 // SetupWithManager sets up the controller with the Manager.
