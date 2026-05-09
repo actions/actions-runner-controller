@@ -218,7 +218,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		var err error
 		cert, err = r.certificate(ctx, &autoscalingRunnerSet, autoscalingListener)
 		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to create certificate env var for listener: %w", err)
+			return ctrl.Result{}, fmt.Errorf("failed to build GitHub server TLS certificate value for listener config: %w", err)
 		}
 	}
 
