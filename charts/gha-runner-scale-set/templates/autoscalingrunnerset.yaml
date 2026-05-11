@@ -269,7 +269,7 @@ spec:
       {{- include "gha-runner-scale-set.default-mode-runner-containers" . | nindent 6 }}
       {{- end }}
       {{- $tlsConfig := (default (dict) .Values.githubServerTLS) }}
-      {{- if or .Values.template.spec.volumes (eq $containerMode.type "dind") (eq $containerMode.type "kubernetes") (eq $containerMode.type "kubernetes-novolume") $tlsConfig.runnerMountPath }}
+      {{- if or .Values.template.spec.volumes (eq $containerMode.type "dind") (eq $containerMode.type "kubernetes") $tlsConfig.runnerMountPath }}
       volumes:
         {{- if $tlsConfig.runnerMountPath }}
           {{- include "gha-runner-scale-set.tls-volume" $tlsConfig | nindent 6 }}
@@ -286,4 +286,6 @@ spec:
         {{- toYaml . | nindent 6 }}
           {{- end }}
         {{- end }}
+      {{- else if eq $containerMode.type "kubernetes-novolume" }}
+      volumes: []
       {{- end }}
