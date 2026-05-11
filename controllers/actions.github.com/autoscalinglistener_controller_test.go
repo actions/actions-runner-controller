@@ -350,7 +350,7 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 				autoscalingListenerTestInterval).Should(BeEquivalentTo(rulesForListenerRole([]string{updated.Spec.EphemeralRunnerSetName})), "Role should be updated")
 		})
 
-		It("It should re-create pod and config secret whenever listener container is terminated", func() {
+		It("It should re-create pod but persist config secret whenever listener container is terminated", func() {
 			// Waiting for the pod is created
 			pod := new(corev1.Pod)
 			Eventually(
@@ -407,7 +407,7 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 				autoscalingListenerTestInterval,
 			).ShouldNot(BeEquivalentTo(oldPodUID), "Pod should be re-created")
 
-			// Check if config secret is re-created
+			// Check if config secret persists (not re-created) to avoid race condition
 			Eventually(
 				func() (string, error) {
 					secret := new(corev1.Secret)
@@ -420,7 +420,7 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 				},
 				autoscalingListenerTestTimeout,
 				autoscalingListenerTestInterval,
-			).ShouldNot(BeEquivalentTo(oldSecretUID), "Config secret should be re-created")
+			).Should(BeEquivalentTo(oldSecretUID), "Config secret should persist (not be re-created)")
 		})
 	})
 })
