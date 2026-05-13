@@ -355,6 +355,115 @@ var _ = Describe("EphemeralRunner", func() {
 			).Should(BeTrue(), "Pod should be re-created")
 		})
 
+		It("It should re-create pod when init container fails before pod phase transitions to Failed", func() {
+			pod := new(corev1.Pod)
+			Eventually(func() (bool, error) {
+				if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod); err != nil {
+					return false, err
+				}
+				return true, nil
+			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeEquivalentTo(true))
+
+			oldPodUID := pod.UID
+
+			// Simulate init container failure without PodFailed phase.
+			// This can happen when the kubelet has not yet transitioned the pod phase.
+			pod.Status.Phase = corev1.PodPending
+			pod.Status.InitContainerStatuses = []corev1.ContainerStatus{
+				{
+					Name: "setup",
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							ExitCode: 1,
+							Reason:   "StartError",
+							Message:  "failed to create containerd task: context canceled",
+						},
+					},
+				},
+			}
+			err := k8sClient.Status().Update(ctx, pod)
+			Expect(err).To(BeNil(), "Failed to update pod status")
+
+			Eventually(
+				func() (int, error) {
+					updated := new(v1alpha1.EphemeralRunner)
+					err := k8sClient.Get(
+						ctx,
+						client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace},
+						updated,
+					)
+					if err != nil {
+						return 0, err
+					}
+					return len(updated.Status.Failures), nil
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(BeEquivalentTo(1))
+
+			Eventually(
+				func() (bool, error) {
+					newPod := new(corev1.Pod)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, newPod)
+					if err != nil {
+						return false, err
+					}
+					return newPod.UID != oldPodUID, nil
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(BeTrue(), "Pod should be re-created after init container failure")
+		})
+
+		It("It should delete ephemeral runner when init container fails and job is assigned", func() {
+			er := new(v1alpha1.EphemeralRunner)
+			Eventually(func() error {
+				return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, er)
+			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to get ephemeral runner")
+
+			er.Status.JobID = "1"
+			err := k8sClient.Status().Update(ctx, er)
+			Expect(err).To(BeNil(), "failed to update ephemeral runner status")
+
+			Eventually(func() (string, error) {
+				current := new(v1alpha1.EphemeralRunner)
+				if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, current); err != nil {
+					return "", err
+				}
+				return current.Status.JobID, nil
+			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeEquivalentTo("1"))
+
+			pod := new(corev1.Pod)
+			Eventually(func() (bool, error) {
+				if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod); err != nil {
+					return false, err
+				}
+				return true, nil
+			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeEquivalentTo(true))
+
+			// Simulate init container failure with job assigned
+			pod.Status.Phase = corev1.PodPending
+			pod.Status.InitContainerStatuses = []corev1.ContainerStatus{
+				{
+					Name: "setup",
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							ExitCode: 1,
+							Reason:   "StartError",
+						},
+					},
+				},
+			}
+			err = k8sClient.Status().Update(ctx, pod)
+			Expect(err).To(BeNil(), "Failed to update pod status")
+
+			Eventually(func() bool {
+				check := new(v1alpha1.EphemeralRunner)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, check)
+				return kerrors.IsNotFound(err)
+			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeTrue(), "Ephemeral runner should eventually be deleted when init container fails with job assigned")
+		})
+
 		It("It should treat pod failed with runner container exit 0 as success with job id", func() {
 			er := new(v1alpha1.EphemeralRunner)
 			Eventually(func() error {
