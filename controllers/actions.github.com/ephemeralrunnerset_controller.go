@@ -195,6 +195,13 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	total := ephemeralRunnersByState.scaleTotal()
+	if r.isDrainingMode(ephemeralRunnerSet) {
+		if err := r.reconcileDrainingRunnerSet(ctx, ephemeralRunnerSet, ephemeralRunnersByState, total, log); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, r.updateStatus(ctx, ephemeralRunnerSet, ephemeralRunnersByState, log)
+	}
+
 	if ephemeralRunnerSet.Spec.PatchID == 0 || ephemeralRunnerSet.Spec.PatchID != ephemeralRunnersByState.latestPatchID {
 		defer func() {
 			if err := r.cleanupFinishedEphemeralRunners(ctx, ephemeralRunnersByState.finished, log); err != nil {
@@ -240,6 +247,8 @@ func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemer
 	total := state.scaleTotal()
 	var phase v1alpha1.EphemeralRunnerSetPhase
 	switch {
+	case r.isDrainingMode(ephemeralRunnerSet):
+		phase = v1alpha1.EphemeralRunnerSetPhaseDraining
 	case len(state.outdated) > 0:
 		phase = v1alpha1.EphemeralRunnerSetPhaseOutdated
 	case ephemeralRunnerSet.Status.Phase == "":
@@ -268,6 +277,30 @@ func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemer
 		}
 	}
 	return nil
+}
+
+func (r *EphemeralRunnerSetReconciler) isDrainingMode(ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet) bool {
+	if ephemeralRunnerSet == nil {
+		return false
+	}
+	return ephemeralRunnerSet.Spec.PatchID == 0 && ephemeralRunnerSet.Spec.Replicas == 0 && ephemeralRunnerSet.Annotations[annotationKeyRunnerSetDraining] == "true"
+}
+
+func (r *EphemeralRunnerSetReconciler) reconcileDrainingRunnerSet(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, state *ephemeralRunnersByState, total int, log logr.Logger) error {
+	terminated := state.terminated()
+	for i := range terminated {
+		log.Info("Deleting terminated ephemeral runner in draining mode", "name", terminated[i].Name)
+		if err := r.Delete(ctx, terminated[i]); err != nil && !kerrors.IsNotFound(err) {
+			return err
+		}
+	}
+
+	if total == 0 {
+		return nil
+	}
+
+	log.Info("Draining ephemeral runner set aggressively", "pending", len(state.pending), "running", len(state.running))
+	return r.deleteIdleEphemeralRunners(ctx, ephemeralRunnerSet, state.pending, state.running, len(state.pending)+len(state.running), log)
 }
 
 func (r *EphemeralRunnerSetReconciler) cleanupFinishedEphemeralRunners(ctx context.Context, finishedEphemeralRunners []*v1alpha1.EphemeralRunner, log logr.Logger) error {

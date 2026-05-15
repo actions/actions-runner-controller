@@ -46,8 +46,9 @@ const (
 	// annotationKeyValuesHash is hash of the entire values json.
 	// This is used to determine if the values have changed, so we can
 	// re-create listener.
-	annotationKeyValuesHash = "actions.github.com/values-hash"
-	annotationKeyChangeHash = "actions.github.com/change-hash"
+	annotationKeyValuesHash        = "actions.github.com/values-hash"
+	annotationKeyChangeHash        = "actions.github.com/change-hash"
+	annotationKeyRunnerSetDraining = "actions.github.com/runner-set-draining"
 
 	autoscalingRunnerSetFinalizerName = "autoscalingrunnerset.actions.github.com/finalizer"
 	runnerScaleSetIDAnnotationKey     = "runner-scale-set-id"
@@ -106,7 +107,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		}
 
 		log.Info("Deleting resources")
-		done, err := r.cleanUpResources(ctx, autoscalingRunnerSet, nil, log)
+		done, err := r.cleanUpResources(ctx, autoscalingRunnerSet, log)
 		if err != nil {
 			log.Error(err, "Failed to clean up resources during deletion")
 			return ctrl.Result{}, err
@@ -138,14 +139,16 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 
 	if !v1alpha1.IsVersionAllowed(autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion], build.Version) {
 		if err := r.Delete(ctx, autoscalingRunnerSet); err != nil {
-			log.Error(err, "Failed to delete autoscaling runner set on version mismatch",
+			log.Error(
+				err, "Failed to delete autoscaling runner set on version mismatch",
 				"buildVersion", build.Version,
 				"autoscalingRunnerSetVersion", autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
 			)
 			return ctrl.Result{}, nil
 		}
 
-		log.Info("Autoscaling runner set version doesn't match the build version. Deleting the resource.",
+		log.Info(
+			"Autoscaling runner set version doesn't match the build version. Deleting the resource.",
 			"buildVersion", build.Version,
 			"autoscalingRunnerSetVersion", autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
 		)
@@ -252,7 +255,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			}
 		}
 
-		done, err := r.cleanUpResources(ctx, autoscalingRunnerSet, latestRunnerSet, log)
+		done, err := r.cleanUpResources(ctx, autoscalingRunnerSet, log)
 		if err != nil {
 			log.Error(err, "Failed to clean up resources for outdated runner set")
 			return ctrl.Result{}, err
@@ -287,17 +290,22 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	if latestRunnerSet.Annotations[annotationKeyRunnerSpecHash] != autoscalingRunnerSet.RunnerSetSpecHash() {
 		if r.drainingJobs(&latestRunnerSet.Status) {
 			log.Info("Latest runner set spec hash does not match the current autoscaling runner set. Waiting for the running and pending runners to finish:", "running", latestRunnerSet.Status.RunningEphemeralRunners, "pending", latestRunnerSet.Status.PendingEphemeralRunners)
-			log.Info("Scaling down the number of desired replicas to 0")
+			log.Info("Scaling down the number of desired replicas to 0 and setting draining phase")
 			// We are in the process of draining the jobs. The listener has been deleted and the ephemeral runner set replicas
 			// need to scale down to 0
 			err := patch(ctx, r.Client, latestRunnerSet, func(obj *v1alpha1.EphemeralRunnerSet) {
 				obj.Spec.Replicas = 0
 				obj.Spec.PatchID = 0
+				if obj.Annotations == nil {
+					obj.Annotations = map[string]string{}
+				}
+				obj.Annotations[annotationKeyRunnerSetDraining] = "true"
 			})
 			if err != nil {
 				log.Error(err, "Failed to patch runner set to set desired count to 0")
+				return ctrl.Result{}, err
 			}
-			return ctrl.Result{}, err
+			return ctrl.Result{}, nil
 		}
 		log.Info("Latest runner set spec hash does not match the current autoscaling runner set. Creating a new runner set")
 		return r.createEphemeralRunnerSet(ctx, autoscalingRunnerSet, log)
@@ -305,8 +313,19 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 
 	oldRunnerSets := existingRunnerSets.old()
 	if len(oldRunnerSets) > 0 {
+		log.Info("Ensuring old ephemeral runner sets are draining", "count", len(oldRunnerSets))
+		drainingReady, err := r.ensureOldRunnerSetsDraining(ctx, oldRunnerSets, log)
+		if err != nil {
+			log.Error(err, "Failed to ensure old runner sets are draining")
+			return ctrl.Result{}, err
+		}
+		if !drainingReady {
+			log.Info("Waiting for old ephemeral runner sets to enter draining state")
+			return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+		}
+
 		log.Info("Cleanup old ephemeral runner sets", "count", len(oldRunnerSets))
-		err := r.deleteEphemeralRunnerSets(ctx, oldRunnerSets, log)
+		err = r.deleteEphemeralRunnerSets(ctx, oldRunnerSets, log)
 		if err != nil {
 			log.Error(err, "Failed to clean up old runner sets")
 			return ctrl.Result{}, err
@@ -331,7 +350,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	return ctrl.Result{}, nil
 }
 
-func (r *AutoscalingRunnerSetReconciler) cleanUpResources(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, latestRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) (bool, error) {
+func (r *AutoscalingRunnerSetReconciler) cleanUpResources(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, log logr.Logger) (bool, error) {
 	log.Info("Deleting the listener")
 	done, err := r.cleanupListener(ctx, autoscalingRunnerSet, log)
 	if err != nil {
@@ -430,6 +449,15 @@ func (r *AutoscalingRunnerSetReconciler) cleanupEphemeralRunnerSets(ctx context.
 		return true, nil
 	}
 
+	drainingReady, err := r.ensureOldRunnerSetsDraining(ctx, runnerSets.all(), logger)
+	if err != nil {
+		return false, fmt.Errorf("failed to set ephemeral runner sets into draining mode: %w", err)
+	}
+	if !drainingReady {
+		logger.Info("Waiting for ephemeral runner sets to enter draining mode")
+		return false, nil
+	}
+
 	logger.Info("Deleting all ephemeral runner sets", "count", runnerSets.count())
 	if err := r.deleteEphemeralRunnerSets(ctx, runnerSets.all(), logger); err != nil {
 		return false, fmt.Errorf("failed to delete ephemeral runner sets: %w", err)
@@ -440,6 +468,14 @@ func (r *AutoscalingRunnerSetReconciler) cleanupEphemeralRunnerSets(ctx context.
 func (r *AutoscalingRunnerSetReconciler) deleteEphemeralRunnerSets(ctx context.Context, oldRunnerSets []v1alpha1.EphemeralRunnerSet, logger logr.Logger) error {
 	for i := range oldRunnerSets {
 		rs := &oldRunnerSets[i]
+		if !r.runnerSetInDrainingMode(rs) {
+			logger.Info("Skip deleting ephemeral runner set until it is in draining mode", "name", rs.Name, "phase", rs.Status.Phase, "replicas", rs.Spec.Replicas, "patchID", rs.Spec.PatchID)
+			continue
+		}
+		if r.hasRunningOrPendingRunners(&rs.Status) {
+			logger.Info("Skip deleting ephemeral runner set while it still has running or pending runners", "name", rs.Name, "running", rs.Status.RunningEphemeralRunners, "pending", rs.Status.PendingEphemeralRunners)
+			continue
+		}
 		// already deleted but contains finalizer so it still exists
 		if !rs.DeletionTimestamp.IsZero() {
 			logger.Info("Skip ephemeral runner set since it is already marked for deletion", "name", rs.Name)
@@ -452,6 +488,47 @@ func (r *AutoscalingRunnerSetReconciler) deleteEphemeralRunnerSets(ctx context.C
 		logger.Info("Deleted ephemeral runner set", "name", rs.Name)
 	}
 	return nil
+}
+
+func (r *AutoscalingRunnerSetReconciler) ensureOldRunnerSetsDraining(ctx context.Context, oldRunnerSets []v1alpha1.EphemeralRunnerSet, logger logr.Logger) (bool, error) {
+	allReady := true
+	for i := range oldRunnerSets {
+		rs := &oldRunnerSets[i]
+		if !rs.DeletionTimestamp.IsZero() {
+			continue
+		}
+		if r.runnerSetInDrainingMode(rs) {
+			continue
+		}
+
+		allReady = false
+		runnerSetCopy := rs.DeepCopy()
+		logger.Info("Patching old ephemeral runner set into draining mode", "name", rs.Name)
+		err := patch(ctx, r.Client, runnerSetCopy, func(obj *v1alpha1.EphemeralRunnerSet) {
+			obj.Spec.Replicas = 0
+			obj.Spec.PatchID = 0
+			if obj.Annotations == nil {
+				obj.Annotations = map[string]string{}
+			}
+			obj.Annotations[annotationKeyRunnerSetDraining] = "true"
+		})
+		if err != nil {
+			return false, fmt.Errorf("failed to patch old EphemeralRunnerSet %s into draining mode: %w", rs.Name, err)
+		}
+	}
+
+	return allReady, nil
+}
+
+func (r *AutoscalingRunnerSetReconciler) runnerSetInDrainingMode(rs *v1alpha1.EphemeralRunnerSet) bool {
+	return rs.Spec.Replicas == 0 && rs.Spec.PatchID == 0 && rs.Annotations[annotationKeyRunnerSetDraining] == "true"
+}
+
+func (r *AutoscalingRunnerSetReconciler) hasRunningOrPendingRunners(status *v1alpha1.EphemeralRunnerSetStatus) bool {
+	if status == nil {
+		return false
+	}
+	return (status.RunningEphemeralRunners + status.PendingEphemeralRunners) > 0
 }
 
 func (r *AutoscalingRunnerSetReconciler) removeFinalizersFromDependentResources(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) error {
@@ -537,7 +614,8 @@ func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Contex
 				RunnerSetting: scaleset.RunnerSetting{
 					DisableUpdate: true,
 				},
-			})
+			},
+		)
 		if err != nil {
 			logger.Error(err, "Failed to create a new runner scale set on Actions service")
 			return ctrl.Result{}, err

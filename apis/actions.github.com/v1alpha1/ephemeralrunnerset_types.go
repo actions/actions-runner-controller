@@ -54,6 +54,10 @@ const (
 	// EphemeralRunnerSetPhaseOutdated is set when at least one ephemeral runner
 	// contains the outdated phase
 	EphemeralRunnerSetPhaseOutdated EphemeralRunnerSetPhase = "Outdated"
+	// EphemeralRunnerSetPhaseDraining is set when the runner set is being actively
+	// drained. In this phase, the desired replicas are expected to be 0 and patchID
+	// is expected to be 0.
+	EphemeralRunnerSetPhaseDraining EphemeralRunnerSetPhase = "Draining"
 )
 
 // +kubebuilder:object:root=true
