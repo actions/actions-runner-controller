@@ -16,6 +16,11 @@ const (
 	// proactiveCapacityWarnThreshold triggers a warning log but does
 	// not clamp — operators may legitimately need >100 in surge cases.
 	proactiveCapacityWarnThreshold = 100
+	// defaultHUDFailureMultiplier is applied to ProactiveCapacity when the
+	// HUD API is unreachable. A value >1 keeps placeholder capacity above
+	// the proactive baseline during a HUD outage; outer caps (MaxRunners
+	// headroom, MaxBurstCapacity) bound the absolute blast radius.
+	defaultHUDFailureMultiplier = 3
 )
 
 // Config holds all configuration for the capacity monitor.
@@ -62,8 +67,9 @@ type Config struct {
 	ScaleSetName string
 
 	// HUD API
-	HUDAPIURL   string
-	HUDAPIToken string
+	HUDAPIURL            string
+	HUDAPIToken          string
+	HUDFailureMultiplier int
 }
 
 // ConfigFromEnv reads capacity monitor configuration from environment
@@ -87,8 +93,9 @@ func ConfigFromEnv() Config {
 		NodeFleet:           envString("CAPACITY_AWARE_NODE_FLEET", ""),
 		RunnerNodeFleet:     envString("CAPACITY_AWARE_RUNNER_NODE_FLEET", ""),
 		RunnerClass:         envString("CAPACITY_AWARE_RUNNER_CLASS", ""),
-		HUDAPIURL:           envString("CAPACITY_AWARE_HUD_API_URL", defaultHUDAPIURL),
-		HUDAPIToken:         envString("CAPACITY_AWARE_HUD_API_TOKEN", ""),
+		HUDAPIURL:            envString("CAPACITY_AWARE_HUD_API_URL", defaultHUDAPIURL),
+		HUDAPIToken:          envString("CAPACITY_AWARE_HUD_API_TOKEN", ""),
+		HUDFailureMultiplier: envInt("CAPACITY_AWARE_HUD_FAILURE_MULTIPLIER", defaultHUDFailureMultiplier),
 	}
 
 	if c.ProactiveCapacity < 0 {
@@ -103,6 +110,12 @@ func ConfigFromEnv() Config {
 	} else if c.ProactiveCapacity > proactiveCapacityWarnThreshold {
 		slog.Warn("CAPACITY_AWARE_PROACTIVE_CAPACITY is unusually high",
 			"value", c.ProactiveCapacity, "warnThreshold", proactiveCapacityWarnThreshold)
+	}
+
+	if c.HUDFailureMultiplier < 1 {
+		slog.Warn("CAPACITY_AWARE_HUD_FAILURE_MULTIPLIER must be >= 1, clamping",
+			"original", c.HUDFailureMultiplier, "clampedTo", 1)
+		c.HUDFailureMultiplier = 1
 	}
 
 	return c
@@ -122,6 +135,11 @@ func (c *Config) Validate() error {
 	if c.MaxBurstCapacity < 0 {
 		slog.Warn("MaxBurstCapacity is negative, clamping to 0", "original", c.MaxBurstCapacity)
 		c.MaxBurstCapacity = 0
+	}
+	if c.HUDFailureMultiplier < 1 {
+		slog.Warn("HUDFailureMultiplier must be >= 1, clamping",
+			"original", c.HUDFailureMultiplier, "clampedTo", 1)
+		c.HUDFailureMultiplier = 1
 	}
 
 	if c.Enabled && c.RunnerNodeFleet == "" {

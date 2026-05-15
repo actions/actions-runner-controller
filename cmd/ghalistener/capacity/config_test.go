@@ -49,6 +49,7 @@ func TestConfigFromEnv_Defaults(t *testing.T) {
 		"CAPACITY_AWARE_RUNNER_NODE_FLEET",
 		"CAPACITY_AWARE_RUNNER_CLASS",
 		"CAPACITY_AWARE_HUD_API_TOKEN",
+		"CAPACITY_AWARE_HUD_FAILURE_MULTIPLIER",
 	}
 	unsetEnvs(t, keys)
 
@@ -68,6 +69,7 @@ func TestConfigFromEnv_Defaults(t *testing.T) {
 	assert.Equal(t, "", cfg.RunnerNodeFleet, "RunnerNodeFleet default")
 	assert.Equal(t, "", cfg.RunnerClass, "RunnerClass default")
 	assert.Equal(t, "", cfg.HUDAPIToken, "HUDAPIToken default")
+	assert.Equal(t, defaultHUDFailureMultiplier, cfg.HUDFailureMultiplier, "HUDFailureMultiplier default")
 	// Fields set by main.go should be zero values.
 	assert.Equal(t, 0, cfg.MaxRunners, "MaxRunners zero")
 	assert.Equal(t, 0, cfg.ScaleSetID, "ScaleSetID zero")
@@ -90,8 +92,9 @@ func TestConfigFromEnv_AllSet(t *testing.T) {
 		"CAPACITY_AWARE_RUNNER_MEMORY":        "1Gi",
 		"CAPACITY_AWARE_NODE_FLEET":           "gpu-fleet",
 		"CAPACITY_AWARE_RUNNER_NODE_FLEET":    "c7i-runner",
-		"CAPACITY_AWARE_RUNNER_CLASS":         "gpu-large",
-		"CAPACITY_AWARE_HUD_API_TOKEN":        "secret-token",
+		"CAPACITY_AWARE_RUNNER_CLASS":           "gpu-large",
+		"CAPACITY_AWARE_HUD_API_TOKEN":          "secret-token",
+		"CAPACITY_AWARE_HUD_FAILURE_MULTIPLIER": "5",
 	})
 
 	cfg := ConfigFromEnv()
@@ -110,6 +113,7 @@ func TestConfigFromEnv_AllSet(t *testing.T) {
 	assert.Equal(t, "c7i-runner", cfg.RunnerNodeFleet)
 	assert.Equal(t, "gpu-large", cfg.RunnerClass)
 	assert.Equal(t, "secret-token", cfg.HUDAPIToken)
+	assert.Equal(t, 5, cfg.HUDFailureMultiplier)
 }
 
 func TestConfigFromEnv_InvalidValues_FallbackToDefaults(t *testing.T) {
@@ -157,6 +161,31 @@ func TestConfigFromEnv_ProactiveCapacity_NegativeClampedToZero(t *testing.T) {
 		"negative ProactiveCapacity must clamp to 0")
 }
 
+// HUDFailureMultiplier must be >= 1 — a value below 1 would never produce
+// over-provisioning on HUD failure, defeating the purpose of the fallback.
+func TestConfigFromEnv_HUDFailureMultiplier_BelowOneClampedToOne(t *testing.T) {
+	t.Run("negative", func(t *testing.T) {
+		setEnvs(t, map[string]string{
+			"CAPACITY_AWARE_HUD_FAILURE_MULTIPLIER": "-5",
+		})
+
+		cfg := ConfigFromEnv()
+
+		assert.Equal(t, 1, cfg.HUDFailureMultiplier,
+			"negative HUDFailureMultiplier must clamp to 1")
+	})
+	t.Run("zero", func(t *testing.T) {
+		setEnvs(t, map[string]string{
+			"CAPACITY_AWARE_HUD_FAILURE_MULTIPLIER": "0",
+		})
+
+		cfg := ConfigFromEnv()
+
+		assert.Equal(t, 1, cfg.HUDFailureMultiplier,
+			"zero HUDFailureMultiplier must clamp to 1")
+	})
+}
+
 // Values above the hard cap (1000) must be clamped — protects against
 // runaway placeholder creation from a misconfiguration.
 func TestConfigFromEnv_ProactiveCapacity_AboveHardCapClamped(t *testing.T) {
@@ -193,6 +222,23 @@ func TestConfigFromEnv_ProactiveCapacity_AboveWarnAllowed(t *testing.T) {
 
 	assert.Equal(t, 250, cfg.ProactiveCapacity,
 		"values between warn threshold and hard cap are allowed")
+}
+
+// Validate() must enforce HUDFailureMultiplier >= 1 for callers that
+// construct Config programmatically (bypassing ConfigFromEnv's clamp).
+func TestConfig_Validate_HUDFailureMultiplierClampedBelowOne(t *testing.T) {
+	t.Run("zero", func(t *testing.T) {
+		cfg := Config{HUDFailureMultiplier: 0}
+		require.NoError(t, cfg.Validate())
+		assert.Equal(t, 1, cfg.HUDFailureMultiplier,
+			"Validate must clamp HUDFailureMultiplier=0 to 1")
+	})
+	t.Run("negative", func(t *testing.T) {
+		cfg := Config{HUDFailureMultiplier: -3}
+		require.NoError(t, cfg.Validate())
+		assert.Equal(t, 1, cfg.HUDFailureMultiplier,
+			"Validate must clamp negative HUDFailureMultiplier to 1")
+	})
 }
 
 // Validate() clamps negative MaxRunners (set by main.go after env parse).

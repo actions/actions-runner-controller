@@ -339,15 +339,17 @@ func (m *Monitor) reconcileProvisioning(ctx context.Context) {
 		m.recorder.ObserveReconcileDuration(reconcilePhaseProvisioner, time.Since(start))
 	}()
 
-	// 1. Query HUD API with retry (graceful fallback to 0).
+	// 1. Query HUD API with retry (graceful fallback handled below).
 	queuedJobs := 0
+	hudFailed := false
 	if m.hudClient != nil && m.config.HUDAPIToken != "" {
 		var err error
 		queuedJobs, err = m.queryHUDWithRetry(ctx)
 		if err != nil {
-			m.logger.Warn("HUD API failed after retries, using 0 queued jobs", "error", err)
+			m.logger.Warn("HUD API failed after retries, falling back to ProactiveCapacity * HUDFailureMultiplier", "error", err)
 			m.recorder.IncReconcileSkips(skipReasonHUDAPIFailed)
 			queuedJobs = 0
+			hudFailed = true
 		}
 	}
 	// Set even on the failure path — queuedJobs is 0 in that case, which
@@ -432,7 +434,13 @@ func (m *Monitor) reconcileProvisioning(ctx context.Context) {
 	}
 
 	// 5. Calculate desired placeholder count.
+	// On HUD failure, over-provision: less information about queue depth
+	// means we must lean toward more capacity to keep latency bounded.
+	// Headroom and burst caps below still bound the absolute blast radius.
 	desiredPairs := m.config.ProactiveCapacity + queuedJobs
+	if hudFailed {
+		desiredPairs = m.config.ProactiveCapacity * m.config.HUDFailureMultiplier
+	}
 
 	// Clamp by headroom against the hard runner cap. Real runner pods (running +
 	// pending) consume the cap, so the placeholder pool can only fill what's left.
@@ -458,6 +466,7 @@ func (m *Monitor) reconcileProvisioning(ctx context.Context) {
 
 	m.logger.Info("provisioning reconciled",
 		"queuedJobs", queuedJobs,
+		"hudFailed", hudFailed,
 		"desiredPairs", desiredPairs,
 		"currentPairs", currentPairs,
 		"runningRunnerPods", runningRunnerPods,

@@ -266,7 +266,7 @@ func TestReconcile_SetMaxRunners_CapAtMaxRunners(t *testing.T) {
 	assert.Equal(t, int32(5), maxVal.Load())
 }
 
-func TestReconcile_HUDAPIFailure_FallsBackToProactiveOnly(t *testing.T) {
+func TestReconcile_HUDAPIFailure_FallsBackToProactiveTimesMultiplier(t *testing.T) {
 	// HUD server returns 500.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -274,11 +274,12 @@ func TestReconcile_HUDAPIFailure_FallsBackToProactiveOnly(t *testing.T) {
 	defer srv.Close()
 
 	cfg := Config{
-		ProactiveCapacity:  3,
-		MaxRunners:         20,
-		ScaleSetLabels:     []string{"linux.2xlarge"},
-		HUDAPIToken:        "test",
-		PlaceholderTimeout: 5 * time.Minute,
+		ProactiveCapacity:    3,
+		HUDFailureMultiplier: 3,
+		MaxRunners:           20,
+		ScaleSetLabels:       []string{"linux.2xlarge"},
+		HUDAPIToken:          "test",
+		PlaceholderTimeout:   5 * time.Minute,
 	}
 	m, cs, maxVal := newTestMonitor(t, cfg, nil)
 
@@ -287,10 +288,83 @@ func TestReconcile_HUDAPIFailure_FallsBackToProactiveOnly(t *testing.T) {
 	m.reconcileProvisioning(context.Background())
 	m.reconcileReporting(context.Background())
 
-	// Falls back to proactiveCapacity only: 3 pairs = 6 pods.
-	assert.Equal(t, 6, countPods(t, cs, "test-ns"))
+	// HUD failure -> over-provision: ProactiveCapacity(3) * HUDFailureMultiplier(3)
+	// = 9 pairs = 18 pods. Less info about queue depth means lean toward more
+	// capacity; outer caps still bound the absolute blast radius.
+	assert.Equal(t, 18, countPods(t, cs, "test-ns"))
 	// No running pairs, so capacity = 0 (still capped at MaxRunners=20).
 	assert.Equal(t, int32(0), maxVal.Load())
+}
+
+// With multiplier=1, the HUD-failure fallback equals ProactiveCapacity alone.
+func TestReconcile_HUDAPIFailure_MultiplierOne(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	cfg := Config{
+		ProactiveCapacity:    3,
+		HUDFailureMultiplier: 1,
+		MaxRunners:           20,
+		ScaleSetLabels:       []string{"linux.2xlarge"},
+		HUDAPIToken:          "test",
+		PlaceholderTimeout:   5 * time.Minute,
+	}
+	m, cs, _ := newTestMonitor(t, cfg, nil)
+	m.hudClient = NewHUDClient(srv.URL, "test")
+
+	m.reconcileProvisioning(context.Background())
+	m.reconcileReporting(context.Background())
+
+	// 3 * 1 = 3 pairs = 6 pods.
+	assert.Equal(t, 6, countPods(t, cs, "test-ns"))
+}
+
+// MaxRunners must clamp the multiplier-amplified fallback so a misconfigured
+// multiplier cannot exceed the hard runner cap.
+func TestReconcile_HUDAPIFailure_MultiplierClampedByMaxRunners(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	cfg := Config{
+		ProactiveCapacity:    5,
+		HUDFailureMultiplier: 4,
+		MaxRunners:           10,
+		ScaleSetLabels:       []string{"linux.2xlarge"},
+		HUDAPIToken:          "test",
+		PlaceholderTimeout:   5 * time.Minute,
+	}
+	m, cs, _ := newTestMonitor(t, cfg, nil)
+	m.hudClient = NewHUDClient(srv.URL, "test")
+
+	m.reconcileProvisioning(context.Background())
+	m.reconcileReporting(context.Background())
+
+	// 5 * 4 = 20 desired, clamped to MaxRunners=10 -> 10 pairs = 20 pods.
+	assert.Equal(t, 20, countPods(t, cs, "test-ns"))
+}
+
+// When HUD is disabled by config (no token), the multiplier path must not
+// trigger — only the proactive baseline applies.
+func TestReconcile_HUDDisabled_MultiplierDoesNotApply(t *testing.T) {
+	cfg := Config{
+		ProactiveCapacity:    3,
+		HUDFailureMultiplier: 99,
+		MaxRunners:           100,
+		HUDAPIToken:          "",
+		PlaceholderTimeout:   5 * time.Minute,
+	}
+	m, cs, _ := newTestMonitor(t, cfg, nil)
+
+	m.reconcileProvisioning(context.Background())
+	m.reconcileReporting(context.Background())
+
+	// HUD disabled -> hudFailed stays false -> desired = ProactiveCapacity(3) +
+	// queuedJobs(0) = 3 pairs = 6 pods. Multiplier of 99 must not apply.
+	assert.Equal(t, 6, countPods(t, cs, "test-ns"))
 }
 
 func TestReconcile_IdempotentWhenAtDesired(t *testing.T) {
