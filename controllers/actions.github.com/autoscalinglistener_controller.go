@@ -538,8 +538,12 @@ func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, a
 
 	var podConfig corev1.Secret
 	if err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Namespace, Name: scaleSetListenerConfigName(autoscalingListener)}, &podConfig); err != nil {
+		if kerrors.IsNotFound(err) {
+			logger.Info("Listener config secret not yet visible, requeueing", "namespace", autoscalingListener.Namespace, "name", scaleSetListenerConfigName(autoscalingListener))
+			return ctrl.Result{Requeue: true}, nil
+		}
 		logger.Error(err, "Unable to get listener config secret", "namespace", autoscalingListener.Namespace, "name", scaleSetListenerConfigName(autoscalingListener))
-		return ctrl.Result{Requeue: true}, err
+		return ctrl.Result{}, err
 	}
 
 	newPod, err := r.newScaleSetListenerPod(autoscalingListener, &podConfig, serviceAccount, metricsConfig, envs...)
