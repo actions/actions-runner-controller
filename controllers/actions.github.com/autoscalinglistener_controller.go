@@ -257,7 +257,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 
 		// Create a listener pod in the controller namespace
 		log.Info("Creating a listener pod")
-		return r.createListenerPod(ctx, &autoscalingRunnerSet, autoscalingListener, serviceAccount, appConfig, log)
+		return r.createListenerPod(ctx, autoscalingListener, serviceAccount, log)
 	}
 
 	// If listener config secret changed and pod exists, restart the pod
@@ -485,7 +485,7 @@ func (r *AutoscalingListenerReconciler) reconcileListenerConfigSecret(ctx contex
 	return false, nil
 }
 
-func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, autoscalingListener *v1alpha1.AutoscalingListener, serviceAccount *corev1.ServiceAccount, appConfig *appconfig.AppConfig, logger logr.Logger) (ctrl.Result, error) {
+func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, serviceAccount *corev1.ServiceAccount, logger logr.Logger) (ctrl.Result, error) {
 	var envs []corev1.EnvVar
 	if autoscalingListener.Spec.Proxy != nil {
 		httpURL := corev1.EnvVar{
@@ -528,15 +528,6 @@ func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, a
 		}
 	}
 
-	cert := ""
-	if autoscalingListener.Spec.GitHubServerTLS != nil {
-		var err error
-		cert, err = r.certificate(ctx, autoscalingRunnerSet, autoscalingListener)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to create certificate env var for listener: %w", err)
-		}
-	}
-
 	var metricsConfig *listenerMetricsServerConfig
 	if r.ListenerMetricsAddr != "0" {
 		metricsConfig = &listenerMetricsServerConfig{
@@ -547,30 +538,8 @@ func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, a
 
 	var podConfig corev1.Secret
 	if err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Namespace, Name: scaleSetListenerConfigName(autoscalingListener)}, &podConfig); err != nil {
-		if !kerrors.IsNotFound(err) {
-			logger.Error(err, "Unable to get listener config secret", "namespace", autoscalingListener.Namespace, "name", scaleSetListenerConfigName(autoscalingListener))
-			return ctrl.Result{Requeue: true}, err
-		}
-
-		logger.Info("Creating listener config secret")
-
-		podConfig, err := r.newScaleSetListenerConfig(autoscalingListener, appConfig, metricsConfig, cert)
-		if err != nil {
-			logger.Error(err, "Failed to build listener config secret")
-			return ctrl.Result{}, err
-		}
-
-		if err := ctrl.SetControllerReference(autoscalingListener, podConfig, r.Scheme); err != nil {
-			logger.Error(err, "Failed to set controller reference")
-			return ctrl.Result{}, err
-		}
-
-		if err := r.Create(ctx, podConfig); err != nil {
-			logger.Error(err, "Unable to create listener config secret", "namespace", podConfig.Namespace, "name", podConfig.Name)
-			return ctrl.Result{}, err
-		}
-
-		return ctrl.Result{Requeue: true}, nil
+		logger.Error(err, "Unable to get listener config secret", "namespace", autoscalingListener.Namespace, "name", scaleSetListenerConfigName(autoscalingListener))
+		return ctrl.Result{Requeue: true}, err
 	}
 
 	newPod, err := r.newScaleSetListenerPod(autoscalingListener, &podConfig, serviceAccount, metricsConfig, envs...)
