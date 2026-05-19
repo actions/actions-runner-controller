@@ -124,12 +124,42 @@ spec:
       {{- if .Values.proxy.http.credentialSecretRef }}
       credentialSecretRef: {{ .Values.proxy.http.credentialSecretRef }}
       {{- end }}
+      {{- if .Values.proxy.http.tls }}
+      tls:
+        {{- if .Values.proxy.http.tls.clientCertSecretRef }}
+        clientCertSecretRef: {{ .Values.proxy.http.tls.clientCertSecretRef }}
+        {{- end }}
+        {{- if .Values.proxy.http.tls.caCertSecretRef }}
+        caCertSecretRef: {{ .Values.proxy.http.tls.caCertSecretRef }}
+        {{- end }}
+        {{- if .Values.proxy.http.tls.caCertConfigMapRef }}
+        caCertConfigMapRef: {{ .Values.proxy.http.tls.caCertConfigMapRef }}
+        {{- end }}
+        {{- if .Values.proxy.http.tls.insecureSkipVerify }}
+        insecureSkipVerify: {{ .Values.proxy.http.tls.insecureSkipVerify }}
+        {{- end }}
+      {{- end }}
     {{- end }}
     {{- if .Values.proxy.https }}
     https:
       url: {{ .Values.proxy.https.url }}
       {{- if .Values.proxy.https.credentialSecretRef }}
       credentialSecretRef: {{ .Values.proxy.https.credentialSecretRef }}
+      {{- end }}
+      {{- if .Values.proxy.https.tls }}
+      tls:
+        {{- if .Values.proxy.https.tls.clientCertSecretRef }}
+        clientCertSecretRef: {{ .Values.proxy.https.tls.clientCertSecretRef }}
+        {{- end }}
+        {{- if .Values.proxy.https.tls.caCertSecretRef }}
+        caCertSecretRef: {{ .Values.proxy.https.tls.caCertSecretRef }}
+        {{- end }}
+        {{- if .Values.proxy.https.tls.caCertConfigMapRef }}
+        caCertConfigMapRef: {{ .Values.proxy.https.tls.caCertConfigMapRef }}
+        {{- end }}
+        {{- if .Values.proxy.https.tls.insecureSkipVerify }}
+        insecureSkipVerify: {{ .Values.proxy.https.tls.insecureSkipVerify }}
+        {{- end }}
       {{- end }}
     {{- end }}
     {{- if and .Values.proxy.noProxy (kindIs "slice" .Values.proxy.noProxy) }}
