@@ -85,13 +85,19 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 								return &scaleset.RunnerGroup{ID: 1, Name: groupName}, nil
 							}),
 							scalefake.WithGetRunnerScaleSet(nil, nil),
-							scalefake.WithCreateRunnerScaleSet(&scaleset.RunnerScaleSet{ID: 1, Name: "test-asrs", RunnerGroupID: 1, RunnerGroupName: "testgroup"}, nil),
+							scalefake.WithCreateRunnerScaleSetFunc(func(ctx context.Context, rs *scaleset.RunnerScaleSet) (*scaleset.RunnerScaleSet, error) {
+								// Return a RunnerScaleSet with name matching the requesting ARS
+								runnerGroupMapLock.RLock()
+								groupName := runnerGroupMap[rs.RunnerGroupID]
+								runnerGroupMapLock.RUnlock()
+								return &scaleset.RunnerScaleSet{ID: 1, Name: rs.Name, RunnerGroupID: rs.RunnerGroupID, RunnerGroupName: groupName}, nil
+							}),
 							scalefake.WithUpdateRunnerScaleSetFunc(func(ctx context.Context, scaleSetID int, rs *scaleset.RunnerScaleSet) (*scaleset.RunnerScaleSet, error) {
 								// Return a RunnerScaleSet with the group name corresponding to the runner group ID
 								runnerGroupMapLock.RLock()
 								groupName := runnerGroupMap[rs.RunnerGroupID]
 								runnerGroupMapLock.RUnlock()
-								return &scaleset.RunnerScaleSet{ID: 1, Name: "test-asrs", RunnerGroupID: rs.RunnerGroupID, RunnerGroupName: groupName}, nil
+								return &scaleset.RunnerScaleSet{ID: 1, Name: rs.Name, RunnerGroupID: rs.RunnerGroupID, RunnerGroupName: groupName}, nil
 							}),
 							scalefake.WithDeleteRunnerScaleSet(nil),
 						),
@@ -153,7 +159,8 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					return created.Finalizers[0], nil
 				},
 				autoscalingRunnerSetTestTimeout,
-				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo(autoscalingRunnerSetFinalizerName), "AutoScalingRunnerSet should have a finalizer")
+				autoscalingRunnerSetTestInterval,
+			).Should(BeEquivalentTo(autoscalingRunnerSetFinalizerName), "AutoScalingRunnerSet should have a finalizer")
 
 			// Check if runner scale set is created on service
 			Eventually(
@@ -202,7 +209,8 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					return fmt.Sprintf("%s/%s", created.Labels[LabelKeyGitHubOrganization], created.Labels[LabelKeyGitHubRepository]), nil
 				},
 				autoscalingRunnerSetTestTimeout,
-				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo("owner/repo"), "RunnerScaleSet should be created/fetched and update the AutoScalingRunnerSet's label")
+				autoscalingRunnerSetTestInterval,
+			).Should(BeEquivalentTo("owner/repo"), "RunnerScaleSet should be created/fetched and update the AutoScalingRunnerSet's label")
 
 			// Check if ephemeral runner set is created
 			Eventually(
@@ -216,7 +224,8 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					return len(runnerSetList.Items), nil
 				},
 				autoscalingRunnerSetTestTimeout,
-				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo(1), "Only one EphemeralRunnerSet should be created")
+				autoscalingRunnerSetTestInterval,
+			).Should(BeEquivalentTo(1), "Only one EphemeralRunnerSet should be created")
 
 			// Check if listener is created
 			Eventually(
@@ -224,7 +233,8 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, new(v1alpha1.AutoscalingListener))
 				},
 				autoscalingRunnerSetTestTimeout,
-				autoscalingRunnerSetTestInterval).Should(Succeed(), "Listener should be created")
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "Listener should be created")
 
 			// Check if status is updated
 			runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
@@ -242,7 +252,8 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, new(v1alpha1.AutoscalingListener))
 				},
 				autoscalingRunnerSetTestTimeout,
-				autoscalingRunnerSetTestInterval).Should(Succeed(), "Listener should be created")
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "Listener should be created")
 
 			// Delete the AutoScalingRunnerSet
 			err := k8sClient.Delete(ctx, autoscalingRunnerSet)
@@ -259,7 +270,8 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					return fmt.Errorf("listener is not deleted")
 				},
 				autoscalingRunnerSetTestTimeout,
-				autoscalingRunnerSetTestInterval).Should(Succeed(), "Listener should be deleted")
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "Listener should be deleted")
 
 			// Check if all the EphemeralRunnerSet is deleted
 			Eventually(
@@ -277,7 +289,8 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					return nil
 				},
 				autoscalingRunnerSetTestTimeout,
-				autoscalingRunnerSetTestInterval).Should(Succeed(), "All EphemeralRunnerSet should be deleted")
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "All EphemeralRunnerSet should be deleted")
 
 			// Check if the AutoScalingRunnerSet is deleted
 			Eventually(
@@ -290,8 +303,148 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					return fmt.Errorf("AutoScalingRunnerSet is not deleted")
 				},
 				autoscalingRunnerSetTestTimeout,
-				autoscalingRunnerSetTestInterval).Should(Succeed(), "AutoScalingRunnerSet should be deleted")
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "AutoScalingRunnerSet should be deleted")
 		})
+	})
+
+	It("should not churn listener when already referencing latest ERS (no-op stability)", func() {
+		// Setup: Create AutoScalingRunnerSet
+		min := 1
+		max := 10
+		testARSName := "test-asrs-no-churn"
+		testARSNamespace := autoscalingNS.Name
+
+		testARS := &v1alpha1.AutoscalingRunnerSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      testARSName,
+				Namespace: testARSNamespace,
+				Labels: map[string]string{
+					LabelKeyKubernetesVersion: buildVersion,
+				},
+			},
+			Spec: v1alpha1.AutoscalingRunnerSetSpec{
+				GitHubConfigUrl:    "https://github.com/owner/repo",
+				GitHubConfigSecret: configSecret.Name,
+				MaxRunners:         &max,
+				MinRunners:         &min,
+				RunnerGroup:        "testgroup",
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "runner",
+								Image: "ghcr.io/actions/runner",
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := k8sClient.Create(ctx, testARS)
+		Expect(err).NotTo(HaveOccurred(), "failed to create test AutoScalingRunnerSet")
+
+		// STEP 1: Wait for ERS creation
+		var latestERSName string
+		Eventually(
+			func() (string, error) {
+				runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
+				err := k8sClient.List(ctx, runnerSetList, client.InNamespace(testARSNamespace))
+				if err != nil {
+					return "", err
+				}
+
+				// Filter to only ERS owned by our test ARS
+				var ownedByTestARS []v1alpha1.EphemeralRunnerSet
+				for _, ers := range runnerSetList.Items {
+					for _, owner := range ers.OwnerReferences {
+						if owner.UID == testARS.UID {
+							ownedByTestARS = append(ownedByTestARS, ers)
+							break
+						}
+					}
+				}
+
+				if len(ownedByTestARS) != 1 {
+					return "", fmt.Errorf("expected 1 EphemeralRunnerSet owned by test ARS, got %d", len(ownedByTestARS))
+				}
+
+				return ownedByTestARS[0].Name, nil
+			},
+			autoscalingRunnerSetTestTimeout,
+			autoscalingRunnerSetTestInterval,
+		).Should(Not(BeEmpty()), "ERS should be created")
+
+		// Capture the latest ERS name
+		runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
+		err = k8sClient.List(ctx, runnerSetList, client.InNamespace(testARSNamespace))
+		Expect(err).NotTo(HaveOccurred(), "failed to list EphemeralRunnerSet")
+
+		var ownedByTestARS []v1alpha1.EphemeralRunnerSet
+		for _, ers := range runnerSetList.Items {
+			for _, owner := range ers.OwnerReferences {
+				if owner.UID == testARS.UID {
+					ownedByTestARS = append(ownedByTestARS, ers)
+					break
+				}
+			}
+		}
+		Expect(len(ownedByTestARS)).To(Equal(1), "should have exactly 1 EphemeralRunnerSet owned by test ARS")
+		latestERSName = ownedByTestARS[0].Name
+
+		// STEP 2: Wait for listener creation and capture identity
+		listener := new(v1alpha1.AutoscalingListener)
+		Eventually(
+			func() (string, error) {
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(testARS), Namespace: testARSNamespace}, listener)
+				if err != nil {
+					return "", err
+				}
+				return listener.Spec.EphemeralRunnerSetName, nil
+			},
+			autoscalingRunnerSetTestTimeout,
+			autoscalingRunnerSetTestInterval,
+		).Should(Equal(latestERSName), "listener should reference the latest ERS")
+
+		// Capture listener identity (UID and ResourceVersion)
+		err = k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(testARS), Namespace: testARSNamespace}, listener)
+		Expect(err).NotTo(HaveOccurred(), "failed to get listener")
+		originalUID := listener.UID
+		originalResourceVersion := listener.ResourceVersion
+
+		// STEP 3: Verify listener identity remains stable over polling window
+		// Use Consistently to assert no churn (listener not deleted/recreated)
+		Consistently(
+			func() (types.UID, error) {
+				currentListener := new(v1alpha1.AutoscalingListener)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(testARS), Namespace: testARSNamespace}, currentListener)
+				if err != nil {
+					return "", err
+				}
+				return currentListener.UID, nil
+			},
+			time.Second*5,
+			autoscalingRunnerSetTestInterval,
+		).Should(Equal(originalUID), "listener UID should remain unchanged (no recreation)")
+
+		Consistently(
+			func() (string, error) {
+				currentListener := new(v1alpha1.AutoscalingListener)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(testARS), Namespace: testARSNamespace}, currentListener)
+				if err != nil {
+					return "", err
+				}
+				return currentListener.ResourceVersion, nil
+			},
+			time.Second*5,
+			autoscalingRunnerSetTestInterval,
+		).Should(Equal(originalResourceVersion), "listener ResourceVersion should remain unchanged (no updates)")
+
+		// STEP 4: Verify listener still references correct ERS
+		err = k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(testARS), Namespace: testARSNamespace}, listener)
+		Expect(err).NotTo(HaveOccurred(), "failed to get listener")
+		Expect(listener.Spec.EphemeralRunnerSetName).To(Equal(latestERSName), "listener should still reference latest ERS")
 	})
 
 	Context("When updating a new AutoScalingRunnerSet", func() {
@@ -303,7 +456,8 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
 				},
 				autoscalingRunnerSetTestTimeout,
-				autoscalingRunnerSetTestInterval).Should(Succeed(), "Listener should be created")
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "Listener should be created")
 
 			runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
 			err := k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
@@ -339,7 +493,8 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					return runnerSetList.Items[0].Annotations[annotationKeyRunnerSpecHash], nil
 				},
 				autoscalingRunnerSetTestTimeout,
-				autoscalingRunnerSetTestInterval).ShouldNot(BeEquivalentTo(runnerSet.Annotations[annotationKeyRunnerSpecHash]), "New EphemeralRunnerSet should be created")
+				autoscalingRunnerSetTestInterval,
+			).ShouldNot(BeEquivalentTo(runnerSet.Annotations[annotationKeyRunnerSpecHash]), "New EphemeralRunnerSet should be created")
 
 			// We should create a new listener
 			Eventually(
@@ -353,7 +508,8 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					return listener.Spec.EphemeralRunnerSetName, nil
 				},
 				autoscalingRunnerSetTestTimeout,
-				autoscalingRunnerSetTestInterval).ShouldNot(BeEquivalentTo(runnerSet.Name), "New Listener should be created")
+				autoscalingRunnerSetTestInterval,
+			).ShouldNot(BeEquivalentTo(runnerSet.Name), "New Listener should be created")
 
 			// Only update the Spec for the AutoScalingListener
 			// This should trigger re-creation of the Listener only
@@ -389,7 +545,8 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					return string(runnerSetList.Items[0].UID), nil
 				},
 				autoscalingRunnerSetTestTimeout,
-				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo(string(runnerSet.UID)), "New EphemeralRunnerSet should not be created")
+				autoscalingRunnerSetTestInterval,
+			).Should(BeEquivalentTo(string(runnerSet.UID)), "New EphemeralRunnerSet should not be created")
 
 			// We should only re-create a new listener
 			Eventually(
@@ -403,7 +560,8 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					return string(listener.UID), nil
 				},
 				autoscalingRunnerSetTestTimeout,
-				autoscalingRunnerSetTestInterval).ShouldNot(BeEquivalentTo(string(listener.UID)), "New Listener should be created")
+				autoscalingRunnerSetTestInterval,
+			).ShouldNot(BeEquivalentTo(string(listener.UID)), "New Listener should be created")
 
 			// Only update the values hash for the autoscaling runner set
 			// This should trigger re-creation of the Listener only
@@ -438,7 +596,8 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					return string(runnerSetList.Items[0].UID), nil
 				},
 				autoscalingRunnerSetTestTimeout,
-				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo(string(runnerSet.UID)), "New EphemeralRunnerSet should not be created")
+				autoscalingRunnerSetTestInterval,
+			).Should(BeEquivalentTo(string(runnerSet.UID)), "New EphemeralRunnerSet should not be created")
 
 			// We should only re-create a new listener
 			Eventually(
@@ -452,7 +611,8 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					return string(listener.UID), nil
 				},
 				autoscalingRunnerSetTestTimeout,
-				autoscalingRunnerSetTestInterval).ShouldNot(BeEquivalentTo(string(listener.UID)), "New Listener should be created")
+				autoscalingRunnerSetTestInterval,
+			).ShouldNot(BeEquivalentTo(string(listener.UID)), "New Listener should be created")
 		})
 
 		It("It should update RunnerScaleSet's runner group on service when it changes", func() {
@@ -463,7 +623,8 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, new(v1alpha1.AutoscalingListener))
 				},
 				autoscalingRunnerSetTestTimeout,
-				autoscalingRunnerSetTestInterval).Should(Succeed(), "Listener should be created")
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "Listener should be created")
 
 			patched := autoscalingRunnerSet.DeepCopy()
 			patched.Spec.RunnerGroup = "testgroup2"
@@ -485,7 +646,8 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					return updated.Annotations[AnnotationKeyGitHubRunnerGroupName], nil
 				},
 				autoscalingRunnerSetTestTimeout,
-				autoscalingRunnerSetTestInterval).Should(BeEquivalentTo("testgroup2"), "AutoScalingRunnerSet should have the new runner group in its annotation")
+				autoscalingRunnerSetTestInterval,
+			).Should(BeEquivalentTo("testgroup2"), "AutoScalingRunnerSet should have the new runner group in its annotation")
 
 			// delete the annotation and it should be re-added
 			patched = autoscalingRunnerSet.DeepCopy()
@@ -642,13 +804,14 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 		).Should(BeTrue(), "AutoscalingRunnerSet should be created")
 
 		runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
-		Eventually(func() (int, error) {
-			err := k8sClient.List(ctx, runnerSetList, client.InNamespace(ars.Namespace))
-			if err != nil {
-				return 0, err
-			}
-			return len(runnerSetList.Items), nil
-		},
+		Eventually(
+			func() (int, error) {
+				err := k8sClient.List(ctx, runnerSetList, client.InNamespace(ars.Namespace))
+				if err != nil {
+					return 0, err
+				}
+				return len(runnerSetList.Items), nil
+			},
 			autoscalingRunnerSetTestTimeout,
 			autoscalingRunnerSetTestInterval,
 		).Should(BeEquivalentTo(1), "Failed to fetch runner set list")
