@@ -309,7 +309,6 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 	})
 
 	It("should not churn listener when already referencing latest ERS (no-op stability)", func() {
-		// Setup: Create AutoScalingRunnerSet
 		min := 1
 		max := 10
 		testARSName := "test-asrs-no-churn"
@@ -345,7 +344,6 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 		err := k8sClient.Create(ctx, testARS)
 		Expect(err).NotTo(HaveOccurred(), "failed to create test AutoScalingRunnerSet")
 
-		// STEP 1: Wait for ERS creation
 		var latestERSName string
 		Eventually(
 			func() (string, error) {
@@ -393,7 +391,6 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 		Expect(len(ownedByTestARS)).To(Equal(1), "should have exactly 1 EphemeralRunnerSet owned by test ARS")
 		latestERSName = ownedByTestARS[0].Name
 
-		// STEP 2: Wait for listener creation and capture identity
 		listener := new(v1alpha1.AutoscalingListener)
 		Eventually(
 			func() (string, error) {
@@ -413,8 +410,6 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 		originalUID := listener.UID
 		originalResourceVersion := listener.ResourceVersion
 
-		// STEP 3: Verify listener identity remains stable over polling window
-		// Use Consistently to assert no churn (listener not deleted/recreated)
 		Consistently(
 			func() (types.UID, error) {
 				currentListener := new(v1alpha1.AutoscalingListener)
@@ -441,7 +436,6 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			autoscalingRunnerSetTestInterval,
 		).Should(Equal(originalResourceVersion), "listener ResourceVersion should remain unchanged (no updates)")
 
-		// STEP 4: Verify listener still references correct ERS
 		err = k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(testARS), Namespace: testARSNamespace}, listener)
 		Expect(err).NotTo(HaveOccurred(), "failed to get listener")
 		Expect(listener.Spec.EphemeralRunnerSetName).To(Equal(latestERSName), "listener should still reference latest ERS")
