@@ -104,11 +104,12 @@ func run(ctx context.Context, config *config.Config) error {
 		metricsExporter.RecordStatic(config.MinRunners, config.MaxRunners)
 	}
 
+	capConfig := capacity.ConfigFromEnv()
 	listener, err := listener.New(
 		sessionClient,
 		listener.Config{
 			ScaleSetID: config.RunnerScaleSetID,
-			MaxRunners: config.MaxRunners,
+			MaxRunners: listenerInitialMaxRunners(config.MaxRunners, capConfig.Enabled),
 			Logger:     logger.With("component", "listener"),
 		},
 		listenerOptions...,
@@ -131,7 +132,6 @@ func run(ctx context.Context, config *config.Config) error {
 	}
 
 	// Capacity monitor (optional).
-	capConfig := capacity.ConfigFromEnv()
 	if capConfig.Enabled {
 		scaleSet, err := scalesetClient.GetRunnerScaleSetByID(ctx, config.RunnerScaleSetID)
 		if err != nil {
@@ -220,4 +220,16 @@ func run(ctx context.Context, config *config.Config) error {
 	}
 
 	return g.Wait()
+}
+
+// listenerInitialMaxRunners returns the MaxRunners value to seed the listener
+// with. When the capacity monitor is enabled it owns advertised capacity via
+// SetMaxRunners; returning 0 ensures the listener's first GetMessage poll
+// advertises 0 instead of configMax (which defaults to math.MaxInt32 upstream
+// when unset) before the monitor's first reconcileReporting cycle has run.
+func listenerInitialMaxRunners(configMax int, capacityEnabled bool) int {
+	if capacityEnabled {
+		return 0
+	}
+	return configMax
 }
