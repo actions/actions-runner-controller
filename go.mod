@@ -1,6 +1,6 @@
 module github.com/actions/actions-runner-controller
 
-go 1.26.1
+go 1.26.3
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.21.1
