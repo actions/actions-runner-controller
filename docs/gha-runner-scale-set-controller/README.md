@@ -43,6 +43,25 @@ You can follow [this troubleshooting guide](https://docs.github.com/en/actions/h
 
 ## Changelog
 
+### 0.14.2
+
+1. Fix orphan no-permission ServiceAccount in kubernetes-novolume mode [#4455](https://github.com/actions/actions-runner-controller/pull/4455)
+1. Updates: runner to v2.334.0 [#4467](https://github.com/actions/actions-runner-controller/pull/4467)
+1. Add option to disable workqueue bucket rate limiter [#4451](https://github.com/actions/actions-runner-controller/pull/4451)
+1. Add a flag for enabling pprof on the controller manager [#4449](https://github.com/actions/actions-runner-controller/pull/4449)
+1. Add health and readiness probes to controller manager [#4459](https://github.com/actions/actions-runner-controller/pull/4459)
+1. Fix empty GVK in OwnerReferences for modern controllers [#4475](https://github.com/actions/actions-runner-controller/pull/4475)
+1. Fix: Detect init container failure in EphemeralRunner controller [#4457](https://github.com/actions/actions-runner-controller/pull/4457)
+1. Bump the actions group with 3 updates [#4483](https://github.com/actions/actions-runner-controller/pull/4483)
+1. Render empty arrays for kubernetes-novolume volumes fields [#4461](https://github.com/actions/actions-runner-controller/pull/4461)
+1. Fix secret reconciliation updates for the listener pod [#4492](https://github.com/actions/actions-runner-controller/pull/4492)
+1. Fix job execution duration when runner assign time is not set [#4472](https://github.com/actions/actions-runner-controller/pull/4472)
+1. Update CODEOWNERS [#4495](https://github.com/actions/actions-runner-controller/pull/4495)
+1. Bump Go to 1.26.2 to fix critical security vulnerabilities [#4491](https://github.com/actions/actions-runner-controller/pull/4491)
+1. Fix helm chart validation workflow [#4479](https://github.com/actions/actions-runner-controller/pull/4479)
+1. Port rate limiter to experimental charts [#4478](https://github.com/actions/actions-runner-controller/pull/4478)
+1. Bump Go to 1.26.3 [#4504](https://github.com/actions/actions-runner-controller/pull/4504)
+
 ### 0.14.1
 
 1. Fix null field for resource metadata fields in experimental chart [#4419](https://github.com/actions/actions-runner-controller/pull/4419)
