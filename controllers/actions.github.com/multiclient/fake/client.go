@@ -102,6 +102,13 @@ func WithSystemInfo(info scaleset.SystemInfo) ClientOption {
 	}
 }
 
+// WithCreateRunnerScaleSetFunc configures a function to handle CreateRunnerScaleSet calls dynamically
+func WithCreateRunnerScaleSetFunc(fn func(context.Context, *scaleset.RunnerScaleSet) (*scaleset.RunnerScaleSet, error)) ClientOption {
+	return func(c *Client) {
+		c.createRunnerScaleSetFunc = fn
+	}
+}
+
 // WithUpdateRunnerScaleSetFunc configures a function to handle UpdateRunnerScaleSet calls dynamically
 func WithUpdateRunnerScaleSetFunc(fn func(context.Context, int, *scaleset.RunnerScaleSet) (*scaleset.RunnerScaleSet, error)) ClientOption {
 	return func(c *Client) {
@@ -112,6 +119,7 @@ func WithUpdateRunnerScaleSetFunc(fn func(context.Context, int, *scaleset.Runner
 // Client implements multiclient.Client interface for testing
 type Client struct {
 	systemInfo               scaleset.SystemInfo
+	createRunnerScaleSetFunc func(context.Context, *scaleset.RunnerScaleSet) (*scaleset.RunnerScaleSet, error)
 	updateRunnerScaleSetFunc func(context.Context, int, *scaleset.RunnerScaleSet) (*scaleset.RunnerScaleSet, error)
 
 	getRunnerScaleSetResult struct {
@@ -215,6 +223,9 @@ func (c *Client) GetRunnerScaleSetByID(ctx context.Context, runnerScaleSetID int
 }
 
 func (c *Client) CreateRunnerScaleSet(ctx context.Context, runnerScaleSet *scaleset.RunnerScaleSet) (*scaleset.RunnerScaleSet, error) {
+	if c.createRunnerScaleSetFunc != nil {
+		return c.createRunnerScaleSetFunc(ctx, runnerScaleSet)
+	}
 	return c.createRunnerScaleSetResult.RunnerScaleSet, c.createRunnerScaleSetResult.err
 }
 
