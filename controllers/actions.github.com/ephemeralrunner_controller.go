@@ -842,7 +842,10 @@ func (r *EphemeralRunnerReconciler) labelPodWithJobInfo(ctx context.Context, eph
 		return nil
 	}
 
-	if pod.Labels[LabelKeyGitHubJobRepository] != "" {
+	// Use an annotation on the EphemeralRunner as the idempotency guard instead of
+	// the pod label. The pod is read from the informer cache which may lag behind the
+	// actual patch, causing repeated patches until the cache refreshes.
+	if ephemeralRunner.Annotations[AnnotationKeyGitHubJobRepository] != "" {
 		return nil
 	}
 
@@ -867,6 +870,17 @@ func (r *EphemeralRunnerReconciler) labelPodWithJobInfo(ctx context.Context, eph
 
 	if err := r.Patch(ctx, pod, podPatch); err != nil {
 		return fmt.Errorf("failed to patch pod with job info: %w", err)
+	}
+
+	// Annotate the EphemeralRunner so subsequent reconciles skip the patch even
+	// if the pod cache hasn't refreshed yet.
+	runnerPatch := client.MergeFrom(ephemeralRunner.DeepCopy())
+	if ephemeralRunner.Annotations == nil {
+		ephemeralRunner.Annotations = make(map[string]string)
+	}
+	ephemeralRunner.Annotations[AnnotationKeyGitHubJobRepository] = ephemeralRunner.Status.JobRepositoryName
+	if err := r.Patch(ctx, ephemeralRunner, runnerPatch); err != nil {
+		return fmt.Errorf("failed to patch ephemeral runner with job info annotation: %w", err)
 	}
 
 	log.Info("Patched pod with job info labels")

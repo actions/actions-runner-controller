@@ -895,6 +895,12 @@ var _ = Describe("EphemeralRunner", func() {
 			Expect(updatedPod.Annotations[AnnotationKeyGitHubJobID]).To(Equal("12345"))
 			Expect(updatedPod.Annotations[AnnotationKeyWorkflowRunID]).To(Equal("67890"))
 			Expect(updatedPod.Annotations[AnnotationKeyGitHubJobRepository]).To(Equal("myorg/my-repo"))
+
+			// Verify the EphemeralRunner itself is annotated (used as idempotency guard)
+			updatedRunner := new(v1alpha1.EphemeralRunner)
+			err = k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updatedRunner)
+			Expect(err).To(BeNil())
+			Expect(updatedRunner.Annotations[AnnotationKeyGitHubJobRepository]).To(Equal("myorg/my-repo"))
 		})
 
 		It("It should not label the pod when no job is assigned", func() {
