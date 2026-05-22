@@ -85,7 +85,7 @@ func (c *GitHubConfig) GitHubAPIURL(path string) *url.URL {
 		result.Host = fmt.Sprintf("api.%s", c.ConfigURL.Host)
 		result.Path = ""
 
-		if strings.EqualFold("www.github.com", c.ConfigURL.Host) {
+		if c.ConfigURL.Host == "www.github.com" {
 			// re-routing www.github.com to api.github.com
 			result.Host = "api.github.com"
 		}
@@ -102,8 +102,8 @@ func isHostedGitHubURL(u *url.URL) bool {
 		return false
 	}
 
-	return strings.EqualFold(u.Host, "github.com") ||
-		strings.EqualFold(u.Host, "www.github.com") ||
-		strings.EqualFold(u.Host, "github.localhost") ||
+	return u.Host == "github.com" ||
+		u.Host == "www.github.com" ||
+		u.Host == "github.localhost" ||
 		strings.HasSuffix(u.Host, ".ghe.com")
 }
