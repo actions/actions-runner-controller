@@ -47,9 +47,10 @@ const (
 const AutoscalingRunnerSetCleanupFinalizerName = "actions.github.com/cleanup-protection"
 
 const (
-	AnnotationKeyGitHubRunnerGroupName    = "actions.github.com/runner-group-name"
-	AnnotationKeyGitHubRunnerScaleSetName = "actions.github.com/runner-scale-set-name"
-	AnnotationKeyPatchID                  = "actions.github.com/patch-id"
+	AnnotationKeyGitHubRunnerGroupName      = "actions.github.com/runner-group-name"
+	AnnotationKeyGitHubRunnerScaleSetName   = "actions.github.com/runner-scale-set-name"
+	AnnotationKeyGitHubRunnerScaleSetLabels = "actions.github.com/runner-scale-set-labels"
+	AnnotationKeyPatchID                    = "actions.github.com/patch-id"
 )
 
 // Labels applied to listener roles

@@ -210,6 +210,18 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			log.Info("AutoScalingRunnerSet runner scale set name changed. Updating the runner scale set.")
 			return r.updateRunnerScaleSetName(ctx, autoscalingRunnerSet, log)
 		}
+
+		// Make sure the runner scale set labels are up to date
+		scaleSetName := autoscalingRunnerSet.Spec.RunnerScaleSetName
+		if len(scaleSetName) == 0 {
+			scaleSetName = autoscalingRunnerSet.Name
+		}
+		desiredLabelsAnnotation := runnerScaleSetLabelsAnnotation(scaleSetName, autoscalingRunnerSet.Spec.RunnerScaleSetLabels)
+		currentLabelsAnnotation := autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetLabels]
+		if currentLabelsAnnotation != desiredLabelsAnnotation {
+			log.Info("AutoScalingRunnerSet runner scale set labels changed. Updating the runner scale set.")
+			return r.updateRunnerScaleSetLabels(ctx, autoscalingRunnerSet, log)
+		}
 	}
 
 	existingRunnerSets, err := r.listEphemeralRunnerSets(ctx, autoscalingRunnerSet)
@@ -472,6 +484,56 @@ func (r *AutoscalingRunnerSetReconciler) removeFinalizersFromDependentResources(
 	return c.Err()
 }
 
+// buildRunnerScaleSetLabels constructs the []scaleset.Label for a runner scale set
+// from the spec's RunnerScaleSetName and RunnerScaleSetLabels, deduplicating entries.
+func buildRunnerScaleSetLabels(scaleSetName string, specLabels []string, logger logr.Logger) []scaleset.Label {
+	labels := []scaleset.Label{
+		{
+			Name: scaleSetName,
+			Type: "System",
+		},
+	}
+
+	if len(specLabels) == 0 {
+		return labels
+	}
+
+	unique := make(map[string]bool, len(specLabels)+1)
+	unique[scaleSetName] = true
+
+	for _, label := range specLabels {
+		if _, exists := unique[label]; exists {
+			logger.Info("Duplicate label found. Skipping adding duplicate label to runner scale set", "label", label)
+			continue
+		}
+		labels = append(labels, scaleset.Label{
+			Name: label,
+			Type: "System",
+		})
+		unique[label] = true
+	}
+
+	return labels
+}
+
+// runnerScaleSetLabelsAnnotation computes a stable annotation value representing the
+// current desired runner scale set labels. Labels are sorted to ensure deterministic comparison.
+func runnerScaleSetLabelsAnnotation(scaleSetName string, specLabels []string) string {
+	unique := make(map[string]bool, len(specLabels)+1)
+	unique[scaleSetName] = true
+
+	sorted := []string{scaleSetName}
+	for _, label := range specLabels {
+		if _, exists := unique[label]; exists {
+			continue
+		}
+		sorted = append(sorted, label)
+		unique[label] = true
+	}
+	sort.Strings(sorted)
+	return strings.Join(sorted, ",")
+}
+
 func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (ctrl.Result, error) {
 	logger.Info("Creating a new runner scale set")
 	actionsClient, err := r.GetActionsService(ctx, autoscalingRunnerSet)
@@ -505,29 +567,7 @@ func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Contex
 	}
 
 	if runnerScaleSet == nil {
-		labels := []scaleset.Label{
-			{
-				Name: autoscalingRunnerSet.Spec.RunnerScaleSetName,
-				Type: "System",
-			},
-		}
-
-		if labelCount := len(autoscalingRunnerSet.Spec.RunnerScaleSetLabels); labelCount > 0 {
-			unique := make(map[string]bool, labelCount+1)
-			unique[autoscalingRunnerSet.Spec.RunnerScaleSetName] = true
-
-			for _, label := range autoscalingRunnerSet.Spec.RunnerScaleSetLabels {
-				if _, exists := unique[label]; exists {
-					logger.Info("Duplicate label found. Skipping adding duplicate label to runner scale set", "label", label)
-					continue
-				}
-				labels = append(labels, scaleset.Label{
-					Name: label,
-					Type: "System",
-				})
-				unique[label] = true
-			}
-		}
+		labels := buildRunnerScaleSetLabels(autoscalingRunnerSet.Spec.RunnerScaleSetName, autoscalingRunnerSet.Spec.RunnerScaleSetLabels, logger)
 		runnerScaleSet, err = actionsClient.CreateRunnerScaleSet(
 			ctx,
 			&scaleset.RunnerScaleSet{
@@ -556,16 +596,19 @@ func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Contex
 		autoscalingRunnerSet.Labels = map[string]string{}
 	}
 
-	logger.Info("Adding runner scale set ID, name and runner group name as an annotation and url labels")
+	labelsAnnotation := runnerScaleSetLabelsAnnotation(autoscalingRunnerSet.Spec.RunnerScaleSetName, autoscalingRunnerSet.Spec.RunnerScaleSetLabels)
+
+	logger.Info("Adding runner scale set ID, name, runner group name and labels as annotations and url labels")
 	if err = patch(ctx, r.Client, autoscalingRunnerSet, func(obj *v1alpha1.AutoscalingRunnerSet) {
 		obj.Annotations[AnnotationKeyGitHubRunnerScaleSetName] = runnerScaleSet.Name
 		obj.Annotations[runnerScaleSetIDAnnotationKey] = strconv.Itoa(runnerScaleSet.ID)
 		obj.Annotations[AnnotationKeyGitHubRunnerGroupName] = runnerScaleSet.RunnerGroupName
+		obj.Annotations[AnnotationKeyGitHubRunnerScaleSetLabels] = labelsAnnotation
 		if err := applyGitHubURLLabels(obj.Spec.GitHubConfigUrl, obj.Labels); err != nil { // should never happen
 			logger.Error(err, "Failed to apply GitHub URL labels")
 		}
 	}); err != nil {
-		logger.Error(err, "Failed to add runner scale set ID, name and runner group name as an annotation")
+		logger.Error(err, "Failed to add runner scale set ID, name, runner group name and labels as annotations")
 		return ctrl.Result{}, err
 	}
 
@@ -652,6 +695,47 @@ func (r *AutoscalingRunnerSetReconciler) updateRunnerScaleSetName(ctx context.Co
 	}
 
 	logger.Info("Updated runner scale set with match name", "name", updatedRunnerScaleSet.Name)
+	return ctrl.Result{}, nil
+}
+
+func (r *AutoscalingRunnerSetReconciler) updateRunnerScaleSetLabels(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (ctrl.Result, error) {
+	runnerScaleSetID, err := strconv.Atoi(autoscalingRunnerSet.Annotations[runnerScaleSetIDAnnotationKey])
+	if err != nil {
+		logger.Error(err, "Failed to parse runner scale set ID")
+		return ctrl.Result{}, err
+	}
+
+	scaleSetName := autoscalingRunnerSet.Spec.RunnerScaleSetName
+	if len(scaleSetName) == 0 {
+		scaleSetName = autoscalingRunnerSet.Name
+	}
+
+	actionsClient, err := r.GetActionsService(ctx, autoscalingRunnerSet)
+	if err != nil {
+		logger.Error(err, "Failed to initialize Actions service client for updating runner scale set labels")
+		return ctrl.Result{}, err
+	}
+
+	labels := buildRunnerScaleSetLabels(scaleSetName, autoscalingRunnerSet.Spec.RunnerScaleSetLabels, logger)
+
+	updatedRunnerScaleSet, err := actionsClient.UpdateRunnerScaleSet(ctx, runnerScaleSetID, &scaleset.RunnerScaleSet{Labels: labels})
+	if err != nil {
+		logger.Error(err, "Failed to update runner scale set labels", "runnerScaleSetId", runnerScaleSetID)
+		return ctrl.Result{}, err
+	}
+
+	labelsAnnotation := runnerScaleSetLabelsAnnotation(scaleSetName, autoscalingRunnerSet.Spec.RunnerScaleSetLabels)
+
+	logger.Info("Updating runner scale set labels annotation")
+	if err := patch(ctx, r.Client, autoscalingRunnerSet, func(obj *v1alpha1.AutoscalingRunnerSet) {
+		obj.Annotations[AnnotationKeyGitHubRunnerScaleSetLabels] = labelsAnnotation
+		obj.Annotations[AnnotationKeyGitHubRunnerScaleSetName] = updatedRunnerScaleSet.Name
+	}); err != nil {
+		logger.Error(err, "Failed to update runner scale set labels annotation")
+		return ctrl.Result{}, err
+	}
+
+	logger.Info("Updated runner scale set labels", "labels", labelsAnnotation)
 	return ctrl.Result{}, nil
 }
 
