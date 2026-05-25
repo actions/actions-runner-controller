@@ -8,6 +8,7 @@ import (
 	"maps"
 	"math"
 	"net"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -835,6 +836,17 @@ func trimLabelValue(val string) string {
 		return val[:63-len(trimLabelVauleSuffix)] + trimLabelVauleSuffix
 	}
 	return strings.Trim(val, "-_.")
+}
+
+var invalidLabelChars = regexp.MustCompile(`[^a-zA-Z0-9\-_.]`)
+var invalidLabelEdges = regexp.MustCompile(`^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$`)
+
+func sanitizeLabelValue(val string) string {
+	val = invalidLabelChars.ReplaceAllString(val, "_")
+	if len(val) > 63 {
+		val = val[:63]
+	}
+	return invalidLabelEdges.ReplaceAllString(val, "")
 }
 
 func (b *ResourceBuilder) filterAndMergeLabels(base, overwrite map[string]string) map[string]string {

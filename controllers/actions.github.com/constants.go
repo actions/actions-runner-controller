@@ -78,6 +78,15 @@ const DefaultScaleSetListenerLogFormat = string(logging.LogFormatText)
 // ownerKey is field selector matching the owner name of a particular resource
 const resourceOwnerKey = ".metadata.controller"
 
+// Labels and annotations applied to runner pods when a job is assigned
+const (
+	LabelKeyGitHubJobRepository      = "actions.github.com/job-repository"
+	LabelKeyGitHubJobDisplayName     = "actions.github.com/job-display-name"
+	AnnotationKeyGitHubJobID         = "actions.github.com/job-id"
+	AnnotationKeyWorkflowRunID       = "actions.github.com/workflow-run-id"
+	AnnotationKeyGitHubJobRepository = "actions.github.com/job-repository-name"
+)
+
 // EphemeralRunner pod creation failure reasons
 const (
 	ReasonTooManyPodFailures = "TooManyPodFailures"
