@@ -103,6 +103,7 @@ jobs:
       - name: Build & push controller image
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
         with:
+          context: .
           file: Dockerfile
           platforms: linux/amd64,linux/arm64
           build-args: VERSION=${{ inputs.release_tag_name }}
