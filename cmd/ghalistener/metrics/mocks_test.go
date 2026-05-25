@@ -118,6 +118,46 @@ func (_c *MockRecorder_RecordJobCompleted_Call) RunAndReturn(run func(msg *scale
 	return _c
 }
 
+// RecordJobAvailable provides a mock function for the type MockRecorder
+func (_mock *MockRecorder) RecordJobAvailable(msg *scaleset.JobAvailable) {
+	_mock.Called(msg)
+	return
+}
+
+// MockRecorder_RecordJobAvailable_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RecordJobAvailable'
+type MockRecorder_RecordJobAvailable_Call struct {
+	*mock.Call
+}
+
+// RecordJobAvailable is a helper method to define mock.On call
+//   - msg *scaleset.JobAvailable
+func (_e *MockRecorder_Expecter) RecordJobAvailable(msg interface{}) *MockRecorder_RecordJobAvailable_Call {
+	return &MockRecorder_RecordJobAvailable_Call{Call: _e.mock.On("RecordJobAvailable", msg)}
+}
+
+func (_c *MockRecorder_RecordJobAvailable_Call) Run(run func(msg *scaleset.JobAvailable)) *MockRecorder_RecordJobAvailable_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 *scaleset.JobAvailable
+		if args[0] != nil {
+			arg0 = args[0].(*scaleset.JobAvailable)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockRecorder_RecordJobAvailable_Call) Return() *MockRecorder_RecordJobAvailable_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *MockRecorder_RecordJobAvailable_Call) RunAndReturn(run func(msg *scaleset.JobAvailable)) *MockRecorder_RecordJobAvailable_Call {
+	_c.Run(run)
+	return _c
+}
+
 // RecordJobStarted provides a mock function for the type MockRecorder
 func (_mock *MockRecorder) RecordJobStarted(msg *scaleset.JobStarted) {
 	_mock.Called(msg)
@@ -398,6 +438,46 @@ func (_c *MockServerExporter_RecordJobCompleted_Call) Return() *MockServerExport
 }
 
 func (_c *MockServerExporter_RecordJobCompleted_Call) RunAndReturn(run func(msg *scaleset.JobCompleted)) *MockServerExporter_RecordJobCompleted_Call {
+	_c.Run(run)
+	return _c
+}
+
+// RecordJobAvailable provides a mock function for the type MockServerExporter
+func (_mock *MockServerExporter) RecordJobAvailable(msg *scaleset.JobAvailable) {
+	_mock.Called(msg)
+	return
+}
+
+// MockServerExporter_RecordJobAvailable_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RecordJobAvailable'
+type MockServerExporter_RecordJobAvailable_Call struct {
+	*mock.Call
+}
+
+// RecordJobAvailable is a helper method to define mock.On call
+//   - msg *scaleset.JobAvailable
+func (_e *MockServerExporter_Expecter) RecordJobAvailable(msg interface{}) *MockServerExporter_RecordJobAvailable_Call {
+	return &MockServerExporter_RecordJobAvailable_Call{Call: _e.mock.On("RecordJobAvailable", msg)}
+}
+
+func (_c *MockServerExporter_RecordJobAvailable_Call) Run(run func(msg *scaleset.JobAvailable)) *MockServerExporter_RecordJobAvailable_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 *scaleset.JobAvailable
+		if args[0] != nil {
+			arg0 = args[0].(*scaleset.JobAvailable)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockServerExporter_RecordJobAvailable_Call) Return() *MockServerExporter_RecordJobAvailable_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *MockServerExporter_RecordJobAvailable_Call) RunAndReturn(run func(msg *scaleset.JobAvailable)) *MockServerExporter_RecordJobAvailable_Call {
 	_c.Run(run)
 	return _c
 }

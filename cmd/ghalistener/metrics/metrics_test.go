@@ -3,8 +3,10 @@ package metrics
 import (
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/scaleset"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -69,6 +71,10 @@ func TestInstallMetrics(t *testing.T) {
 				Buckets: []float64{0.1, 1},
 			},
 			// histogram metric should be registered with default runtime buckets
+			MetricJobQueueDurationSeconds: {
+				Labels: []string{labelKeyRepository},
+			},
+			// histogram metric should be registered with default runtime buckets
 			MetricJobStartupDurationSeconds: {
 				Labels: []string{labelKeyRepository},
 			},
@@ -79,7 +85,7 @@ func TestInstallMetrics(t *testing.T) {
 	got := installMetrics(metricsConfig, reg, discardLogger)
 	assert.Len(t, got.counters, 1)
 	assert.Len(t, got.gauges, 1)
-	assert.Len(t, got.histograms, 2)
+	assert.Len(t, got.histograms, 3)
 
 	assert.Equal(t, got.counters[MetricStartedJobsTotal].config, metricsConfig.Counters[MetricStartedJobsTotal])
 	assert.Equal(t, got.gauges[MetricAssignedJobs].config, metricsConfig.Gauges[MetricAssignedJobs])
@@ -264,4 +270,74 @@ func TestExporterConfigDefaults(t *testing.T) {
 	}
 
 	assert.Equal(t, want, config)
+}
+
+func TestJobQueueDurationMetric(t *testing.T) {
+	metricsConfig := v1alpha1.MetricsConfig{
+		Counters: map[string]*v1alpha1.CounterMetric{
+			MetricStartedJobsTotal: {
+				Labels: []string{labelKeyRepository},
+			},
+		},
+		Histograms: map[string]*v1alpha1.HistogramMetric{
+			MetricJobQueueDurationSeconds: {
+				Labels:  []string{labelKeyRepository},
+				Buckets: []float64{1, 5, 10},
+			},
+			MetricJobStartupDurationSeconds: {
+				Labels:  []string{labelKeyRepository},
+				Buckets: []float64{1, 5, 10},
+			},
+		},
+	}
+
+	reg := prometheus.NewRegistry()
+	installed := installMetrics(metricsConfig, reg, discardLogger)
+	exporter := &exporter{
+		scaleSetLabels: prometheus.Labels{
+			labelKeyRepository: "repo",
+		},
+		metrics: installed,
+	}
+
+	queueTime := time.Unix(100, 0)
+	scaleSetAssignTime := queueTime.Add(30 * time.Second)
+	runnerAssignTime := scaleSetAssignTime.Add(10 * time.Second)
+
+	exporter.RecordJobAvailable(&scaleset.JobAvailable{
+		JobMessageBase: scaleset.JobMessageBase{
+			RunnerRequestID: 42,
+			RepositoryName:  "repo",
+			QueueTime:       queueTime,
+		},
+	})
+	exporter.RecordJobStarted(&scaleset.JobStarted{
+		JobMessageBase: scaleset.JobMessageBase{
+			RunnerRequestID:    42,
+			RepositoryName:     "repo",
+			ScaleSetAssignTime: scaleSetAssignTime,
+			RunnerAssignTime:   runnerAssignTime,
+		},
+	})
+
+	_, ok := exporter.queuedAt.Load(int64(42))
+	assert.False(t, ok, "queue time entry should be removed after job started")
+
+	metricFamilies, err := reg.Gather()
+	require.NoError(t, err)
+
+	var queueDurationSum float64
+	var queueDurationCount uint64
+	for _, mf := range metricFamilies {
+		if mf.GetName() != "gha_job_queue_duration_seconds" {
+			continue
+		}
+		for _, m := range mf.GetMetric() {
+			queueDurationSum = m.GetHistogram().GetSampleSum()
+			queueDurationCount = m.GetHistogram().GetSampleCount()
+		}
+	}
+
+	assert.Equal(t, uint64(1), queueDurationCount)
+	assert.Equal(t, float64(30), queueDurationSum)
 }

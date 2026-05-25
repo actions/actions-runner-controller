@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
@@ -44,6 +45,7 @@ const (
 	MetricIdleRunners                 = "gha_idle_runners"
 	MetricStartedJobsTotal            = "gha_started_jobs_total"
 	MetricCompletedJobsTotal          = "gha_completed_jobs_total"
+	MetricJobQueueDurationSeconds     = "gha_job_queue_duration_seconds"
 	MetricJobStartupDurationSeconds   = "gha_job_startup_duration_seconds"
 	MetricJobExecutionDurationSeconds = "gha_job_execution_duration_seconds"
 )
@@ -70,6 +72,7 @@ var metricsHelp = metricsHelpRegistry{
 		MetricIdleRunners:       "Number of registered runners not running a job.",
 	},
 	histograms: map[string]string{
+		MetricJobQueueDurationSeconds:     "Time spent waiting for workflow jobs to get assigned to the scale set after queueing (in seconds).",
 		MetricJobStartupDurationSeconds:   "Time spent waiting for workflow job to get started on the runner owned by the scale set (in seconds).",
 		MetricJobExecutionDurationSeconds: "Time spent executing workflow jobs by the scale set (in seconds).",
 	},
@@ -102,6 +105,7 @@ func (e *exporter) startedJobLabels(msg *scaleset.JobStarted) prometheus.Labels 
 type Recorder interface {
 	RecordStatic(min, max int)
 	RecordStatistics(stats *scaleset.RunnerScaleSetStatistic)
+	RecordJobAvailable(msg *scaleset.JobAvailable)
 	RecordJobStarted(msg *scaleset.JobStarted)
 	RecordJobCompleted(msg *scaleset.JobCompleted)
 	RecordDesiredRunners(count int)
@@ -124,6 +128,9 @@ type exporter struct {
 	scaleSetLabels prometheus.Labels
 	*metrics
 	srv *http.Server
+
+	// JobStarted.QueueTime is unset on the wire, so queue time is captured on JobAvailable.
+	queuedAt sync.Map // map[int64]time.Time keyed by RunnerRequestID
 }
 
 type metrics struct {
@@ -256,6 +263,16 @@ var defaultMetrics = v1alpha1.MetricsConfig{
 		},
 	},
 	Histograms: map[string]*v1alpha1.HistogramMetric{
+		MetricJobQueueDurationSeconds: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyJobName,
+				labelKeyEventName,
+			},
+			Buckets: defaultRuntimeBuckets,
+		},
 		MetricJobStartupDurationSeconds: {
 			Labels: []string{
 				labelKeyEnterprise,
@@ -484,9 +501,25 @@ func (e *exporter) RecordStatistics(stats *scaleset.RunnerScaleSetStatistic) {
 	e.setGauge(MetricIdleRunners, e.scaleSetLabels, float64(stats.TotalIdleRunners))
 }
 
+func (e *exporter) RecordJobAvailable(msg *scaleset.JobAvailable) {
+	queuedAt := msg.QueueTime
+	if queuedAt.IsZero() {
+		queuedAt = time.Now()
+	}
+	e.queuedAt.Store(msg.RunnerRequestID, queuedAt)
+}
+
 func (e *exporter) RecordJobStarted(msg *scaleset.JobStarted) {
 	l := e.startedJobLabels(msg)
 	e.incCounter(MetricStartedJobsTotal, l)
+
+	if v, ok := e.queuedAt.LoadAndDelete(msg.RunnerRequestID); ok {
+		if queuedAt, ok := v.(time.Time); ok && !queuedAt.IsZero() && !msg.ScaleSetAssignTime.IsZero() {
+			if d := msg.ScaleSetAssignTime.Sub(queuedAt).Seconds(); d >= 0 {
+				e.observeHistogram(MetricJobQueueDurationSeconds, l, d)
+			}
+		}
+	}
 
 	startupDuration := msg.RunnerAssignTime.Unix() - msg.ScaleSetAssignTime.Unix()
 	e.observeHistogram(MetricJobStartupDurationSeconds, l, float64(startupDuration))
@@ -510,6 +543,7 @@ type discard struct{}
 
 func (*discard) RecordStatic(int, int)                              {}
 func (*discard) RecordStatistics(*scaleset.RunnerScaleSetStatistic) {}
+func (*discard) RecordJobAvailable(*scaleset.JobAvailable)          {}
 func (*discard) RecordJobStarted(*scaleset.JobStarted)              {}
 func (*discard) RecordJobCompleted(*scaleset.JobCompleted)          {}
 func (*discard) RecordDesiredRunners(int)                           {}
