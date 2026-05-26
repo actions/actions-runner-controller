@@ -138,14 +138,16 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 
 	if !v1alpha1.IsVersionAllowed(autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion], build.Version) {
 		if err := r.Delete(ctx, autoscalingRunnerSet); err != nil {
-			log.Error(err, "Failed to delete autoscaling runner set on version mismatch",
+			log.Error(
+				err, "Failed to delete autoscaling runner set on version mismatch",
 				"buildVersion", build.Version,
 				"autoscalingRunnerSetVersion", autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
 			)
 			return ctrl.Result{}, nil
 		}
 
-		log.Info("Autoscaling runner set version doesn't match the build version. Deleting the resource.",
+		log.Info(
+			"Autoscaling runner set version doesn't match the build version. Deleting the resource.",
 			"buildVersion", build.Version,
 			"autoscalingRunnerSetVersion", autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
 		)
@@ -270,12 +272,12 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	// Our listener pod is out of date, so we need to delete it to get a new recreate.
 	listenerValuesHashChanged := listener.Annotations[annotationKeyValuesHash] != autoscalingRunnerSet.Annotations[annotationKeyValuesHash]
 	listenerSpecHashChanged := listener.Annotations[annotationKeyRunnerSpecHash] != autoscalingRunnerSet.ListenerSpecHash()
-	if listenerFound && (listenerValuesHashChanged || listenerSpecHashChanged) {
+	if listenerFound && (listenerValuesHashChanged ||
+		listenerSpecHashChanged ||
+		latestRunnerSet == nil ||
+		listener.Spec.EphemeralRunnerSetName != latestRunnerSet.Name) {
 		log.Info("RunnerScaleSetListener is out of date. Deleting it so that it is recreated", "name", listener.Name)
 		if err := r.Delete(ctx, listener); err != nil {
-			if kerrors.IsNotFound(err) {
-				return ctrl.Result{}, nil
-			}
 			log.Error(err, "Failed to delete AutoscalingListener resource")
 			return ctrl.Result{}, err
 		}
@@ -473,6 +475,7 @@ func (r *AutoscalingRunnerSetReconciler) removeFinalizersFromDependentResources(
 }
 
 func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (ctrl.Result, error) {
+	original := autoscalingRunnerSet.DeepCopy()
 	logger.Info("Creating a new runner scale set")
 	actionsClient, err := r.GetActionsService(ctx, autoscalingRunnerSet)
 	if len(autoscalingRunnerSet.Spec.RunnerScaleSetName) == 0 {
@@ -537,7 +540,8 @@ func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Contex
 				RunnerSetting: scaleset.RunnerSetting{
 					DisableUpdate: true,
 				},
-			})
+			},
+		)
 		if err != nil {
 			logger.Error(err, "Failed to create a new runner scale set on Actions service")
 			return ctrl.Result{}, err
@@ -556,15 +560,16 @@ func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Contex
 		autoscalingRunnerSet.Labels = map[string]string{}
 	}
 
+	autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName] = runnerScaleSet.Name
+	autoscalingRunnerSet.Annotations[runnerScaleSetIDAnnotationKey] = strconv.Itoa(runnerScaleSet.ID)
+	autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName] = runnerScaleSet.RunnerGroupName
+	if err := applyGitHubURLLabels(autoscalingRunnerSet.Spec.GitHubConfigUrl, autoscalingRunnerSet.Labels); err != nil { // should never happen
+		logger.Error(err, "Failed to apply GitHub URL labels")
+		return ctrl.Result{}, err
+	}
+
 	logger.Info("Adding runner scale set ID, name and runner group name as an annotation and url labels")
-	if err = patch(ctx, r.Client, autoscalingRunnerSet, func(obj *v1alpha1.AutoscalingRunnerSet) {
-		obj.Annotations[AnnotationKeyGitHubRunnerScaleSetName] = runnerScaleSet.Name
-		obj.Annotations[runnerScaleSetIDAnnotationKey] = strconv.Itoa(runnerScaleSet.ID)
-		obj.Annotations[AnnotationKeyGitHubRunnerGroupName] = runnerScaleSet.RunnerGroupName
-		if err := applyGitHubURLLabels(obj.Spec.GitHubConfigUrl, obj.Labels); err != nil { // should never happen
-			logger.Error(err, "Failed to apply GitHub URL labels")
-		}
-	}); err != nil {
+	if err = r.Patch(ctx, autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
 		logger.Error(err, "Failed to add runner scale set ID, name and runner group name as an annotation")
 		return ctrl.Result{}, err
 	}

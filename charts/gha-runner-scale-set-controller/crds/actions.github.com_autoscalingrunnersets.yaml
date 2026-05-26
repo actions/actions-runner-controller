@@ -24,8 +24,8 @@ spec:
         - jsonPath: .status.currentRunners
           name: Current Runners
           type: integer
-        - jsonPath: .status.phase
-          name: Phase
+        - jsonPath: .status.state
+          name: State
           type: string
         - jsonPath: .status.pendingEphemeralRunners
           name: Pending Runners
