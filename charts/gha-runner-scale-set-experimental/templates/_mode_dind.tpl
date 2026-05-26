@@ -1,4 +1,7 @@
 {{- define "runner-mode-dind.runner-container" -}}
+{{- include "runner.container.validate" . -}}
+{{- $runner := (.Values.runner | default dict) -}}
+{{- $container := ($runner.container | default dict) -}}
 name: runner
 image: {{ include "runner.image" . | quote }}
 command: {{ include "runner.command" . }}
@@ -15,7 +18,11 @@ volumeMounts:
     mountPath: /home/runner/_work
   - name: dind-sock
     mountPath: {{ include "runner-mode-dind.sock-mount-dir" . | quote }}
-  {{ include "githubServerTLS.volumeMountItem" (dict "root" $ "existingVolumeMounts" (list)) | nindent 2 }}
+  {{ include "githubServerTLS.volumeMountItem" (dict "root" $ "existingVolumeMounts" (list)) | nindent 2 -}}
+{{- $extra := omit $container "name" "image" "command" "env" "volumeMounts" -}}
+{{- if not (empty $extra) }}
+{{ toYaml $extra -}}
+{{- end -}}
 {{- end }}
 
 {{- define "runner-mode-dind.dind-container" -}}
