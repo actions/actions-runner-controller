@@ -3,6 +3,7 @@ package multiclient
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
 	"crypto/x509"
 	"fmt"
 	"net/http"
@@ -87,11 +88,12 @@ func (m *Scaleset) GetClientFor(ctx context.Context, opts *ClientForOptions) (Cl
 }
 
 type ClientForOptions struct {
-	GithubConfigURL string
-	AppConfig       appconfig.AppConfig
-	Namespace       string
-	RootCAs         *x509.CertPool
-	ProxyFunc       func(*http.Request) (*url.URL, error)
+	GithubConfigURL       string
+	AppConfig             appconfig.AppConfig
+	Namespace             string
+	RootCAs               *x509.CertPool
+	ProxyFunc             func(*http.Request) (*url.URL, error)
+	TLSClientCertificates []tls.Certificate
 }
 
 func (o *ClientForOptions) identifier() (string, error) {
@@ -123,6 +125,10 @@ func (o *ClientForOptions) identifier() (string, error) {
 		identifier += fmt.Sprintf(",rootCAs:%q", o.RootCAs.Subjects())
 	}
 
+	if len(o.TLSClientCertificates) > 0 {
+		identifier += fmt.Sprintf(",tlsClientCerts:%d", len(o.TLSClientCertificates))
+	}
+
 	return uuid.NewHash(sha256.New(), uuid.NameSpaceOID, []byte(identifier), 6).String(), nil
 }
 
@@ -141,6 +147,9 @@ func (o *ClientForOptions) newClient() (*scaleset.Client, error) {
 	}
 	if o.ProxyFunc != nil {
 		options = append(options, scaleset.WithProxy(o.ProxyFunc))
+	}
+	for _, cert := range o.TLSClientCertificates {
+		options = append(options, scaleset.WithTLSClientCertificate(cert))
 	}
 
 	if o.AppConfig.Token != "" {

@@ -2,6 +2,7 @@ package secretresolver
 
 import (
 	"context"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 
+	v1alpha1 "github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1/appconfig"
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient"
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/object"
@@ -121,6 +123,16 @@ func (sr *SecretResolver) GetActionsService(ctx context.Context, obj object.Acti
 		}
 	}
 
+	// Load mTLS client certificates for proxy authentication
+	var tlsClientCerts []tls.Certificate
+	if proxy := obj.GitHubProxy(); proxy != nil {
+		certs, err := sr.loadProxyTLSClientCerts(ctx, obj.GetNamespace(), proxy)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load proxy TLS client certificates: %w", err)
+		}
+		tlsClientCerts = certs
+	}
+
 	var rootCAs *x509.CertPool
 	if tc := obj.GitHubServerTLS(); tc != nil {
 		pool, err := tc.ToCertPool(func(name, key string) ([]byte, error) {
@@ -149,11 +161,12 @@ func (sr *SecretResolver) GetActionsService(ctx context.Context, obj object.Acti
 	return sr.multiClient.GetClientFor(
 		ctx,
 		&multiclient.ClientForOptions{
-			GithubConfigURL: obj.GitHubConfigUrl(),
-			AppConfig:       *appConfig,
-			Namespace:       obj.GetNamespace(),
-			RootCAs:         rootCAs,
-			ProxyFunc:       proxyFunc,
+			GithubConfigURL:       obj.GitHubConfigUrl(),
+			AppConfig:             *appConfig,
+			Namespace:             obj.GetNamespace(),
+			RootCAs:               rootCAs,
+			ProxyFunc:             proxyFunc,
+			TLSClientCertificates: tlsClientCerts,
 		},
 	)
 }
@@ -278,4 +291,58 @@ func (r *vaultResolver) proxyCredentials(ctx context.Context, key string) (*url.
 	}
 
 	return url.UserPassword(i.Username, i.Password), nil
+}
+
+// loadProxyTLSClientCerts loads TLS client certificates from secrets for mTLS proxy authentication
+func (sr *SecretResolver) loadProxyTLSClientCerts(ctx context.Context, namespace string, proxy *v1alpha1.ProxyConfig) ([]tls.Certificate, error) {
+	var certs []tls.Certificate
+
+	// Load HTTP proxy client cert if configured
+	if proxy.HTTP != nil && proxy.HTTP.TLS != nil && proxy.HTTP.TLS.ClientCertSecretRef != "" {
+		cert, err := sr.loadTLSCertFromSecret(ctx, namespace, proxy.HTTP.TLS.ClientCertSecretRef)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load HTTP proxy client cert: %w", err)
+		}
+		certs = append(certs, cert)
+	}
+
+	// Load HTTPS proxy client cert if configured
+	if proxy.HTTPS != nil && proxy.HTTPS.TLS != nil && proxy.HTTPS.TLS.ClientCertSecretRef != "" {
+		cert, err := sr.loadTLSCertFromSecret(ctx, namespace, proxy.HTTPS.TLS.ClientCertSecretRef)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load HTTPS proxy client cert: %w", err)
+		}
+		certs = append(certs, cert)
+	}
+
+	return certs, nil
+}
+
+// loadTLSCertFromSecret loads a TLS certificate from a Kubernetes TLS secret
+func (sr *SecretResolver) loadTLSCertFromSecret(ctx context.Context, namespace, secretName string) (tls.Certificate, error) {
+	var secret corev1.Secret
+	err := sr.k8sClient.Get(ctx, types.NamespacedName{
+		Namespace: namespace,
+		Name:      secretName,
+	}, &secret)
+	if err != nil {
+		return tls.Certificate{}, fmt.Errorf("failed to get secret %s: %w", secretName, err)
+	}
+
+	certPEM, ok := secret.Data["tls.crt"]
+	if !ok {
+		return tls.Certificate{}, fmt.Errorf("secret %s missing tls.crt key", secretName)
+	}
+
+	keyPEM, ok := secret.Data["tls.key"]
+	if !ok {
+		return tls.Certificate{}, fmt.Errorf("secret %s missing tls.key key", secretName)
+	}
+
+	cert, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		return tls.Certificate{}, fmt.Errorf("failed to parse TLS certificate: %w", err)
+	}
+
+	return cert, nil
 }
