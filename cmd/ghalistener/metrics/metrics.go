@@ -34,6 +34,8 @@ const (
 
 // Names of all metrics available on the listener
 const (
+	MetricAvailableJobs               = "gha_available_jobs"
+	MetricAcquiredJobs                = "gha_acquired_jobs"
 	MetricAssignedJobs                = "gha_assigned_jobs"
 	MetricRunningJobs                 = "gha_running_jobs"
 	MetricRegisteredRunners           = "gha_registered_runners"
@@ -60,6 +62,8 @@ var metricsHelp = metricsHelpRegistry{
 		MetricCompletedJobsTotal: "Total number of jobs completed.",
 	},
 	gauges: map[string]string{
+		MetricAvailableJobs:     "Number of jobs available to be acquired by this scale set.",
+		MetricAcquiredJobs:      "Number of jobs acquired by this scale set but not yet assigned to a runner.",
 		MetricAssignedJobs:      "Number of jobs assigned to this scale set.",
 		MetricRunningJobs:       "Number of jobs running (or about to be run).",
 		MetricRegisteredRunners: "Number of runners registered by the scale set.",
@@ -182,6 +186,24 @@ var defaultMetrics = v1alpha1.MetricsConfig{
 		},
 	},
 	Gauges: map[string]*v1alpha1.GaugeMetric{
+		MetricAvailableJobs: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyRunnerScaleSetName,
+				labelKeyRunnerScaleSetNamespace,
+			},
+		},
+		MetricAcquiredJobs: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyRunnerScaleSetName,
+				labelKeyRunnerScaleSetNamespace,
+			},
+		},
 		MetricAssignedJobs: {
 			Labels: []string{
 				labelKeyEnterprise,
@@ -477,6 +499,8 @@ func (e *exporter) RecordStatic(min, max int) {
 }
 
 func (e *exporter) RecordStatistics(stats *scaleset.RunnerScaleSetStatistic) {
+	e.setGauge(MetricAvailableJobs, e.scaleSetLabels, float64(stats.TotalAvailableJobs))
+	e.setGauge(MetricAcquiredJobs, e.scaleSetLabels, float64(stats.TotalAcquiredJobs))
 	e.setGauge(MetricAssignedJobs, e.scaleSetLabels, float64(stats.TotalAssignedJobs))
 	e.setGauge(MetricRunningJobs, e.scaleSetLabels, float64(stats.TotalRunningJobs))
 	e.setGauge(MetricRegisteredRunners, e.scaleSetLabels, float64(stats.TotalRegisteredRunners))

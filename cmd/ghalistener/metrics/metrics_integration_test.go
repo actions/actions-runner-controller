@@ -5,7 +5,9 @@ import (
 
 	"github.com/actions/scaleset"
 	"github.com/prometheus/client_golang/prometheus"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMetricsWithWorkflowRefParsing(t *testing.T) {
@@ -95,5 +97,58 @@ func TestMetricsWithWorkflowRefParsing(t *testing.T) {
 			// Assert all expected labels match
 			assert.Equal(t, expectedLabels, labels, "jobLabels() returned unexpected labels for %s", tt.name)
 		})
+	}
+}
+
+func TestRecordStatisticsExposesAllFields(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := installMetrics(defaultMetrics, reg, discardLogger)
+
+	exp := &exporter{
+		scaleSetLabels: prometheus.Labels{
+			labelKeyRunnerScaleSetName:      "test-scale-set",
+			labelKeyRunnerScaleSetNamespace: "test-namespace",
+			labelKeyEnterprise:              "",
+			labelKeyOrganization:            "test-org",
+			labelKeyRepository:              "test-repo",
+		},
+		metrics: m,
+	}
+
+	stats := &scaleset.RunnerScaleSetStatistic{
+		TotalAvailableJobs:     5,
+		TotalAcquiredJobs:      3,
+		TotalAssignedJobs:      10,
+		TotalRunningJobs:       7,
+		TotalRegisteredRunners: 12,
+		TotalBusyRunners:       7,
+		TotalIdleRunners:       5,
+	}
+
+	exp.RecordStatistics(stats)
+
+	gathered, err := reg.Gather()
+	require.NoError(t, err)
+
+	metricsByName := make(map[string]*io_prometheus_client.MetricFamily, len(gathered))
+	for _, mf := range gathered {
+		metricsByName[mf.GetName()] = mf
+	}
+
+	wantGauges := map[string]float64{
+		"gha_available_jobs":     5,
+		"gha_acquired_jobs":      3,
+		"gha_assigned_jobs":      10,
+		"gha_running_jobs":       7,
+		"gha_registered_runners": 12,
+		"gha_busy_runners":       7,
+		"gha_idle_runners":       5,
+	}
+
+	for name, wantVal := range wantGauges {
+		mf, ok := metricsByName[name]
+		require.True(t, ok, "metric %q not found in gathered metrics", name)
+		require.NotEmpty(t, mf.GetMetric(), "metric %q has no samples", name)
+		assert.Equal(t, wantVal, mf.GetMetric()[0].GetGauge().GetValue(), "metric %q value mismatch", name)
 	}
 }
