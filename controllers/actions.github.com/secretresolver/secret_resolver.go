@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 
 	v1alpha1 "github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
@@ -313,11 +314,13 @@ func (r *vaultResolver) proxyCredentials(ctx context.Context, key string) (*url.
 	return url.UserPassword(i.Username, i.Password), nil
 }
 
-// loadProxyTLSClientCerts loads TLS client certificates from secrets for mTLS proxy authentication
+// loadProxyTLSClientCerts loads TLS client certificates for mTLS proxy authentication.
+// It first checks for K8s secret refs in the proxy config, then falls back to
+// environment variables HTTPS_PROXY_CLIENT_CERT and HTTPS_PROXY_CLIENT_KEY for file paths.
 func (sr *SecretResolver) loadProxyTLSClientCerts(ctx context.Context, namespace string, proxy *v1alpha1.ProxyConfig) ([]tls.Certificate, error) {
 	var certs []tls.Certificate
 
-	// Load HTTP proxy client cert if configured
+	// Load HTTP proxy client cert if configured via K8s secret
 	if proxy.HTTP != nil && proxy.HTTP.TLS != nil && proxy.HTTP.TLS.ClientCertSecretRef != "" {
 		cert, err := sr.loadTLSCertFromSecret(ctx, namespace, proxy.HTTP.TLS.ClientCertSecretRef)
 		if err != nil {
@@ -326,13 +329,27 @@ func (sr *SecretResolver) loadProxyTLSClientCerts(ctx context.Context, namespace
 		certs = append(certs, cert)
 	}
 
-	// Load HTTPS proxy client cert if configured
+	// Load HTTPS proxy client cert if configured via K8s secret
 	if proxy.HTTPS != nil && proxy.HTTPS.TLS != nil && proxy.HTTPS.TLS.ClientCertSecretRef != "" {
 		cert, err := sr.loadTLSCertFromSecret(ctx, namespace, proxy.HTTPS.TLS.ClientCertSecretRef)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load HTTPS proxy client cert: %w", err)
 		}
 		certs = append(certs, cert)
+	}
+
+	// Fallback: load from file paths via environment variables if no K8s secrets configured
+	if len(certs) == 0 {
+		certFile := os.Getenv("HTTPS_PROXY_CLIENT_CERT")
+		keyFile := os.Getenv("HTTPS_PROXY_CLIENT_KEY")
+		if certFile != "" && keyFile != "" {
+			cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load client cert from files (cert=%s, key=%s): %w", certFile, keyFile, err)
+			}
+			certs = append(certs, cert)
+			sr.logger.Info("Loaded proxy client cert from file paths", "cert", certFile, "key", keyFile)
+		}
 	}
 
 	return certs, nil
@@ -367,7 +384,9 @@ func (sr *SecretResolver) loadTLSCertFromSecret(ctx context.Context, namespace, 
 	return cert, nil
 }
 
-// loadProxyCACerts loads CA certificates for verifying proxy server TLS from secrets or configmaps
+// loadProxyCACerts loads CA certificates for verifying proxy server TLS.
+// It first checks for K8s secret/configmap refs in the proxy config, then falls back to
+// the HTTPS_PROXY_CA_CERT environment variable for a file path.
 func (sr *SecretResolver) loadProxyCACerts(ctx context.Context, namespace string, proxy *v1alpha1.ProxyConfig) (*x509.CertPool, error) {
 	pool, err := x509.SystemCertPool()
 	if err != nil {
@@ -377,7 +396,7 @@ func (sr *SecretResolver) loadProxyCACerts(ctx context.Context, namespace string
 
 	var certsAdded bool
 
-	// Load HTTP proxy CA cert if configured
+	// Load HTTP proxy CA cert if configured via K8s secret/configmap
 	if proxy.HTTP != nil && proxy.HTTP.TLS != nil {
 		if err := sr.addProxyCACertsToPool(ctx, namespace, proxy.HTTP.TLS, pool); err != nil {
 			return nil, fmt.Errorf("failed to load HTTP proxy CA cert: %w", err)
@@ -387,13 +406,29 @@ func (sr *SecretResolver) loadProxyCACerts(ctx context.Context, namespace string
 		}
 	}
 
-	// Load HTTPS proxy CA cert if configured
+	// Load HTTPS proxy CA cert if configured via K8s secret/configmap
 	if proxy.HTTPS != nil && proxy.HTTPS.TLS != nil {
 		if err := sr.addProxyCACertsToPool(ctx, namespace, proxy.HTTPS.TLS, pool); err != nil {
 			return nil, fmt.Errorf("failed to load HTTPS proxy CA cert: %w", err)
 		}
 		if proxy.HTTPS.TLS.CACertSecretRef != "" || proxy.HTTPS.TLS.CACertConfigMapRef != "" {
 			certsAdded = true
+		}
+	}
+
+	// Fallback: load from file path via environment variable if no K8s refs configured
+	if !certsAdded {
+		caFile := os.Getenv("HTTPS_PROXY_CA_CERT")
+		if caFile != "" {
+			caCert, err := os.ReadFile(caFile)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read CA cert file %s: %w", caFile, err)
+			}
+			if !pool.AppendCertsFromPEM(caCert) {
+				return nil, fmt.Errorf("failed to parse CA certificate from file %s", caFile)
+			}
+			certsAdded = true
+			sr.logger.Info("Loaded proxy CA cert from file path", "file", caFile)
 		}
 	}
 
