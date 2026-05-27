@@ -125,21 +125,40 @@ func (sr *SecretResolver) GetActionsService(ctx context.Context, obj object.Acti
 	}
 
 	// Load mTLS client certificates for proxy authentication
+	// Check CR config first, then fall back to env vars (for HTTPS_PROXY set via env)
 	var tlsClientCerts []tls.Certificate
-	if proxy := obj.GitHubProxy(); proxy != nil {
+	proxy := obj.GitHubProxy()
+	if proxy != nil {
 		certs, err := sr.loadProxyTLSClientCerts(ctx, obj.GetNamespace(), proxy)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load proxy TLS client certificates: %w", err)
 		}
 		tlsClientCerts = certs
+	} else if os.Getenv("HTTPS_PROXY") != "" || os.Getenv("HTTP_PROXY") != "" {
+		// Proxy is set via env var, check for client cert env vars
+		certs, err := sr.loadProxyTLSClientCertsFromEnv()
+		if err != nil {
+			return nil, fmt.Errorf("failed to load proxy TLS client certificates from env: %w", err)
+		}
+		tlsClientCerts = certs
 	}
 
 	// Load proxy CA certificates for verifying proxy server TLS
+	// Check CR config first, then fall back to env vars (for HTTPS_PROXY set via env)
 	var rootCAs *x509.CertPool
-	if proxy := obj.GitHubProxy(); proxy != nil {
+	if proxy != nil {
 		pool, err := sr.loadProxyCACerts(ctx, obj.GetNamespace(), proxy)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load proxy CA certificates: %w", err)
+		}
+		if pool != nil {
+			rootCAs = pool
+		}
+	} else if os.Getenv("HTTPS_PROXY") != "" || os.Getenv("HTTP_PROXY") != "" {
+		// Proxy is set via env var, check for CA cert env var
+		pool, err := sr.loadProxyCACertsFromEnv()
+		if err != nil {
+			return nil, fmt.Errorf("failed to load proxy CA certificates from env: %w", err)
 		}
 		if pool != nil {
 			rootCAs = pool
@@ -490,4 +509,50 @@ func (sr *SecretResolver) addProxyCACertsToPool(ctx context.Context, namespace s
 	}
 
 	return nil
+}
+
+// loadProxyTLSClientCertsFromEnv loads TLS client certificates from file paths specified in env vars.
+// Used when proxy is set via HTTPS_PROXY env var instead of CR config.
+func (sr *SecretResolver) loadProxyTLSClientCertsFromEnv() ([]tls.Certificate, error) {
+	var certs []tls.Certificate
+
+	certFile := os.Getenv("HTTPS_PROXY_CLIENT_CERT")
+	keyFile := os.Getenv("HTTPS_PROXY_CLIENT_KEY")
+	if certFile != "" && keyFile != "" {
+		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load client cert from files (cert=%s, key=%s): %w", certFile, keyFile, err)
+		}
+		certs = append(certs, cert)
+		sr.logger.Info("Loaded proxy client cert from env var file paths", "cert", certFile, "key", keyFile)
+	}
+
+	return certs, nil
+}
+
+// loadProxyCACertsFromEnv loads CA certificates from file path specified in env var.
+// Used when proxy is set via HTTPS_PROXY env var instead of CR config.
+func (sr *SecretResolver) loadProxyCACertsFromEnv() (*x509.CertPool, error) {
+	caFile := os.Getenv("HTTPS_PROXY_CA_CERT")
+	if caFile == "" {
+		return nil, nil
+	}
+
+	pool, err := x509.SystemCertPool()
+	if err != nil {
+		sr.logger.Warn("Failed to load system cert pool, using empty pool", "error", err)
+		pool = x509.NewCertPool()
+	}
+
+	caCert, err := os.ReadFile(caFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read CA cert file %s: %w", caFile, err)
+	}
+
+	if !pool.AppendCertsFromPEM(caCert) {
+		return nil, fmt.Errorf("failed to parse CA certificate from file %s", caFile)
+	}
+
+	sr.logger.Info("Loaded proxy CA cert from env var file path", "file", caFile)
+	return pool, nil
 }
