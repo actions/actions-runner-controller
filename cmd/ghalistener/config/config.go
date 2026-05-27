@@ -172,6 +172,19 @@ func (c *Config) ActionsClient(logger *slog.Logger, clientOptions ...scaleset.HT
 		return proxyFunc(req.URL)
 	}))
 
+	// Load TLS client certificate for proxy mTLS authentication
+	// Used when proxy requires mutual TLS (e.g., Kraken mTLS proxy)
+	certFile := os.Getenv("HTTPS_PROXY_CLIENT_CERT")
+	keyFile := os.Getenv("HTTPS_PROXY_CLIENT_KEY")
+	if certFile != "" && keyFile != "" {
+		tlsOpt, err := scaleset.WithTLSClientCertificateFromFile(certFile, keyFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load proxy TLS client cert (cert=%s, key=%s): %w", certFile, keyFile, err)
+		}
+		options = append(options, tlsOpt)
+		logger.Info("Loaded proxy TLS client certificate from env vars", "cert", certFile, "key", keyFile)
+	}
+
 	var client *scaleset.Client
 	switch c.Token {
 	case "":
