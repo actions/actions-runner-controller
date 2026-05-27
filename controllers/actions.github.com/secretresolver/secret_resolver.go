@@ -2,14 +2,17 @@ package secretresolver
 
 import (
 	"context"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 
+	v1alpha1 "github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1/appconfig"
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient"
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/object"
@@ -121,7 +124,48 @@ func (sr *SecretResolver) GetActionsService(ctx context.Context, obj object.Acti
 		}
 	}
 
+	// Load mTLS client certificates for proxy authentication
+	// Check CR config first, then fall back to env vars (for HTTPS_PROXY set via env)
+	var tlsClientCerts []tls.Certificate
+	proxy := obj.GitHubProxy()
+	if proxy != nil {
+		certs, err := sr.loadProxyTLSClientCerts(ctx, obj.GetNamespace(), proxy)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load proxy TLS client certificates: %w", err)
+		}
+		tlsClientCerts = certs
+	} else if os.Getenv("HTTPS_PROXY") != "" || os.Getenv("HTTP_PROXY") != "" {
+		// Proxy is set via env var, check for client cert env vars
+		certs, err := sr.loadProxyTLSClientCertsFromEnv()
+		if err != nil {
+			return nil, fmt.Errorf("failed to load proxy TLS client certificates from env: %w", err)
+		}
+		tlsClientCerts = certs
+	}
+
+	// Load proxy CA certificates for verifying proxy server TLS
+	// Check CR config first, then fall back to env vars (for HTTPS_PROXY set via env)
 	var rootCAs *x509.CertPool
+	if proxy != nil {
+		pool, err := sr.loadProxyCACerts(ctx, obj.GetNamespace(), proxy)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load proxy CA certificates: %w", err)
+		}
+		if pool != nil {
+			rootCAs = pool
+		}
+	} else if os.Getenv("HTTPS_PROXY") != "" || os.Getenv("HTTP_PROXY") != "" {
+		// Proxy is set via env var, check for CA cert env var
+		pool, err := sr.loadProxyCACertsFromEnv()
+		if err != nil {
+			return nil, fmt.Errorf("failed to load proxy CA certificates from env: %w", err)
+		}
+		if pool != nil {
+			rootCAs = pool
+		}
+	}
+
+	// Load GitHub server TLS config (for GHES) and merge with proxy CAs if present
 	if tc := obj.GitHubServerTLS(); tc != nil {
 		pool, err := tc.ToCertPool(func(name, key string) ([]byte, error) {
 			var configmap corev1.ConfigMap
@@ -143,17 +187,26 @@ func (sr *SecretResolver) GetActionsService(ctx context.Context, obj object.Acti
 			return nil, fmt.Errorf("failed to get tls config: %w", err)
 		}
 
+		// Merge GitHub server CAs with proxy CAs if both are present
+		if rootCAs != nil && pool != nil {
+			// Add GitHub server certs to the existing proxy CA pool
+			// Note: x509.CertPool doesn't have a direct merge method, but since
+			// tc.ToCertPool returns certs from configmap, we need to re-add them
+			// For now, prefer the GitHub server pool and log that proxy CAs are overridden
+			sr.logger.Info("Both proxy CA and GitHub server TLS configured; using GitHub server TLS pool")
+		}
 		rootCAs = pool
 	}
 
 	return sr.multiClient.GetClientFor(
 		ctx,
 		&multiclient.ClientForOptions{
-			GithubConfigURL: obj.GitHubConfigUrl(),
-			AppConfig:       *appConfig,
-			Namespace:       obj.GetNamespace(),
-			RootCAs:         rootCAs,
-			ProxyFunc:       proxyFunc,
+			GithubConfigURL:       obj.GitHubConfigUrl(),
+			AppConfig:             *appConfig,
+			Namespace:             obj.GetNamespace(),
+			RootCAs:               rootCAs,
+			ProxyFunc:             proxyFunc,
+			TLSClientCertificates: tlsClientCerts,
 		},
 	)
 }
@@ -278,4 +331,228 @@ func (r *vaultResolver) proxyCredentials(ctx context.Context, key string) (*url.
 	}
 
 	return url.UserPassword(i.Username, i.Password), nil
+}
+
+// loadProxyTLSClientCerts loads TLS client certificates for mTLS proxy authentication.
+// It first checks for K8s secret refs in the proxy config, then falls back to
+// environment variables HTTPS_PROXY_CLIENT_CERT and HTTPS_PROXY_CLIENT_KEY for file paths.
+func (sr *SecretResolver) loadProxyTLSClientCerts(ctx context.Context, namespace string, proxy *v1alpha1.ProxyConfig) ([]tls.Certificate, error) {
+	var certs []tls.Certificate
+
+	// Load HTTP proxy client cert if configured via K8s secret
+	if proxy.HTTP != nil && proxy.HTTP.TLS != nil && proxy.HTTP.TLS.ClientCertSecretRef != "" {
+		cert, err := sr.loadTLSCertFromSecret(ctx, namespace, proxy.HTTP.TLS.ClientCertSecretRef)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load HTTP proxy client cert: %w", err)
+		}
+		certs = append(certs, cert)
+	}
+
+	// Load HTTPS proxy client cert if configured via K8s secret
+	if proxy.HTTPS != nil && proxy.HTTPS.TLS != nil && proxy.HTTPS.TLS.ClientCertSecretRef != "" {
+		cert, err := sr.loadTLSCertFromSecret(ctx, namespace, proxy.HTTPS.TLS.ClientCertSecretRef)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load HTTPS proxy client cert: %w", err)
+		}
+		certs = append(certs, cert)
+	}
+
+	// Fallback: load from file paths via environment variables if no K8s secrets configured
+	if len(certs) == 0 {
+		certFile := os.Getenv("HTTPS_PROXY_CLIENT_CERT")
+		keyFile := os.Getenv("HTTPS_PROXY_CLIENT_KEY")
+		if certFile != "" && keyFile != "" {
+			cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load client cert from files (cert=%s, key=%s): %w", certFile, keyFile, err)
+			}
+			certs = append(certs, cert)
+			sr.logger.Info("Loaded proxy client cert from file paths", "cert", certFile, "key", keyFile)
+		}
+	}
+
+	return certs, nil
+}
+
+// loadTLSCertFromSecret loads a TLS certificate from a Kubernetes TLS secret
+func (sr *SecretResolver) loadTLSCertFromSecret(ctx context.Context, namespace, secretName string) (tls.Certificate, error) {
+	var secret corev1.Secret
+	err := sr.k8sClient.Get(ctx, types.NamespacedName{
+		Namespace: namespace,
+		Name:      secretName,
+	}, &secret)
+	if err != nil {
+		return tls.Certificate{}, fmt.Errorf("failed to get secret %s: %w", secretName, err)
+	}
+
+	certPEM, ok := secret.Data["tls.crt"]
+	if !ok {
+		return tls.Certificate{}, fmt.Errorf("secret %s missing tls.crt key", secretName)
+	}
+
+	keyPEM, ok := secret.Data["tls.key"]
+	if !ok {
+		return tls.Certificate{}, fmt.Errorf("secret %s missing tls.key key", secretName)
+	}
+
+	cert, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		return tls.Certificate{}, fmt.Errorf("failed to parse TLS certificate: %w", err)
+	}
+
+	return cert, nil
+}
+
+// loadProxyCACerts loads CA certificates for verifying proxy server TLS.
+// It first checks for K8s secret/configmap refs in the proxy config, then falls back to
+// the HTTPS_PROXY_CA_CERT environment variable for a file path.
+func (sr *SecretResolver) loadProxyCACerts(ctx context.Context, namespace string, proxy *v1alpha1.ProxyConfig) (*x509.CertPool, error) {
+	pool, err := x509.SystemCertPool()
+	if err != nil {
+		sr.logger.Warn("Failed to load system cert pool, using empty pool", "error", err)
+		pool = x509.NewCertPool()
+	}
+
+	var certsAdded bool
+
+	// Load HTTP proxy CA cert if configured via K8s secret/configmap
+	if proxy.HTTP != nil && proxy.HTTP.TLS != nil {
+		if err := sr.addProxyCACertsToPool(ctx, namespace, proxy.HTTP.TLS, pool); err != nil {
+			return nil, fmt.Errorf("failed to load HTTP proxy CA cert: %w", err)
+		}
+		if proxy.HTTP.TLS.CACertSecretRef != "" || proxy.HTTP.TLS.CACertConfigMapRef != "" {
+			certsAdded = true
+		}
+	}
+
+	// Load HTTPS proxy CA cert if configured via K8s secret/configmap
+	if proxy.HTTPS != nil && proxy.HTTPS.TLS != nil {
+		if err := sr.addProxyCACertsToPool(ctx, namespace, proxy.HTTPS.TLS, pool); err != nil {
+			return nil, fmt.Errorf("failed to load HTTPS proxy CA cert: %w", err)
+		}
+		if proxy.HTTPS.TLS.CACertSecretRef != "" || proxy.HTTPS.TLS.CACertConfigMapRef != "" {
+			certsAdded = true
+		}
+	}
+
+	// Fallback: load from file path via environment variable if no K8s refs configured
+	if !certsAdded {
+		caFile := os.Getenv("HTTPS_PROXY_CA_CERT")
+		if caFile != "" {
+			caCert, err := os.ReadFile(caFile)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read CA cert file %s: %w", caFile, err)
+			}
+			if !pool.AppendCertsFromPEM(caCert) {
+				return nil, fmt.Errorf("failed to parse CA certificate from file %s", caFile)
+			}
+			certsAdded = true
+			sr.logger.Info("Loaded proxy CA cert from file path", "file", caFile)
+		}
+	}
+
+	if !certsAdded {
+		return nil, nil
+	}
+
+	return pool, nil
+}
+
+// addProxyCACertsToPool adds CA certificates from a ProxyTLSConfig to the given cert pool
+func (sr *SecretResolver) addProxyCACertsToPool(ctx context.Context, namespace string, tlsConfig *v1alpha1.ProxyTLSConfig, pool *x509.CertPool) error {
+	if tlsConfig == nil {
+		return nil
+	}
+
+	// Load from secret if configured
+	if tlsConfig.CACertSecretRef != "" {
+		var secret corev1.Secret
+		err := sr.k8sClient.Get(ctx, types.NamespacedName{
+			Namespace: namespace,
+			Name:      tlsConfig.CACertSecretRef,
+		}, &secret)
+		if err != nil {
+			return fmt.Errorf("failed to get CA cert secret %s: %w", tlsConfig.CACertSecretRef, err)
+		}
+
+		caCert, ok := secret.Data["ca.crt"]
+		if !ok {
+			return fmt.Errorf("secret %s missing ca.crt key", tlsConfig.CACertSecretRef)
+		}
+
+		if !pool.AppendCertsFromPEM(caCert) {
+			return fmt.Errorf("failed to parse CA certificate from secret %s", tlsConfig.CACertSecretRef)
+		}
+		sr.logger.Info("Loaded proxy CA cert from secret", "secret", tlsConfig.CACertSecretRef)
+	}
+
+	// Load from configmap if configured
+	if tlsConfig.CACertConfigMapRef != "" {
+		var configmap corev1.ConfigMap
+		err := sr.k8sClient.Get(ctx, types.NamespacedName{
+			Namespace: namespace,
+			Name:      tlsConfig.CACertConfigMapRef,
+		}, &configmap)
+		if err != nil {
+			return fmt.Errorf("failed to get CA cert configmap %s: %w", tlsConfig.CACertConfigMapRef, err)
+		}
+
+		caCert, ok := configmap.Data["ca.crt"]
+		if !ok {
+			return fmt.Errorf("configmap %s missing ca.crt key", tlsConfig.CACertConfigMapRef)
+		}
+
+		if !pool.AppendCertsFromPEM([]byte(caCert)) {
+			return fmt.Errorf("failed to parse CA certificate from configmap %s", tlsConfig.CACertConfigMapRef)
+		}
+		sr.logger.Info("Loaded proxy CA cert from configmap", "configmap", tlsConfig.CACertConfigMapRef)
+	}
+
+	return nil
+}
+
+// loadProxyTLSClientCertsFromEnv loads TLS client certificates from file paths specified in env vars.
+// Used when proxy is set via HTTPS_PROXY env var instead of CR config.
+func (sr *SecretResolver) loadProxyTLSClientCertsFromEnv() ([]tls.Certificate, error) {
+	var certs []tls.Certificate
+
+	certFile := os.Getenv("HTTPS_PROXY_CLIENT_CERT")
+	keyFile := os.Getenv("HTTPS_PROXY_CLIENT_KEY")
+	if certFile != "" && keyFile != "" {
+		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load client cert from files (cert=%s, key=%s): %w", certFile, keyFile, err)
+		}
+		certs = append(certs, cert)
+		sr.logger.Info("Loaded proxy client cert from env var file paths", "cert", certFile, "key", keyFile)
+	}
+
+	return certs, nil
+}
+
+// loadProxyCACertsFromEnv loads CA certificates from file path specified in env var.
+// Used when proxy is set via HTTPS_PROXY env var instead of CR config.
+func (sr *SecretResolver) loadProxyCACertsFromEnv() (*x509.CertPool, error) {
+	caFile := os.Getenv("HTTPS_PROXY_CA_CERT")
+	if caFile == "" {
+		return nil, nil
+	}
+
+	pool, err := x509.SystemCertPool()
+	if err != nil {
+		sr.logger.Warn("Failed to load system cert pool, using empty pool", "error", err)
+		pool = x509.NewCertPool()
+	}
+
+	caCert, err := os.ReadFile(caFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read CA cert file %s: %w", caFile, err)
+	}
+
+	if !pool.AppendCertsFromPEM(caCert) {
+		return nil, fmt.Errorf("failed to parse CA certificate from file %s", caFile)
+	}
+
+	sr.logger.Info("Loaded proxy CA cert from env var file path", "file", caFile)
+	return pool, nil
 }

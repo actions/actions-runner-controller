@@ -75,6 +75,89 @@ func SetListenerEntrypoint(entrypoint string) {
 	}
 }
 
+// proxyTLSVolumesAndMounts returns volumes and volume mounts for proxy mTLS configuration.
+// It creates volumes for client certificates and CA certificates if configured.
+func proxyTLSVolumesAndMounts(proxy *v1alpha1.ProxyConfig) ([]corev1.Volume, []corev1.VolumeMount) {
+	if proxy == nil {
+		return nil, nil
+	}
+
+	var volumes []corev1.Volume
+	var mounts []corev1.VolumeMount
+
+	// Helper to add TLS volumes for a proxy server config
+	addTLSConfig := func(prefix string, tls *v1alpha1.ProxyTLSConfig) {
+		if tls == nil {
+			return
+		}
+
+		// Client certificate secret
+		if tls.ClientCertSecretRef != "" {
+			volName := prefix + "-client-cert"
+			volumes = append(volumes, corev1.Volume{
+				Name: volName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: tls.ClientCertSecretRef,
+					},
+				},
+			})
+			mounts = append(mounts, corev1.VolumeMount{
+				Name:      volName,
+				MountPath: "/etc/proxy-tls/" + prefix + "/client",
+				ReadOnly:  true,
+			})
+		}
+
+		// CA certificate from secret
+		if tls.CACertSecretRef != "" {
+			volName := prefix + "-ca-cert"
+			volumes = append(volumes, corev1.Volume{
+				Name: volName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: tls.CACertSecretRef,
+					},
+				},
+			})
+			mounts = append(mounts, corev1.VolumeMount{
+				Name:      volName,
+				MountPath: "/etc/proxy-tls/" + prefix + "/ca",
+				ReadOnly:  true,
+			})
+		}
+
+		// CA certificate from configmap
+		if tls.CACertConfigMapRef != "" {
+			volName := prefix + "-ca-configmap"
+			volumes = append(volumes, corev1.Volume{
+				Name: volName,
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: tls.CACertConfigMapRef,
+						},
+					},
+				},
+			})
+			mounts = append(mounts, corev1.VolumeMount{
+				Name:      volName,
+				MountPath: "/etc/proxy-tls/" + prefix + "/ca-cm",
+				ReadOnly:  true,
+			})
+		}
+	}
+
+	if proxy.HTTP != nil {
+		addTLSConfig("http-proxy", proxy.HTTP.TLS)
+	}
+	if proxy.HTTPS != nil {
+		addTLSConfig("https-proxy", proxy.HTTPS.TLS)
+	}
+
+	return volumes, mounts
+}
+
 type SecretResolver interface {
 	GetAppConfig(ctx context.Context, obj object.ActionsGitHubObject) (*appconfig.AppConfig, error)
 	GetActionsService(ctx context.Context, obj object.ActionsGitHubObject) (multiclient.Client, error)
@@ -266,6 +349,32 @@ func (b *ResourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 		ports = append(ports, port)
 	}
 
+	// Base volume mounts
+	volumeMounts := []corev1.VolumeMount{
+		{
+			Name:      "listener-config",
+			MountPath: "/etc/gha-listener",
+			ReadOnly:  true,
+		},
+	}
+
+	// Base volumes
+	volumes := []corev1.Volume{
+		{
+			Name: "listener-config",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: podConfig.Name,
+				},
+			},
+		},
+	}
+
+	// Add proxy mTLS volumes and mounts if configured
+	proxyTLSVolumes, proxyTLSMounts := proxyTLSVolumesAndMounts(autoscalingListener.Spec.Proxy)
+	volumes = append(volumes, proxyTLSVolumes...)
+	volumeMounts = append(volumeMounts, proxyTLSMounts...)
+
 	terminationGracePeriodSeconds := int64(60)
 	podSpec := corev1.PodSpec{
 		ServiceAccountName: serviceAccount.Name,
@@ -280,26 +389,11 @@ func (b *ResourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 				Command: []string{
 					scaleSetListenerEntrypoint,
 				},
-				Ports: ports,
-				VolumeMounts: []corev1.VolumeMount{
-					{
-						Name:      "listener-config",
-						MountPath: "/etc/gha-listener",
-						ReadOnly:  true,
-					},
-				},
+				Ports:        ports,
+				VolumeMounts: volumeMounts,
 			},
 		},
-		Volumes: []corev1.Volume{
-			{
-				Name: "listener-config",
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						SecretName: podConfig.Name,
-					},
-				},
-			},
-		},
+		Volumes:                       volumes,
 		ImagePullSecrets:              autoscalingListener.Spec.ImagePullSecrets,
 		RestartPolicy:                 corev1.RestartPolicyNever,
 		TerminationGracePeriodSeconds: &terminationGracePeriodSeconds,
@@ -697,6 +791,10 @@ func (b *ResourceBuilder) newEphemeralRunnerPod(runner *v1alpha1.EphemeralRunner
 	newPod.Spec = runner.Spec.Spec
 	newPod.Spec.Containers = make([]corev1.Container, 0, len(runner.Spec.Spec.Containers))
 
+	// Add proxy mTLS volumes if configured
+	proxyTLSVolumes, proxyTLSMounts := proxyTLSVolumesAndMounts(runner.Spec.Proxy)
+	newPod.Spec.Volumes = append(newPod.Spec.Volumes, proxyTLSVolumes...)
+
 	for _, c := range runner.Spec.Spec.Containers {
 		if c.Name == v1alpha1.EphemeralRunnerContainerName {
 			c.Env = append(
@@ -722,6 +820,8 @@ func (b *ResourceBuilder) newEphemeralRunnerPod(runner *v1alpha1.EphemeralRunner
 				},
 			)
 			c.Env = append(c.Env, envs...)
+			// Add proxy mTLS volume mounts to runner container
+			c.VolumeMounts = append(c.VolumeMounts, proxyTLSMounts...)
 		}
 
 		newPod.Spec.Containers = append(newPod.Spec.Containers, c)

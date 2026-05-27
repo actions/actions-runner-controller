@@ -45,14 +45,28 @@ githubConfigSecret:
 
 ## proxy can be used to define proxy settings that will be used by the
 ## controller, the listener and the runner of this scale set.
+##
+## For basic auth, use credentialSecretRef pointing to a secret with `username` and `password` keys.
+## For mTLS (mutual TLS), use the tls section with client certificate configuration.
 #
 # proxy:
 #   http:
 #     url: http://proxy.com:1234
 #     credentialSecretRef: proxy-auth # a secret with `username` and `password` keys
 #   https:
-#     url: http://proxy.com:1234
+#     url: https://proxy.com:1234
 #     credentialSecretRef: proxy-auth # a secret with `username` and `password` keys
+#     ## mTLS configuration for proxies that require client certificate authentication
+#     tls:
+#       ## Secret containing client certificate and key (must have 'tls.crt' and 'tls.key' keys)
+#       ## You can create this with: kubectl create secret tls proxy-client-cert --cert=client.crt --key=client.key
+#       clientCertSecretRef: proxy-client-cert
+#       ## Secret containing CA certificate to verify proxy server (must have 'ca.crt' key)
+#       caCertSecretRef: proxy-ca-cert
+#       ## Or use a ConfigMap for the CA cert (must have 'ca.crt' key)
+#       # caCertConfigMapRef: proxy-ca-configmap
+#       ## Skip server certificate verification (NOT recommended for production)
+#       # insecureSkipVerify: false
 #   noProxy:
 #     - example.com
 #     - example.org

@@ -264,6 +264,38 @@ type ProxyServerConfig struct {
 
 	// +optional
 	CredentialSecretRef string `json:"credentialSecretRef,omitempty"`
+
+	// +optional
+	// TLS configures mTLS (mutual TLS) for the proxy connection.
+	// When set, the client will present a certificate to the proxy server.
+	TLS *ProxyTLSConfig `json:"tls,omitempty"`
+}
+
+// ProxyTLSConfig configures mTLS for proxy connections.
+type ProxyTLSConfig struct {
+	// ClientCertSecretRef is a reference to a Kubernetes secret containing
+	// the client certificate and key for mTLS authentication.
+	// The secret must contain 'tls.crt' and 'tls.key' keys.
+	// +optional
+	ClientCertSecretRef string `json:"clientCertSecretRef,omitempty"`
+
+	// CACertSecretRef is a reference to a Kubernetes secret containing
+	// the CA certificate to verify the proxy server's certificate.
+	// The secret must contain a 'ca.crt' key.
+	// +optional
+	CACertSecretRef string `json:"caCertSecretRef,omitempty"`
+
+	// CACertConfigMapRef is a reference to a ConfigMap containing
+	// the CA certificate to verify the proxy server's certificate.
+	// The ConfigMap must contain a 'ca.crt' key.
+	// Alternative to CACertSecretRef when CA cert is not sensitive.
+	// +optional
+	CACertConfigMapRef string `json:"caCertConfigMapRef,omitempty"`
+
+	// InsecureSkipVerify disables server certificate verification.
+	// WARNING: This should only be used for testing.
+	// +optional
+	InsecureSkipVerify bool `json:"insecureSkipVerify,omitempty"`
 }
 
 type VaultConfig struct {
