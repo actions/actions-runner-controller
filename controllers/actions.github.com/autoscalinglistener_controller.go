@@ -797,6 +797,9 @@ func (r *AutoscalingListenerReconciler) createClusterRoleForListener(ctx context
 
 	logger.Info("Creating listener cluster role", "name", newClusterRole.Name, "rules", newClusterRole.Rules)
 	if err := r.Create(ctx, newClusterRole); err != nil {
+		if kerrors.IsAlreadyExists(err) {
+			return ctrl.Result{Requeue: true}, nil
+		}
 		logger.Error(err, "Unable to create listener cluster role", "name", newClusterRole.Name)
 		return ctrl.Result{}, err
 	}
@@ -829,6 +832,9 @@ func (r *AutoscalingListenerReconciler) createClusterRoleBindingForListener(ctx 
 		"serviceAccountNamespace", serviceAccount.Namespace,
 		"serviceAccount", serviceAccount.Name)
 	if err := r.Create(ctx, newClusterRoleBinding); err != nil {
+		if kerrors.IsAlreadyExists(err) {
+			return ctrl.Result{Requeue: true}, nil
+		}
 		logger.Error(err, "Unable to create listener cluster role binding", "name", newClusterRoleBinding.Name)
 		return ctrl.Result{}, err
 	}
@@ -914,6 +920,8 @@ func (r *AutoscalingListenerReconciler) SetupWithManager(mgr ctrl.Manager, opts 
 			Owns(&corev1.ServiceAccount{}).
 			Watches(&rbacv1.Role{}, handler.EnqueueRequestsFromMapFunc(labelBasedWatchFunc)).
 			Watches(&rbacv1.RoleBinding{}, handler.EnqueueRequestsFromMapFunc(labelBasedWatchFunc)).
+			Watches(&rbacv1.ClusterRole{}, handler.EnqueueRequestsFromMapFunc(labelBasedWatchFunc)).
+			Watches(&rbacv1.ClusterRoleBinding{}, handler.EnqueueRequestsFromMapFunc(labelBasedWatchFunc)).
 			WithEventFilter(predicate.ResourceVersionChangedPredicate{}),
 		opts,
 	).Complete(r)
