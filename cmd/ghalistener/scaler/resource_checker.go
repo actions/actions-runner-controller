@@ -9,6 +9,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -157,6 +158,10 @@ func (c *KubernetesResourceChecker) HasSufficientResources(ctx context.Context, 
 	// Filter target nodes
 	nodeList, err := c.clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
+		if kerrors.IsForbidden(err) {
+			c.logger.Warn("Insufficient RBAC permissions to list nodes, skipping resource check — apply arc-controller-clusterrole.yaml to enable it")
+			return true, nil
+		}
 		return false, fmt.Errorf("list nodes: %w", err)
 	}
 	targetNodes := filterNodes(nodeList.Items, nodeSelector)
@@ -175,6 +180,10 @@ func (c *KubernetesResourceChecker) HasSufficientResources(ctx context.Context, 
 	// Sum used resources (Running/Pending pods bound to target nodes)
 	podList, err := c.clientset.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
 	if err != nil {
+		if kerrors.IsForbidden(err) {
+			c.logger.Warn("Insufficient RBAC permissions to list pods, skipping resource check — apply arc-controller-clusterrole.yaml to enable it")
+			return true, nil
+		}
 		return false, fmt.Errorf("list pods: %w", err)
 	}
 	usedResources := sumPodRequests(podList.Items, targetNodeNames)
