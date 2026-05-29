@@ -360,11 +360,10 @@ func TestHandleDesiredRunnerCount_CheckerReturnsFalse(t *testing.T) {
 }
 
 func TestHandleDesiredRunnerCount_CheckerReturnsError(t *testing.T) {
-	// fail-open: error from checker should not block scaling
-	// We can't call the real k8s patch in a unit test, so we only verify
-	// that the checker error path does NOT return 0 early.
-	// The test verifies the checker is called and its error is tolerated.
-	called := false
+	// fail-open: when checker returns an error, scaling must NOT be blocked.
+	// The k8s patch will panic (nil clientset, no real server), but the important
+	// assertion is that we did NOT return (0, nil) early — which would mean fail-closed.
+	// A panic here proves execution proceeded past the resource check.
 	w := &Scaler{
 		config:        Config{MinRunners: 0, MaxRunners: 10},
 		targetRunners: -1,
@@ -375,9 +374,12 @@ func TestHandleDesiredRunnerCount_CheckerReturnsError(t *testing.T) {
 			err:        errors.New("api error"),
 		},
 	}
-	_ = w // checker error path: HandleDesiredRunnerCount proceeds past the check
-	called = true // placeholder — real assertion is in integration
-	assert.True(t, called)
+	// fail-open: checker error must not cause a (0, nil) early return.
+	// Execution proceeds to the k8s patch which panics on nil clientset —
+	// that panic is proof the early-return was NOT taken.
+	assert.Panics(t, func() {
+		w.HandleDesiredRunnerCount(context.Background(), 5) //nolint:errcheck
+	}, "checker error should not block scale-up (fail-open): execution must reach k8s patch")
 }
 
 func TestSetDesiredWorkerState_NilChecker(t *testing.T) {
