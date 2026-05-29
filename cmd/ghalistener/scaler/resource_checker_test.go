@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	arcconst "github.com/actions/actions-runner-controller/controllers/actions.github.com"
 )
 
 const (
@@ -27,12 +28,13 @@ func buildFakeClientset(objs ...runtime.Object) *fake.Clientset {
 }
 
 // buildEphemeralRunnerSet returns a minimal EphemeralRunnerSet with the given
-// container resource requests and nodeSelector.
-func buildEphemeralRunnerSet(requests corev1.ResourceList, nodeSelector map[string]string) *v1alpha1.EphemeralRunnerSet {
+// annotations and nodeSelector.
+func buildEphemeralRunnerSet(annotations map[string]string, nodeSelector map[string]string) *v1alpha1.EphemeralRunnerSet {
 	return &v1alpha1.EphemeralRunnerSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      testRSName,
-			Namespace: testNS,
+			Name:        testRSName,
+			Namespace:   testNS,
+			Annotations: annotations,
 		},
 		Spec: v1alpha1.EphemeralRunnerSetSpec{
 			EphemeralRunnerSpec: v1alpha1.EphemeralRunnerSpec{
@@ -40,12 +42,7 @@ func buildEphemeralRunnerSet(requests corev1.ResourceList, nodeSelector map[stri
 					Spec: corev1.PodSpec{
 						NodeSelector: nodeSelector,
 						Containers: []corev1.Container{
-							{
-								Name: "runner",
-								Resources: corev1.ResourceRequirements{
-									Requests: requests,
-								},
-							},
+							{Name: "runner"},
 						},
 					},
 				},
@@ -84,13 +81,10 @@ func fakeERSGetter(ers *v1alpha1.EphemeralRunnerSet) ersGetter {
 }
 
 func TestHasSufficientResources_SufficientCPUAndMemory(t *testing.T) {
-	ers := buildEphemeralRunnerSet(
-		corev1.ResourceList{
-			corev1.ResourceCPU:    resource.MustParse("1"),
-			corev1.ResourceMemory: resource.MustParse("1Gi"),
-		},
-		nil,
-	)
+	ers := buildEphemeralRunnerSet(map[string]string{
+		arcconst.AnnotationKeyJobCPU:    "1",
+		arcconst.AnnotationKeyJobMemory: "1Gi",
+	}, nil)
 	node := buildNode("node1", corev1.ResourceList{
 		corev1.ResourceCPU:    resource.MustParse("8"),
 		corev1.ResourceMemory: resource.MustParse("16Gi"),
@@ -111,9 +105,9 @@ func TestHasSufficientResources_SufficientCPUAndMemory(t *testing.T) {
 }
 
 func TestHasSufficientResources_CustomResourceSufficient(t *testing.T) {
-	ers := buildEphemeralRunnerSet(corev1.ResourceList{
-		corev1.ResourceCPU:                    resource.MustParse("1"),
-		corev1.ResourceName("huawei.com/npu"): resource.MustParse("1"),
+	ers := buildEphemeralRunnerSet(map[string]string{
+		arcconst.AnnotationKeyJobCPU: "1",
+		arcconst.AnnotationKeyJobNPU: "huawei.com/npu:1",
 	}, nil)
 	node := buildNode("node1", corev1.ResourceList{
 		corev1.ResourceCPU:                    resource.MustParse("8"),
@@ -131,8 +125,8 @@ func TestHasSufficientResources_CustomResourceSufficient(t *testing.T) {
 }
 
 func TestHasSufficientResources_CustomResourceInsufficient(t *testing.T) {
-	ers := buildEphemeralRunnerSet(corev1.ResourceList{
-		corev1.ResourceName("huawei.com/npu"): resource.MustParse("1"),
+	ers := buildEphemeralRunnerSet(map[string]string{
+		arcconst.AnnotationKeyJobNPU: "huawei.com/npu:1",
 	}, nil)
 	node := buildNode("node1", corev1.ResourceList{
 		corev1.ResourceName("huawei.com/npu"): resource.MustParse("3"),
@@ -149,8 +143,8 @@ func TestHasSufficientResources_CustomResourceInsufficient(t *testing.T) {
 }
 
 func TestHasSufficientResources_InsufficientCPU(t *testing.T) {
-	ers := buildEphemeralRunnerSet(corev1.ResourceList{
-		corev1.ResourceCPU: resource.MustParse("4"),
+	ers := buildEphemeralRunnerSet(map[string]string{
+		arcconst.AnnotationKeyJobCPU: "4",
 	}, nil)
 	node := buildNode("node1", corev1.ResourceList{
 		corev1.ResourceCPU: resource.MustParse("8"),
@@ -167,8 +161,8 @@ func TestHasSufficientResources_InsufficientCPU(t *testing.T) {
 }
 
 func TestHasSufficientResources_InsufficientMemory(t *testing.T) {
-	ers := buildEphemeralRunnerSet(corev1.ResourceList{
-		corev1.ResourceMemory: resource.MustParse("4Gi"),
+	ers := buildEphemeralRunnerSet(map[string]string{
+		arcconst.AnnotationKeyJobMemory: "4Gi",
 	}, nil)
 	node := buildNode("node1", corev1.ResourceList{
 		corev1.ResourceMemory: resource.MustParse("8Gi"),
@@ -185,8 +179,8 @@ func TestHasSufficientResources_InsufficientMemory(t *testing.T) {
 }
 
 func TestHasSufficientResources_NodeSelectorSufficient(t *testing.T) {
-	ers := buildEphemeralRunnerSet(corev1.ResourceList{
-		corev1.ResourceCPU: resource.MustParse("1"),
+	ers := buildEphemeralRunnerSet(map[string]string{
+		arcconst.AnnotationKeyJobCPU: "1",
 	}, map[string]string{"arch": "arm64"})
 	arm := buildNode("arm-node", corev1.ResourceList{
 		corev1.ResourceCPU: resource.MustParse("8"),
@@ -206,8 +200,8 @@ func TestHasSufficientResources_NodeSelectorSufficient(t *testing.T) {
 }
 
 func TestHasSufficientResources_NodeSelectorInsufficient(t *testing.T) {
-	ers := buildEphemeralRunnerSet(corev1.ResourceList{
-		corev1.ResourceCPU: resource.MustParse("1"),
+	ers := buildEphemeralRunnerSet(map[string]string{
+		arcconst.AnnotationKeyJobCPU: "1",
 	}, map[string]string{"arch": "arm64"})
 	arm := buildNode("arm-node", corev1.ResourceList{
 		corev1.ResourceCPU: resource.MustParse("2"),
@@ -224,13 +218,12 @@ func TestHasSufficientResources_NodeSelectorInsufficient(t *testing.T) {
 }
 
 func TestHasSufficientResources_RunningPodConsuming(t *testing.T) {
-	ers := buildEphemeralRunnerSet(corev1.ResourceList{
-		corev1.ResourceCPU: resource.MustParse("2"),
+	ers := buildEphemeralRunnerSet(map[string]string{
+		arcconst.AnnotationKeyJobCPU: "2",
 	}, nil)
 	node := buildNode("node1", corev1.ResourceList{
 		corev1.ResourceCPU: resource.MustParse("8"),
 	}, nil)
-	// Running pod consuming 6 CPU on the target node
 	runningPod := buildPod("running-pod", "node1", corev1.PodRunning, corev1.ResourceList{
 		corev1.ResourceCPU: resource.MustParse("6"),
 	})
@@ -245,8 +238,8 @@ func TestHasSufficientResources_RunningPodConsuming(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestHasSufficientResources_NoRequests(t *testing.T) {
-	ers := buildEphemeralRunnerSet(nil, nil) // no resource requests
+func TestHasSufficientResources_NoLabels(t *testing.T) {
+	ers := buildEphemeralRunnerSet(nil, nil) // no job resource labels
 	cs := buildFakeClientset()
 	checker := &KubernetesResourceChecker{
 		clientset: cs, ephemeralRunnerSetNS: testNS,
@@ -255,7 +248,100 @@ func TestHasSufficientResources_NoRequests(t *testing.T) {
 	}
 	ok, err := checker.HasSufficientResources(context.Background(), 5)
 	require.NoError(t, err)
-	assert.True(t, ok) // skip check when no requests defined
+	assert.True(t, ok) // no labels → skip check
+}
+
+func TestHasSufficientResources_OnlyCPULabelChecked(t *testing.T) {
+	// Only job-cpu annotation set; memory not declared so not checked even if tight.
+	ers := buildEphemeralRunnerSet(map[string]string{
+		arcconst.AnnotationKeyJobCPU: "1",
+	}, nil)
+	node := buildNode("node1", corev1.ResourceList{
+		corev1.ResourceCPU:    resource.MustParse("8"),
+		corev1.ResourceMemory: resource.MustParse("1Ki"), // extremely small, but not checked
+	}, nil)
+	cs := buildFakeClientset(node)
+	checker := &KubernetesResourceChecker{
+		clientset: cs, ephemeralRunnerSetNS: testNS,
+		ephemeralRunnerSetName: testRSName, logger: discardLogger,
+		ersGetter: fakeERSGetter(ers),
+	}
+	ok, err := checker.HasSufficientResources(context.Background(), 4)
+	require.NoError(t, err)
+	assert.True(t, ok) // memory not declared → not checked
+}
+
+func TestHasSufficientResources_JobArchFiltersSufficientNodes(t *testing.T) {
+	ers := buildEphemeralRunnerSet(map[string]string{
+		arcconst.AnnotationKeyJobCPU:  "1",
+		arcconst.AnnotationKeyJobArch: "arm64",
+	}, nil)
+	arm := buildNode("arm-node", corev1.ResourceList{
+		corev1.ResourceCPU: resource.MustParse("8"),
+	}, map[string]string{"kubernetes.io/arch": "arm64"})
+	x86 := buildNode("x86-node", corev1.ResourceList{
+		corev1.ResourceCPU: resource.MustParse("100"),
+	}, map[string]string{"kubernetes.io/arch": "amd64"})
+	cs := buildFakeClientset(arm, x86)
+	checker := &KubernetesResourceChecker{
+		clientset: cs, ephemeralRunnerSetNS: testNS,
+		ephemeralRunnerSetName: testRSName, logger: discardLogger,
+		ersGetter: fakeERSGetter(ers),
+	}
+	ok, err := checker.HasSufficientResources(context.Background(), 4) // 4×1 <= 8 (arm only)
+	require.NoError(t, err)
+	assert.True(t, ok)
+}
+
+func TestHasSufficientResources_JobArchFiltersInsufficientNodes(t *testing.T) {
+	ers := buildEphemeralRunnerSet(map[string]string{
+		arcconst.AnnotationKeyJobCPU:  "1",
+		arcconst.AnnotationKeyJobArch: "arm64",
+	}, nil)
+	arm := buildNode("arm-node", corev1.ResourceList{
+		corev1.ResourceCPU: resource.MustParse("2"),
+	}, map[string]string{"kubernetes.io/arch": "arm64"})
+	x86 := buildNode("x86-node", corev1.ResourceList{
+		corev1.ResourceCPU: resource.MustParse("100"),
+	}, map[string]string{"kubernetes.io/arch": "amd64"})
+	cs := buildFakeClientset(arm, x86)
+	checker := &KubernetesResourceChecker{
+		clientset: cs, ephemeralRunnerSetNS: testNS,
+		ephemeralRunnerSetName: testRSName, logger: discardLogger,
+		ersGetter: fakeERSGetter(ers),
+	}
+	ok, err := checker.HasSufficientResources(context.Background(), 4) // needs 4, arm only has 2
+	require.NoError(t, err)
+	assert.False(t, ok)
+}
+
+func TestHasSufficientResources_InvalidResourceCountLabel(t *testing.T) {
+	ers := buildEphemeralRunnerSet(map[string]string{
+		arcconst.AnnotationKeyJobNPU: "huawei.com/npu:not-a-number",
+	}, nil)
+	cs := buildFakeClientset()
+	checker := &KubernetesResourceChecker{
+		clientset: cs, ephemeralRunnerSetNS: testNS,
+		ephemeralRunnerSetName: testRSName, logger: discardLogger,
+		ersGetter: fakeERSGetter(ers),
+	}
+	_, err := checker.HasSufficientResources(context.Background(), 1)
+	assert.Error(t, err)
+}
+
+func TestHasSufficientResources_MissingResourceCountLabel(t *testing.T) {
+	// job-npu with missing colon separator → error
+	ers := buildEphemeralRunnerSet(map[string]string{
+		arcconst.AnnotationKeyJobNPU: "huawei.com/npu",
+	}, nil)
+	cs := buildFakeClientset()
+	checker := &KubernetesResourceChecker{
+		clientset: cs, ephemeralRunnerSetNS: testNS,
+		ephemeralRunnerSetName: testRSName, logger: discardLogger,
+		ersGetter: fakeERSGetter(ers),
+	}
+	_, err := checker.HasSufficientResources(context.Background(), 1)
+	assert.Error(t, err)
 }
 
 func TestHasSufficientResources_ERSFetchError(t *testing.T) {

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -12,6 +14,7 @@ import (
 	"k8s.io/client-go/rest"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	arcconst "github.com/actions/actions-runner-controller/controllers/actions.github.com"
 )
 
 // ResourceChecker decides whether the cluster has enough resources to run count runners.
@@ -63,35 +66,93 @@ func (c *KubernetesResourceChecker) fetchERS(ctx context.Context, ns, name strin
 	return ers, err
 }
 
+// jobResourceRequirements extracts per-job resource requirements from ERS annotations.
+// Only annotations that are present are included; absent annotations are not checked.
+//
+// Supported annotations (all optional):
+//
+//	actions.github.com/job-cpu    — CPU cores per job (e.g. "32")
+//	actions.github.com/job-memory — Memory per job    (e.g. "128Gi")
+//	actions.github.com/job-npu    — NPU resource per job, format "<resource-name>:<count>"
+//	                                (e.g. "huawei.com/ascend-1980:4")
+func jobResourceRequirements(annotations map[string]string) (corev1.ResourceList, error) {
+	reqs := corev1.ResourceList{}
+
+	if v, ok := annotations[arcconst.AnnotationKeyJobCPU]; ok {
+		q, err := resource.ParseQuantity(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid %s annotation value %q: %w", arcconst.AnnotationKeyJobCPU, v, err)
+		}
+		reqs[corev1.ResourceCPU] = q
+	}
+
+	if v, ok := annotations[arcconst.AnnotationKeyJobMemory]; ok {
+		q, err := resource.ParseQuantity(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid %s annotation value %q: %w", arcconst.AnnotationKeyJobMemory, v, err)
+		}
+		reqs[corev1.ResourceMemory] = q
+	}
+
+	if v, ok := annotations[arcconst.AnnotationKeyJobNPU]; ok {
+		resName, count, err := parseNPUAnnotation(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid %s annotation value %q: %w", arcconst.AnnotationKeyJobNPU, v, err)
+		}
+		reqs[corev1.ResourceName(resName)] = *resource.NewQuantity(int64(count), resource.DecimalSI)
+	}
+
+	return reqs, nil
+}
+
+// parseNPUAnnotation parses "<resource-name>:<count>" (e.g. "huawei.com/ascend-1980:4").
+func parseNPUAnnotation(v string) (string, int, error) {
+	idx := strings.LastIndex(v, ":")
+	if idx <= 0 || idx == len(v)-1 {
+		return "", 0, fmt.Errorf("must be \"<resource-name>:<count>\"")
+	}
+	resName := v[:idx]
+	n, err := strconv.Atoi(v[idx+1:])
+	if err != nil || n < 0 {
+		return "", 0, fmt.Errorf("count must be a non-negative integer, got %q", v[idx+1:])
+	}
+	return resName, n, nil
+}
+
+// jobArchNodeSelector returns an extra node selector derived from the
+// actions.github.com/job-arch annotation, or nil if the annotation is absent.
+func jobArchNodeSelector(annotations map[string]string) map[string]string {
+	arch, ok := annotations[arcconst.AnnotationKeyJobArch]
+	if !ok {
+		return nil
+	}
+	return map[string]string{"kubernetes.io/arch": arch}
+}
+
 // HasSufficientResources returns true if the cluster has enough resources to
-// schedule count additional runners. Errors are returned so the caller can
-// fail-open.
+// schedule count additional runners. Only resource types declared via labels on
+// the EphemeralRunnerSet are checked; absent labels are skipped. Errors are
+// returned so the caller can fail-open.
 func (c *KubernetesResourceChecker) HasSufficientResources(ctx context.Context, count int) (bool, error) {
 	ers, err := c.ersGetter(ctx, c.ephemeralRunnerSetNS, c.ephemeralRunnerSetName)
 	if err != nil {
 		return false, fmt.Errorf("fetch EphemeralRunnerSet: %w", err)
 	}
 
-	containers := ers.Spec.EphemeralRunnerSpec.Spec.Containers
-	if len(containers) == 0 {
-		c.logger.Info("No containers defined in EphemeralRunnerSet, skipping resource check")
+	jobRequests, err := jobResourceRequirements(ers.Annotations)
+	if err != nil {
+		return false, fmt.Errorf("parse job resource annotations: %w", err)
+	}
+	if len(jobRequests) == 0 {
+		c.logger.Info("No job resource annotations defined on EphemeralRunnerSet, skipping resource check")
 		return true, nil
 	}
-	// Find the container named "runner"; fall back to the first container for
-	// backward compatibility with specs that omit the standard name.
-	runnerContainer := &containers[0]
-	for i := range containers {
-		if containers[i].Name == v1alpha1.EphemeralRunnerContainerName {
-			runnerContainer = &containers[i]
-			break
-		}
-	}
-	if len(runnerContainer.Resources.Requests) == 0 {
-		c.logger.Info("No resource requests defined in runner container, skipping resource check")
-		return true, nil
-	}
-	runnerRequests := runnerContainer.Resources.Requests
-	nodeSelector := ers.Spec.EphemeralRunnerSpec.Spec.NodeSelector
+
+	// Merge nodeSelector from ERS spec with optional arch annotation.
+	nodeSelector := mergeSelectors(
+		ers.Spec.EphemeralRunnerSpec.Spec.NodeSelector,
+		jobArchNodeSelector(ers.Annotations),
+	)
 
 	// Filter target nodes
 	nodeList, err := c.clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
@@ -119,13 +180,12 @@ func (c *KubernetesResourceChecker) HasSufficientResources(ctx context.Context, 
 	usedResources := sumPodRequests(podList.Items, targetNodeNames)
 	logResourceMap(c.logger, "Used resources", usedResources)
 
-	// Decision: check each requested resource
 	available := subtractResources(clusterAllocatable, usedResources)
 	logResourceMap(c.logger, "Available resources", available)
 
-	c.logger.Info("Runner resource requirements", "count", count, "requestsPerRunner", resourceMapToStrings(runnerRequests))
+	c.logger.Info("Job resource requirements per runner", "count", count, "requestsPerRunner", resourceMapToStrings(jobRequests))
 
-	for resName, req := range runnerRequests {
+	for resName, req := range jobRequests {
 		avail := available[resName]
 		needed := multiplyQuantity(req, count)
 		c.logger.Info("Resource check",
@@ -246,4 +306,20 @@ func multiplyQuantity(q resource.Quantity, n int) resource.Quantity {
 	result := q.DeepCopy()
 	result.Mul(int64(n))
 	return result
+}
+
+// mergeSelectors returns a new map that is the union of a and b.
+// Keys in b override keys in a on conflict.
+func mergeSelectors(a, b map[string]string) map[string]string {
+	if len(a) == 0 && len(b) == 0 {
+		return nil
+	}
+	merged := make(map[string]string, len(a)+len(b))
+	for k, v := range a {
+		merged[k] = v
+	}
+	for k, v := range b {
+		merged[k] = v
+	}
+	return merged
 }

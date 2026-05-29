@@ -50,6 +50,20 @@ const (
 	AnnotationKeyGitHubRunnerGroupName    = "actions.github.com/runner-group-name"
 	AnnotationKeyGitHubRunnerScaleSetName = "actions.github.com/runner-scale-set-name"
 	AnnotationKeyPatchID                  = "actions.github.com/patch-id"
+
+	// Job resource requirement annotations — declare the resources consumed by each
+	// job container so the scaler can check cluster capacity before scaling up.
+	// Annotations that are absent are simply not checked.
+	//
+	// Format:
+	//   job-arch:   "arm64" | "amd64"
+	//   job-cpu:    "<quantity>"          e.g. "32"
+	//   job-memory: "<quantity>"          e.g. "128Gi"
+	//   job-npu:    "<resource-name>:<count>"  e.g. "huawei.com/ascend-1980:4"
+	AnnotationKeyJobArch   = "actions.github.com/job-arch"
+	AnnotationKeyJobCPU    = "actions.github.com/job-cpu"
+	AnnotationKeyJobMemory = "actions.github.com/job-memory"
+	AnnotationKeyJobNPU    = "actions.github.com/job-npu"
 )
 
 // Labels applied to listener roles
