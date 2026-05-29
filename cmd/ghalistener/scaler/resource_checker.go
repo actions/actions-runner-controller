@@ -74,6 +74,7 @@ func (c *KubernetesResourceChecker) HasSufficientResources(ctx context.Context, 
 
 	containers := ers.Spec.EphemeralRunnerSpec.Spec.Containers
 	if len(containers) == 0 {
+		c.logger.Info("No containers defined in EphemeralRunnerSet, skipping resource check")
 		return true, nil
 	}
 	// Find the container named "runner"; fall back to the first container for
@@ -86,6 +87,7 @@ func (c *KubernetesResourceChecker) HasSufficientResources(ctx context.Context, 
 		}
 	}
 	if len(runnerContainer.Resources.Requests) == 0 {
+		c.logger.Info("No resource requests defined in runner container, skipping resource check")
 		return true, nil
 	}
 	runnerRequests := runnerContainer.Resources.Requests
@@ -98,12 +100,16 @@ func (c *KubernetesResourceChecker) HasSufficientResources(ctx context.Context, 
 	}
 	targetNodes := filterNodes(nodeList.Items, nodeSelector)
 	targetNodeNames := make(map[string]struct{}, len(targetNodes))
+	nodeNames := make([]string, 0, len(targetNodes))
 	for _, n := range targetNodes {
 		targetNodeNames[n.Name] = struct{}{}
+		nodeNames = append(nodeNames, n.Name)
 	}
+	c.logger.Info("Target nodes for resource check", "count", len(targetNodes), "nodes", nodeNames, "nodeSelector", nodeSelector)
 
 	// Sum allocatable across target nodes
 	clusterAllocatable := sumResourceLists(targetNodes)
+	logResourceMap(c.logger, "Cluster allocatable", clusterAllocatable)
 
 	// Sum used resources (Running/Pending pods bound to target nodes)
 	podList, err := c.clientset.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
@@ -111,17 +117,50 @@ func (c *KubernetesResourceChecker) HasSufficientResources(ctx context.Context, 
 		return false, fmt.Errorf("list pods: %w", err)
 	}
 	usedResources := sumPodRequests(podList.Items, targetNodeNames)
+	logResourceMap(c.logger, "Used resources", usedResources)
 
 	// Decision: check each requested resource
 	available := subtractResources(clusterAllocatable, usedResources)
+	logResourceMap(c.logger, "Available resources", available)
+
+	c.logger.Info("Runner resource requirements", "count", count, "requestsPerRunner", resourceMapToStrings(runnerRequests))
+
 	for resName, req := range runnerRequests {
 		avail := available[resName]
 		needed := multiplyQuantity(req, count)
+		c.logger.Info("Resource check",
+			"resource", resName,
+			"needed", needed.String(),
+			"available", avail.String(),
+			"sufficient", needed.Cmp(avail) <= 0,
+		)
 		if needed.Cmp(avail) > 0 {
+			c.logger.Info("Insufficient resources, rejecting scale-up",
+				"resource", resName,
+				"needed", needed.String(),
+				"available", avail.String(),
+			)
 			return false, nil
 		}
 	}
+	c.logger.Info("Resource check passed, scale-up allowed", "count", count)
 	return true, nil
+}
+
+func logResourceMap(logger *slog.Logger, label string, m map[corev1.ResourceName]resource.Quantity) {
+	args := []any{"label", label}
+	for k, v := range m {
+		args = append(args, string(k), v.String())
+	}
+	logger.Info("Resource summary", args...)
+}
+
+func resourceMapToStrings(m corev1.ResourceList) map[string]string {
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		out[string(k)] = v.String()
+	}
+	return out
 }
 
 func filterNodes(nodes []corev1.Node, selector map[string]string) []corev1.Node {
