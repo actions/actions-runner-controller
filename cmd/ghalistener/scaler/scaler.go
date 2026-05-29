@@ -25,6 +25,12 @@ func WithLogger(logger *slog.Logger) Option {
 	}
 }
 
+func WithResourceChecker(rc ResourceChecker) Option {
+	return func(w *Scaler) {
+		w.resourceChecker = rc
+	}
+}
+
 type Config struct {
 	EphemeralRunnerSetNamespace string
 	EphemeralRunnerSetName      string
@@ -40,8 +46,9 @@ type Scaler struct {
 	targetRunners int
 	patchSeq      int
 	// dirty is set when there are any events handled before the desired count is called.
-	dirty  bool
-	logger *slog.Logger
+	dirty           bool
+	logger          *slog.Logger
+	resourceChecker ResourceChecker
 }
 
 var _ listener.Scaler = (*Scaler)(nil)
@@ -167,6 +174,16 @@ func (w *Scaler) HandleJobCompleted(ctx context.Context, msg *scaleset.JobComple
 // Finally, it logs the scaled ephemeral runner set details and returns nil if successful.
 // If any error occurs during the process, it returns an error with a descriptive message.
 func (w *Scaler) HandleDesiredRunnerCount(ctx context.Context, count int) (int, error) {
+	if w.resourceChecker != nil {
+		ok, err := w.resourceChecker.HasSufficientResources(ctx, count)
+		if err != nil {
+			w.logger.Warn("Resource check failed, proceeding without check", "error", err)
+		} else if !ok {
+			w.logger.Info("Insufficient resources, rejecting all runners", "requestedCount", count)
+			return 0, nil
+		}
+	}
+
 	patchID := w.setDesiredWorkerState(count)
 
 	original, err := json.Marshal(
