@@ -31,12 +31,6 @@ func WithResourceChecker(rc ResourceChecker) Option {
 	}
 }
 
-func WithClientset(cs *kubernetes.Clientset) Option {
-	return func(w *Scaler) {
-		w.clientset = cs
-	}
-}
-
 type Config struct {
 	EphemeralRunnerSetNamespace string
 	EphemeralRunnerSetName      string
@@ -66,22 +60,20 @@ func New(config Config, options ...Option) (*Scaler, error) {
 		patchSeq:      -1,
 	}
 
-	for _, option := range options {
-		option(w)
+	conf, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
 	}
 
-	if w.clientset == nil {
-		conf, err := rest.InClusterConfig()
-		if err != nil {
-			return nil, err
-		}
+	clientset, err := kubernetes.NewForConfig(conf)
+	if err != nil {
+		return nil, err
+	}
 
-		clientset, err := kubernetes.NewForConfig(conf)
-		if err != nil {
-			return nil, err
-		}
+	w.clientset = clientset
 
-		w.clientset = clientset
+	for _, option := range options {
+		option(w)
 	}
 
 	if err := w.applyDefaults(); err != nil {

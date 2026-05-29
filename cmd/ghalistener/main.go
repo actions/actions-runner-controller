@@ -138,7 +138,6 @@ func run(ctx context.Context, config *config.Config) error {
 			MaxRunners:                  config.MaxRunners,
 			MinRunners:                  config.MinRunners,
 		},
-		scaler.WithClientset(k8sClient),
 		scaler.WithLogger(logger.With("component", "worker")),
 		scaler.WithResourceChecker(resourceChecker),
 	)
