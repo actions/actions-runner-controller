@@ -389,22 +389,24 @@ func (ars *AutoscalingRunnerSet) VaultProxy() *ProxyConfig {
 
 func (ars *AutoscalingRunnerSet) RunnerSetSpecHash() string {
 	type runnerSetSpec struct {
-		GitHubConfigUrl    string
-		GitHubConfigSecret string
-		RunnerGroup        string
-		RunnerScaleSetName string
-		Proxy              *ProxyConfig
-		GitHubServerTLS    *TLSConfig
-		Template           corev1.PodTemplateSpec
+		GitHubConfigUrl            string
+		GitHubConfigSecret         string
+		RunnerGroup                string
+		RunnerScaleSetName         string
+		Proxy                      *ProxyConfig
+		GitHubServerTLS            *TLSConfig
+		Template                   corev1.PodTemplateSpec
+		EphemeralRunnerSetMetadata *ResourceMeta
 	}
 	spec := &runnerSetSpec{
-		GitHubConfigUrl:    ars.Spec.GitHubConfigUrl,
-		GitHubConfigSecret: ars.Spec.GitHubConfigSecret,
-		RunnerGroup:        ars.Spec.RunnerGroup,
-		RunnerScaleSetName: ars.Spec.RunnerScaleSetName,
-		Proxy:              ars.Spec.Proxy,
-		GitHubServerTLS:    ars.Spec.GitHubServerTLS,
-		Template:           ars.Spec.Template,
+		GitHubConfigUrl:            ars.Spec.GitHubConfigUrl,
+		GitHubConfigSecret:         ars.Spec.GitHubConfigSecret,
+		RunnerGroup:                ars.Spec.RunnerGroup,
+		RunnerScaleSetName:         ars.Spec.RunnerScaleSetName,
+		Proxy:                      ars.Spec.Proxy,
+		GitHubServerTLS:            ars.Spec.GitHubServerTLS,
+		Template:                   ars.Spec.Template,
+		EphemeralRunnerSetMetadata: ars.Spec.EphemeralRunnerSetMetadata,
 	}
 	return hash.ComputeTemplateHash(&spec)
 }
