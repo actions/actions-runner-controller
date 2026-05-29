@@ -799,7 +799,7 @@ func rulesForListenerRole(resourceNames []string) []rbacv1.PolicyRule {
 			APIGroups:     []string{"actions.github.com"},
 			Resources:     []string{"ephemeralrunnersets"},
 			ResourceNames: resourceNames,
-			Verbs:         []string{"patch"},
+			Verbs:         []string{"get", "patch"},
 		},
 		{
 			APIGroups: []string{"actions.github.com"},
