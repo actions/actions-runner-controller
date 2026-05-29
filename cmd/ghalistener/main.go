@@ -15,8 +15,6 @@ import (
 	"github.com/actions/scaleset/listener"
 	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 )
 
 func main() {
@@ -116,21 +114,6 @@ func run(ctx context.Context, config *config.Config) error {
 		return fmt.Errorf("failed to create new listener: %w", err)
 	}
 
-	k8sConf, err := rest.InClusterConfig()
-	if err != nil {
-		return fmt.Errorf("failed to get in-cluster config: %w", err)
-	}
-	k8sClient, err := kubernetes.NewForConfig(k8sConf)
-	if err != nil {
-		return fmt.Errorf("failed to create kubernetes client: %w", err)
-	}
-	resourceChecker := scaler.NewKubernetesResourceChecker(
-		k8sClient,
-		config.EphemeralRunnerSetNamespace,
-		config.EphemeralRunnerSetName,
-		logger.With("component", "resource-checker"),
-	)
-
 	scaler, err := scaler.New(
 		scaler.Config{
 			EphemeralRunnerSetNamespace: config.EphemeralRunnerSetNamespace,
@@ -139,7 +122,6 @@ func run(ctx context.Context, config *config.Config) error {
 			MinRunners:                  config.MinRunners,
 		},
 		scaler.WithLogger(logger.With("component", "worker")),
-		scaler.WithResourceChecker(resourceChecker),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create new kubernetes worker: %w", err)

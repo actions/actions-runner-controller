@@ -80,6 +80,15 @@ func New(config Config, options ...Option) (*Scaler, error) {
 		return nil, err
 	}
 
+	if w.resourceChecker == nil {
+		w.resourceChecker = NewKubernetesResourceChecker(
+			clientset,
+			config.EphemeralRunnerSetNamespace,
+			config.EphemeralRunnerSetName,
+			w.logger.With("component", "resource-checker"),
+		)
+	}
+
 	return w, nil
 }
 
