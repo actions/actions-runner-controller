@@ -118,11 +118,6 @@ func (c *KubernetesResourceChecker) HasSufficientResources(ctx context.Context, 
 		avail := available[resName]
 		needed := multiplyQuantity(req, count)
 		if needed.Cmp(avail) > 0 {
-			c.logger.Info("Insufficient resources, rejecting scale-up",
-				"resource", resName,
-				"requested", needed.String(),
-				"available", avail.String(),
-			)
 			return false, nil
 		}
 	}

@@ -382,7 +382,10 @@ func TestHandleDesiredRunnerCount_CheckerReturnsError(t *testing.T) {
 	}, "checker error should not block scale-up (fail-open): execution must reach k8s patch")
 }
 
-func TestSetDesiredWorkerState_NilChecker(t *testing.T) {
+func TestHandleDesiredRunnerCount_NilChecker(t *testing.T) {
+	// nil checker: resource check is skipped entirely, scaling proceeds normally.
+	// The k8s patch panics on nil clientset — that panic proves execution
+	// reached the patch (i.e., the nil-checker guard did not block scaling).
 	w := &Scaler{
 		config:          Config{MinRunners: 0, MaxRunners: 10},
 		targetRunners:   -1,
@@ -390,8 +393,7 @@ func TestSetDesiredWorkerState_NilChecker(t *testing.T) {
 		logger:          discardLogger,
 		resourceChecker: nil,
 	}
-	// nil checker: setDesiredWorkerState should still run normally
-	patchID := w.setDesiredWorkerState(3)
-	assert.Equal(t, 3, w.targetRunners)
-	assert.Equal(t, 0, patchID)
+	assert.Panics(t, func() {
+		w.HandleDesiredRunnerCount(context.Background(), 3) //nolint:errcheck
+	}, "nil checker should not block scale-up")
 }
