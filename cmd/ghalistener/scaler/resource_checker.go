@@ -73,10 +73,22 @@ func (c *KubernetesResourceChecker) HasSufficientResources(ctx context.Context, 
 	}
 
 	containers := ers.Spec.EphemeralRunnerSpec.Spec.Containers
-	if len(containers) == 0 || len(containers[0].Resources.Requests) == 0 {
+	if len(containers) == 0 {
 		return true, nil
 	}
-	runnerRequests := containers[0].Resources.Requests
+	// Find the container named "runner"; fall back to the first container for
+	// backward compatibility with specs that omit the standard name.
+	runnerContainer := &containers[0]
+	for i := range containers {
+		if containers[i].Name == v1alpha1.EphemeralRunnerContainerName {
+			runnerContainer = &containers[i]
+			break
+		}
+	}
+	if len(runnerContainer.Resources.Requests) == 0 {
+		return true, nil
+	}
+	runnerRequests := runnerContainer.Resources.Requests
 	nodeSelector := ers.Spec.EphemeralRunnerSpec.Spec.NodeSelector
 
 	// Filter target nodes
@@ -93,7 +105,7 @@ func (c *KubernetesResourceChecker) HasSufficientResources(ctx context.Context, 
 	// Sum allocatable across target nodes
 	clusterAllocatable := sumResourceLists(targetNodes)
 
-	// Sum used resources (Running/Pending pods on target nodes + unbound Pending)
+	// Sum used resources (Running/Pending pods bound to target nodes)
 	podList, err := c.clientset.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return false, fmt.Errorf("list pods: %w", err)
@@ -160,9 +172,15 @@ func sumPodRequests(pods []corev1.Pod, targetNodes map[string]struct{}) map[core
 		if pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodPending {
 			continue
 		}
+		// Only count pods bound to a target node. Unbound Pending pods are
+		// excluded because we cannot reliably determine which node pool they
+		// will land on; counting them cluster-wide would produce false
+		// negatives for runners targeting a specific pool. This is a
+		// deliberately conservative choice: we may allow scheduling when an
+		// unbound pod will eventually consume target resources, but we avoid
+		// blocking scale-up due to pods destined for other pools.
 		_, onTarget := targetNodes[pod.Spec.NodeName]
-		isUnbound := pod.Spec.NodeName == ""
-		if !onTarget && !isUnbound {
+		if !onTarget {
 			continue
 		}
 		for _, c := range pod.Spec.Containers {
@@ -191,9 +209,7 @@ func subtractResources(
 }
 
 func multiplyQuantity(q resource.Quantity, n int) resource.Quantity {
-	result := resource.NewMilliQuantity(0, q.Format)
-	for i := 0; i < n; i++ {
-		result.Add(q)
-	}
-	return *result
+	result := q.DeepCopy()
+	result.Mul(int64(n))
+	return result
 }
