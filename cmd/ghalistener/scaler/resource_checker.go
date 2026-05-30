@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"strconv"
 	"strings"
 
@@ -20,9 +21,10 @@ import (
 
 // ResourceChecker decides whether the cluster has enough resources to run count runners.
 type ResourceChecker interface {
-	// AdjustCount returns the number of runners that can actually be scheduled,
-	// which may be less than count when resources are constrained (partial allocation).
-	AdjustCount(ctx context.Context, count int) (int, error)
+	// AdjustCount returns:
+	//   adjusted  - how many runners to actually create (min of requested and feasible)
+	//   capacity  - true cluster capacity regardless of current demand (for reporting to GitHub)
+	AdjustCount(ctx context.Context, count int) (adjusted int, capacity int, err error)
 }
 
 // ersGetter abstracts fetching an EphemeralRunnerSet so tests can inject a fake.
@@ -137,29 +139,28 @@ func jobArchNodeSelector(annotations map[string]string) map[string]string {
 // the EphemeralRunnerSet are checked; absent labels are skipped. Errors are
 // returned so the caller can fail-open.
 func (c *KubernetesResourceChecker) HasSufficientResources(ctx context.Context, count int) (bool, error) {
-	n, err := c.AdjustCount(ctx, count)
+	n, _, err := c.AdjustCount(ctx, count)
 	if err != nil {
 		return false, err
 	}
 	return n >= count, nil
 }
 
-// AdjustCount returns the maximum number of runners (up to count) that can be
-// scheduled given current cluster resources. When resources are constrained it
-// returns a smaller number rather than rejecting all runners (partial allocation).
-func (c *KubernetesResourceChecker) AdjustCount(ctx context.Context, count int) (int, error) {
+// AdjustCount returns adjusted (runners to create, capped by demand) and
+// capacity (true cluster capacity, for reporting to GitHub via maxRunners).
+func (c *KubernetesResourceChecker) AdjustCount(ctx context.Context, count int) (int, int, error) {
 	ers, err := c.ersGetter(ctx, c.ephemeralRunnerSetNS, c.ephemeralRunnerSetName)
 	if err != nil {
-		return 0, fmt.Errorf("fetch EphemeralRunnerSet: %w", err)
+		return 0, 0, fmt.Errorf("fetch EphemeralRunnerSet: %w", err)
 	}
 
 	jobRequests, err := jobResourceRequirements(ers.Annotations)
 	if err != nil {
-		return 0, fmt.Errorf("parse job resource annotations: %w", err)
+		return 0, 0, fmt.Errorf("parse job resource annotations: %w", err)
 	}
 	if len(jobRequests) == 0 {
 		c.logger.Info("No job resource annotations defined on EphemeralRunnerSet, skipping resource check")
-		return count, nil
+		return count, count, nil
 	}
 
 	// Merge nodeSelector from ERS spec with optional arch annotation.
@@ -173,9 +174,9 @@ func (c *KubernetesResourceChecker) AdjustCount(ctx context.Context, count int) 
 	if err != nil {
 		if kerrors.IsForbidden(err) {
 			c.logger.Warn("Insufficient RBAC permissions to list nodes, skipping resource check — apply arc-controller-clusterrole.yaml to enable it")
-			return count, nil
+			return count, count, nil
 		}
-		return 0, fmt.Errorf("list nodes: %w", err)
+		return 0, 0, fmt.Errorf("list nodes: %w", err)
 	}
 	targetNodes := filterNodes(nodeList.Items, nodeSelector)
 	targetNodeNames := make(map[string]struct{}, len(targetNodes))
@@ -195,9 +196,9 @@ func (c *KubernetesResourceChecker) AdjustCount(ctx context.Context, count int) 
 	if err != nil {
 		if kerrors.IsForbidden(err) {
 			c.logger.Warn("Insufficient RBAC permissions to list pods, skipping resource check — apply arc-controller-clusterrole.yaml to enable it")
-			return count, nil
+			return count, count, nil
 		}
-		return 0, fmt.Errorf("list pods: %w", err)
+		return 0, 0, fmt.Errorf("list pods: %w", err)
 	}
 	usedResources := sumPodRequests(podList.Items, targetNodeNames)
 	logResourceMap(c.logger, "Used resources", usedResources)
@@ -213,8 +214,9 @@ func (c *KubernetesResourceChecker) AdjustCount(ctx context.Context, count int) 
 
 	c.logger.Info("Job resource requirements per runner", "count", count, "requestsPerRunner", resourceMapToStrings(jobRequests))
 
-	// For each resource, compute total feasible = running + floor(available/perRunner).
-	adjusted := count
+	// capacity = true cluster capacity (not capped by demand), for reporting to GitHub.
+	// adjusted = min(count, capacity), for deciding how many runners to create.
+	capacity := math.MaxInt
 	for resName, req := range jobRequests {
 		avail := available[resName]
 		feasibleAdditional := divideQuantity(avail, req)
@@ -228,17 +230,18 @@ func (c *KubernetesResourceChecker) AdjustCount(ctx context.Context, count int) 
 			"totalFeasible", totalFeasible,
 			"requested", count,
 		)
-		if totalFeasible < adjusted {
-			adjusted = totalFeasible
+		if totalFeasible < capacity {
+			capacity = totalFeasible
 		}
 	}
 
+	adjusted := min(count, capacity)
 	if adjusted < count {
-		c.logger.Info("Partial allocation due to resource constraints", "requested", count, "adjusted", adjusted)
+		c.logger.Info("Partial allocation due to resource constraints", "requested", count, "adjusted", adjusted, "capacity", capacity)
 	} else {
-		c.logger.Info("Resource check passed, scale-up allowed", "count", count)
+		c.logger.Info("Resource check passed, scale-up allowed", "count", count, "capacity", capacity)
 	}
-	return adjusted, nil
+	return adjusted, capacity, nil
 }
 
 func logResourceMap(logger *slog.Logger, label string, m map[corev1.ResourceName]resource.Quantity) {

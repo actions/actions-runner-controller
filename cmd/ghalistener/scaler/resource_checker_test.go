@@ -373,7 +373,7 @@ func TestAdjustCount_PartialAllocation(t *testing.T) {
 		ephemeralRunnerSetName: testRSName, logger: discardLogger,
 		ersGetter: fakeERSGetter(ers),
 	}
-	n, err := checker.AdjustCount(context.Background(), 4)
+	n, _, err := checker.AdjustCount(context.Background(), 4)
 	require.NoError(t, err)
 	assert.Equal(t, 3, n) // floor(7/2) = 3
 }
@@ -392,7 +392,7 @@ func TestAdjustCount_FullAllocation(t *testing.T) {
 		ephemeralRunnerSetName: testRSName, logger: discardLogger,
 		ersGetter: fakeERSGetter(ers),
 	}
-	n, err := checker.AdjustCount(context.Background(), 4)
+	n, _, err := checker.AdjustCount(context.Background(), 4)
 	require.NoError(t, err)
 	assert.Equal(t, 4, n)
 }
@@ -411,7 +411,7 @@ func TestAdjustCount_ZeroWhenNoResources(t *testing.T) {
 		ephemeralRunnerSetName: testRSName, logger: discardLogger,
 		ersGetter: fakeERSGetter(ers),
 	}
-	n, err := checker.AdjustCount(context.Background(), 4)
+	n, _, err := checker.AdjustCount(context.Background(), 4)
 	require.NoError(t, err)
 	assert.Equal(t, 0, n)
 }
@@ -432,7 +432,7 @@ func TestAdjustCount_BottleneckResourceLimits(t *testing.T) {
 		ephemeralRunnerSetName: testRSName, logger: discardLogger,
 		ersGetter: fakeERSGetter(ers),
 	}
-	n, err := checker.AdjustCount(context.Background(), 10)
+	n, _, err := checker.AdjustCount(context.Background(), 10)
 	require.NoError(t, err)
 	assert.Equal(t, 3, n) // min(8, floor(7/2)=3) = 3
 }
@@ -446,7 +446,7 @@ func TestAdjustCount_NoAnnotations_ReturnsRequestedCount(t *testing.T) {
 		ephemeralRunnerSetName: testRSName, logger: discardLogger,
 		ersGetter: fakeERSGetter(ers),
 	}
-	n, err := checker.AdjustCount(context.Background(), 5)
+	n, _, err := checker.AdjustCount(context.Background(), 5)
 	require.NoError(t, err)
 	assert.Equal(t, 5, n)
 }
@@ -460,7 +460,7 @@ func TestAdjustCount_ERSFetchError(t *testing.T) {
 			return nil, fmt.Errorf("not found")
 		},
 	}
-	_, err := checker.AdjustCount(context.Background(), 1)
+	_, _, err := checker.AdjustCount(context.Background(), 1)
 	assert.Error(t, err)
 }
 
@@ -491,7 +491,7 @@ func TestAdjustCount_RunningRunnersCountedTowardTotal(t *testing.T) {
 		ersGetter: fakeERSGetter(ers),
 	}
 	// GitHub says 4 jobs assigned (2 running + 2 queued)
-	n, err := checker.AdjustCount(context.Background(), 4)
+	n, _, err := checker.AdjustCount(context.Background(), 4)
 	require.NoError(t, err)
 	assert.Equal(t, 4, n) // 2 running + floor((8-4)/2)=2 additional = 4
 }
@@ -520,7 +520,7 @@ func TestAdjustCount_RunningRunnersPartialAdditional(t *testing.T) {
 		ephemeralRunnerSetName: testRSName, logger: discardLogger,
 		ersGetter: fakeERSGetter(ers),
 	}
-	n, err := checker.AdjustCount(context.Background(), 4)
+	n, _, err := checker.AdjustCount(context.Background(), 4)
 	require.NoError(t, err)
 	assert.Equal(t, 3, n) // 2 running + floor(3/2)=1 additional = 3
 }

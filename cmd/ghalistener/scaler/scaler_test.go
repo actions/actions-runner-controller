@@ -342,11 +342,11 @@ type mockResourceChecker struct {
 	err      error
 }
 
-func (m *mockResourceChecker) AdjustCount(_ context.Context, count int) (int, error) {
+func (m *mockResourceChecker) AdjustCount(_ context.Context, count int) (int, int, error) {
 	if m.err != nil {
-		return 0, m.err
+		return 0, 0, m.err
 	}
-	return m.adjusted, nil
+	return m.adjusted, m.adjusted, nil
 }
 
 func TestHandleDesiredRunnerCount_CheckerReturnsFalse(t *testing.T) {

@@ -122,6 +122,7 @@ func run(ctx context.Context, config *config.Config) error {
 			MinRunners:                  config.MinRunners,
 		},
 		scaler.WithLogger(logger.With("component", "worker")),
+		scaler.WithSetMaxRunners(listener.SetMaxRunners),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create new kubernetes worker: %w", err)

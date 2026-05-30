@@ -31,6 +31,12 @@ func WithResourceChecker(rc ResourceChecker) Option {
 	}
 }
 
+func WithSetMaxRunners(fn func(int)) Option {
+	return func(w *Scaler) {
+		w.setMaxRunners = fn
+	}
+}
+
 type Config struct {
 	EphemeralRunnerSetNamespace string
 	EphemeralRunnerSetName      string
@@ -49,6 +55,7 @@ type Scaler struct {
 	dirty           bool
 	logger          *slog.Logger
 	resourceChecker ResourceChecker
+	setMaxRunners   func(int)
 }
 
 var _ listener.Scaler = (*Scaler)(nil)
@@ -184,7 +191,7 @@ func (w *Scaler) HandleJobCompleted(ctx context.Context, msg *scaleset.JobComple
 // If any error occurs during the process, it returns an error with a descriptive message.
 func (w *Scaler) HandleDesiredRunnerCount(ctx context.Context, count int) (int, error) {
 	if w.resourceChecker != nil {
-		adjusted, err := w.resourceChecker.AdjustCount(ctx, count)
+		adjusted, capacity, err := w.resourceChecker.AdjustCount(ctx, count)
 		if err != nil {
 			w.logger.Warn("Resource check failed, proceeding without check", "error", err)
 		} else {
@@ -192,6 +199,9 @@ func (w *Scaler) HandleDesiredRunnerCount(ctx context.Context, count int) (int, 
 				w.logger.Info("Partial allocation due to resource constraints", "requestedCount", count, "adjustedCount", adjusted)
 			}
 			count = adjusted
+			if w.setMaxRunners != nil {
+				w.setMaxRunners(capacity)
+			}
 			if count == 0 {
 				w.logger.Info("No resources available, rejecting all runners")
 				return 0, nil
