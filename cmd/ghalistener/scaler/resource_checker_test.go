@@ -195,6 +195,7 @@ func TestAdjustCount_RunningRunnersCountedTowardTotal(t *testing.T) {
 	ers := buildEphemeralRunnerSet(map[string]string{
 		arcconst.AnnotationKeyJobNPU: "huawei.com/npu:2",
 	}, nil)
+	ers.Status.CurrentReplicas = 2
 	node := buildNode("node1", corev1.ResourceList{
 		corev1.ResourceName("huawei.com/npu"): resource.MustParse("8"),
 	}, nil)
@@ -226,6 +227,7 @@ func TestAdjustCount_RunningRunnersPartialAdditional(t *testing.T) {
 	ers := buildEphemeralRunnerSet(map[string]string{
 		arcconst.AnnotationKeyJobNPU: "huawei.com/npu:2",
 	}, nil)
+	ers.Status.CurrentReplicas = 2
 	node := buildNode("node1", corev1.ResourceList{
 		corev1.ResourceName("huawei.com/npu"): resource.MustParse("7"),
 	}, nil)

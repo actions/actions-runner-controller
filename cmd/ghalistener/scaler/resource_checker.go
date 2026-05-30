@@ -152,10 +152,6 @@ func (c *KubernetesResourceChecker) AdjustCount(ctx context.Context) (int, error
 		return math.MaxInt, nil
 	}
 
-	// scaleSetName identifies pods belonging to this specific runner set.
-	// Other runner types in the same namespace must not be counted as "our" runners.
-	scaleSetName := ers.Labels[arcconst.LabelKeyGitHubScaleSetName]
-
 	nodeSelector := mergeSelectors(
 		ers.Spec.EphemeralRunnerSpec.Spec.NodeSelector,
 		jobArchNodeSelector(ers.Annotations),
@@ -202,26 +198,22 @@ func (c *KubernetesResourceChecker) AdjustCount(ctx context.Context) (int, error
 	currentRunnerCount := ers.Status.CurrentReplicas
 	c.logger.Info("Current runner pods on target nodes", "count", currentRunnerCount)
 
-	runnerResourceUsage := sumRunnerPodRequests(podList.Items, targetNodeNames, c.ephemeralRunnerSetNS, scaleSetName)
-
 	c.logger.Info("Job resource requirements per runner", "requestsPerRunner", resourceMapToStrings(jobRequests))
 
 	capacity := math.MaxInt
 	for resName, req := range jobRequests {
 		avail := available[resName]
 		feasibleAdditional := divideQuantity(avail, req)
-		// Use per-resource runner count: only runners that actually request this
-		// resource count toward the base. Using the total runner pod count would
-		// overstate capacity for resources not requested by every runner (e.g. GPUs).
-		runnerUsage := runnerResourceUsage[resName]
-		runnersUsingResource := divideQuantity(runnerUsage, req)
-		totalFeasible := runnersUsingResource + feasibleAdditional
+		// currentRunnerCount (from ERS status) is the authoritative count of runners
+		// of this specific type. Each runner consumes exactly req of this resource,
+		// and available already has their usage subtracted, so adding currentRunnerCount
+		// back gives the true total feasible count.
+		totalFeasible := currentRunnerCount + feasibleAdditional
 		c.logger.Info("Resource check",
 			"resource", resName,
 			"available", avail.String(),
 			"perRunner", req.String(),
 			"currentRunners", currentRunnerCount,
-			"runnersUsingResource", runnersUsingResource,
 			"feasibleAdditional", feasibleAdditional,
 			"totalFeasible", totalFeasible,
 		)
@@ -278,36 +270,6 @@ func sumPodRequests(pods []corev1.Pod, targetNodes map[string]struct{}) map[core
 		// deliberately conservative choice: we may allow scheduling when an
 		// unbound pod will eventually consume target resources, but we avoid
 		// blocking scale-up due to pods destined for other pools.
-		_, onTarget := targetNodes[pod.Spec.NodeName]
-		if !onTarget {
-			continue
-		}
-		for _, c := range pod.Spec.Containers {
-			for res, qty := range c.Resources.Requests {
-				sum := total[res].DeepCopy()
-				sum.Add(qty)
-				total[res] = sum
-			}
-		}
-	}
-	return total
-}
-
-func sumRunnerPodRequests(pods []corev1.Pod, targetNodes map[string]struct{}, runnerNamespace, scaleSetName string) map[corev1.ResourceName]resource.Quantity {
-	total := make(map[corev1.ResourceName]resource.Quantity)
-	for _, pod := range pods {
-		if pod.Namespace != runnerNamespace {
-			continue
-		}
-		if scaleSetName != "" && pod.Labels[arcconst.LabelKeyGitHubScaleSetName] != scaleSetName {
-			continue
-		}
-		if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
-			continue
-		}
-		if pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodPending {
-			continue
-		}
 		_, onTarget := targetNodes[pod.Spec.NodeName]
 		if !onTarget {
 			continue
