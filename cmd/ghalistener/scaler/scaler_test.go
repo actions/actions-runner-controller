@@ -338,12 +338,15 @@ func TestSetDesiredWorkerState_MinMaxSet(t *testing.T) {
 
 // mockResourceChecker implements ResourceChecker for testing.
 type mockResourceChecker struct {
-	sufficient bool
-	err        error
+	adjusted int
+	err      error
 }
 
-func (m *mockResourceChecker) HasSufficientResources(_ context.Context, _ int) (bool, error) {
-	return m.sufficient, m.err
+func (m *mockResourceChecker) AdjustCount(_ context.Context, count int) (int, error) {
+	if m.err != nil {
+		return 0, m.err
+	}
+	return m.adjusted, nil
 }
 
 func TestHandleDesiredRunnerCount_CheckerReturnsFalse(t *testing.T) {
@@ -352,7 +355,7 @@ func TestHandleDesiredRunnerCount_CheckerReturnsFalse(t *testing.T) {
 		targetRunners:   -1,
 		patchSeq:        -1,
 		logger:          discardLogger,
-		resourceChecker: &mockResourceChecker{sufficient: false},
+		resourceChecker: &mockResourceChecker{adjusted: 0},
 	}
 	result, err := w.HandleDesiredRunnerCount(context.Background(), 5)
 	require.NoError(t, err)
@@ -370,8 +373,7 @@ func TestHandleDesiredRunnerCount_CheckerReturnsError(t *testing.T) {
 		patchSeq:      -1,
 		logger:        discardLogger,
 		resourceChecker: &mockResourceChecker{
-			sufficient: false,
-			err:        errors.New("api error"),
+			err: errors.New("api error"),
 		},
 	}
 	// fail-open: checker error must not cause a (0, nil) early return.

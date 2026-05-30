@@ -20,7 +20,9 @@ import (
 
 // ResourceChecker decides whether the cluster has enough resources to run count runners.
 type ResourceChecker interface {
-	HasSufficientResources(ctx context.Context, count int) (bool, error)
+	// AdjustCount returns the number of runners that can actually be scheduled,
+	// which may be less than count when resources are constrained (partial allocation).
+	AdjustCount(ctx context.Context, count int) (int, error)
 }
 
 // ersGetter abstracts fetching an EphemeralRunnerSet so tests can inject a fake.
@@ -135,18 +137,29 @@ func jobArchNodeSelector(annotations map[string]string) map[string]string {
 // the EphemeralRunnerSet are checked; absent labels are skipped. Errors are
 // returned so the caller can fail-open.
 func (c *KubernetesResourceChecker) HasSufficientResources(ctx context.Context, count int) (bool, error) {
+	n, err := c.AdjustCount(ctx, count)
+	if err != nil {
+		return false, err
+	}
+	return n >= count, nil
+}
+
+// AdjustCount returns the maximum number of runners (up to count) that can be
+// scheduled given current cluster resources. When resources are constrained it
+// returns a smaller number rather than rejecting all runners (partial allocation).
+func (c *KubernetesResourceChecker) AdjustCount(ctx context.Context, count int) (int, error) {
 	ers, err := c.ersGetter(ctx, c.ephemeralRunnerSetNS, c.ephemeralRunnerSetName)
 	if err != nil {
-		return false, fmt.Errorf("fetch EphemeralRunnerSet: %w", err)
+		return 0, fmt.Errorf("fetch EphemeralRunnerSet: %w", err)
 	}
 
 	jobRequests, err := jobResourceRequirements(ers.Annotations)
 	if err != nil {
-		return false, fmt.Errorf("parse job resource annotations: %w", err)
+		return 0, fmt.Errorf("parse job resource annotations: %w", err)
 	}
 	if len(jobRequests) == 0 {
 		c.logger.Info("No job resource annotations defined on EphemeralRunnerSet, skipping resource check")
-		return true, nil
+		return count, nil
 	}
 
 	// Merge nodeSelector from ERS spec with optional arch annotation.
@@ -160,9 +173,9 @@ func (c *KubernetesResourceChecker) HasSufficientResources(ctx context.Context, 
 	if err != nil {
 		if kerrors.IsForbidden(err) {
 			c.logger.Warn("Insufficient RBAC permissions to list nodes, skipping resource check — apply arc-controller-clusterrole.yaml to enable it")
-			return true, nil
+			return count, nil
 		}
-		return false, fmt.Errorf("list nodes: %w", err)
+		return 0, fmt.Errorf("list nodes: %w", err)
 	}
 	targetNodes := filterNodes(nodeList.Items, nodeSelector)
 	targetNodeNames := make(map[string]struct{}, len(targetNodes))
@@ -182,9 +195,9 @@ func (c *KubernetesResourceChecker) HasSufficientResources(ctx context.Context, 
 	if err != nil {
 		if kerrors.IsForbidden(err) {
 			c.logger.Warn("Insufficient RBAC permissions to list pods, skipping resource check — apply arc-controller-clusterrole.yaml to enable it")
-			return true, nil
+			return count, nil
 		}
-		return false, fmt.Errorf("list pods: %w", err)
+		return 0, fmt.Errorf("list pods: %w", err)
 	}
 	usedResources := sumPodRequests(podList.Items, targetNodeNames)
 	logResourceMap(c.logger, "Used resources", usedResources)
@@ -192,28 +205,40 @@ func (c *KubernetesResourceChecker) HasSufficientResources(ctx context.Context, 
 	available := subtractResources(clusterAllocatable, usedResources)
 	logResourceMap(c.logger, "Available resources", available)
 
+	// Count runner pods already running/pending on target nodes.
+	// These are already subtracted from available, so we must add them back
+	// to get the correct total feasible count (running + additional).
+	currentRunnerCount := countRunnerPods(podList.Items, targetNodeNames, c.ephemeralRunnerSetNS)
+	c.logger.Info("Current runner pods on target nodes", "count", currentRunnerCount)
+
 	c.logger.Info("Job resource requirements per runner", "count", count, "requestsPerRunner", resourceMapToStrings(jobRequests))
 
+	// For each resource, compute total feasible = running + floor(available/perRunner).
+	adjusted := count
 	for resName, req := range jobRequests {
 		avail := available[resName]
-		needed := multiplyQuantity(req, count)
+		feasibleAdditional := divideQuantity(avail, req)
+		totalFeasible := currentRunnerCount + feasibleAdditional
 		c.logger.Info("Resource check",
 			"resource", resName,
-			"needed", needed.String(),
 			"available", avail.String(),
-			"sufficient", needed.Cmp(avail) <= 0,
+			"perRunner", req.String(),
+			"currentRunners", currentRunnerCount,
+			"feasibleAdditional", feasibleAdditional,
+			"totalFeasible", totalFeasible,
+			"requested", count,
 		)
-		if needed.Cmp(avail) > 0 {
-			c.logger.Info("Insufficient resources, rejecting scale-up",
-				"resource", resName,
-				"needed", needed.String(),
-				"available", avail.String(),
-			)
-			return false, nil
+		if totalFeasible < adjusted {
+			adjusted = totalFeasible
 		}
 	}
-	c.logger.Info("Resource check passed, scale-up allowed", "count", count)
-	return true, nil
+
+	if adjusted < count {
+		c.logger.Info("Partial allocation due to resource constraints", "requested", count, "adjusted", adjusted)
+	} else {
+		c.logger.Info("Resource check passed, scale-up allowed", "count", count)
+	}
+	return adjusted, nil
 }
 
 func logResourceMap(logger *slog.Logger, label string, m map[corev1.ResourceName]resource.Quantity) {
@@ -317,8 +342,46 @@ func multiplyQuantity(q resource.Quantity, n int) resource.Quantity {
 	return result
 }
 
+// divideQuantity returns floor(a / b). Returns 0 if b is zero or a is negative.
+func divideQuantity(a, b resource.Quantity) int {
+	bVal := b.Value()
+	if bVal <= 0 {
+		return 0
+	}
+	aVal := a.Value()
+	if aVal <= 0 {
+		return 0
+	}
+	return int(aVal / bVal)
+}
+
 // mergeSelectors returns a new map that is the union of a and b.
 // Keys in b override keys in a on conflict.
+// countRunnerPods counts Running/Pending pods in the runner namespace that are
+// bound to target nodes. These pods represent currently active runners whose
+// resources are already subtracted from available, so they must be added back
+// when computing total feasible runner count.
+func countRunnerPods(pods []corev1.Pod, targetNodes map[string]struct{}, runnerNamespace string) int {
+	count := 0
+	for _, pod := range pods {
+		if pod.Namespace != runnerNamespace {
+			continue
+		}
+		if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
+			continue
+		}
+		if pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodPending {
+			continue
+		}
+		_, onTarget := targetNodes[pod.Spec.NodeName]
+		if !onTarget {
+			continue
+		}
+		count++
+	}
+	return count
+}
+
 func mergeSelectors(a, b map[string]string) map[string]string {
 	if len(a) == 0 && len(b) == 0 {
 		return nil

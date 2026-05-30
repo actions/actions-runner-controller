@@ -184,12 +184,18 @@ func (w *Scaler) HandleJobCompleted(ctx context.Context, msg *scaleset.JobComple
 // If any error occurs during the process, it returns an error with a descriptive message.
 func (w *Scaler) HandleDesiredRunnerCount(ctx context.Context, count int) (int, error) {
 	if w.resourceChecker != nil {
-		ok, err := w.resourceChecker.HasSufficientResources(ctx, count)
+		adjusted, err := w.resourceChecker.AdjustCount(ctx, count)
 		if err != nil {
 			w.logger.Warn("Resource check failed, proceeding without check", "error", err)
-		} else if !ok {
-			w.logger.Info("Insufficient resources, rejecting all runners", "requestedCount", count)
-			return 0, nil
+		} else {
+			if adjusted < count {
+				w.logger.Info("Partial allocation due to resource constraints", "requestedCount", count, "adjustedCount", adjusted)
+			}
+			count = adjusted
+			if count == 0 {
+				w.logger.Info("No resources available, rejecting all runners")
+				return 0, nil
+			}
 		}
 	}
 
