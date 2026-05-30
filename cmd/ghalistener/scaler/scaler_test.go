@@ -342,7 +342,7 @@ type mockResourceChecker struct {
 	err      error
 }
 
-func (m *mockResourceChecker) AdjustCount(_ context.Context, count int) (int, error) {
+func (m *mockResourceChecker) AdjustCount(_ context.Context) (int, error) {
 	if m.err != nil {
 		return 0, m.err
 	}

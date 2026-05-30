@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
@@ -23,7 +24,7 @@ import (
 type ResourceChecker interface {
 	// AdjustCount returns the true cluster capacity (running + additional feasible runners),
 	// used to dynamically update maxRunners reported to GitHub.
-	AdjustCount(ctx context.Context, count int) (capacity int, err error)
+	AdjustCount(ctx context.Context) (capacity int, err error)
 }
 
 // ersGetter abstracts fetching an EphemeralRunnerSet so tests can inject a fake.
@@ -136,7 +137,7 @@ func jobArchNodeSelector(annotations map[string]string) map[string]string {
 // AdjustCount returns the true cluster capacity: currently running runners plus
 // however many more can be scheduled given available resources. This value is
 // used to update maxRunners reported to GitHub so it reflects real capacity.
-func (c *KubernetesResourceChecker) AdjustCount(ctx context.Context, count int) (int, error) {
+func (c *KubernetesResourceChecker) AdjustCount(ctx context.Context) (int, error) {
 	ers, err := c.ersGetter(ctx, c.ephemeralRunnerSetNS, c.ephemeralRunnerSetName)
 	if err != nil {
 		return 0, fmt.Errorf("fetch EphemeralRunnerSet: %w", err)
@@ -148,23 +149,31 @@ func (c *KubernetesResourceChecker) AdjustCount(ctx context.Context, count int) 
 	}
 	if len(jobRequests) == 0 {
 		c.logger.Info("No job resource annotations defined on EphemeralRunnerSet, skipping resource check")
-		return count, nil
+		return math.MaxInt, nil
 	}
+
+	// scaleSetName identifies pods belonging to this specific runner set.
+	// Other runner types in the same namespace must not be counted as "our" runners.
+	scaleSetName := ers.Labels[arcconst.LabelKeyGitHubScaleSetName]
 
 	nodeSelector := mergeSelectors(
 		ers.Spec.EphemeralRunnerSpec.Spec.NodeSelector,
 		jobArchNodeSelector(ers.Annotations),
 	)
 
-	nodeList, err := c.clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	nodeListOpts := metav1.ListOptions{}
+	if len(nodeSelector) > 0 {
+		nodeListOpts.LabelSelector = labels.Set(nodeSelector).String()
+	}
+	nodeList, err := c.clientset.CoreV1().Nodes().List(ctx, nodeListOpts)
 	if err != nil {
 		if kerrors.IsForbidden(err) {
 			c.logger.Warn("Insufficient RBAC permissions to list nodes, skipping resource check — apply arc-controller-clusterrole.yaml to enable it")
-			return count, nil
+			return math.MaxInt, nil
 		}
 		return 0, fmt.Errorf("list nodes: %w", err)
 	}
-	targetNodes := filterNodes(nodeList.Items, nodeSelector)
+	targetNodes := nodeList.Items
 	targetNodeNames := make(map[string]struct{}, len(targetNodes))
 	nodeNames := make([]string, 0, len(targetNodes))
 	for _, n := range targetNodes {
@@ -180,7 +189,7 @@ func (c *KubernetesResourceChecker) AdjustCount(ctx context.Context, count int) 
 	if err != nil {
 		if kerrors.IsForbidden(err) {
 			c.logger.Warn("Insufficient RBAC permissions to list pods, skipping resource check — apply arc-controller-clusterrole.yaml to enable it")
-			return count, nil
+			return math.MaxInt, nil
 		}
 		return 0, fmt.Errorf("list pods: %w", err)
 	}
@@ -190,31 +199,38 @@ func (c *KubernetesResourceChecker) AdjustCount(ctx context.Context, count int) 
 	available := subtractResources(clusterAllocatable, usedResources)
 	logResourceMap(c.logger, "Available resources", available)
 
-	currentRunnerCount := countRunnerPods(podList.Items, targetNodeNames, c.ephemeralRunnerSetNS)
+	currentRunnerCount := ers.Status.CurrentReplicas
 	c.logger.Info("Current runner pods on target nodes", "count", currentRunnerCount)
 
-	c.logger.Info("Job resource requirements per runner", "count", count, "requestsPerRunner", resourceMapToStrings(jobRequests))
+	runnerResourceUsage := sumRunnerPodRequests(podList.Items, targetNodeNames, c.ephemeralRunnerSetNS, scaleSetName)
+
+	c.logger.Info("Job resource requirements per runner", "requestsPerRunner", resourceMapToStrings(jobRequests))
 
 	capacity := math.MaxInt
 	for resName, req := range jobRequests {
 		avail := available[resName]
 		feasibleAdditional := divideQuantity(avail, req)
-		totalFeasible := currentRunnerCount + feasibleAdditional
+		// Use per-resource runner count: only runners that actually request this
+		// resource count toward the base. Using the total runner pod count would
+		// overstate capacity for resources not requested by every runner (e.g. GPUs).
+		runnerUsage := runnerResourceUsage[resName]
+		runnersUsingResource := divideQuantity(runnerUsage, req)
+		totalFeasible := runnersUsingResource + feasibleAdditional
 		c.logger.Info("Resource check",
 			"resource", resName,
 			"available", avail.String(),
 			"perRunner", req.String(),
 			"currentRunners", currentRunnerCount,
+			"runnersUsingResource", runnersUsingResource,
 			"feasibleAdditional", feasibleAdditional,
 			"totalFeasible", totalFeasible,
-			"requested", count,
 		)
 		if totalFeasible < capacity {
 			capacity = totalFeasible
 		}
 	}
 
-	c.logger.Info("Capacity calculated", "capacity", capacity, "requested", count)
+	c.logger.Info("Capacity calculated", "capacity", capacity)
 	return capacity, nil
 }
 
@@ -232,28 +248,6 @@ func resourceMapToStrings(m corev1.ResourceList) map[string]string {
 		out[string(k)] = v.String()
 	}
 	return out
-}
-
-func filterNodes(nodes []corev1.Node, selector map[string]string) []corev1.Node {
-	if len(selector) == 0 {
-		return nodes
-	}
-	var result []corev1.Node
-	for _, n := range nodes {
-		if labelsMatch(n.Labels, selector) {
-			result = append(result, n)
-		}
-	}
-	return result
-}
-
-func labelsMatch(nodeLabels, selector map[string]string) bool {
-	for k, v := range selector {
-		if nodeLabels[k] != v {
-			return false
-		}
-	}
-	return true
 }
 
 func sumResourceLists(nodes []corev1.Node) map[corev1.ResourceName]resource.Quantity {
@@ -299,6 +293,36 @@ func sumPodRequests(pods []corev1.Pod, targetNodes map[string]struct{}) map[core
 	return total
 }
 
+func sumRunnerPodRequests(pods []corev1.Pod, targetNodes map[string]struct{}, runnerNamespace, scaleSetName string) map[corev1.ResourceName]resource.Quantity {
+	total := make(map[corev1.ResourceName]resource.Quantity)
+	for _, pod := range pods {
+		if pod.Namespace != runnerNamespace {
+			continue
+		}
+		if scaleSetName != "" && pod.Labels[arcconst.LabelKeyGitHubScaleSetName] != scaleSetName {
+			continue
+		}
+		if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
+			continue
+		}
+		if pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodPending {
+			continue
+		}
+		_, onTarget := targetNodes[pod.Spec.NodeName]
+		if !onTarget {
+			continue
+		}
+		for _, c := range pod.Spec.Containers {
+			for res, qty := range c.Resources.Requests {
+				sum := total[res].DeepCopy()
+				sum.Add(qty)
+				total[res] = sum
+			}
+		}
+	}
+	return total
+}
+
 func subtractResources(
 	allocatable, used map[corev1.ResourceName]resource.Quantity,
 ) map[corev1.ResourceName]resource.Quantity {
@@ -328,31 +352,6 @@ func divideQuantity(a, b resource.Quantity) int {
 
 // mergeSelectors returns a new map that is the union of a and b.
 // Keys in b override keys in a on conflict.
-// countRunnerPods counts Running/Pending pods in the runner namespace that are
-// bound to target nodes. These pods represent currently active runners whose
-// resources are already subtracted from available, so they must be added back
-// when computing total feasible runner count.
-func countRunnerPods(pods []corev1.Pod, targetNodes map[string]struct{}, runnerNamespace string) int {
-	count := 0
-	for _, pod := range pods {
-		if pod.Namespace != runnerNamespace {
-			continue
-		}
-		if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
-			continue
-		}
-		if pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodPending {
-			continue
-		}
-		_, onTarget := targetNodes[pod.Spec.NodeName]
-		if !onTarget {
-			continue
-		}
-		count++
-	}
-	return count
-}
-
 func mergeSelectors(a, b map[string]string) map[string]string {
 	if len(a) == 0 && len(b) == 0 {
 		return nil

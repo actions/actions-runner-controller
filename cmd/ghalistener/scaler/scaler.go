@@ -63,7 +63,7 @@ var _ listener.Scaler = (*Scaler)(nil)
 
 func New(config Config, options ...Option) (*Scaler, error) {
 	w := &Scaler{
-		config:        config,
+		config:             config,
 		targetRunners:      -1,
 		patchSeq:           -1,
 		originalMaxRunners: config.MaxRunners,
@@ -193,7 +193,8 @@ func (w *Scaler) HandleJobCompleted(ctx context.Context, msg *scaleset.JobComple
 // If any error occurs during the process, it returns an error with a descriptive message.
 func (w *Scaler) HandleDesiredRunnerCount(ctx context.Context, count int) (int, error) {
 	if w.resourceChecker != nil {
-		capacity, err := w.resourceChecker.AdjustCount(ctx, count)
+		w.logger.Info("Handling desired runner count", "count", count)
+		capacity, err := w.resourceChecker.AdjustCount(ctx)
 		if err != nil {
 			w.logger.Warn("Resource check failed, proceeding without check", "error", err)
 		} else {
