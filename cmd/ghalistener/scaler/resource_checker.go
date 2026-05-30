@@ -21,10 +21,9 @@ import (
 
 // ResourceChecker decides whether the cluster has enough resources to run count runners.
 type ResourceChecker interface {
-	// AdjustCount returns:
-	//   adjusted  - how many runners to actually create (min of requested and feasible)
-	//   capacity  - true cluster capacity regardless of current demand (for reporting to GitHub)
-	AdjustCount(ctx context.Context, count int) (adjusted int, capacity int, err error)
+	// AdjustCount returns the true cluster capacity (running + additional feasible runners),
+	// used to dynamically update maxRunners reported to GitHub.
+	AdjustCount(ctx context.Context, count int) (capacity int, err error)
 }
 
 // ersGetter abstracts fetching an EphemeralRunnerSet so tests can inject a fake.
@@ -134,49 +133,36 @@ func jobArchNodeSelector(annotations map[string]string) map[string]string {
 	return map[string]string{"kubernetes.io/arch": arch}
 }
 
-// HasSufficientResources returns true if the cluster has enough resources to
-// schedule count additional runners. Only resource types declared via labels on
-// the EphemeralRunnerSet are checked; absent labels are skipped. Errors are
-// returned so the caller can fail-open.
-func (c *KubernetesResourceChecker) HasSufficientResources(ctx context.Context, count int) (bool, error) {
-	n, _, err := c.AdjustCount(ctx, count)
-	if err != nil {
-		return false, err
-	}
-	return n >= count, nil
-}
-
-// AdjustCount returns adjusted (runners to create, capped by demand) and
-// capacity (true cluster capacity, for reporting to GitHub via maxRunners).
-func (c *KubernetesResourceChecker) AdjustCount(ctx context.Context, count int) (int, int, error) {
+// AdjustCount returns the true cluster capacity: currently running runners plus
+// however many more can be scheduled given available resources. This value is
+// used to update maxRunners reported to GitHub so it reflects real capacity.
+func (c *KubernetesResourceChecker) AdjustCount(ctx context.Context, count int) (int, error) {
 	ers, err := c.ersGetter(ctx, c.ephemeralRunnerSetNS, c.ephemeralRunnerSetName)
 	if err != nil {
-		return 0, 0, fmt.Errorf("fetch EphemeralRunnerSet: %w", err)
+		return 0, fmt.Errorf("fetch EphemeralRunnerSet: %w", err)
 	}
 
 	jobRequests, err := jobResourceRequirements(ers.Annotations)
 	if err != nil {
-		return 0, 0, fmt.Errorf("parse job resource annotations: %w", err)
+		return 0, fmt.Errorf("parse job resource annotations: %w", err)
 	}
 	if len(jobRequests) == 0 {
 		c.logger.Info("No job resource annotations defined on EphemeralRunnerSet, skipping resource check")
-		return count, count, nil
+		return count, nil
 	}
 
-	// Merge nodeSelector from ERS spec with optional arch annotation.
 	nodeSelector := mergeSelectors(
 		ers.Spec.EphemeralRunnerSpec.Spec.NodeSelector,
 		jobArchNodeSelector(ers.Annotations),
 	)
 
-	// Filter target nodes
 	nodeList, err := c.clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		if kerrors.IsForbidden(err) {
 			c.logger.Warn("Insufficient RBAC permissions to list nodes, skipping resource check — apply arc-controller-clusterrole.yaml to enable it")
-			return count, count, nil
+			return count, nil
 		}
-		return 0, 0, fmt.Errorf("list nodes: %w", err)
+		return 0, fmt.Errorf("list nodes: %w", err)
 	}
 	targetNodes := filterNodes(nodeList.Items, nodeSelector)
 	targetNodeNames := make(map[string]struct{}, len(targetNodes))
@@ -187,18 +173,16 @@ func (c *KubernetesResourceChecker) AdjustCount(ctx context.Context, count int) 
 	}
 	c.logger.Info("Target nodes for resource check", "count", len(targetNodes), "nodes", nodeNames, "nodeSelector", nodeSelector)
 
-	// Sum allocatable across target nodes
 	clusterAllocatable := sumResourceLists(targetNodes)
 	logResourceMap(c.logger, "Cluster allocatable", clusterAllocatable)
 
-	// Sum used resources (Running/Pending pods bound to target nodes)
 	podList, err := c.clientset.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
 	if err != nil {
 		if kerrors.IsForbidden(err) {
 			c.logger.Warn("Insufficient RBAC permissions to list pods, skipping resource check — apply arc-controller-clusterrole.yaml to enable it")
-			return count, count, nil
+			return count, nil
 		}
-		return 0, 0, fmt.Errorf("list pods: %w", err)
+		return 0, fmt.Errorf("list pods: %w", err)
 	}
 	usedResources := sumPodRequests(podList.Items, targetNodeNames)
 	logResourceMap(c.logger, "Used resources", usedResources)
@@ -206,16 +190,11 @@ func (c *KubernetesResourceChecker) AdjustCount(ctx context.Context, count int) 
 	available := subtractResources(clusterAllocatable, usedResources)
 	logResourceMap(c.logger, "Available resources", available)
 
-	// Count runner pods already running/pending on target nodes.
-	// These are already subtracted from available, so we must add them back
-	// to get the correct total feasible count (running + additional).
 	currentRunnerCount := countRunnerPods(podList.Items, targetNodeNames, c.ephemeralRunnerSetNS)
 	c.logger.Info("Current runner pods on target nodes", "count", currentRunnerCount)
 
 	c.logger.Info("Job resource requirements per runner", "count", count, "requestsPerRunner", resourceMapToStrings(jobRequests))
 
-	// capacity = true cluster capacity (not capped by demand), for reporting to GitHub.
-	// adjusted = min(count, capacity), for deciding how many runners to create.
 	capacity := math.MaxInt
 	for resName, req := range jobRequests {
 		avail := available[resName]
@@ -235,13 +214,8 @@ func (c *KubernetesResourceChecker) AdjustCount(ctx context.Context, count int) 
 		}
 	}
 
-	adjusted := min(count, capacity)
-	if adjusted < count {
-		c.logger.Info("Partial allocation due to resource constraints", "requested", count, "adjusted", adjusted, "capacity", capacity)
-	} else {
-		c.logger.Info("Resource check passed, scale-up allowed", "count", count, "capacity", capacity)
-	}
-	return adjusted, capacity, nil
+	c.logger.Info("Capacity calculated", "capacity", capacity, "requested", count)
+	return capacity, nil
 }
 
 func logResourceMap(logger *slog.Logger, label string, m map[corev1.ResourceName]resource.Quantity) {
@@ -336,12 +310,6 @@ func subtractResources(
 		}
 		result[res] = avail
 	}
-	return result
-}
-
-func multiplyQuantity(q resource.Quantity, n int) resource.Quantity {
-	result := q.DeepCopy()
-	result.Mul(int64(n))
 	return result
 }
 

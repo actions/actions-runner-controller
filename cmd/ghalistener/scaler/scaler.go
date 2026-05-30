@@ -52,10 +52,11 @@ type Scaler struct {
 	targetRunners int
 	patchSeq      int
 	// dirty is set when there are any events handled before the desired count is called.
-	dirty           bool
-	logger          *slog.Logger
-	resourceChecker ResourceChecker
-	setMaxRunners   func(int)
+	dirty              bool
+	logger             *slog.Logger
+	resourceChecker    ResourceChecker
+	setMaxRunners      func(int)
+	originalMaxRunners int // preserves the configured upper bound
 }
 
 var _ listener.Scaler = (*Scaler)(nil)
@@ -63,8 +64,9 @@ var _ listener.Scaler = (*Scaler)(nil)
 func New(config Config, options ...Option) (*Scaler, error) {
 	w := &Scaler{
 		config:        config,
-		targetRunners: -1,
-		patchSeq:      -1,
+		targetRunners:      -1,
+		patchSeq:           -1,
+		originalMaxRunners: config.MaxRunners,
 	}
 
 	conf, err := rest.InClusterConfig()
@@ -191,18 +193,16 @@ func (w *Scaler) HandleJobCompleted(ctx context.Context, msg *scaleset.JobComple
 // If any error occurs during the process, it returns an error with a descriptive message.
 func (w *Scaler) HandleDesiredRunnerCount(ctx context.Context, count int) (int, error) {
 	if w.resourceChecker != nil {
-		adjusted, capacity, err := w.resourceChecker.AdjustCount(ctx, count)
+		capacity, err := w.resourceChecker.AdjustCount(ctx, count)
 		if err != nil {
 			w.logger.Warn("Resource check failed, proceeding without check", "error", err)
 		} else {
-			if adjusted < count {
-				w.logger.Info("Partial allocation due to resource constraints", "requestedCount", count, "adjustedCount", adjusted)
-			}
-			count = adjusted
+			effectiveMax := min(capacity, w.originalMaxRunners)
+			w.config.MaxRunners = effectiveMax
 			if w.setMaxRunners != nil {
-				w.setMaxRunners(capacity)
+				w.setMaxRunners(effectiveMax)
 			}
-			if count == 0 {
+			if effectiveMax == 0 {
 				w.logger.Info("No resources available, rejecting all runners")
 				return 0, nil
 			}
