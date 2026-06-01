@@ -157,7 +157,11 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 	}
 
 	if specModified {
-		desiredServiceAccount := r.newScaleSetListenerServiceAccount(autoscalingListener)
+		desiredServiceAccount, err := r.newScaleSetListenerServiceAccount(autoscalingListener)
+		if err != nil {
+			log.Error(err, "Failed to build desired listener service account")
+			return ctrl.Result{}, err
+		}
 		if !maps.Equal(serviceAccount.Labels, desiredServiceAccount.Labels) || !maps.Equal(serviceAccount.Annotations, desiredServiceAccount.Annotations) {
 			original := serviceAccount.DeepCopy()
 			if err := r.Patch(ctx, desiredServiceAccount, client.MergeFrom(original)); err != nil {
@@ -549,9 +553,8 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 }
 
 func (r *AutoscalingListenerReconciler) createServiceAccountForListener(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) (ctrl.Result, error) {
-	newServiceAccount := r.newScaleSetListenerServiceAccount(autoscalingListener)
-
-	if err := ctrl.SetControllerReference(autoscalingListener, newServiceAccount, r.Scheme); err != nil {
+	newServiceAccount, err := r.newScaleSetListenerServiceAccount(autoscalingListener)
+	if err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -575,10 +578,6 @@ func (r *AutoscalingListenerReconciler) reconcileListenerConfigSecret(ctx contex
 	err = r.Get(ctx, types.NamespacedName{Name: desiredSecret.Name, Namespace: desiredSecret.Namespace}, existingSecret)
 	if err != nil {
 		if kerrors.IsNotFound(err) {
-			if err := ctrl.SetControllerReference(autoscalingListener, desiredSecret, r.Scheme); err != nil {
-				return false, fmt.Errorf("failed to set controller reference: %w", err)
-			}
-
 			logger.Info("Creating listener config secret", "namespace", desiredSecret.Namespace, "name", desiredSecret.Name)
 			if err := r.Create(ctx, desiredSecret); err != nil {
 				return false, fmt.Errorf("failed to create listener config secret: %w", err)
@@ -681,11 +680,6 @@ func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, a
 			return ctrl.Result{}, err
 		}
 
-		if err := ctrl.SetControllerReference(autoscalingListener, podConfig, r.Scheme); err != nil {
-			logger.Error(err, "Failed to set controller reference")
-			return ctrl.Result{}, err
-		}
-
 		if err := r.Create(ctx, podConfig); err != nil {
 			logger.Error(err, "Unable to create listener config secret", "namespace", podConfig.Namespace, "name", podConfig.Name)
 			return ctrl.Result{}, err
@@ -697,11 +691,6 @@ func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, a
 	newPod, err := r.newScaleSetListenerPod(autoscalingListener, &podConfig, serviceAccount, metricsConfig, envs...)
 	if err != nil {
 		logger.Error(err, "Failed to build listener pod")
-		return ctrl.Result{}, err
-	}
-
-	if err := ctrl.SetControllerReference(autoscalingListener, newPod, r.Scheme); err != nil {
-		logger.Error(err, "Failed to set controller reference")
 		return ctrl.Result{}, err
 	}
 
@@ -769,9 +758,6 @@ func (r *AutoscalingListenerReconciler) createProxySecret(ctx context.Context, a
 	newProxySecret, err := r.newAutoscalingListenerProxySecret(autoscalingListener, data)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to build listener proxy secret: %w", err)
-	}
-	if err := ctrl.SetControllerReference(autoscalingListener, newProxySecret, r.Scheme); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to set controller reference for listener proxy secret: %w", err)
 	}
 
 	logger.Info("Creating listener proxy secret", "namespace", newProxySecret.Namespace, "name", newProxySecret.Name)
@@ -888,6 +874,8 @@ func listenerConfigSecretDrifted(existing *corev1.Secret, desired *corev1.Secret
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *AutoscalingListenerReconciler) SetupWithManager(mgr ctrl.Manager, opts ...Option) error {
+	r.ResourceBuilder.setSchemeIfUnset(r.Scheme)
+
 	labelBasedWatchFunc := func(_ context.Context, obj client.Object) []reconcile.Request {
 		var requests []reconcile.Request
 		labels := obj.GetLabels()

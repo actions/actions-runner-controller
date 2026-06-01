@@ -32,7 +32,6 @@ import (
 	"go.uber.org/multierr"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -433,16 +432,14 @@ func (r *EphemeralRunnerSetReconciler) createEphemeralRunners(ctx context.Contex
 	// Track multiple errors at once and return the bundle.
 	errs := make([]error, 0)
 	for i := range count {
-		ephemeralRunner := r.newEphemeralRunner(runnerSet)
-		if runnerSet.Spec.EphemeralRunnerSpec.Proxy != nil {
-			ephemeralRunner.Spec.ProxySecretRef = proxyEphemeralRunnerSetSecretName(runnerSet)
-		}
-
-		// Make sure that we own the resource we create.
-		if err := ctrl.SetControllerReference(runnerSet, ephemeralRunner, r.Scheme); err != nil {
-			log.Error(err, "failed to set controller reference on ephemeral runner")
+		ephemeralRunner, err := r.newEphemeralRunner(runnerSet)
+		if err != nil {
+			log.Error(err, "failed to build ephemeral runner")
 			errs = append(errs, err)
 			continue
+		}
+		if runnerSet.Spec.EphemeralRunnerSpec.Proxy != nil {
+			ephemeralRunner.Spec.ProxySecretRef = proxyEphemeralRunnerSetSecretName(runnerSet)
 		}
 
 		log.Info("Creating new ephemeral runner", "progress", i+1, "total", count)
@@ -468,21 +465,9 @@ func (r *EphemeralRunnerSetReconciler) createProxySecret(ctx context.Context, ep
 		return fmt.Errorf("failed to convert proxy config to secret data: %w", err)
 	}
 
-	runnerPodProxySecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet),
-			Namespace: ephemeralRunnerSet.Namespace,
-			Labels: map[string]string{
-				LabelKeyGitHubScaleSetName:      ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName],
-				LabelKeyGitHubScaleSetNamespace: ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace],
-			},
-		},
-		Data: proxySecretData,
-	}
-
-	// Make sure that we own the resource we create.
-	if err := ctrl.SetControllerReference(ephemeralRunnerSet, runnerPodProxySecret, r.Scheme); err != nil {
-		log.Error(err, "failed to set controller reference on proxy secret")
+	runnerPodProxySecret, err := r.newEphemeralRunnerSetProxySecret(ephemeralRunnerSet, proxySecretData)
+	if err != nil {
+		log.Error(err, "failed to build proxy secret")
 		return err
 	}
 
@@ -575,6 +560,8 @@ func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunnerWithActionsClient(ct
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *EphemeralRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager, opts ...Option) error {
+	r.ResourceBuilder.setSchemeIfUnset(r.Scheme)
+
 	return builderWithOptions(
 		ctrl.NewControllerManagedBy(mgr).
 			For(&v1alpha1.EphemeralRunnerSet{}).

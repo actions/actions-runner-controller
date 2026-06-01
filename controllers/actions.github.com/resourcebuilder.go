@@ -26,6 +26,8 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // secret constants
@@ -89,6 +91,23 @@ type ResourceBuilder struct {
 	ExcludeLabelPropagationPrefixes []string
 	SecretResolver
 	Scheme *runtime.Scheme
+}
+
+func (b *ResourceBuilder) setSchemeIfUnset(scheme *runtime.Scheme) {
+	if b.Scheme == nil {
+		b.Scheme = scheme
+	}
+}
+
+func (b *ResourceBuilder) setControllerReference(owner client.Object, object client.Object) error {
+	if b.Scheme == nil {
+		b.Scheme = runtime.NewScheme()
+		if err := v1alpha1.AddToScheme(b.Scheme); err != nil {
+			return err
+		}
+	}
+
+	return ctrl.SetControllerReference(owner, object, b.Scheme)
 }
 
 func (b *ResourceBuilder) newAutoscalingListener(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, namespace, image string, imagePullSecrets []corev1.LocalObjectReference) (*v1alpha1.AutoscalingListener, error) {
@@ -242,7 +261,7 @@ func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha
 		annotations = autoscalingListener.Spec.ConfigSecretMetadata.Annotations
 	}
 
-	return &corev1.Secret{
+	desiredSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        scaleSetListenerConfigName(autoscalingListener),
 			Namespace:   autoscalingListener.Namespace,
@@ -252,7 +271,12 @@ func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha
 		Data: map[string][]byte{
 			"config.json": buf.Bytes(),
 		},
-	}, nil
+	}
+	if err := b.setControllerReference(autoscalingListener, desiredSecret); err != nil {
+		return nil, fmt.Errorf("failed to set controller reference for listener config secret: %w", err)
+	}
+
+	return desiredSecret, nil
 }
 
 func (b *ResourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.AutoscalingListener, podConfig *corev1.Secret, serviceAccount *corev1.ServiceAccount, metricsConfig *listenerMetricsServerConfig, envs ...corev1.EnvVar) (*corev1.Pod, error) {
@@ -324,18 +348,11 @@ func (b *ResourceBuilder) newScaleSetListenerPod(autoscalingListener *v1alpha1.A
 			Name:      autoscalingListener.Name,
 			Namespace: autoscalingListener.Namespace,
 			Labels:    labels,
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion:         v1alpha1.GroupVersion.String(),
-					Kind:               "AutoscalingListener",
-					UID:                autoscalingListener.GetUID(),
-					Name:               autoscalingListener.GetName(),
-					Controller:         new(true),
-					BlockOwnerDeletion: new(true),
-				},
-			},
 		},
 		Spec: podSpec,
+	}
+	if err := b.setControllerReference(autoscalingListener, newRunnerScaleSetListenerPod); err != nil {
+		return nil, fmt.Errorf("failed to set controller reference for listener pod: %w", err)
 	}
 
 	if autoscalingListener.Spec.Template != nil {
@@ -462,7 +479,7 @@ func mergeListenerContainer(base, from *corev1.Container) {
 	base.TTY = from.TTY
 }
 
-func (b *ResourceBuilder) newScaleSetListenerServiceAccount(autoscalingListener *v1alpha1.AutoscalingListener) *corev1.ServiceAccount {
+func (b *ResourceBuilder) newScaleSetListenerServiceAccount(autoscalingListener *v1alpha1.AutoscalingListener) (*corev1.ServiceAccount, error) {
 	base := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      autoscalingListener.Name,
@@ -478,8 +495,11 @@ func (b *ResourceBuilder) newScaleSetListenerServiceAccount(autoscalingListener 
 		base.Labels = b.filterAndMergeLabels(autoscalingListener.Spec.ServiceAccountMetadata.Labels, base.Labels)
 		base.Annotations = b.mergeAnnotations(autoscalingListener.Spec.ServiceAccountMetadata.Annotations, base.Annotations)
 	}
+	if err := b.setControllerReference(autoscalingListener, base); err != nil {
+		return nil, fmt.Errorf("failed to set controller reference for listener service account: %w", err)
+	}
 
-	return base
+	return base, nil
 }
 
 func (b *ResourceBuilder) newScaleSetListenerRole(autoscalingListener *v1alpha1.AutoscalingListener) *rbacv1.Role {
@@ -610,18 +630,11 @@ func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 			Namespace:   autoscalingRunnerSet.Namespace,
 			Labels:      labels,
 			Annotations: annotations,
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion:         v1alpha1.GroupVersion.String(),
-					Kind:               "AutoscalingRunnerSet",
-					UID:                autoscalingRunnerSet.GetUID(),
-					Name:               autoscalingRunnerSet.GetName(),
-					Controller:         new(true),
-					BlockOwnerDeletion: new(true),
-				},
-			},
 		},
 		Spec: spec,
+	}
+	if err := b.setControllerReference(autoscalingRunnerSet, newEphemeralRunnerSet); err != nil {
+		return nil, fmt.Errorf("failed to set controller reference for ephemeral runner set: %w", err)
 	}
 
 	return newEphemeralRunnerSet, nil
@@ -639,11 +652,14 @@ func (b *ResourceBuilder) newAutoscalingListenerProxySecret(autoscalingListener 
 		},
 		Data: data,
 	}
+	if err := b.setControllerReference(autoscalingListener, newProxySecret); err != nil {
+		return nil, fmt.Errorf("failed to set controller reference for listener proxy secret: %w", err)
+	}
 
 	return newProxySecret, nil
 }
 
-func (b *ResourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet) *v1alpha1.EphemeralRunner {
+func (b *ResourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet) (*v1alpha1.EphemeralRunner, error) {
 	labels := make(map[string]string, len(ephemeralRunnerSet.Labels))
 	maps.Copy(labels, ephemeralRunnerSet.Labels)
 	labels[LabelKeyKubernetesComponent] = "runner"
@@ -657,7 +673,7 @@ func (b *ResourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.Epheme
 		annotations = b.mergeAnnotations(ephemeralRunnerSet.Spec.EphemeralRunnerMetadata.Annotations, annotations)
 	}
 
-	return &v1alpha1.EphemeralRunner{
+	ephemeralRunner := &v1alpha1.EphemeralRunner{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: ephemeralRunnerSet.Name + "-runner-",
 			Namespace:    ephemeralRunnerSet.Namespace,
@@ -667,22 +683,17 @@ func (b *ResourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.Epheme
 				ephemeralRunnerFinalizerName,
 				ephemeralRunnerActionsFinalizerName,
 			},
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion:         v1alpha1.GroupVersion.String(),
-					Kind:               "EphemeralRunnerSet",
-					UID:                ephemeralRunnerSet.GetUID(),
-					Name:               ephemeralRunnerSet.GetName(),
-					Controller:         new(true),
-					BlockOwnerDeletion: new(true),
-				},
-			},
 		},
 		Spec: ephemeralRunnerSet.Spec.EphemeralRunnerSpec,
 	}
+	if err := b.setControllerReference(ephemeralRunnerSet, ephemeralRunner); err != nil {
+		return nil, fmt.Errorf("failed to set controller reference for ephemeral runner: %w", err)
+	}
+
+	return ephemeralRunner, nil
 }
 
-func (b *ResourceBuilder) newEphemeralRunnerPod(runner *v1alpha1.EphemeralRunner, secret *corev1.Secret, envs ...corev1.EnvVar) *corev1.Pod {
+func (b *ResourceBuilder) newEphemeralRunnerPod(runner *v1alpha1.EphemeralRunner, secret *corev1.Secret, envs ...corev1.EnvVar) (*corev1.Pod, error) {
 	var newPod corev1.Pod
 
 	annotations := make(map[string]string, len(runner.Annotations)+len(runner.Spec.Annotations))
@@ -705,16 +716,6 @@ func (b *ResourceBuilder) newEphemeralRunnerPod(runner *v1alpha1.EphemeralRunner
 		Namespace:   runner.Namespace,
 		Labels:      labels,
 		Annotations: annotations,
-		OwnerReferences: []metav1.OwnerReference{
-			{
-				APIVersion:         v1alpha1.GroupVersion.String(),
-				Kind:               "EphemeralRunner",
-				UID:                runner.GetUID(),
-				Name:               runner.GetName(),
-				Controller:         new(true),
-				BlockOwnerDeletion: new(true),
-			},
-		},
 	}
 
 	newPod.ObjectMeta = objectMeta
@@ -751,10 +752,14 @@ func (b *ResourceBuilder) newEphemeralRunnerPod(runner *v1alpha1.EphemeralRunner
 		newPod.Spec.Containers = append(newPod.Spec.Containers, c)
 	}
 
-	return &newPod
+	if err := b.setControllerReference(runner, &newPod); err != nil {
+		return nil, fmt.Errorf("failed to set controller reference for ephemeral runner pod: %w", err)
+	}
+
+	return &newPod, nil
 }
 
-func (b *ResourceBuilder) newEphemeralRunnerJitSecret(ephemeralRunner *v1alpha1.EphemeralRunner, jitConfig *scaleset.RunnerScaleSetJitRunnerConfig) *corev1.Secret {
+func (b *ResourceBuilder) newEphemeralRunnerJitSecret(ephemeralRunner *v1alpha1.EphemeralRunner, jitConfig *scaleset.RunnerScaleSetJitRunnerConfig) (*corev1.Secret, error) {
 	var (
 		labels      map[string]string
 		annotations map[string]string
@@ -765,7 +770,7 @@ func (b *ResourceBuilder) newEphemeralRunnerJitSecret(ephemeralRunner *v1alpha1.
 		annotations = ephemeralRunner.Spec.EphemeralRunnerConfigSecretMetadata.Annotations
 	}
 
-	return &corev1.Secret{
+	jitSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        ephemeralRunner.Name,
 			Namespace:   ephemeralRunner.Namespace,
@@ -779,6 +784,30 @@ func (b *ResourceBuilder) newEphemeralRunnerJitSecret(ephemeralRunner *v1alpha1.
 			"scaleSetId": []byte(strconv.Itoa(jitConfig.Runner.RunnerScaleSetID)),
 		},
 	}
+	if err := b.setControllerReference(ephemeralRunner, jitSecret); err != nil {
+		return nil, fmt.Errorf("failed to set controller reference for ephemeral runner jit secret: %w", err)
+	}
+
+	return jitSecret, nil
+}
+
+func (b *ResourceBuilder) newEphemeralRunnerSetProxySecret(ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, data map[string][]byte) (*corev1.Secret, error) {
+	runnerPodProxySecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet),
+			Namespace: ephemeralRunnerSet.Namespace,
+			Labels: map[string]string{
+				LabelKeyGitHubScaleSetName:      ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName],
+				LabelKeyGitHubScaleSetNamespace: ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace],
+			},
+		},
+		Data: data,
+	}
+	if err := b.setControllerReference(ephemeralRunnerSet, runnerPodProxySecret); err != nil {
+		return nil, fmt.Errorf("failed to set controller reference for ephemeral runner set proxy secret: %w", err)
+	}
+
+	return runnerPodProxySecret, nil
 }
 
 func scaleSetListenerConfigName(autoscalingListener *v1alpha1.AutoscalingListener) string {

@@ -145,7 +145,8 @@ func TestMetadataPropagation(t *testing.T) {
 	assert.NotContains(t, listener.Labels, "directly.excluded.org/label")
 	assert.Equal(t, "not-excluded-value", listener.Labels["directly.excluded.org/arbitrary"])
 
-	listenerServiceAccount := b.newScaleSetListenerServiceAccount(listener)
+	listenerServiceAccount, err := b.newScaleSetListenerServiceAccount(listener)
+	require.NoError(t, err)
 	assert.Equal(t, "listener-service-account-label", listenerServiceAccount.Labels["test.com/listener-service-account-label"])
 	assert.Equal(t, "listener-service-account-annotation", listenerServiceAccount.Annotations["test.com/listener-service-account-annotation"])
 
@@ -161,7 +162,7 @@ func TestMetadataPropagation(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, listenerPod.Labels, listener.Labels)
 
-	ephemeralRunner := b.newEphemeralRunner(ephemeralRunnerSet)
+	ephemeralRunner, err := b.newEphemeralRunner(ephemeralRunnerSet)
 	require.NoError(t, err)
 
 	for _, key := range commonLabelKeys {
@@ -176,7 +177,7 @@ func TestMetadataPropagation(t *testing.T) {
 	assert.Equal(t, "ephemeral-runner-label", ephemeralRunner.Labels["test.com/ephemeral-runner-label"])
 	assert.Equal(t, "ephemeral-runner-annotation", ephemeralRunner.Annotations["test.com/ephemeral-runner-annotation"])
 
-	runnerSecret := b.newEphemeralRunnerJitSecret(ephemeralRunner, &scaleset.RunnerScaleSetJitRunnerConfig{
+	runnerSecret, err := b.newEphemeralRunnerJitSecret(ephemeralRunner, &scaleset.RunnerScaleSetJitRunnerConfig{
 		Runner: &scaleset.RunnerReference{
 			ID:               1,
 			Name:             "test",
@@ -184,10 +185,12 @@ func TestMetadataPropagation(t *testing.T) {
 		},
 		EncodedJITConfig: "",
 	})
+	require.NoError(t, err)
 	assert.Equal(t, "ephemeral-runner-config-secret-label", runnerSecret.Labels["test.com/ephemeral-runner-config-secret-label"])
 	assert.Equal(t, "ephemeral-runner-config-secret-annotation", runnerSecret.Annotations["test.com/ephemeral-runner-config-secret-annotation"])
 
-	pod := b.newEphemeralRunnerPod(ephemeralRunner, runnerSecret)
+	pod, err := b.newEphemeralRunnerPod(ephemeralRunner, runnerSecret)
+	require.NoError(t, err)
 	for key := range ephemeralRunner.Labels {
 		assert.Equal(t, ephemeralRunner.Labels[key], pod.Labels[key])
 	}
@@ -321,7 +324,8 @@ func TestOwnershipRelationships(t *testing.T) {
 	assert.Equal(t, true, *ownerRef.BlockOwnerDeletion, "BlockOwnerDeletion flag should be true")
 
 	// Create EphemeralRunner
-	ephemeralRunner := b.newEphemeralRunner(ephemeralRunnerSet)
+	ephemeralRunner, err := b.newEphemeralRunner(ephemeralRunnerSet)
+	require.NoError(t, err)
 
 	// Test EphemeralRunner ownership
 	require.Len(t, ephemeralRunner.OwnerReferences, 1, "EphemeralRunner should have exactly one owner reference")
@@ -339,7 +343,8 @@ func TestOwnershipRelationships(t *testing.T) {
 			Name: "test-secret",
 		},
 	}
-	pod := b.newEphemeralRunnerPod(ephemeralRunner, runnerSecret)
+	pod, err := b.newEphemeralRunnerPod(ephemeralRunner, runnerSecret)
+	require.NoError(t, err)
 
 	// Test EphemeralRunnerPod ownership
 	require.Len(t, pod.OwnerReferences, 1, "EphemeralRunnerPod should have exactly one owner reference")

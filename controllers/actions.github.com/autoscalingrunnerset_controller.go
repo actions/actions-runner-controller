@@ -754,11 +754,6 @@ func (r *AutoscalingRunnerSetReconciler) createEphemeralRunnerSet(ctx context.Co
 		return ctrl.Result{}, err
 	}
 
-	if err := ctrl.SetControllerReference(autoscalingRunnerSet, desiredRunnerSet, r.Scheme); err != nil {
-		log.Error(err, "Failed to set controller reference to a new EphemeralRunnerSet")
-		return ctrl.Result{}, err
-	}
-
 	log.Info("Creating a new EphemeralRunnerSet resource")
 	if err := r.Create(ctx, desiredRunnerSet); err != nil {
 		log.Error(err, "Failed to create EphemeralRunnerSet resource")
@@ -811,6 +806,8 @@ func shouldCreateScaleSet(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) b
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *AutoscalingRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager, opts ...Option) error {
+	r.ResourceBuilder.setSchemeIfUnset(r.Scheme)
+
 	return builderWithOptions(
 		ctrl.NewControllerManagedBy(mgr).
 			For(&v1alpha1.AutoscalingRunnerSet{}).

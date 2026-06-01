@@ -754,10 +754,9 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 	}
 
 	log.Info("Creating new pod for ephemeral runner")
-	newPod := r.newEphemeralRunnerPod(runner, secret, envs...)
-
-	if err := ctrl.SetControllerReference(runner, newPod, r.Scheme); err != nil {
-		log.Error(err, "Failed to set controller reference to a new pod")
+	newPod, err := r.newEphemeralRunnerPod(runner, secret, envs...)
+	if err != nil {
+		log.Error(err, "Failed to build new pod")
 		return ctrl.Result{}, err
 	}
 
@@ -779,10 +778,9 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 
 func (r *EphemeralRunnerReconciler) createSecret(ctx context.Context, runner *v1alpha1.EphemeralRunner, jitConfig *scaleset.RunnerScaleSetJitRunnerConfig, log logr.Logger) (*corev1.Secret, error) {
 	log.Info("Creating new secret for ephemeral runner")
-	jitSecret := r.newEphemeralRunnerJitSecret(runner, jitConfig)
-
-	if err := ctrl.SetControllerReference(runner, jitSecret, r.Scheme); err != nil {
-		return nil, fmt.Errorf("failed to set controller reference: %w", err)
+	jitSecret, err := r.newEphemeralRunnerJitSecret(runner, jitConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build jit secret: %w", err)
 	}
 
 	log.Info("Created new secret spec for ephemeral runner")
@@ -860,6 +858,8 @@ func (r *EphemeralRunnerReconciler) deleteRunnerFromService(ctx context.Context,
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *EphemeralRunnerReconciler) SetupWithManager(mgr ctrl.Manager, opts ...Option) error {
+	r.ResourceBuilder.setSchemeIfUnset(r.Scheme)
+
 	return builderWithOptions(
 		ctrl.NewControllerManagedBy(mgr).
 			For(&v1alpha1.EphemeralRunner{}).
