@@ -81,6 +81,11 @@ type AutoscalingListenerSpec struct {
 
 	// +optional
 	RoleBindingMetadata *ResourceMeta `json:"roleBindingMetadata,omitempty"`
+
+	// ClusterRoleName is the name of the pre-provisioned ClusterRole to bind to the listener's
+	// ServiceAccount. When empty, no ClusterRoleBinding is created and resource checking is skipped.
+	// +optional
+	ClusterRoleName string `json:"clusterRoleName,omitempty"`
 }
 
 // AutoscalingListenerStatus defines the observed state of AutoscalingListener

@@ -149,6 +149,7 @@ func (b *ResourceBuilder) newAutoScalingListener(autoscalingRunnerSet *v1alpha1.
 			RoleMetadata:                  autoscalingRunnerSet.Spec.ListenerRoleMetadata,
 			RoleBindingMetadata:           autoscalingRunnerSet.Spec.ListenerRoleBindingMetadata,
 			ConfigSecretMetadata:          autoscalingRunnerSet.Spec.ListenerConfigSecretMetadata,
+			ClusterRoleName:               autoscalingRunnerSet.Spec.ListenerClusterRoleName,
 		},
 	}
 
@@ -809,43 +810,7 @@ func rulesForListenerRole(resourceNames []string) []rbacv1.PolicyRule {
 	}
 }
 
-func rulesForListenerClusterRole() []rbacv1.PolicyRule {
-	return []rbacv1.PolicyRule{
-		{
-			APIGroups: []string{""},
-			Resources: []string{"nodes"},
-			Verbs:     []string{"get", "list"},
-		},
-		{
-			APIGroups: []string{""},
-			Resources: []string{"pods"},
-			Verbs:     []string{"list"},
-		},
-	}
-}
-
-func (b *ResourceBuilder) newScaleSetListenerClusterRole(autoscalingListener *v1alpha1.AutoscalingListener) *rbacv1.ClusterRole {
-	rules := rulesForListenerClusterRole()
-	rulesHash := hash.ComputeTemplateHash(&rules)
-
-	labels := b.filterAndMergeLabels(autoscalingListener.Labels, map[string]string{
-		LabelKeyGitHubScaleSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
-		LabelKeyGitHubScaleSetName:      autoscalingListener.Spec.AutoscalingRunnerSetName,
-		labelKeyListenerNamespace:       autoscalingListener.Namespace,
-		labelKeyListenerName:            autoscalingListener.Name,
-		"role-policy-rules-hash":        rulesHash,
-	})
-
-	return &rbacv1.ClusterRole{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   autoscalingListener.Name,
-			Labels: labels,
-		},
-		Rules: rules,
-	}
-}
-
-func (b *ResourceBuilder) newScaleSetListenerClusterRoleBinding(autoscalingListener *v1alpha1.AutoscalingListener, clusterRole *rbacv1.ClusterRole, serviceAccount *corev1.ServiceAccount) *rbacv1.ClusterRoleBinding {
+func (b *ResourceBuilder) newScaleSetListenerClusterRoleBinding(autoscalingListener *v1alpha1.AutoscalingListener, serviceAccount *corev1.ServiceAccount) *rbacv1.ClusterRoleBinding {
 	subjects := []rbacv1.Subject{
 		{
 			Kind:      "ServiceAccount",
@@ -871,7 +836,7 @@ func (b *ResourceBuilder) newScaleSetListenerClusterRoleBinding(autoscalingListe
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     clusterRole.Name,
+			Name:     autoscalingListener.Spec.ClusterRoleName,
 		},
 		Subjects: subjects,
 	}

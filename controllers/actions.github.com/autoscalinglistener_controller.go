@@ -197,35 +197,8 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		return r.createRoleBindingForListener(ctx, autoscalingListener, listenerRole, serviceAccount, log)
 	}
 
-	// Make sure the listener cluster role exists (grants nodes/pods read for resource checking)
-	listenerClusterRole := new(rbacv1.ClusterRole)
-	if err := r.Get(ctx, types.NamespacedName{Name: autoscalingListener.Name}, listenerClusterRole); err != nil {
-		if !kerrors.IsNotFound(err) {
-			log.Error(err, "Unable to get listener cluster role", "name", autoscalingListener.Name)
-			return ctrl.Result{}, err
-		}
-		log.Info("Creating a cluster role for the listener pod")
-		return r.createClusterRoleForListener(ctx, autoscalingListener, log)
-	}
-
-	// Make sure the listener cluster role has up-to-date rules
-	existingClusterRuleHash := listenerClusterRole.Labels["role-policy-rules-hash"]
-	desiredClusterRules := rulesForListenerClusterRole()
-	desiredClusterRulesHash := hash.ComputeTemplateHash(&desiredClusterRules)
-	if existingClusterRuleHash != desiredClusterRulesHash {
-		log.Info("Updating the listener cluster role with up-to-date rules")
-		return r.updateClusterRoleForListener(ctx, listenerClusterRole, desiredClusterRules, desiredClusterRulesHash, log)
-	}
-
-	// Make sure the listener cluster role binding exists
-	listenerClusterRoleBinding := new(rbacv1.ClusterRoleBinding)
-	if err := r.Get(ctx, types.NamespacedName{Name: autoscalingListener.Name}, listenerClusterRoleBinding); err != nil {
-		if !kerrors.IsNotFound(err) {
-			log.Error(err, "Unable to get listener cluster role binding", "name", autoscalingListener.Name)
-			return ctrl.Result{}, err
-		}
-		log.Info("Creating a cluster role binding for the service account and cluster role")
-		return r.createClusterRoleBindingForListener(ctx, autoscalingListener, listenerClusterRole, serviceAccount, log)
+	if done, result, err := r.reconcileClusterRBAC(ctx, autoscalingListener, serviceAccount, log); done {
+		return result, err
 	}
 
 	// Create a secret containing proxy config if specified
@@ -455,22 +428,6 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 		return false, fmt.Errorf("failed to get listener cluster role binding: %w", err)
 	}
 	logger.Info("Listener cluster role binding is deleted")
-
-	listenerClusterRole := new(rbacv1.ClusterRole)
-	err = r.Get(ctx, types.NamespacedName{Name: autoscalingListener.Name}, listenerClusterRole)
-	switch {
-	case err == nil:
-		if listenerClusterRole.DeletionTimestamp.IsZero() {
-			logger.Info("Deleting the listener cluster role")
-			if err := r.Delete(ctx, listenerClusterRole); err != nil {
-				return false, fmt.Errorf("failed to delete listener cluster role: %w", err)
-			}
-		}
-		requeue = true
-	case !kerrors.IsNotFound(err):
-		return false, fmt.Errorf("failed to get listener cluster role: %w", err)
-	}
-	logger.Info("Listener cluster role is deleted")
 
 	logger.Info("Cleaning up the listener service account")
 	listenerSa := new(corev1.ServiceAccount)
@@ -792,43 +749,38 @@ func (r *AutoscalingListenerReconciler) createRoleBindingForListener(ctx context
 	return ctrl.Result{Requeue: true}, nil
 }
 
-func (r *AutoscalingListenerReconciler) createClusterRoleForListener(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) (ctrl.Result, error) {
-	newClusterRole := r.newScaleSetListenerClusterRole(autoscalingListener)
 
-	logger.Info("Creating listener cluster role", "name", newClusterRole.Name, "rules", newClusterRole.Rules)
-	if err := r.Create(ctx, newClusterRole); err != nil {
-		if kerrors.IsAlreadyExists(err) {
-			return ctrl.Result{Requeue: true}, nil
+// reconcileClusterRBAC ensures the ClusterRoleBinding for the listener exists, binding the
+// listener's ServiceAccount to the ClusterRole specified in the listener spec.
+// When ClusterRoleName is empty, resource checking is not configured and this is a no-op.
+// Returns (true, result, err) when the caller should return immediately, (false, _, nil) to continue.
+func (r *AutoscalingListenerReconciler) reconcileClusterRBAC(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, serviceAccount *corev1.ServiceAccount, log logr.Logger) (done bool, result ctrl.Result, err error) {
+	if autoscalingListener.Spec.ClusterRoleName == "" {
+		log.Info("No ClusterRoleName configured, skipping cluster RBAC setup")
+		return false, ctrl.Result{}, nil
+	}
+
+	clusterRoleBinding := new(rbacv1.ClusterRoleBinding)
+	if err := r.Get(ctx, types.NamespacedName{Name: autoscalingListener.Name}, clusterRoleBinding); err != nil {
+		if !kerrors.IsNotFound(err) {
+			log.Error(err, "Unable to get listener cluster role binding", "name", autoscalingListener.Name)
+			return true, ctrl.Result{}, err
 		}
-		logger.Error(err, "Unable to create listener cluster role", "name", newClusterRole.Name)
-		return ctrl.Result{}, err
+		log.Info("Creating a cluster role binding for the listener pod", "clusterRole", autoscalingListener.Spec.ClusterRoleName)
+		result, err := r.createClusterRoleBindingForListener(ctx, autoscalingListener, serviceAccount, log)
+		return true, result, err
 	}
 
-	logger.Info("Created listener cluster role", "name", newClusterRole.Name)
-	return ctrl.Result{Requeue: true}, nil
+	return false, ctrl.Result{}, nil
 }
 
-func (r *AutoscalingListenerReconciler) updateClusterRoleForListener(ctx context.Context, clusterRole *rbacv1.ClusterRole, desiredRules []rbacv1.PolicyRule, desiredRulesHash string, logger logr.Logger) (ctrl.Result, error) {
-	updated := clusterRole.DeepCopy()
-	updated.Labels["role-policy-rules-hash"] = desiredRulesHash
-	updated.Rules = desiredRules
 
-	logger.Info("Updating listener cluster role", "name", updated.Name, "newRules", updated.Rules)
-	if err := r.Update(ctx, updated); err != nil {
-		logger.Error(err, "Unable to update listener cluster role", "name", updated.Name)
-		return ctrl.Result{}, err
-	}
-
-	logger.Info("Updated listener cluster role", "name", updated.Name)
-	return ctrl.Result{Requeue: true}, nil
-}
-
-func (r *AutoscalingListenerReconciler) createClusterRoleBindingForListener(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, clusterRole *rbacv1.ClusterRole, serviceAccount *corev1.ServiceAccount, logger logr.Logger) (ctrl.Result, error) {
-	newClusterRoleBinding := r.newScaleSetListenerClusterRoleBinding(autoscalingListener, clusterRole, serviceAccount)
+func (r *AutoscalingListenerReconciler) createClusterRoleBindingForListener(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, serviceAccount *corev1.ServiceAccount, logger logr.Logger) (ctrl.Result, error) {
+	newClusterRoleBinding := r.newScaleSetListenerClusterRoleBinding(autoscalingListener, serviceAccount)
 
 	logger.Info("Creating listener cluster role binding",
 		"name", newClusterRoleBinding.Name,
-		"clusterRole", clusterRole.Name,
+		"clusterRole", autoscalingListener.Spec.ClusterRoleName,
 		"serviceAccountNamespace", serviceAccount.Namespace,
 		"serviceAccount", serviceAccount.Name)
 	if err := r.Create(ctx, newClusterRoleBinding); err != nil {
