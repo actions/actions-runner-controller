@@ -102,14 +102,6 @@ type AutoscalingRunnerSetSpec struct {
 	// +optional
 	ListenerConfigSecretMetadata *ResourceMeta `json:"listenerConfigSecretMetadata,omitempty"`
 
-	// ListenerClusterRoleName specifies the name of a pre-provisioned ClusterRole to bind to the
-	// listener pod's ServiceAccount for cluster-wide resource checking (nodes/pods list).
-	// When set, the controller creates a ClusterRoleBinding for each listener.
-	// When empty, resource checking is skipped and no ClusterRoleBinding is created.
-	// +optional
-	ListenerClusterRoleName string `json:"listenerClusterRoleName,omitempty"`
-
-	// +optional
 	EphemeralRunnerSetMetadata *ResourceMeta `json:"ephemeralRunnerSetMetadata,omitempty"`
 
 	// +optional
