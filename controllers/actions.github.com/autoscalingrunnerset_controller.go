@@ -287,8 +287,12 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			return ctrl.Result{}, nil
 		}
 
-		if !cmp.Equal(ephemeralRunnerSet.Spec.EphemeralRunnerSpec, desired.Spec.EphemeralRunnerSpec) ||
-			!cmp.Equal(ephemeralRunnerSet.Spec.EphemeralRunnerMetadata, desired.Spec.EphemeralRunnerMetadata) {
+		ephemeralRunnerSpecModified := !cmp.Equal(ephemeralRunnerSet.Spec.EphemeralRunnerSpec, desired.Spec.EphemeralRunnerSpec)
+		ephemeralRunnerMetadataModified := !cmp.Equal(ephemeralRunnerSet.Spec.EphemeralRunnerMetadata, desired.Spec.EphemeralRunnerMetadata)
+		ephemeralRunnerLabelsModified := !cmp.Equal(ephemeralRunnerSet.Labels, desired.Labels)
+		ephemeralRunnerAnnotationsModified := !cmp.Equal(ephemeralRunnerSet.Annotations, desired.Annotations)
+
+		if ephemeralRunnerSpecModified || ephemeralRunnerMetadataModified {
 			// When runners are actively processing jobs, defer the spec update:
 			// delete the listener to stop accepting new jobs, but leave the ERS
 			// (and its running pods) untouched until all jobs have drained.
@@ -313,6 +317,21 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			}
 
 			log.Info("Successfully patched ephemeral runner set spec")
+			return ctrl.Result{}, nil
+		}
+
+		if ephemeralRunnerLabelsModified || ephemeralRunnerAnnotationsModified {
+			original := ephemeralRunnerSet.DeepCopy()
+			ephemeralRunnerSet.Labels = r.filterAndMergeLabels(ephemeralRunnerSet.Labels, desired.Labels)
+			ephemeralRunnerSet.Annotations = r.mergeAnnotations(ephemeralRunnerSet.Annotations, desired.Annotations)
+
+			log.Info("Updating ephemeral runner set metadata to match desired labels and annotations")
+			if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
+				log.Error(err, "Failed to patch ephemeral runner set metadata to match desired labels and annotations")
+				return ctrl.Result{}, err
+			}
+
+			log.Info("Successfully patched ephemeral runner set metadata")
 			return ctrl.Result{}, nil
 		}
 	}

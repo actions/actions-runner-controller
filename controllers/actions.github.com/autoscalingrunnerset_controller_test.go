@@ -549,6 +549,35 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			).Should(Succeed())
 		})
 
+		It("updates EphemeralRunnerSet labels when only AutoScalingRunnerSet labels change", func() {
+			runnerSet := new(v1alpha1.EphemeralRunnerSet)
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, runnerSet)
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "EphemeralRunnerSet should be created")
+
+			patched := autoscalingRunnerSet.DeepCopy()
+			patched.Labels["arc.test/label-drift"] = "updated"
+			err := k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))
+			Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingRunnerSet labels")
+
+			Eventually(
+				func() (string, error) {
+					current := new(v1alpha1.EphemeralRunnerSet)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, current)
+					if err != nil {
+						return "", err
+					}
+					return current.Labels["arc.test/label-drift"], nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Equal("updated"), "EphemeralRunnerSet should be patched with label-only drift")
+		})
+
 		It("updates EphemeralRunnerSet and Listener when the GitHub config secret changes", func() {
 			updatedSecret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
