@@ -83,6 +83,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if err := r.Get(ctx, req.NamespacedName, ephemeralRunner); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+	original := ephemeralRunner.DeepCopy()
 
 	if !ephemeralRunner.DeletionTimestamp.IsZero() {
 		if !controllerutil.ContainsFinalizer(ephemeralRunner, ephemeralRunnerFinalizerName) {
@@ -102,10 +103,12 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			}
 
 			log.Info("Runner is cleaned up from the service, removing finalizer")
-			if err := patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
-				controllerutil.RemoveFinalizer(obj, ephemeralRunnerActionsFinalizerName)
-			}); err != nil {
-				return ctrl.Result{}, err
+			if controllerutil.RemoveFinalizer(ephemeralRunner, ephemeralRunnerActionsFinalizerName) {
+				log.Info("Removed finalizer from ephemeral runner")
+				if err := r.Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
+					log.Error(err, "Failed to update ephemeral runner after removing finalizer")
+					return ctrl.Result{}, err
+				}
 			}
 			log.Info("Removed finalizer from ephemeral runner")
 		}
@@ -127,12 +130,12 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 
 		log.Info("Removing finalizer")
-		err = patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
-			controllerutil.RemoveFinalizer(obj, ephemeralRunnerFinalizerName)
-		})
-		if err != nil && !kerrors.IsNotFound(err) {
-			log.Error(err, "Failed to update ephemeral runner without the finalizer")
-			return ctrl.Result{}, err
+		if controllerutil.RemoveFinalizer(ephemeralRunner, ephemeralRunnerFinalizerName) {
+			log.Info("Removed finalizer from ephemeral runner")
+			if err := r.Patch(ctx, ephemeralRunner, client.MergeFrom(original)); client.IgnoreNotFound(err) != nil {
+				log.Error(err, "Failed to update ephemeral runner after removing finalizer")
+				return ctrl.Result{}, err
+			}
 		}
 
 		log.Info("Successfully removed finalizer after cleanup")
@@ -156,12 +159,14 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	addFinalizers := !controllerutil.ContainsFinalizer(ephemeralRunner, ephemeralRunnerFinalizerName) || !controllerutil.ContainsFinalizer(ephemeralRunner, ephemeralRunnerActionsFinalizerName)
 	if addFinalizers {
 		log.Info("Adding finalizers")
-		if err := patch(ctx, r.Client, ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
-			controllerutil.AddFinalizer(obj, ephemeralRunnerFinalizerName)
-			controllerutil.AddFinalizer(obj, ephemeralRunnerActionsFinalizerName)
-		}); err != nil {
-			log.Error(err, "Failed to update with finalizer set")
-			return ctrl.Result{}, err
+		var addedFinalizers bool
+		addedFinalizers = addedFinalizers || controllerutil.AddFinalizer(ephemeralRunner, ephemeralRunnerFinalizerName)
+		addedFinalizers = addedFinalizers || controllerutil.AddFinalizer(ephemeralRunner, ephemeralRunnerActionsFinalizerName)
+		if addedFinalizers {
+			if err := r.Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
+				log.Error(err, "Failed to update with finalizer set")
+				return ctrl.Result{}, err
+			}
 		}
 		log.Info("Successfully added finalizers")
 	}
@@ -215,14 +220,13 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 
 		runnerName := string(secret.Data["runnerName"])
-		if err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
-			obj.Status.RunnerID = runnerID
-			obj.Status.RunnerName = runnerName
-		}); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to update runner status for RunnerId/RunnerName/RunnerJITConfig: %w", err)
-		}
+
 		ephemeralRunner.Status.RunnerID = runnerID
 		ephemeralRunner.Status.RunnerName = runnerName
+
+		if err := r.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update runner status for RunnerId/RunnerName: %w", err)
+		}
 		log.Info("Updated ephemeral runner status with runnerId and runnerName")
 	}
 
@@ -242,7 +246,8 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	nextReconciliation := lastFailure.Add(backoffDuration)
 	if !lastFailure.IsZero() && now.Before(&metav1.Time{Time: nextReconciliation}) {
 		requeueAfter := nextReconciliation.Sub(now.Time)
-		log.Info("Backing off the next reconciliation due to failure",
+		log.Info(
+			"Backing off the next reconciliation due to failure",
 			"lastFailure", lastFailure,
 			"nextReconciliation", nextReconciliation,
 			"requeueAfter", requeueAfter,
@@ -312,7 +317,8 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	cs := runnerContainerStatus(pod)
 	switch {
 	case pod.Status.Phase == corev1.PodFailed: // All containers are stopped
-		log.Info("Pod is in failed phase, inspecting runner container status",
+		log.Info(
+			"Pod is in failed phase, inspecting runner container status",
 			"podReason", pod.Status.Reason,
 			"podMessage", pod.Status.Message,
 			"podConditions", pod.Status.Conditions,
@@ -352,7 +358,8 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, r.deleteEphemeralRunnerOrPod(ctx, ephemeralRunner, pod, log)
 
 	case initContainerFailed(pod):
-		log.Info("Pod has a failed init container, deleting pod as failed so it can be restarted",
+		log.Info(
+			"Pod has a failed init container, deleting pod as failed so it can be restarted",
 			"initContainerStatuses", pod.Status.InitContainerStatuses,
 		)
 		return ctrl.Result{}, r.deleteEphemeralRunnerOrPod(ctx, ephemeralRunner, pod, log)
@@ -568,11 +575,12 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedSecrets(ctx context.Conte
 
 func (r *EphemeralRunnerReconciler) markAsFailed(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, errMessage string, reason string, log logr.Logger) error {
 	log.Info("Updating ephemeral runner status to Failed")
-	if err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
-		obj.Status.Phase = v1alpha1.EphemeralRunnerPhaseFailed
-		obj.Status.Reason = reason
-		obj.Status.Message = errMessage
-	}); err != nil {
+
+	original := ephemeralRunner.DeepCopy()
+	ephemeralRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseFailed
+	ephemeralRunner.Status.Reason = reason
+	ephemeralRunner.Status.Message = errMessage
+	if err := r.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
 		return fmt.Errorf("failed to update ephemeral runner status Phase/Message: %w", err)
 	}
 
@@ -588,11 +596,12 @@ func (r *EphemeralRunnerReconciler) markAsFailed(ctx context.Context, ephemeralR
 func (r *EphemeralRunnerReconciler) markAsOutdated(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
 	log.Info("Updating ephemeral runner status to Outdated")
 
-	if err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
-		obj.Status.Phase = v1alpha1.EphemeralRunnerPhaseOutdated
-		obj.Status.Reason = "Outdated"
-		obj.Status.Message = "Runner is deprecated"
-	}); err != nil {
+	original := ephemeralRunner.DeepCopy()
+	ephemeralRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseOutdated
+	ephemeralRunner.Status.Reason = "Outdated"
+	ephemeralRunner.Status.Message = "Runner is deprecated"
+
+	if err := r.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
 		return fmt.Errorf("failed to update ephemeral runner status Phase/Message: %w", err)
 	}
 
@@ -616,16 +625,17 @@ func (r *EphemeralRunnerReconciler) deletePodAsFailed(ctx context.Context, ephem
 	}
 
 	log.Info("Updating ephemeral runner status to track the failure count")
-	if err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
-		if obj.Status.Failures == nil {
-			obj.Status.Failures = make(map[string]metav1.Time)
-		}
-		obj.Status.Failures[string(pod.UID)] = metav1.Now()
-		obj.Status.Ready = false
-		obj.Status.Reason = pod.Status.Reason
-		obj.Status.Message = pod.Status.Message
-	}); err != nil {
-		return fmt.Errorf("failed to update ephemeral runner status: failed attempts: %w", err)
+	original := ephemeralRunner.DeepCopy()
+	if ephemeralRunner.Status.Failures == nil {
+		ephemeralRunner.Status.Failures = make(map[string]metav1.Time)
+	}
+	ephemeralRunner.Status.Failures[string(pod.UID)] = metav1.Now()
+	ephemeralRunner.Status.Ready = false
+	ephemeralRunner.Status.Reason = pod.Status.Reason
+	ephemeralRunner.Status.Message = pod.Status.Message
+
+	if err := r.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
+		return fmt.Errorf("failed to update ephemeral runner status with failure count: %w", err)
 	}
 
 	log.Info("EphemeralRunner pod is deleted and status is updated with failure count")
@@ -761,7 +771,7 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 		"runnerScaleSetId", runner.Spec.RunnerScaleSetID,
 		"runnerName", runner.Status.RunnerName,
 		"runnerId", runner.Status.RunnerID,
-		"configUrl", runner.Spec.GitHubConfigUrl,
+		"configUrl", runner.Spec.GitHubConfigURL,
 		"podName", newPod.Name)
 
 	return ctrl.Result{}, nil
@@ -818,13 +828,13 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 		"statusMessage", pod.Status.Message,
 		"ready", ready,
 	)
-	err := patchSubResource(ctx, r.Status(), ephemeralRunner, func(obj *v1alpha1.EphemeralRunner) {
-		obj.Status.Phase = phase
-		obj.Status.Ready = ready
-		obj.Status.Reason = pod.Status.Reason
-		obj.Status.Message = pod.Status.Message
-	})
-	if err != nil {
+	original := ephemeralRunner.DeepCopy()
+	ephemeralRunner.Status.Phase = phase
+	ephemeralRunner.Status.Ready = ready
+	ephemeralRunner.Status.Reason = pod.Status.Reason
+	ephemeralRunner.Status.Message = pod.Status.Message
+
+	if err := r.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
 		return fmt.Errorf("failed to update runner status for Phase/Reason/Message/Ready: %w", err)
 	}
 

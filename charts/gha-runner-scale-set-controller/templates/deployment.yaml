@@ -70,9 +70,6 @@ spec:
         {{- with .Values.flags.runnerMaxConcurrentReconciles }}
         - "--runner-max-concurrent-reconciles={{ . }}"
         {{- end }}
-        {{- with .Values.flags.updateStrategy }}
-        - "--update-strategy={{ . }}"
-        {{- end }}
         {{- if .Values.metrics }}
         {{- with .Values.metrics }}
         - "--listener-metrics-addr={{ .listenerAddr }}"

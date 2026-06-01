@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/google/go-cmp/cmp"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -41,12 +42,12 @@ import (
 	hash "github.com/actions/actions-runner-controller/hash"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
-	autoscalingListenerContainerName = "listener"
-	autoscalingListenerFinalizerName = "autoscalinglistener.actions.github.com/finalizer"
+	autoscalingListenerContainerName         = "listener"
+	autoscalingListenerFinalizerName         = "autoscalinglistener.actions.github.com/finalizer"
+	AnnotationKeyAutoscalingListenerSpecHash = "actions.github.com/spec-hash"
 )
 
 // AutoscalingListenerReconciler reconciles a AutoscalingListener object
@@ -81,6 +82,8 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	original := autoscalingListener.DeepCopy()
+
 	if !autoscalingListener.DeletionTimestamp.IsZero() {
 		if !controllerutil.ContainsFinalizer(autoscalingListener, autoscalingListenerFinalizerName) {
 			return ctrl.Result{}, nil
@@ -98,23 +101,19 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 
 		log.Info("Removing finalizer")
-		err = patch(ctx, r.Client, autoscalingListener, func(obj *v1alpha1.AutoscalingListener) {
-			controllerutil.RemoveFinalizer(obj, autoscalingListenerFinalizerName)
-		})
-		if err != nil && !kerrors.IsNotFound(err) {
-			log.Error(err, "Failed to remove finalizer")
-			return ctrl.Result{}, err
+		if controllerutil.RemoveFinalizer(autoscalingListener, autoscalingListenerFinalizerName) {
+			if err := r.Patch(ctx, autoscalingListener, client.MergeFrom(original)); err != nil && !kerrors.IsNotFound(err) {
+				log.Error(err, "Failed to remove finalizer")
+				return ctrl.Result{}, err
+			}
 		}
 
 		log.Info("Successfully removed finalizer after cleanup")
 		return ctrl.Result{}, nil
 	}
 
-	if !controllerutil.ContainsFinalizer(autoscalingListener, autoscalingListenerFinalizerName) {
-		log.Info("Adding finalizer")
-		if err := patch(ctx, r.Client, autoscalingListener, func(obj *v1alpha1.AutoscalingListener) {
-			controllerutil.AddFinalizer(obj, autoscalingListenerFinalizerName)
-		}); err != nil {
+	if controllerutil.AddFinalizer(autoscalingListener, autoscalingListenerFinalizerName) {
+		if err := r.Patch(ctx, autoscalingListener, client.MergeFrom(original)); err != nil {
 			log.Error(err, "Failed to add finalizer")
 			return ctrl.Result{}, err
 		}
@@ -123,25 +122,24 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, nil
 	}
 
+	specHash := autoscalingListener.Spec.Hash()
+	specModified := autoscalingListener.Annotations[annotationKeySpecHash] != specHash
+
 	// Check if the AutoscalingRunnerSet exists
 	var autoscalingRunnerSet v1alpha1.AutoscalingRunnerSet
 	if err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace, Name: autoscalingListener.Spec.AutoscalingRunnerSetName}, &autoscalingRunnerSet); err != nil {
+		if kerrors.IsNotFound(err) {
+			log.Info("AutoscalingRunnerSet is not found, deleting autoscaling listener", "namespace", autoscalingListener.Spec.AutoscalingRunnerSetNamespace, "name", autoscalingListener.Spec.AutoscalingRunnerSetName)
+			if err := r.Delete(ctx, autoscalingListener); err != nil {
+				log.Error(err, "failed to delete autoscaling listener", "namespace", autoscalingListener.Namespace, "name", autoscalingListener.Name)
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, nil
+		}
+
 		log.Error(err, "Failed to find AutoscalingRunnerSet.",
 			"namespace", autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
 			"name", autoscalingListener.Spec.AutoscalingRunnerSetName)
-		return ctrl.Result{}, err
-	}
-
-	appConfig, err := r.GetAppConfig(ctx, &autoscalingRunnerSet)
-	if err != nil {
-		log.Error(
-			err,
-			"Failed to get app config for AutoscalingRunnerSet.",
-			"namespace",
-			autoscalingRunnerSet.Namespace,
-			"name",
-			autoscalingRunnerSet.GitHubConfigSecret,
-		)
 		return ctrl.Result{}, err
 	}
 
@@ -158,7 +156,18 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		return r.createServiceAccountForListener(ctx, autoscalingListener, log)
 	}
 
-	// TODO: make sure the service account is up to date
+	if specModified {
+		desiredServiceAccount := r.newScaleSetListenerServiceAccount(autoscalingListener)
+		if !maps.Equal(serviceAccount.Labels, desiredServiceAccount.Labels) || !maps.Equal(serviceAccount.Annotations, desiredServiceAccount.Annotations) {
+			original := serviceAccount.DeepCopy()
+			if err := r.Patch(ctx, desiredServiceAccount, client.MergeFrom(original)); err != nil {
+				log.Error(err, "Failed to patch listener service account metadata")
+				return ctrl.Result{}, err
+			}
+
+			return ctrl.Result{Requeue: true}, nil
+		}
+	}
 
 	// Make sure the runner scale set listener role is created in the AutoscalingRunnerSet namespace
 	listenerRole := new(rbacv1.Role)
@@ -181,6 +190,19 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		log.Info("Updating the listener role with the up-to-date rules")
 		return r.updateRoleForListener(ctx, listenerRole, desiredRules, desiredRulesHash, log)
 	}
+	if specModified {
+		desiredRole := r.newScaleSetListenerRole(autoscalingListener)
+		if !maps.Equal(listenerRole.Labels, desiredRole.Labels) || !maps.Equal(listenerRole.Annotations, desiredRole.Annotations) {
+			log.Info("Patching listener role metadata")
+			original := listenerRole.DeepCopy()
+			if err := r.Patch(ctx, desiredRole, client.MergeFrom(original)); err != nil {
+				log.Error(err, "Failed to patch listener role metadata")
+				return ctrl.Result{}, err
+			}
+
+			return ctrl.Result{Requeue: true}, nil
+		}
+	}
 
 	// Make sure the runner scale set listener role binding is created
 	listenerRoleBinding := new(rbacv1.RoleBinding)
@@ -193,6 +215,20 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		// Create a role binding for the listener pod in the AutoScalingRunnerSet namespace
 		log.Info("Creating a role binding for the service account and role")
 		return r.createRoleBindingForListener(ctx, autoscalingListener, listenerRole, serviceAccount, log)
+	}
+	if specModified {
+		desiredRoleBinding := r.newScaleSetListenerRoleBinding(autoscalingListener, listenerRole, serviceAccount)
+		if !maps.Equal(listenerRoleBinding.Labels, desiredRoleBinding.Labels) ||
+			!maps.Equal(listenerRoleBinding.Annotations, desiredRoleBinding.Annotations) {
+			log.Info("Patching listener role binding")
+			original := listenerRoleBinding.DeepCopy()
+			if err := r.Patch(ctx, desiredRoleBinding, client.MergeFrom(original)); err != nil {
+				log.Error(err, "Failed to patch listener role binding metadata")
+				return ctrl.Result{}, err
+			}
+
+			return ctrl.Result{Requeue: true}, nil
+		}
 	}
 
 	// Create a secret containing proxy config if specified
@@ -208,18 +244,55 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			log.Info("Creating a listener proxy secret for the listener pod")
 			return r.createProxySecret(ctx, autoscalingListener, log)
 		}
+
+		if specModified {
+			desiredListenerProxy, err := r.newAutoscalingListenerProxySecret(autoscalingListener, proxySecret.Data)
+			if err != nil {
+				log.Error(err, "Failed to build desired listener proxy secret")
+				return ctrl.Result{}, err
+			}
+			if !maps.Equal(proxySecret.Labels, desiredListenerProxy.Labels) || !maps.Equal(proxySecret.Annotations, desiredListenerProxy.Annotations) || !cmp.Equal(proxySecret.Data, desiredListenerProxy.Data) {
+				log.Info("Patching listener proxy secret metadata")
+				original := proxySecret.DeepCopy()
+				if err := r.Patch(ctx, desiredListenerProxy, client.MergeFrom(original)); err != nil {
+					log.Error(err, "Failed to patch listener proxy secret metadata")
+					return ctrl.Result{}, err
+				}
+
+				return ctrl.Result{Requeue: true}, nil
+			}
+		}
 	}
 
-	// TODO: make sure the role binding has the up-to-date role and service account
-
-	// Reconcile listener config secret and detect drift
-	cert := ""
-	if autoscalingListener.Spec.GitHubServerTLS != nil {
-		var err error
-		cert, err = r.certificate(ctx, &autoscalingRunnerSet, autoscalingListener)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to build GitHub server TLS certificate value for listener config: %w", err)
+	var appConfig *appconfig.AppConfig
+	getAppConfig := func() (*appconfig.AppConfig, error) {
+		if appConfig != nil {
+			return appConfig, nil
 		}
+
+		cfg, err := r.GetAppConfig(ctx, &autoscalingRunnerSet)
+		if err != nil {
+			log.Error(
+				err,
+				"Failed to get app config for AutoscalingRunnerSet.",
+				"namespace",
+				autoscalingRunnerSet.Namespace,
+				"name",
+				autoscalingRunnerSet.GitHubConfigSecret,
+			)
+			return nil, err
+		}
+
+		appConfig = cfg
+		return appConfig, nil
+	}
+
+	listenerConfigSecret := new(corev1.Secret)
+	err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Namespace, Name: scaleSetListenerConfigName(autoscalingListener)}, listenerConfigSecret)
+	configSecretExists := err == nil
+	if err != nil && !kerrors.IsNotFound(err) {
+		log.Error(err, "Unable to get listener config secret", "namespace", autoscalingListener.Namespace, "name", scaleSetListenerConfigName(autoscalingListener))
+		return ctrl.Result{}, err
 	}
 
 	var metricsConfig *listenerMetricsServerConfig
@@ -230,10 +303,26 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 	}
 
-	secretChanged, err := r.reconcileListenerConfigSecret(ctx, autoscalingListener, appConfig, metricsConfig, cert, log)
-	if err != nil {
-		log.Error(err, "Failed to reconcile listener config secret")
-		return ctrl.Result{}, err
+	secretChanged := false
+	if specModified || !configSecretExists {
+		cfg, err := getAppConfig()
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		cert := ""
+		if autoscalingListener.Spec.GitHubServerTLS != nil {
+			cert, err = r.certificate(ctx, &autoscalingRunnerSet, autoscalingListener)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to build GitHub server TLS certificate value for listener config: %w", err)
+			}
+		}
+
+		secretChanged, err = r.reconcileListenerConfigSecret(ctx, autoscalingListener, cfg, metricsConfig, cert, log)
+		if err != nil {
+			log.Error(err, "Failed to reconcile listener config secret")
+			return ctrl.Result{}, err
+		}
 	}
 
 	listenerPod := new(corev1.Pod)
@@ -255,15 +344,47 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			return ctrl.Result{}, nil
 		}
 
+		cfg, err := getAppConfig()
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
 		// Create a listener pod in the controller namespace
 		log.Info("Creating a listener pod")
-		return r.createListenerPod(ctx, &autoscalingRunnerSet, autoscalingListener, serviceAccount, appConfig, log)
+		return r.createListenerPod(ctx, &autoscalingRunnerSet, autoscalingListener, serviceAccount, cfg, log)
 	}
 
 	// If listener config secret changed and pod exists, restart the pod
 	if secretChanged {
 		log.Info("Listener config secret changed, restarting listener pod")
-		return ctrl.Result{}, r.deleteListenerPod(ctx, autoscalingListener, listenerPod, log)
+		if err := r.deleteListenerPod(ctx, autoscalingListener, listenerPod, log); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		if autoscalingListener.Annotations == nil {
+			autoscalingListener.Annotations = make(map[string]string)
+		}
+		autoscalingListener.Annotations[annotationKeySpecHash] = specHash
+		if err := r.Patch(ctx, autoscalingListener, client.MergeFrom(original)); err != nil {
+			log.Error(err, "Failed to update listener spec hash annotation")
+			return ctrl.Result{}, err
+		}
+
+		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+	}
+
+	if specModified {
+		if autoscalingListener.Annotations == nil {
+			autoscalingListener.Annotations = make(map[string]string)
+		}
+		autoscalingListener.Annotations[annotationKeySpecHash] = specHash
+		if err := r.Patch(ctx, autoscalingListener, client.MergeFrom(original)); err != nil {
+			log.Error(err, "Failed to update listener spec hash annotation")
+			return ctrl.Result{}, err
+		}
+
+		log.Info("Updated listener spec hash annotation after applying spec changes", "hash", specHash)
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	cs := listenerContainerStatus(listenerPod)
@@ -645,19 +766,12 @@ func (r *AutoscalingListenerReconciler) createProxySecret(ctx context.Context, a
 		return ctrl.Result{}, fmt.Errorf("failed to convert proxy config to secret data: %w", err)
 	}
 
-	newProxySecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      proxyListenerSecretName(autoscalingListener),
-			Namespace: autoscalingListener.Namespace,
-			Labels: map[string]string{
-				LabelKeyGitHubScaleSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
-				LabelKeyGitHubScaleSetName:      autoscalingListener.Spec.AutoscalingRunnerSetName,
-			},
-		},
-		Data: data,
+	newProxySecret, err := r.newAutoscalingListenerProxySecret(autoscalingListener, data)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to build listener proxy secret: %w", err)
 	}
 	if err := ctrl.SetControllerReference(autoscalingListener, newProxySecret, r.Scheme); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to create listener proxy secret: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to set controller reference for listener proxy secret: %w", err)
 	}
 
 	logger.Info("Creating listener proxy secret", "namespace", newProxySecret.Namespace, "name", newProxySecret.Name)
@@ -728,7 +842,7 @@ func (r *AutoscalingListenerReconciler) createRoleBindingForListener(ctx context
 }
 
 func (r *AutoscalingListenerReconciler) publishRunningListener(autoscalingListener *v1alpha1.AutoscalingListener, isUp bool) error {
-	githubConfigURL := autoscalingListener.Spec.GitHubConfigUrl
+	githubConfigURL := autoscalingListener.Spec.GitHubConfigURL
 	parsedURL, err := actions.ParseGitHubConfigFromURL(githubConfigURL)
 	if err != nil {
 		return err
@@ -786,7 +900,8 @@ func (r *AutoscalingListenerReconciler) SetupWithManager(mgr ctrl.Manager, opts 
 		if !ok {
 			return nil
 		}
-		requests = append(requests,
+		requests = append(
+			requests,
 			reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name:      name,

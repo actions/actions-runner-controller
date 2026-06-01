@@ -42,17 +42,16 @@ import (
 )
 
 const (
-	ephemeralRunnerSetFinalizerName = "ephemeralrunner.actions.github.com/finalizer"
+	// EphemeralRunnerSetFinalizerName is the finalizer name used in EphemeralRunnerSet resource to protect the cleanup process of the child ephemeral runners and proxy secret.
+	EphemeralRunnerSetFinalizerName = "ephemeralrunnerset.actions.github.com/finalizer"
 )
 
 // EphemeralRunnerSetReconciler reconciles a EphemeralRunnerSet object
 type EphemeralRunnerSetReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
-
+	Log            logr.Logger
+	Scheme         *runtime.Scheme
 	PublishMetrics bool
-
 	ResourceBuilder
 }
 
@@ -77,19 +76,20 @@ type EphemeralRunnerSetReconciler struct {
 func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("ephemeralrunnerset", req.NamespacedName)
 
-	ephemeralRunnerSet := new(v1alpha1.EphemeralRunnerSet)
-	if err := r.Get(ctx, req.NamespacedName, ephemeralRunnerSet); err != nil {
+	var ephemeralRunnerSet v1alpha1.EphemeralRunnerSet
+	if err := r.Get(ctx, req.NamespacedName, &ephemeralRunnerSet); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+	original := ephemeralRunnerSet.DeepCopy()
 
 	// Requested deletion does not need reconciled.
 	if !ephemeralRunnerSet.DeletionTimestamp.IsZero() {
-		if !controllerutil.ContainsFinalizer(ephemeralRunnerSet, ephemeralRunnerSetFinalizerName) {
+		if !controllerutil.ContainsFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName) {
 			return ctrl.Result{}, nil
 		}
 
 		log.Info("Deleting resources")
-		done, err := r.cleanUpEphemeralRunners(ctx, ephemeralRunnerSet, log)
+		done, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log)
 		if err != nil {
 			log.Error(err, "Failed to clean up EphemeralRunners")
 			return ctrl.Result{}, err
@@ -100,11 +100,11 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 
 		log.Info("Removing finalizer")
-		if err := patch(ctx, r.Client, ephemeralRunnerSet, func(obj *v1alpha1.EphemeralRunnerSet) {
-			controllerutil.RemoveFinalizer(obj, ephemeralRunnerSetFinalizerName)
-		}); err != nil && !kerrors.IsNotFound(err) {
-			log.Error(err, "Failed to update ephemeral runner set with removed finalizer")
-			return ctrl.Result{}, err
+		if controllerutil.RemoveFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName) {
+			if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
+				log.Error(err, "Failed to update ephemeral runner set with removed finalizer")
+				return ctrl.Result{}, err
+			}
 		}
 
 		log.Info("Successfully removed finalizer after cleanup")
@@ -112,12 +112,10 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	// Add finalizer if not present
-	if !controllerutil.ContainsFinalizer(ephemeralRunnerSet, ephemeralRunnerSetFinalizerName) {
+	if controllerutil.AddFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName) {
 		log.Info("Adding finalizer")
-		if err := patch(ctx, r.Client, ephemeralRunnerSet, func(obj *v1alpha1.EphemeralRunnerSet) {
-			controllerutil.AddFinalizer(obj, ephemeralRunnerSetFinalizerName)
-		}); err != nil {
-			log.Error(err, "Failed to update ephemeral runner set with finalizer added")
+		if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
+			log.Error(err, "Failed to update ephemeral runner set with new finalizer")
 			return ctrl.Result{}, err
 		}
 
@@ -125,23 +123,58 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, nil
 	}
 
+	// If hash spec has changed, delete idle ephemeral runners
+	// in order to apply the change to the runners that did not yet receive a job.
+	ephemeralRunnerSpecHash := ephemeralRunnerSet.EphemeralRunnerSpecHash()
+	if ephemeralRunnerSet.Annotations[annotationKeySpecHash] != ephemeralRunnerSpecHash {
+		log.Info("EphemeralRunnerSpec has changed, deleting idle ephemeral runners to apply the new spec")
+		if _, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log); err != nil {
+			log.Error(err, "Failed to clean up EphemeralRunners")
+			return ctrl.Result{}, err
+		}
+
+		log.Info("Updating EphemeralRunnerSet with new spec hash")
+		original := ephemeralRunnerSet.DeepCopy()
+		if ephemeralRunnerSet.Annotations == nil {
+			ephemeralRunnerSet.Annotations = make(map[string]string)
+		}
+		ephemeralRunnerSet.Annotations[annotationKeySpecHash] = ephemeralRunnerSpecHash
+		if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
+			log.Error(err, "Failed to update ephemeral runner set with new spec hash")
+			return ctrl.Result{}, err
+		}
+
+		log.Info("Updated ephemeral runner set with new spec hash")
+		return ctrl.Result{}, nil
+	}
+
 	if ephemeralRunnerSet.Status.Phase == v1alpha1.EphemeralRunnerSetPhaseOutdated {
-		log.Info("ephemeral runner set is outdated, waiting for autoscaling runner set to remove it")
+		if _, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log); err != nil {
+			log.Error(err, "Failed to clean up EphemeralRunners")
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{}, nil
 	}
 
 	// Create proxy secret if not present
 	if ephemeralRunnerSet.Spec.EphemeralRunnerSpec.Proxy != nil {
 		proxySecret := new(corev1.Secret)
-		if err := r.Get(ctx, types.NamespacedName{Namespace: ephemeralRunnerSet.Namespace, Name: proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet)}, proxySecret); err != nil {
+		if err := r.Get(
+			ctx,
+			types.NamespacedName{
+				Namespace: ephemeralRunnerSet.Namespace,
+				Name:      proxyEphemeralRunnerSetSecretName(&ephemeralRunnerSet),
+			},
+			proxySecret,
+		); err != nil {
 			if !kerrors.IsNotFound(err) {
-				log.Error(err, "Unable to get ephemeralRunnerSet proxy secret", "namespace", ephemeralRunnerSet.Namespace, "name", proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet))
+				log.Error(err, "Unable to get ephemeralRunnerSet proxy secret", "namespace", ephemeralRunnerSet.Namespace, "name", proxyEphemeralRunnerSetSecretName(&ephemeralRunnerSet))
 				return ctrl.Result{}, err
 			}
 
 			// Create a compiled secret for the runner pods in the runnerset namespace
 			log.Info("Creating a ephemeralRunnerSet proxy secret for the runner pods")
-			if err := r.createProxySecret(ctx, ephemeralRunnerSet, log); err != nil {
+			if err := r.createProxySecret(ctx, &ephemeralRunnerSet, log); err != nil {
 				log.Error(err, "Unable to create ephemeralRunnerSet proxy secret", "namespace", ephemeralRunnerSet.Namespace, "set-name", ephemeralRunnerSet.Name)
 				return ctrl.Result{}, err
 			}
@@ -162,7 +195,8 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	ephemeralRunnersByState := newEphemeralRunnersByStates(ephemeralRunnerList)
 
-	log.Info("Ephemeral runner counts",
+	log.Info(
+		"Ephemeral runner counts",
 		"outdated", len(ephemeralRunnersByState.outdated),
 		"pending", len(ephemeralRunnersByState.pending),
 		"running", len(ephemeralRunnersByState.running),
@@ -172,7 +206,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 	)
 
 	if r.PublishMetrics {
-		githubConfigURL := ephemeralRunnerSet.Spec.EphemeralRunnerSpec.GitHubConfigUrl
+		githubConfigURL := ephemeralRunnerSet.Spec.EphemeralRunnerSpec.GitHubConfigURL
 		parsedURL, err := actions.ParseGitHubConfigFromURL(githubConfigURL)
 		if err != nil {
 			log.Error(err, "Github Config URL is invalid", "URL", githubConfigURL)
@@ -206,7 +240,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		case total < ephemeralRunnerSet.Spec.Replicas: // Handle scale up
 			count := ephemeralRunnerSet.Spec.Replicas - total
 			log.Info("Creating new ephemeral runners (scale up)", "count", count)
-			if err := r.createEphemeralRunners(ctx, ephemeralRunnerSet, count, log); err != nil {
+			if err := r.createEphemeralRunners(ctx, &ephemeralRunnerSet, count, log); err != nil {
 				log.Error(err, "failed to make ephemeral runner")
 				return ctrl.Result{}, err
 			}
@@ -221,7 +255,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 			log.Info("Deleting ephemeral runners (scale down)", "count", count)
 			if err := r.deleteIdleEphemeralRunners(
 				ctx,
-				ephemeralRunnerSet,
+				&ephemeralRunnerSet,
 				ephemeralRunnersByState.pending,
 				ephemeralRunnersByState.running,
 				count,
@@ -233,10 +267,11 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 	}
 
-	return ctrl.Result{}, r.updateStatus(ctx, ephemeralRunnerSet, ephemeralRunnersByState, log)
+	return ctrl.Result{}, r.updateStatus(ctx, &ephemeralRunnerSet, ephemeralRunnersByState, log)
 }
 
 func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, state *ephemeralRunnersByState, log logr.Logger) error {
+	original := ephemeralRunnerSet.DeepCopy()
 	total := state.scaleTotal()
 	var phase v1alpha1.EphemeralRunnerSetPhase
 	switch {
@@ -257,15 +292,13 @@ func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemer
 
 	// Update the status if needed.
 	if ephemeralRunnerSet.Status != desiredStatus {
-		log.Info("Updating status with current runners count", "count", total)
-		ephemeralRunnerSet := ephemeralRunnerSet.DeepCopy()
-		ephemeralRunnerSet.Status.CurrentReplicas = -1 // ALWAYS update current replicas
-		if err := patchSubResource(ctx, r.Status(), ephemeralRunnerSet, func(obj *v1alpha1.EphemeralRunnerSet) {
-			obj.Status = desiredStatus
-		}); err != nil {
-			log.Error(err, "Failed to update status with current runners count")
+		ephemeralRunnerSet.Status = desiredStatus
+		if err := r.Status().Patch(ctx, ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
+			log.Error(err, "Failed to update EphemeralRunnerSet status")
 			return err
 		}
+		log.Info("Updated EphemeralRunnerSet status", "status", ephemeralRunnerSet.Status)
+
 	}
 	return nil
 }
@@ -323,7 +356,8 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 
 	ephemeralRunnerState := newEphemeralRunnersByStates(ephemeralRunnerList)
 
-	log.Info("Clean up runner counts",
+	log.Info(
+		"Clean up runner counts",
 		"pending", len(ephemeralRunnerState.pending),
 		"running", len(ephemeralRunnerState.running),
 		"finished", len(ephemeralRunnerState.finished),
@@ -359,8 +393,26 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 
 	log.Info("Cleanup pending or running ephemeral runners")
 	errs = errs[0:0]
-	for _, ephemeralRunner := range append(ephemeralRunnerState.pending, ephemeralRunnerState.running...) {
+	for _, ephemeralRunner := range ephemeralRunnerState.pending {
 		log.Info("Removing the ephemeral runner from the service", "name", ephemeralRunner.Name)
+		_, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	for _, ephemeralRunner := range ephemeralRunnerState.running {
+		if ephemeralRunner.HasJob() {
+			log.Info(
+				"Skipping ephemeral runner since it is running a job",
+				"name", ephemeralRunner.Name,
+				"workflowRunId", ephemeralRunner.Status.WorkflowRunID,
+				"jobId", ephemeralRunner.Status.JobID,
+			)
+			continue
+		}
+
+		log.Info("Removing the idle ephemeral runner from the service", "name", ephemeralRunner.Name)
 		_, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
 		if err != nil {
 			errs = append(errs, err)

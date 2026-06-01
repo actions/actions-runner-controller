@@ -96,9 +96,9 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 				Namespace: autoscalingNS.Name,
 			},
 			Spec: v1alpha1.AutoscalingListenerSpec{
-				GitHubConfigUrl:               "https://github.com/owner/repo",
+				GitHubConfigURL:               "https://github.com/owner/repo",
 				GitHubConfigSecret:            configSecret.Name,
-				RunnerScaleSetId:              1,
+				RunnerScaleSetID:              1,
 				AutoscalingRunnerSetNamespace: autoscalingRunnerSet.Namespace,
 				AutoscalingRunnerSetName:      autoscalingRunnerSet.Name,
 				EphemeralRunnerSetName:        "test-ers",
@@ -143,7 +143,8 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 					return created.Finalizers[0], nil
 				},
 				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval).Should(BeEquivalentTo(autoscalingListenerFinalizerName), "AutoScalingListener should have a finalizer")
+				autoscalingListenerTestInterval,
+			).Should(BeEquivalentTo(autoscalingListenerFinalizerName), "AutoScalingListener should have a finalizer")
 
 			// Check if service account is created
 			serviceAccount := new(corev1.ServiceAccount)
@@ -171,7 +172,8 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 					return role.Rules, nil
 				},
 				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval).Should(BeEquivalentTo(rulesForListenerRole([]string{autoscalingListener.Spec.EphemeralRunnerSetName})), "Role should be created")
+				autoscalingListenerTestInterval,
+			).Should(BeEquivalentTo(rulesForListenerRole([]string{autoscalingListener.Spec.EphemeralRunnerSetName})), "Role should be created")
 
 			// Check if rolebinding is created
 			roleBinding := new(rbacv1.RoleBinding)
@@ -185,7 +187,8 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 					return roleBinding.RoleRef.Name, nil
 				},
 				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval).Should(BeEquivalentTo(autoscalingListener.Name), "Rolebinding should be created")
+				autoscalingListenerTestInterval,
+			).Should(BeEquivalentTo(autoscalingListener.Name), "Rolebinding should be created")
 
 			// Check if pod is created
 			pod := new(corev1.Pod)
@@ -199,7 +202,8 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 					return pod.Name, nil
 				},
 				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
+				autoscalingListenerTestInterval,
+			).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
 		})
 	})
 
@@ -292,7 +296,8 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 					return nil
 				},
 				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval).ShouldNot(Succeed(), "failed to delete service account")
+				autoscalingListenerTestInterval,
+			).ShouldNot(Succeed(), "failed to delete service account")
 
 			// The AutoScalingListener should be deleted
 			Eventually(
@@ -309,7 +314,8 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 					return nil
 				},
 				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval).ShouldNot(Succeed(), "failed to delete AutoScalingListener")
+				autoscalingListenerTestInterval,
+			).ShouldNot(Succeed(), "failed to delete AutoScalingListener")
 		})
 	})
 
@@ -327,7 +333,8 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 					return pod.Name, nil
 				},
 				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
+				autoscalingListenerTestInterval,
+			).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
 
 			// Update the AutoScalingListener
 			updated := autoscalingListener.DeepCopy()
@@ -347,7 +354,8 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 					return role.Rules, nil
 				},
 				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval).Should(BeEquivalentTo(rulesForListenerRole([]string{updated.Spec.EphemeralRunnerSetName})), "Role should be updated")
+				autoscalingListenerTestInterval,
+			).Should(BeEquivalentTo(rulesForListenerRole([]string{updated.Spec.EphemeralRunnerSetName})), "Role should be updated")
 		})
 
 		It("It should re-create pod but persist config secret whenever listener container is terminated", func() {
@@ -512,9 +520,9 @@ var _ = Describe("Test AutoScalingListener customization", func() {
 				Namespace: autoscalingNS.Name,
 			},
 			Spec: v1alpha1.AutoscalingListenerSpec{
-				GitHubConfigUrl:               "https://github.com/owner/repo",
+				GitHubConfigURL:               "https://github.com/owner/repo",
 				GitHubConfigSecret:            configSecret.Name,
-				RunnerScaleSetId:              1,
+				RunnerScaleSetID:              1,
 				AutoscalingRunnerSetNamespace: autoscalingRunnerSet.Namespace,
 				AutoscalingRunnerSetName:      autoscalingRunnerSet.Name,
 				EphemeralRunnerSetName:        "test-ers",
@@ -771,9 +779,9 @@ var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 				Namespace: autoscalingNS.Name,
 			},
 			Spec: v1alpha1.AutoscalingListenerSpec{
-				GitHubConfigUrl:               "https://github.com/owner/repo",
+				GitHubConfigURL:               "https://github.com/owner/repo",
 				GitHubConfigSecret:            configSecret.Name,
-				RunnerScaleSetId:              1,
+				RunnerScaleSetID:              1,
 				AutoscalingRunnerSetNamespace: autoscalingRunnerSet.Namespace,
 				AutoscalingRunnerSetName:      autoscalingRunnerSet.Name,
 				EphemeralRunnerSetName:        "test-ers",
@@ -908,7 +916,8 @@ var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 				}), "no_proxy environment variable not found")
 			},
 			autoscalingListenerTestTimeout,
-			autoscalingListenerTestInterval).Should(Succeed(), "failed to create listener pod with proxy details")
+			autoscalingListenerTestInterval,
+		).Should(Succeed(), "failed to create listener pod with proxy details")
 
 		// Delete the AutoScalingListener
 		err = k8sClient.Delete(ctx, autoscalingListener)
@@ -925,7 +934,8 @@ var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 				g.Expect(kerrors.IsNotFound(err)).To(BeTrue())
 			},
 			autoscalingListenerTestTimeout,
-			autoscalingListenerTestInterval).Should(Succeed(), "failed to delete secret with proxy details")
+			autoscalingListenerTestInterval,
+		).Should(Succeed(), "failed to delete secret with proxy details")
 	})
 })
 
@@ -973,9 +983,9 @@ var _ = Describe("Test AutoScalingListener controller with template modification
 				Namespace: autoscalingNS.Name,
 			},
 			Spec: v1alpha1.AutoscalingListenerSpec{
-				GitHubConfigUrl:               "https://github.com/owner/repo",
+				GitHubConfigURL:               "https://github.com/owner/repo",
 				GitHubConfigSecret:            configSecret.Name,
-				RunnerScaleSetId:              1,
+				RunnerScaleSetID:              1,
 				AutoscalingRunnerSetNamespace: autoscalingRunnerSet.Namespace,
 				AutoscalingRunnerSetName:      autoscalingRunnerSet.Name,
 				EphemeralRunnerSetName:        "test-ers",
@@ -1063,7 +1073,8 @@ var _ = Describe("Test AutoScalingListener controller with template modification
 				g.Expect(pod.ObjectMeta.Labels).To(HaveKeyWithValue("test-label-key", "test-label-value"), "pod labels should be copied from runner set template")
 			},
 			autoscalingListenerTestTimeout,
-			autoscalingListenerTestInterval).Should(Succeed(), "failed to create listener pod with proxy details")
+			autoscalingListenerTestInterval,
+		).Should(Succeed(), "failed to create listener pod with proxy details")
 
 		// Delete the AutoScalingListener
 		err := k8sClient.Delete(ctx, autoscalingListener)
@@ -1080,7 +1091,8 @@ var _ = Describe("Test AutoScalingListener controller with template modification
 				g.Expect(kerrors.IsNotFound(err)).To(BeTrue())
 			},
 			autoscalingListenerTestTimeout,
-			autoscalingListenerTestInterval).Should(Succeed(), "failed to delete secret with proxy details")
+			autoscalingListenerTestInterval,
+		).Should(Succeed(), "failed to delete secret with proxy details")
 	})
 })
 
@@ -1177,7 +1189,7 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 				Namespace: autoscalingNS.Name,
 			},
 			Spec: v1alpha1.AutoscalingListenerSpec{
-				GitHubConfigUrl:    "https://github.com/owner/repo",
+				GitHubConfigURL:    "https://github.com/owner/repo",
 				GitHubConfigSecret: configSecret.Name,
 				GitHubServerTLS: &v1alpha1.TLSConfig{
 					CertificateFrom: &v1alpha1.TLSCertificateSource{
@@ -1189,7 +1201,7 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 						},
 					},
 				},
-				RunnerScaleSetId:              1,
+				RunnerScaleSetID:              1,
 				AutoscalingRunnerSetNamespace: autoscalingRunnerSet.Namespace,
 				AutoscalingRunnerSetName:      autoscalingRunnerSet.Name,
 				EphemeralRunnerSetName:        "test-ers",
@@ -1240,7 +1252,8 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 						BeEquivalentTo(string(cert)),
 						"GITHUB_SERVER_ROOT_CA should be the rootCA.crt",
 					)
-				}).
+				},
+			).
 				WithTimeout(autoscalingRunnerSetTestTimeout).
 				WithPolling(autoscalingListenerTestInterval).
 				Should(Succeed(), "failed to create pod with volume and env variable")

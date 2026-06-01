@@ -31,9 +31,6 @@ controller:
       # The maximum number of concurrent reconciles which can be run by the EphemeralRunner controller.
       runnerMaxConcurrentReconciles: 2
 
-      # How the controller handles upgrades with running jobs: "immediate" or "eventual".
-      updateStrategy: "immediate"
-
       # List of label prefixes that should NOT be propagated to internal resources.
       excludeLabelPropagationPrefixes: []
       # Example:

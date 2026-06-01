@@ -25,7 +25,6 @@ function install_arc() {
         --namespace "${ARC_NAMESPACE}" \
         --create-namespace \
         --set controller.manager.container.image="${IMAGE_NAME}:${IMAGE_TAG}" \
-        --set controller.manager.config.updateStrategy="eventual" \
         "${ROOT_DIR}/charts/gha-runner-scale-set-controller-experimental" \
         --debug
 

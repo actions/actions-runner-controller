@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 const defaultGitHubToken = "gh_token"
@@ -53,6 +54,9 @@ func createNamespace(t ginkgo.GinkgoTInterface, client client.Client) (*corev1.N
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Controller: config.Controller{
 			SkipNameValidation: ptr.To(true),
+		},
+		Metrics: metricsserver.Options{
+			BindAddress: "0",
 		},
 		Cache: cache.Options{
 			DefaultNamespaces: map[string]cache.Config{

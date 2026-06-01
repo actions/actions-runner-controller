@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"github.com/actions/actions-runner-controller/hash"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -24,13 +25,13 @@ import (
 // AutoscalingListenerSpec defines the desired state of AutoscalingListener
 type AutoscalingListenerSpec struct {
 	// Required
-	GitHubConfigUrl string `json:"githubConfigUrl,omitempty"`
+	GitHubConfigURL string `json:"githubConfigUrl,omitempty"`
 
 	// Required
 	GitHubConfigSecret string `json:"githubConfigSecret,omitempty"`
 
 	// Required
-	RunnerScaleSetId int `json:"runnerScaleSetId,omitempty"`
+	RunnerScaleSetID int `json:"runnerScaleSetId,omitempty"`
 
 	// Required
 	AutoscalingRunnerSetNamespace string `json:"autoscalingRunnerSetNamespace,omitempty"`
@@ -81,6 +82,10 @@ type AutoscalingListenerSpec struct {
 
 	// +optional
 	RoleBindingMetadata *ResourceMeta `json:"roleBindingMetadata,omitempty"`
+}
+
+func (s *AutoscalingListenerSpec) Hash() string {
+	return hash.ComputeTemplateHash(s)
 }
 
 // AutoscalingListenerStatus defines the observed state of AutoscalingListener
