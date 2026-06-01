@@ -419,12 +419,14 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 	case err == nil:
 		if listenerClusterRoleBinding.DeletionTimestamp.IsZero() {
 			logger.Info("Deleting the listener cluster role binding")
-			if err := r.Delete(ctx, listenerClusterRoleBinding); err != nil {
+			if err := r.Delete(ctx, listenerClusterRoleBinding); err != nil && !kerrors.IsForbidden(err) {
 				return false, fmt.Errorf("failed to delete listener cluster role binding: %w", err)
 			}
 		}
 		requeue = true
-	case !kerrors.IsNotFound(err):
+	case kerrors.IsNotFound(err) || kerrors.IsForbidden(err):
+		// not found or no permission — nothing to clean up
+	default:
 		return false, fmt.Errorf("failed to get listener cluster role binding: %w", err)
 	}
 	logger.Info("Listener cluster role binding is deleted")
