@@ -68,8 +68,8 @@ type AutoscalingListenerReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=create;delete;get;list;watch;update
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=create;delete;get;list;watch
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=create;delete;get;list;watch;update
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=create;delete;get;list;watch
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=create;delete;get
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=create;delete;get
 // +kubebuilder:rbac:groups=actions.github.com,resources=autoscalinglisteners,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=actions.github.com,resources=autoscalinglisteners/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=actions.github.com,resources=autoscalinglisteners/finalizers,verbs=update
@@ -909,8 +909,6 @@ func (r *AutoscalingListenerReconciler) SetupWithManager(mgr ctrl.Manager, opts 
 			Owns(&corev1.ServiceAccount{}).
 			Watches(&rbacv1.Role{}, handler.EnqueueRequestsFromMapFunc(labelBasedWatchFunc)).
 			Watches(&rbacv1.RoleBinding{}, handler.EnqueueRequestsFromMapFunc(labelBasedWatchFunc)).
-			Watches(&rbacv1.ClusterRole{}, handler.EnqueueRequestsFromMapFunc(labelBasedWatchFunc)).
-			Watches(&rbacv1.ClusterRoleBinding{}, handler.EnqueueRequestsFromMapFunc(labelBasedWatchFunc)).
 			WithEventFilter(predicate.ResourceVersionChangedPredicate{}),
 		opts,
 	).Complete(r)
