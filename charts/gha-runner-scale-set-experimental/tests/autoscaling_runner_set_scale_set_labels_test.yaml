@@ -1,0 +1,58 @@
+suite: "AutoscalingRunnerSet scale set labels"
+templates:
+  - autoscalingrunnserset.yaml
+tests:
+  - it: should apply scaleset labels slice as runnerScaleSetLabels
+    set:
+      scaleset.name: "test"
+      scaleset.labels:
+        - "linux"
+        - "x64"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.runnerScaleSetLabels[0]
+          value: "linux"
+      - equal:
+          path: spec.runnerScaleSetLabels[1]
+          value: "x64"
+
+  - it: should fail when a scaleset label is empty
+    set:
+      scaleset.name: "test"
+      scaleset.labels:
+        - "linux"
+        - ""
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: "scaleset.labels contains an empty string, each label must be a non-empty string of less than 256 characters"
+
+  - it: should fail when a scaleset label is 256 characters or more
+    set:
+      scaleset.name: "test"
+      scaleset.labels:
+        - "linux"
+        - "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: "scaleset.labels contains a label that is 256 characters or more, each label must be a non-empty string of less than 256 characters"

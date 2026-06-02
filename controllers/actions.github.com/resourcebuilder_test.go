@@ -1,19 +1,19 @@
 package actionsgithubcom
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/scaleset"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestLabelPropagation(t *testing.T) {
+func TestMetadataPropagation(t *testing.T) {
 	autoscalingRunnerSet := v1alpha1.AutoscalingRunnerSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-scale-set",
@@ -28,13 +28,77 @@ func TestLabelPropagation(t *testing.T) {
 				"directly.excluded.org/arbitrary": "not-excluded-value",
 			},
 			Annotations: map[string]string{
-				runnerScaleSetIdAnnotationKey:         "1",
+				runnerScaleSetIDAnnotationKey:         "1",
 				AnnotationKeyGitHubRunnerGroupName:    "test-group",
 				AnnotationKeyGitHubRunnerScaleSetName: "test-scale-set",
 			},
 		},
 		Spec: v1alpha1.AutoscalingRunnerSetSpec{
 			GitHubConfigUrl: "https://github.com/org/repo",
+			AutoscalingListenerMetadata: &v1alpha1.ResourceMeta{
+				Labels: map[string]string{
+					"test.com/autoscaling-listener-label": "autoscaling-listener-label",
+				},
+				Annotations: map[string]string{
+					"test.com/autoscaling-listener-annotation": "autoscaling-listener-annotation",
+				},
+			},
+			ListenerServiceAccountMetadata: &v1alpha1.ResourceMeta{
+				Labels: map[string]string{
+					"test.com/listener-service-account-label": "listener-service-account-label",
+				},
+				Annotations: map[string]string{
+					"test.com/listener-service-account-annotation": "listener-service-account-annotation",
+				},
+			},
+			ListenerRoleMetadata: &v1alpha1.ResourceMeta{
+				Labels: map[string]string{
+					"test.com/listener-role-label": "listener-role-label",
+				},
+				Annotations: map[string]string{
+					"test.com/listener-role-annotation": "listener-role-annotation",
+				},
+			},
+			ListenerRoleBindingMetadata: &v1alpha1.ResourceMeta{
+				Labels: map[string]string{
+					"test.com/listener-role-binding-label": "listener-role-binding-label",
+				},
+				Annotations: map[string]string{
+					"test.com/listener-role-binding-annotation": "listener-role-binding-annotation",
+				},
+			},
+			ListenerConfigSecretMetadata: &v1alpha1.ResourceMeta{
+				Labels: map[string]string{
+					"test.com/listener-config-secret-label": "listener-config-secret-label",
+				},
+				Annotations: map[string]string{
+					"test.com/listener-config-secret-annotation": "listener-config-secret-annotation",
+				},
+			},
+			EphemeralRunnerSetMetadata: &v1alpha1.ResourceMeta{
+				Labels: map[string]string{
+					"test.com/ephemeral-runner-set-label": "ephemeral-runner-set-label",
+				},
+				Annotations: map[string]string{
+					"test.com/ephemeral-runner-set-annotation": "ephemeral-runner-set-annotation",
+				},
+			},
+			EphemeralRunnerMetadata: &v1alpha1.ResourceMeta{
+				Labels: map[string]string{
+					"test.com/ephemeral-runner-label": "ephemeral-runner-label",
+				},
+				Annotations: map[string]string{
+					"test.com/ephemeral-runner-annotation": "ephemeral-runner-annotation",
+				},
+			},
+			EphemeralRunnerConfigSecretMetadata: &v1alpha1.ResourceMeta{
+				Labels: map[string]string{
+					"test.com/ephemeral-runner-config-secret-label": "ephemeral-runner-config-secret-label",
+				},
+				Annotations: map[string]string{
+					"test.com/ephemeral-runner-config-secret-annotation": "ephemeral-runner-config-secret-annotation",
+				},
+			},
 		},
 	}
 
@@ -58,6 +122,8 @@ func TestLabelPropagation(t *testing.T) {
 	assert.Equal(t, autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName], ephemeralRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName])
 	assert.Equal(t, autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName], ephemeralRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName])
 	assert.Equal(t, autoscalingRunnerSet.Labels["arbitrary-label"], ephemeralRunnerSet.Labels["arbitrary-label"])
+	assert.Equal(t, "ephemeral-runner-set-label", ephemeralRunnerSet.Labels["test.com/ephemeral-runner-set-label"])
+	assert.Equal(t, "ephemeral-runner-set-annotation", ephemeralRunnerSet.Annotations["test.com/ephemeral-runner-set-annotation"])
 
 	listener, err := b.newAutoScalingListener(&autoscalingRunnerSet, ephemeralRunnerSet, autoscalingRunnerSet.Namespace, "test:latest", nil)
 	require.NoError(t, err)
@@ -71,17 +137,26 @@ func TestLabelPropagation(t *testing.T) {
 	assert.Equal(t, "org", listener.Labels[LabelKeyGitHubOrganization])
 	assert.Equal(t, "repo", listener.Labels[LabelKeyGitHubRepository])
 	assert.Equal(t, autoscalingRunnerSet.Labels["arbitrary-label"], listener.Labels["arbitrary-label"])
+	assert.Equal(t, "autoscaling-listener-label", listener.Labels["test.com/autoscaling-listener-label"])
+	assert.Equal(t, "autoscaling-listener-annotation", listener.Annotations["test.com/autoscaling-listener-annotation"])
 
 	assert.NotContains(t, listener.Labels, "example.com/label")
 	assert.NotContains(t, listener.Labels, "example.com/example")
 	assert.NotContains(t, listener.Labels, "directly.excluded.org/label")
 	assert.Equal(t, "not-excluded-value", listener.Labels["directly.excluded.org/arbitrary"])
 
-	listenerServiceAccount := &corev1.ServiceAccount{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "test",
-		},
-	}
+	listenerServiceAccount := b.newScaleSetListenerServiceAccount(listener)
+	assert.Equal(t, "listener-service-account-label", listenerServiceAccount.Labels["test.com/listener-service-account-label"])
+	assert.Equal(t, "listener-service-account-annotation", listenerServiceAccount.Annotations["test.com/listener-service-account-annotation"])
+
+	listenerRole := b.newScaleSetListenerRole(listener)
+	assert.Equal(t, "listener-role-label", listenerRole.Labels["test.com/listener-role-label"])
+	assert.Equal(t, "listener-role-annotation", listenerRole.Annotations["test.com/listener-role-annotation"])
+
+	listenerRoleBinding := b.newScaleSetListenerRoleBinding(listener, listenerRole, listenerServiceAccount)
+	assert.Equal(t, "listener-role-binding-label", listenerRoleBinding.Labels["test.com/listener-role-binding-label"])
+	assert.Equal(t, "listener-role-binding-annotation", listenerRoleBinding.Annotations["test.com/listener-role-binding-annotation"])
+
 	listenerPod, err := b.newScaleSetListenerPod(listener, &corev1.Secret{}, listenerServiceAccount, nil)
 	require.NoError(t, err)
 	assert.Equal(t, listenerPod.Labels, listener.Labels)
@@ -98,13 +173,21 @@ func TestLabelPropagation(t *testing.T) {
 	assert.Equal(t, "runner", ephemeralRunner.Labels[LabelKeyKubernetesComponent])
 	assert.Equal(t, autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName], ephemeralRunner.Annotations[AnnotationKeyGitHubRunnerGroupName])
 	assert.Equal(t, autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName], ephemeralRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName])
+	assert.Equal(t, "ephemeral-runner-label", ephemeralRunner.Labels["test.com/ephemeral-runner-label"])
+	assert.Equal(t, "ephemeral-runner-annotation", ephemeralRunner.Annotations["test.com/ephemeral-runner-annotation"])
 
-	runnerSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "test",
+	runnerSecret := b.newEphemeralRunnerJitSecret(ephemeralRunner, &scaleset.RunnerScaleSetJitRunnerConfig{
+		Runner: &scaleset.RunnerReference{
+			ID:               1,
+			Name:             "test",
+			RunnerScaleSetID: 1,
 		},
-	}
-	pod := b.newEphemeralRunnerPod(context.TODO(), ephemeralRunner, runnerSecret)
+		EncodedJITConfig: "",
+	})
+	assert.Equal(t, "ephemeral-runner-config-secret-label", runnerSecret.Labels["test.com/ephemeral-runner-config-secret-label"])
+	assert.Equal(t, "ephemeral-runner-config-secret-annotation", runnerSecret.Annotations["test.com/ephemeral-runner-config-secret-annotation"])
+
+	pod := b.newEphemeralRunnerPod(ephemeralRunner, runnerSecret)
 	for key := range ephemeralRunner.Labels {
 		assert.Equal(t, ephemeralRunner.Labels[key], pod.Labels[key])
 	}
@@ -124,7 +207,7 @@ func TestGitHubURLTrimLabelValues(t *testing.T) {
 				LabelKeyKubernetesVersion: "0.2.0",
 			},
 			Annotations: map[string]string{
-				runnerScaleSetIdAnnotationKey:         "1",
+				runnerScaleSetIDAnnotationKey:         "1",
 				AnnotationKeyGitHubRunnerGroupName:    "test-group",
 				AnnotationKeyGitHubRunnerScaleSetName: "test-scale-set",
 			},
@@ -190,7 +273,7 @@ func TestOwnershipRelationships(t *testing.T) {
 				LabelKeyKubernetesVersion: "0.2.0",
 			},
 			Annotations: map[string]string{
-				runnerScaleSetIdAnnotationKey:         "1",
+				runnerScaleSetIDAnnotationKey:         "1",
 				AnnotationKeyGitHubRunnerGroupName:    "test-group",
 				AnnotationKeyGitHubRunnerScaleSetName: "test-scale-set",
 				annotationKeyValuesHash:               "test-hash",
@@ -208,9 +291,30 @@ func TestOwnershipRelationships(t *testing.T) {
 	ephemeralRunnerSet, err := b.newEphemeralRunnerSet(&autoscalingRunnerSet)
 	require.NoError(t, err)
 
+	// Create and test Listener Pod ownership
+	listener, err := b.newAutoScalingListener(&autoscalingRunnerSet, ephemeralRunnerSet, autoscalingRunnerSet.Namespace, "test:latest", nil)
+	require.NoError(t, err)
+	listener.UID = "test-listener-uid"
+	listenerServiceAccount := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-sa"},
+	}
+	listenerPod, err := b.newScaleSetListenerPod(listener, &corev1.Secret{}, listenerServiceAccount, nil)
+	require.NoError(t, err)
+
+	require.Len(t, listenerPod.OwnerReferences, 1, "Listener Pod should have exactly one owner reference")
+	ownerRef := listenerPod.OwnerReferences[0]
+	assert.Equal(t, v1alpha1.GroupVersion.String(), ownerRef.APIVersion, "Owner reference APIVersion should match GroupVersion")
+	assert.Equal(t, "AutoscalingListener", ownerRef.Kind, "Owner reference Kind should be AutoscalingListener")
+	assert.Equal(t, listener.GetName(), ownerRef.Name, "Owner reference name should match AutoscalingListener name")
+	assert.Equal(t, listener.GetUID(), ownerRef.UID, "Owner reference UID should match AutoscalingListener UID")
+	assert.Equal(t, true, *ownerRef.Controller, "Controller flag should be true")
+	assert.Equal(t, true, *ownerRef.BlockOwnerDeletion, "BlockOwnerDeletion flag should be true")
+
 	// Test EphemeralRunnerSet ownership
 	require.Len(t, ephemeralRunnerSet.OwnerReferences, 1, "EphemeralRunnerSet should have exactly one owner reference")
-	ownerRef := ephemeralRunnerSet.OwnerReferences[0]
+	ownerRef = ephemeralRunnerSet.OwnerReferences[0]
+	assert.Equal(t, v1alpha1.GroupVersion.String(), ownerRef.APIVersion, "Owner reference APIVersion should match GroupVersion")
+	assert.Equal(t, "AutoscalingRunnerSet", ownerRef.Kind, "Owner reference Kind should be AutoscalingRunnerSet")
 	assert.Equal(t, autoscalingRunnerSet.GetName(), ownerRef.Name, "Owner reference name should match AutoscalingRunnerSet name")
 	assert.Equal(t, autoscalingRunnerSet.GetUID(), ownerRef.UID, "Owner reference UID should match AutoscalingRunnerSet UID")
 	assert.Equal(t, true, *ownerRef.Controller, "Controller flag should be true")
@@ -222,6 +326,8 @@ func TestOwnershipRelationships(t *testing.T) {
 	// Test EphemeralRunner ownership
 	require.Len(t, ephemeralRunner.OwnerReferences, 1, "EphemeralRunner should have exactly one owner reference")
 	ownerRef = ephemeralRunner.OwnerReferences[0]
+	assert.Equal(t, v1alpha1.GroupVersion.String(), ownerRef.APIVersion, "Owner reference APIVersion should match GroupVersion")
+	assert.Equal(t, "EphemeralRunnerSet", ownerRef.Kind, "Owner reference Kind should be EphemeralRunnerSet")
 	assert.Equal(t, ephemeralRunnerSet.GetName(), ownerRef.Name, "Owner reference name should match EphemeralRunnerSet name")
 	assert.Equal(t, ephemeralRunnerSet.GetUID(), ownerRef.UID, "Owner reference UID should match EphemeralRunnerSet UID")
 	assert.Equal(t, true, *ownerRef.Controller, "Controller flag should be true")
@@ -233,13 +339,123 @@ func TestOwnershipRelationships(t *testing.T) {
 			Name: "test-secret",
 		},
 	}
-	pod := b.newEphemeralRunnerPod(context.TODO(), ephemeralRunner, runnerSecret)
+	pod := b.newEphemeralRunnerPod(ephemeralRunner, runnerSecret)
 
 	// Test EphemeralRunnerPod ownership
 	require.Len(t, pod.OwnerReferences, 1, "EphemeralRunnerPod should have exactly one owner reference")
 	ownerRef = pod.OwnerReferences[0]
+	assert.Equal(t, v1alpha1.GroupVersion.String(), ownerRef.APIVersion, "Owner reference APIVersion should match GroupVersion")
+	assert.Equal(t, "EphemeralRunner", ownerRef.Kind, "Owner reference Kind should be EphemeralRunner")
 	assert.Equal(t, ephemeralRunner.GetName(), ownerRef.Name, "Owner reference name should match EphemeralRunner name")
 	assert.Equal(t, ephemeralRunner.GetUID(), ownerRef.UID, "Owner reference UID should match EphemeralRunner UID")
 	assert.Equal(t, true, *ownerRef.Controller, "Controller flag should be true")
 	assert.Equal(t, true, *ownerRef.BlockOwnerDeletion, "BlockOwnerDeletion flag should be true")
+}
+
+func TestListenerPodNodeSelector(t *testing.T) {
+	autoscalingRunnerSet := v1alpha1.AutoscalingRunnerSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-scale-set",
+			Namespace: "test-ns",
+			Labels: map[string]string{
+				LabelKeyKubernetesPartOf:  labelValueKubernetesPartOf,
+				LabelKeyKubernetesVersion: "0.2.0",
+			},
+			Annotations: map[string]string{
+				runnerScaleSetIDAnnotationKey:         "1",
+				AnnotationKeyGitHubRunnerGroupName:    "test-group",
+				AnnotationKeyGitHubRunnerScaleSetName: "test-scale-set",
+			},
+		},
+		Spec: v1alpha1.AutoscalingRunnerSetSpec{
+			GitHubConfigUrl: "https://github.com/org/repo",
+		},
+	}
+
+	b := ResourceBuilder{}
+	ephemeralRunnerSet, err := b.newEphemeralRunnerSet(&autoscalingRunnerSet)
+	require.NoError(t, err)
+
+	listener, err := b.newAutoScalingListener(&autoscalingRunnerSet, ephemeralRunnerSet, autoscalingRunnerSet.Namespace, "test:latest", nil)
+	require.NoError(t, err)
+
+	listenerServiceAccount := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test",
+		},
+	}
+
+	t.Run("default listener pod has linux nodeSelector", func(t *testing.T) {
+		pod, err := b.newScaleSetListenerPod(listener, &corev1.Secret{}, listenerServiceAccount, nil)
+		require.NoError(t, err)
+		require.NotNil(t, pod.Spec.NodeSelector)
+		assert.Equal(t, "linux", pod.Spec.NodeSelector[LabelKeyKubernetesOS],
+			"listener pod should default to linux nodeSelector")
+	})
+
+	t.Run("nil listenerTemplate preserves linux nodeSelector", func(t *testing.T) {
+		listenerNoTemplate := listener.DeepCopy()
+		listenerNoTemplate.Spec.Template = nil
+
+		pod, err := b.newScaleSetListenerPod(listenerNoTemplate, &corev1.Secret{}, listenerServiceAccount, nil)
+		require.NoError(t, err)
+		require.NotNil(t, pod.Spec.NodeSelector)
+		assert.Equal(t, "linux", pod.Spec.NodeSelector[LabelKeyKubernetesOS],
+			"listener pod should keep linux nodeSelector when no template is provided")
+	})
+
+	t.Run("listenerTemplate with nil nodeSelector preserves linux default", func(t *testing.T) {
+		listenerWithTemplate := listener.DeepCopy()
+		listenerWithTemplate.Spec.Template = &corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				// NodeSelector intentionally nil
+				Tolerations: []corev1.Toleration{
+					{Key: "example.com/test", Operator: corev1.TolerationOpExists},
+				},
+			},
+		}
+
+		pod, err := b.newScaleSetListenerPod(listenerWithTemplate, &corev1.Secret{}, listenerServiceAccount, nil)
+		require.NoError(t, err)
+		require.NotNil(t, pod.Spec.NodeSelector,
+			"linux nodeSelector should not be cleared by template with nil nodeSelector")
+		assert.Equal(t, "linux", pod.Spec.NodeSelector[LabelKeyKubernetesOS])
+		assert.Len(t, pod.Spec.Tolerations, 1, "other template fields should still be applied")
+	})
+
+	t.Run("listenerTemplate with explicit nodeSelector overrides default", func(t *testing.T) {
+		listenerWithTemplate := listener.DeepCopy()
+		listenerWithTemplate.Spec.Template = &corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				NodeSelector: map[string]string{
+					LabelKeyKubernetesOS: "linux",
+					"custom-label/pool":  "listeners",
+				},
+			},
+		}
+
+		pod, err := b.newScaleSetListenerPod(listenerWithTemplate, &corev1.Secret{}, listenerServiceAccount, nil)
+		require.NoError(t, err)
+		require.NotNil(t, pod.Spec.NodeSelector)
+		assert.Equal(t, "linux", pod.Spec.NodeSelector[LabelKeyKubernetesOS])
+		assert.Equal(t, "listeners", pod.Spec.NodeSelector["custom-label/pool"],
+			"explicit template nodeSelector should be applied")
+	})
+
+	t.Run("listenerTemplate with empty nodeSelector overrides default", func(t *testing.T) {
+		listenerWithTemplate := listener.DeepCopy()
+		listenerWithTemplate.Spec.Template = &corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				NodeSelector: map[string]string{},
+			},
+		}
+
+		pod, err := b.newScaleSetListenerPod(listenerWithTemplate, &corev1.Secret{}, listenerServiceAccount, nil)
+		require.NoError(t, err)
+		// An explicitly set empty map is non-nil, so it overrides the default.
+		// This is intentional: the user explicitly opted out of nodeSelector constraints.
+		assert.NotNil(t, pod.Spec.NodeSelector)
+		assert.Empty(t, pod.Spec.NodeSelector,
+			"explicitly empty nodeSelector should override the linux default")
+	})
 }

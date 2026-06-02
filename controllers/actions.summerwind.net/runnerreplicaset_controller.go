@@ -25,7 +25,7 @@ import (
 
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -38,7 +38,7 @@ import (
 type RunnerReplicaSetReconciler struct {
 	client.Client
 	Log      logr.Logger
-	Recorder record.EventRecorder
+	Recorder events.EventRecorder
 	Scheme   *runtime.Scheme
 	Name     string
 }
@@ -195,7 +195,7 @@ func (r *RunnerReplicaSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		name = r.Name
 	}
 
-	r.Recorder = mgr.GetEventRecorderFor(name)
+	r.Recorder = mgr.GetEventRecorder(name)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.RunnerReplicaSet{}).

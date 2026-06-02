@@ -1,0 +1,84 @@
+suite: "AutoscalingRunnerSet extraContainers"
+templates:
+  - autoscalingrunnserset.yaml
+tests:
+  - it: should append extraContainers after the runner container
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "kubernetes"
+        pod:
+          spec:
+            containers:
+              - name: "sidecar"
+                image: "busybox:1.36"
+                command: ["sh", "-c", "sleep 3600"]
+                resources:
+                  limits:
+                    cpu: "250m"
+                    memory: "64Mi"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: runner
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: sidecar
+      - equal:
+          path: spec.template.spec.containers[1].image
+          value: busybox:1.36
+      - equal:
+          path: spec.template.spec.containers[1].resources.limits.cpu
+          value: 250m
+      - equal:
+          path: spec.template.spec.containers[1].resources.limits.memory
+          value: 64Mi
+
+  - it: should fail when runner.pod.spec.containers is not a list
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "kubernetes"
+        pod:
+          spec:
+            containers:
+              name: "not-a-list"
+              image: "busybox:1.36"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: ".Values.runner.pod.spec.containers must be a list of container specifications"
+
+  - it: should fail when a container is named runner
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "kubernetes"
+        pod:
+          spec:
+            containers:
+              - name: "runner"
+                image: "busybox:1.36"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: ".Values.runner.pod.spec.containers[].name must not be 'runner' (reserved)"

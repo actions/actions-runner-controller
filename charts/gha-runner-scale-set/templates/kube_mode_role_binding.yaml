@@ -1,14 +1,21 @@
 {{- $containerMode := .Values.containerMode }}
 {{- $hasCustomResourceMeta := (and .Values.resourceMeta .Values.resourceMeta.kubernetesModeRoleBinding) }}
-{{- if and (eq $containerMode.type "kubernetes") (not .Values.template.spec.serviceAccountName) }}
+{{- if and (or (eq $containerMode.type "kubernetes") (eq $containerMode.type "kubernetes-novolume")) (not .Values.template.spec.serviceAccountName) }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: {{ include "gha-runner-scale-set.kubeModeRoleBindingName" . }}
   namespace: {{ include "gha-runner-scale-set.namespace" . }}
   labels:
+    {{- $base := include "gha-runner-scale-set.labels" . | fromYaml }}
+    {{- $extra := dict "app.kubernetes.io/component" "" }}
+    {{- $reserved := merge $base $extra }}
     {{- with .Values.labels }}
-    {{- toYaml . | nindent 4 }}
+    {{- range $k, $v := . }}
+    {{- if not (or (hasKey $reserved $k) (hasPrefix "actions.github.com/" $k)) }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
+    {{- end }}
     {{- end }}
     {{- if $hasCustomResourceMeta }}
     {{- with .Values.resourceMeta.kubernetesModeRoleBinding.labels }}

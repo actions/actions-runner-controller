@@ -54,7 +54,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestDesiredReplicas(ghc *arcgi
 	case v1alpha1.AutoscalingMetricTypePercentageRunnersBusy:
 		suggested, err = r.suggestReplicasByPercentageRunnersBusy(ghc, st, hra, primaryMetric)
 	default:
-		return nil, fmt.Errorf("validating autoscaling metrics: unsupported metric type %q", primaryMetric)
+		return nil, fmt.Errorf("validating autoscaling metrics: unsupported metric type %q", primaryMetric.Type)
 	}
 
 	if err != nil {

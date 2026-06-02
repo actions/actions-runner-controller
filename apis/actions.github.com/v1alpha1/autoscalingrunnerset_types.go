@@ -67,6 +67,9 @@ type AutoscalingRunnerSetSpec struct {
 	RunnerScaleSetName string `json:"runnerScaleSetName,omitempty"`
 
 	// +optional
+	RunnerScaleSetLabels []string `json:"runnerScaleSetLabels,omitempty"`
+
+	// +optional
 	Proxy *ProxyConfig `json:"proxy,omitempty"`
 
 	// +optional
@@ -79,10 +82,34 @@ type AutoscalingRunnerSetSpec struct {
 	Template corev1.PodTemplateSpec `json:"template,omitempty"`
 
 	// +optional
+	AutoscalingListenerMetadata *ResourceMeta `json:"autoscalingListener,omitempty"`
+
+	// +optional
 	ListenerMetrics *MetricsConfig `json:"listenerMetrics,omitempty"`
 
 	// +optional
 	ListenerTemplate *corev1.PodTemplateSpec `json:"listenerTemplate,omitempty"`
+
+	// +optional
+	ListenerServiceAccountMetadata *ResourceMeta `json:"listenerServiceAccountMetadata,omitempty"`
+
+	// +optional
+	ListenerRoleMetadata *ResourceMeta `json:"listenerRoleMetadata,omitempty"`
+
+	// +optional
+	ListenerRoleBindingMetadata *ResourceMeta `json:"listenerRoleBindingMetadata,omitempty"`
+
+	// +optional
+	ListenerConfigSecretMetadata *ResourceMeta `json:"listenerConfigSecretMetadata,omitempty"`
+
+	// +optional
+	EphemeralRunnerSetMetadata *ResourceMeta `json:"ephemeralRunnerSetMetadata,omitempty"`
+
+	// +optional
+	EphemeralRunnerMetadata *ResourceMeta `json:"ephemeralRunnerMetadata,omitempty"`
+
+	// +optional
+	EphemeralRunnerConfigSecretMetadata *ResourceMeta `json:"ephemeralRunnerConfigSecretMetadata,omitempty"`
 
 	// +optional
 	// +kubebuilder:validation:Minimum:=0
@@ -291,7 +318,7 @@ type AutoscalingRunnerSetStatus struct {
 	CurrentRunners int `json:"currentRunners"`
 
 	// +optional
-	State string `json:"state"`
+	Phase AutoscalingRunnerSetPhase `json:"phase"`
 
 	// EphemeralRunner counts separated by the stage ephemeral runners are in, taken from the EphemeralRunnerSet
 
@@ -301,6 +328,30 @@ type AutoscalingRunnerSetStatus struct {
 	RunningEphemeralRunners int `json:"runningEphemeralRunners"`
 	// +optional
 	FailedEphemeralRunners int `json:"failedEphemeralRunners"`
+}
+
+type AutoscalingRunnerSetPhase string
+
+const (
+	// AutoscalingRunnerSetPhasePending phase means that the listener is not
+	// yet started
+	AutoscalingRunnerSetPhasePending  AutoscalingRunnerSetPhase = "Pending"
+	AutoscalingRunnerSetPhaseRunning  AutoscalingRunnerSetPhase = "Running"
+	AutoscalingRunnerSetPhaseOutdated AutoscalingRunnerSetPhase = "Outdated"
+)
+
+func (ars *AutoscalingRunnerSet) Hash() string {
+	type data struct {
+		Spec   *AutoscalingRunnerSetSpec
+		Labels map[string]string
+	}
+
+	d := &data{
+		Spec:   ars.Spec.DeepCopy(),
+		Labels: ars.Labels,
+	}
+
+	return hash.ComputeTemplateHash(d)
 }
 
 func (ars *AutoscalingRunnerSet) ListenerSpecHash() string {

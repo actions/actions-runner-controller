@@ -42,11 +42,11 @@ func createNamespace(t ginkgo.GinkgoTInterface, client client.Client) (*corev1.N
 		ObjectMeta: metav1.ObjectMeta{Name: "testns-autoscaling" + RandStringRunes(5)},
 	}
 
-	err := k8sClient.Create(context.Background(), ns)
+	err := client.Create(context.Background(), ns)
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
-		err := k8sClient.Delete(context.Background(), ns)
+		err := client.Delete(context.Background(), ns)
 		require.NoError(t, err)
 	})
 

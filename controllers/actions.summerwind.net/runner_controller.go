@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/client-go/tools/events"
 
 	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/actions-runner-controller/hash"
@@ -33,7 +34,6 @@ import (
 
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -66,7 +66,7 @@ const (
 type RunnerReconciler struct {
 	client.Client
 	Log                         logr.Logger
-	Recorder                    record.EventRecorder
+	Recorder                    events.EventRecorder
 	Scheme                      *runtime.Scheme
 	GitHubClient                *MultiGitHubClient
 	Name                        string
@@ -408,7 +408,14 @@ func (r *RunnerReconciler) processRunnerCreation(ctx context.Context, runner v1a
 		return ctrl.Result{}, err
 	}
 
-	r.Recorder.Event(&runner, corev1.EventTypeNormal, "PodCreated", fmt.Sprintf("Created pod '%s'", newPod.Name))
+	r.Recorder.Eventf(
+		&runner,
+		nil,
+		corev1.EventTypeNormal,
+		"PodCreated",
+		"",
+		fmt.Sprintf("Created pod '%s'", newPod.Name),
+	)
 	log.Info("Created runner pod", "repository", runner.Spec.Repository)
 
 	return ctrl.Result{}, nil
@@ -423,14 +430,28 @@ func (r *RunnerReconciler) createObject(ctx context.Context, obj client.Object, 
 	if err := r.Create(ctx, obj); err != nil {
 		if kerrors.IsAlreadyExists(err) {
 			log.Info(fmt.Sprintf("Failed to create %s %s as it already exists. Reusing existing %s", kind, meta.Name, kind))
-			r.Recorder.Event(runner, corev1.EventTypeNormal, fmt.Sprintf("%sReused", kind), fmt.Sprintf("Reused %s '%s'", kind, meta.Name))
+			r.Recorder.Eventf(
+				runner,
+				nil,
+				corev1.EventTypeNormal,
+				fmt.Sprintf("%sReused", kind),
+				"",
+				fmt.Sprintf("Reused %s '%s'", kind, meta.Name),
+			)
 			return nil
 		}
 
 		log.Error(err, fmt.Sprintf("Retrying as failed to create %s %s resource", kind, meta.Name))
 		return &ctrl.Result{Requeue: true}
 	}
-	r.Recorder.Event(runner, corev1.EventTypeNormal, fmt.Sprintf("%sCreated", kind), fmt.Sprintf("Created %s '%s'", kind, meta.Name))
+	r.Recorder.Eventf(
+		runner,
+		nil,
+		corev1.EventTypeNormal,
+		fmt.Sprintf("%sCreated", kind),
+		"",
+		fmt.Sprintf("Created %s '%s'", kind, meta.Name),
+	)
 	log.Info(fmt.Sprintf("Created %s", kind), "name", meta.Name)
 	return nil
 }
@@ -453,7 +474,14 @@ func (r *RunnerReconciler) updateRegistrationToken(ctx context.Context, runner v
 		//    POST https://api.github.com/enterprises/YOUR_ENTERPRISE/actions/runners/registration-token: 403 Resource not accessible by integration []
 		// In such case retrying in seconds might not make much sense.
 
-		r.Recorder.Event(&runner, corev1.EventTypeWarning, "FailedUpdateRegistrationToken", "Updating registration token failed")
+		r.Recorder.Eventf(
+			&runner,
+			nil,
+			corev1.EventTypeWarning,
+			"FailedUpdateRegistrationToken",
+			"",
+			"Updating registration token failed",
+		)
 		log.Error(err, "Failed to get new registration token")
 		return false, err
 	}
@@ -472,7 +500,14 @@ func (r *RunnerReconciler) updateRegistrationToken(ctx context.Context, runner v
 		return false, err
 	}
 
-	r.Recorder.Event(&runner, corev1.EventTypeNormal, "RegistrationTokenUpdated", "Successfully update registration token")
+	r.Recorder.Eventf(
+		&runner,
+		nil,
+		corev1.EventTypeNormal,
+		"RegistrationTokenUpdated",
+		"",
+		"Successfully update registration token",
+	)
 	log.Info("Updated registration token", "repository", runner.Spec.Repository)
 
 	return true, nil
@@ -818,7 +853,6 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 
 	if runnerSpec.DockerVarRunVolumeSizeLimit == nil {
 		runnerSpec.DockerVarRunVolumeSizeLimit = resource.NewScaledQuantity(1, resource.Mega)
-
 	}
 
 	// Be aware some of the environment variables are used
@@ -1046,12 +1080,12 @@ func newRunnerPodWithContainerMode(containerMode string, template corev1.Pod, ru
 		// overridden
 		if ok, _ := envVarPresent("DOCKER_GROUP_GID", dockerdContainer.Env); !ok {
 			gid := d.DockerGID
-			// We default to gid 121 for Ubuntu 22.04 images
+			// We default to gid 121 for Ubuntu 22.04 and 24.04 images
 			// See below for more details
 			// - https://github.com/actions/actions-runner-controller/issues/2490#issuecomment-1501561923
 			// - https://github.com/actions/actions-runner-controller/blob/8869ad28bb5a1daaedefe0e988571fe1fb36addd/runner/actions-runner.ubuntu-20.04.dockerfile#L14
 			// - https://github.com/actions/actions-runner-controller/blob/8869ad28bb5a1daaedefe0e988571fe1fb36addd/runner/actions-runner.ubuntu-22.04.dockerfile#L12
-			if strings.Contains(runnerContainer.Image, "22.04") {
+			if strings.Contains(runnerContainer.Image, "22.04") || strings.Contains(runnerContainer.Image, "24.04") {
 				gid = "121"
 			} else if strings.Contains(runnerContainer.Image, "20.04") {
 				gid = "1001"
@@ -1290,7 +1324,7 @@ func (r *RunnerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		name = r.Name
 	}
 
-	r.Recorder = mgr.GetEventRecorderFor(name)
+	r.Recorder = mgr.GetEventRecorder(name)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.Runner{}).

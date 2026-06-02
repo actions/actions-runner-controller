@@ -66,7 +66,7 @@ func SetupTest(ctx2 context.Context) *corev1.Namespace {
 			Client:   mgr.GetClient(),
 			Scheme:   scheme.Scheme,
 			Log:      logf.Log,
-			Recorder: mgr.GetEventRecorderFor("runnerreplicaset-controller"),
+			Recorder: mgr.GetEventRecorder("runnerreplicaset-controller"),
 			Name:     "runnerreplicaset-" + ns.Name,
 		}
 		err = controller.SetupWithManager(mgr)

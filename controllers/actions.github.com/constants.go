@@ -12,6 +12,9 @@ const (
 const (
 	EnvVarRunnerJITConfig      = "ACTIONS_RUNNER_INPUT_JITCONFIG"
 	EnvVarRunnerExtraUserAgent = "GITHUB_ACTIONS_RUNNER_EXTRA_USER_AGENT"
+	// Environment variable setting the exit code to return when the runner version is deprecated.
+	// This is used by the runner to signal to the controller that it should switch off the scaleset.
+	EnvVarRunnerDeprecatedExitCode = "ACTIONS_RUNNER_RETURN_VERSION_DEPRECATED_EXIT_CODE"
 )
 
 // Environment variable names used to set proxy variables for containers
@@ -28,6 +31,9 @@ const (
 	LabelKeyKubernetesComponent = "app.kubernetes.io/component"
 	LabelKeyKubernetesVersion   = "app.kubernetes.io/version"
 
+	// Well-known Kubernetes node labels
+	LabelKeyKubernetesOS = "kubernetes.io/os"
+
 	// Github labels
 	LabelKeyGitHubScaleSetName      = "actions.github.com/scale-set-name"
 	LabelKeyGitHubScaleSetNamespace = "actions.github.com/scale-set-namespace"
@@ -36,7 +42,8 @@ const (
 	LabelKeyGitHubRepository        = "actions.github.com/repository"
 )
 
-// Finalizer used to protect resources from deletion while AutoscalingRunnerSet is running
+// AutoscalingRunnerSetCleanupFinalizerName is a finalizer used to protect resources
+// from deletion while AutoscalingRunnerSet is running
 const AutoscalingRunnerSetCleanupFinalizerName = "actions.github.com/cleanup-protection"
 
 const (

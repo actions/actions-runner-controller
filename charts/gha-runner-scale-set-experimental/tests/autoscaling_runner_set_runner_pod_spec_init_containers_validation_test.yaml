@@ -1,0 +1,45 @@
+suite: autoscaling runner set runner pod spec initContainers validation
+
+templates:
+  - templates/autoscalingrunnserset.yaml
+
+tests:
+  - it: should fail when runner.pod.spec.initContainers is not a list
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "kubernetes"
+        pod:
+          spec:
+            initContainers:
+              name: "not-a-list"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: ".Values.runner.pod.spec.initContainers must be a list of container specifications"
+
+  - it: should fail when initContainers entry has no name
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "kubernetes"
+        pod:
+          spec:
+            initContainers:
+              - image: "busybox:1.36"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: ".Values.runner.pod.spec.initContainers[].name is required"

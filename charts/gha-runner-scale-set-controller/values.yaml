@@ -94,6 +94,10 @@ priorityClassName: ""
 #   listenerAddr: ":8080"
 #   listenerEndpoint: "/metrics"
 
+## To enable pprof, uncomment the addr field below.
+pprof: {}
+#   addr: ":6060"
+
 flags:
   ## Log level can be set here with one of the following values: "debug", "info", "warn", "error".
   ## Defaults to "debug".
@@ -136,8 +140,19 @@ flags:
   # excludeLabelPropagationPrefixes:
   #   - "argocd.argoproj.io/instance"
 
+  ## Workqueue rate limiter configuration.
+  ## By default, controller-runtime uses a combined rate limiter with both a per-item
+  ## exponential backoff and an overall token bucket (10 QPS, 100 bucket size).
+  ## Valid names: "bucket_rate_limiter" (default), "typed_rate_limiter" (per-item only, no global token bucket).
+  # rateLimiter:
+  #   name: "bucket_rate_limiter"
+
 # Overrides the default `.Release.Namespace` for all resources in this chart.
 namespaceOverride: ""
+
+  ## The address the health probe endpoint binds to. Disabled if empty.
+  ## When set, liveness and readiness probes are added to the controller pod.
+  # healthProbeBindAddress: ":8081"
 
 ## Defines the K8s client rate limiter parameters.
   # k8sClientRateLimiterQPS: 20

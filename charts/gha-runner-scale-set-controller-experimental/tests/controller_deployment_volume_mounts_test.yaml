@@ -1,0 +1,25 @@
+suite: "Controller Deployment volume mounts"
+templates:
+  - deployment.yaml
+tests:
+  - it: should append controller.pod.volumeMounts to manager container
+    set:
+      controller:
+        manager:
+          container:
+            image: "ghcr.io/actions/gha-runner-scale-set-controller:latest"
+        pod:
+          volumeMounts:
+            - name: my-config
+              mountPath: /etc/my-config
+              readOnly: true
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: my-config
+            mountPath: /etc/my-config
+            readOnly: true

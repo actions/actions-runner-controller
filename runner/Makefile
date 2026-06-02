@@ -6,9 +6,9 @@ DIND_ROOTLESS_RUNNER_NAME ?= ${DOCKER_USER}/actions-runner-dind-rootless
 OS_IMAGE ?= ubuntu-22.04
 TARGETPLATFORM ?= $(shell arch)
 
-RUNNER_VERSION ?= 2.325.0
-RUNNER_CONTAINER_HOOKS_VERSION ?= 0.7.0
-DOCKER_VERSION ?= 24.0.7
+RUNNER_VERSION ?= 2.334.0
+RUNNER_CONTAINER_HOOKS_VERSION ?= 0.8.1
+DOCKER_VERSION ?= 28.0.4
 
 # default list of platforms for which multiarch image is built
 ifeq (${PLATFORMS}, )

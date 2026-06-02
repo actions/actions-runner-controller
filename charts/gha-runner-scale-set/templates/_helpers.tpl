@@ -54,6 +54,20 @@ app.kubernetes.io/name: {{ include "gha-runner-scale-set.scale-set-name" . }}
 app.kubernetes.io/instance: {{ include "gha-runner-scale-set.scale-set-name" . }}
 {{- end }}
 
+{{/*
+Render a ResourceMeta block for AutoscalingRunnerSet spec fields.
+*/}}
+{{- define "gha-runner-scale-set.resourceMetaSpec" -}}
+{{- with .labels }}
+labels:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- with .annotations }}
+annotations:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end }}
+
 {{- define "gha-runner-scale-set.githubsecret" -}}
   {{- if kindIs "string" .Values.githubConfigSecret }}
     {{- if not (empty .Values.githubConfigSecret) }}
@@ -62,12 +76,12 @@ app.kubernetes.io/instance: {{ include "gha-runner-scale-set.scale-set-name" . }
 {{- fail "Values.githubConfigSecret is required for setting auth with GitHub server." }}
     {{- end }}
   {{- else }}
-{{- include "gha-runner-scale-set.fullname" . }}-github-secret
+{{- include "gha-runner-scale-set.fullname" . | replace "_" "-" }}-github-secret
   {{- end }}
 {{- end }}
 
 {{- define "gha-runner-scale-set.noPermissionServiceAccountName" -}}
-{{- include "gha-runner-scale-set.fullname" . }}-no-permission
+{{- include "gha-runner-scale-set.fullname" . | replace "_" "-" }}-no-permission
 {{- end }}
 
 {{- define "gha-runner-scale-set.kubeModeRoleName" -}}
@@ -79,7 +93,7 @@ app.kubernetes.io/instance: {{ include "gha-runner-scale-set.scale-set-name" . }
 {{- end }}
 
 {{- define "gha-runner-scale-set.kubeModeServiceAccountName" -}}
-{{- include "gha-runner-scale-set.fullname" . }}-kube-mode
+{{- include "gha-runner-scale-set.fullname" . | replace "_" "-" }}-kube-mode
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-init-container" -}}
@@ -372,6 +386,105 @@ volumeMounts:
   - name: github-server-tls-cert
     mountPath: {{ clean (print $tlsConfig.runnerMountPath "/" $tlsConfig.certificateFrom.configMapKeyRef.key) }}
     subPath: {{ $tlsConfig.certificateFrom.configMapKeyRef.key }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- end }}
+
+{{- define "gha-runner-scale-set.kubernetes-novolume-mode-runner-container" -}}
+{{- $tlsConfig := (default (dict) .Values.githubServerTLS) }}
+{{- range $i, $container := .Values.template.spec.containers }}
+  {{- if eq $container.name "runner" }}
+    {{- $setRunnerImage := "" }}
+    {{- range $key, $val := $container }}
+      {{- if and (ne $key "env") (ne $key "volumeMounts") (ne $key "name") }}
+      {{- if eq $key "image" }}
+        {{- $setRunnerImage = $val }}
+      {{- end }}
+{{ $key }}: {{ $val | toYaml | nindent 2 }}
+      {{- end }}
+    {{- end }}
+    {{- $setContainerHooks := 1 }}
+    {{- $setPodName := 1 }}
+    {{- $setRequireJobContainer := 1 }}
+    {{- $setActionsRunnerImage := 1 }}
+    {{- $setNodeExtraCaCerts := 0 }}
+    {{- $setRunnerUpdateCaCerts := 0 }}
+    {{- if $tlsConfig.runnerMountPath }}
+      {{- $setNodeExtraCaCerts = 1 }}
+      {{- $setRunnerUpdateCaCerts = 1 }}
+    {{- end }}
+env:
+    {{- with $container.env }}
+      {{- range $i, $env := . }}
+        {{- if eq $env.name "ACTIONS_RUNNER_CONTAINER_HOOKS" }}
+          {{- $setContainerHooks = 0 }}
+        {{- end }}
+        {{- if eq $env.name "ACTIONS_RUNNER_IMAGE" }}
+          {{- $setActionsRunnerImage = 0 }}
+        {{- end }}
+        {{- if eq $env.name "ACTIONS_RUNNER_POD_NAME" }}
+          {{- $setPodName = 0 }}
+        {{- end }}
+        {{- if eq $env.name "ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER" }}
+          {{- $setRequireJobContainer = 0 }}
+        {{- end }}
+        {{- if eq $env.name "NODE_EXTRA_CA_CERTS" }}
+          {{- $setNodeExtraCaCerts = 0 }}
+        {{- end }}
+        {{- if eq $env.name "RUNNER_UPDATE_CA_CERTS" }}
+          {{- $setRunnerUpdateCaCerts = 0 }}
+        {{- end }}
+  - {{ $env | toYaml | nindent 4 }}
+      {{- end }}
+    {{- end }}
+    {{- if $setContainerHooks }}
+  - name: ACTIONS_RUNNER_CONTAINER_HOOKS
+    value: /home/runner/k8s-novolume/index.js
+    {{- end }}
+    {{- if $setPodName }}
+  - name: ACTIONS_RUNNER_POD_NAME
+    valueFrom:
+      fieldRef:
+        fieldPath: metadata.name
+    {{- end }}
+    {{- if $setRequireJobContainer }}
+  - name: ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER
+    value: "true"
+    {{- end }}
+    {{- if $setActionsRunnerImage }}
+  - name: ACTIONS_RUNNER_IMAGE
+    value: "{{- $setRunnerImage -}}"
+    {{- end }}
+    {{- if $setNodeExtraCaCerts }}
+  - name: NODE_EXTRA_CA_CERTS
+    value: {{ clean (print $tlsConfig.runnerMountPath "/" $tlsConfig.certificateFrom.configMapKeyRef.key) }}
+    {{- end }}
+    {{- if $setRunnerUpdateCaCerts }}
+  - name: RUNNER_UPDATE_CA_CERTS
+    value: "1"
+    {{- end }}
+    {{- $mountGitHubServerTLS := 0 }}
+    {{- if $tlsConfig.runnerMountPath }}
+      {{- $mountGitHubServerTLS = 1 }}
+    {{- end }}
+    {{- if or $container.volumeMounts $mountGitHubServerTLS }}
+volumeMounts:
+    {{- with $container.volumeMounts }}
+      {{- range $i, $volMount := . }}
+        {{- if eq $volMount.name "github-server-tls-cert" }}
+          {{- $mountGitHubServerTLS = 0 }}
+        {{- end }}
+  - {{ $volMount | toYaml | nindent 4 }}
+      {{- end }}
+    {{- end }}
+    {{- if $mountGitHubServerTLS }}
+  - name: github-server-tls-cert
+    mountPath: {{ clean (print $tlsConfig.runnerMountPath "/" $tlsConfig.certificateFrom.configMapKeyRef.key) }}
+    subPath: {{ $tlsConfig.certificateFrom.configMapKeyRef.key }}
+    {{- end }}
+    {{- else }}
+volumeMounts: []
     {{- end }}
   {{- end }}
 {{- end }}

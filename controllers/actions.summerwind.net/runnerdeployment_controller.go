@@ -25,12 +25,12 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/events"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/rand"
-	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -52,7 +52,7 @@ const (
 type RunnerDeploymentReconciler struct {
 	client.Client
 	Log                logr.Logger
-	Recorder           record.EventRecorder
+	Recorder           events.EventRecorder
 	Scheme             *runtime.Scheme
 	CommonRunnerLabels []string
 	Name               string
@@ -104,7 +104,7 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	desiredRS, err := r.newRunnerReplicaSet(rd)
 	if err != nil {
-		r.Recorder.Event(&rd, corev1.EventTypeNormal, "RunnerAutoscalingFailure", err.Error())
+		r.Recorder.Eventf(&rd, nil, corev1.EventTypeNormal, "RunnerAutoscalingFailure", "", err.Error())
 
 		log.Error(err, "Could not create runnerreplicaset")
 
@@ -274,7 +274,14 @@ func (r *RunnerDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				return ctrl.Result{}, err
 			}
 
-			r.Recorder.Event(&rd, corev1.EventTypeNormal, "RunnerReplicaSetDeleted", fmt.Sprintf("Deleted runnerreplicaset '%s'", rs.Name))
+			r.Recorder.Eventf(
+				&rd,
+				&rs,
+				corev1.EventTypeNormal,
+				"RunnerReplicaSetDeleted",
+				"",
+				fmt.Sprintf("Deleted runnerreplicaset '%s'", rs.Name),
+			)
 
 			rslog.Info("Deleted runnerreplicaset")
 		}
@@ -482,7 +489,7 @@ func (r *RunnerDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		name = r.Name
 	}
 
-	r.Recorder = mgr.GetEventRecorderFor(name)
+	r.Recorder = mgr.GetEventRecorder(name)
 
 	if err := mgr.GetFieldIndexer().IndexField(context.TODO(), &v1alpha1.RunnerReplicaSet{}, runnerSetOwnerKey, func(rawObj client.Object) []string {
 		runnerSet := rawObj.(*v1alpha1.RunnerReplicaSet)

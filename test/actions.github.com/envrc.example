@@ -1,0 +1,3 @@
+export TARGET_ORG="org"
+export TARGET_REPO="repo"
+export GITHUB_TOKEN="token"

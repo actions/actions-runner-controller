@@ -1,0 +1,18 @@
+githubConfigUrl: https://github.com/actions
+githubConfigSecret:
+  github_token: gh_token12345
+containerMode:
+  type: kubernetes-novolume
+controllerServiceAccount:
+  name: arc
+  namespace: arc-system
+template:
+  spec:
+    volumes:
+    - name: custom-volume
+      emptyDir: {}
+    containers:
+    - name: runner
+      volumeMounts:
+      - name: custom-volume
+        mountPath: /mnt/custom

@@ -10,10 +10,10 @@ import (
 
 func TestConfigValidationMinMax(t *testing.T) {
 	config := &Config{
-		ConfigureUrl:                "github.com/some_org/some_repo",
+		ConfigureURL:                "github.com/some_org/some_repo",
 		EphemeralRunnerSetNamespace: "namespace",
 		EphemeralRunnerSetName:      "deployment",
-		RunnerScaleSetId:            1,
+		RunnerScaleSetID:            1,
 		MinRunners:                  5,
 		MaxRunners:                  2,
 		AppConfig: &appconfig.AppConfig{
@@ -26,10 +26,10 @@ func TestConfigValidationMinMax(t *testing.T) {
 
 func TestConfigValidationMissingToken(t *testing.T) {
 	config := &Config{
-		ConfigureUrl:                "github.com/some_org/some_repo",
+		ConfigureURL:                "github.com/some_org/some_repo",
 		EphemeralRunnerSetNamespace: "namespace",
 		EphemeralRunnerSetName:      "deployment",
-		RunnerScaleSetId:            1,
+		RunnerScaleSetID:            1,
 	}
 	err := config.Validate()
 	expectedError := "AppConfig validation failed: missing app config"
@@ -46,10 +46,10 @@ func TestConfigValidationAppKey(t *testing.T) {
 				AppID:             "1",
 				AppInstallationID: 10,
 			},
-			ConfigureUrl:                "github.com/some_org/some_repo",
+			ConfigureURL:                "github.com/some_org/some_repo",
 			EphemeralRunnerSetNamespace: "namespace",
 			EphemeralRunnerSetName:      "deployment",
-			RunnerScaleSetId:            1,
+			RunnerScaleSetID:            1,
 		}
 		err := config.Validate()
 		expectedError := "AppConfig validation failed: no credentials provided: either a PAT or GitHub App credentials should be provided"
@@ -63,10 +63,10 @@ func TestConfigValidationAppKey(t *testing.T) {
 				AppID:             "Iv23f8doAlphaNumer1c",
 				AppInstallationID: 10,
 			},
-			ConfigureUrl:                "github.com/some_org/some_repo",
+			ConfigureURL:                "github.com/some_org/some_repo",
 			EphemeralRunnerSetNamespace: "namespace",
 			EphemeralRunnerSetName:      "deployment",
-			RunnerScaleSetId:            1,
+			RunnerScaleSetID:            1,
 		}
 		err := config.Validate()
 		expectedError := "AppConfig validation failed: no credentials provided: either a PAT or GitHub App credentials should be provided"
@@ -82,10 +82,10 @@ func TestConfigValidationOnlyOneTypeOfCredentials(t *testing.T) {
 			AppPrivateKey:     "asdf",
 			Token:             "asdf",
 		},
-		ConfigureUrl:                "github.com/some_org/some_repo",
+		ConfigureURL:                "github.com/some_org/some_repo",
 		EphemeralRunnerSetNamespace: "namespace",
 		EphemeralRunnerSetName:      "deployment",
-		RunnerScaleSetId:            1,
+		RunnerScaleSetID:            1,
 	}
 	err := config.Validate()
 	expectedError := "AppConfig validation failed: both PAT and GitHub App credentials provided. should only provide one"
@@ -94,10 +94,10 @@ func TestConfigValidationOnlyOneTypeOfCredentials(t *testing.T) {
 
 func TestConfigValidation(t *testing.T) {
 	config := &Config{
-		ConfigureUrl:                "https://github.com/actions",
+		ConfigureURL:                "https://github.com/actions",
 		EphemeralRunnerSetNamespace: "namespace",
 		EphemeralRunnerSetName:      "deployment",
-		RunnerScaleSetId:            1,
+		RunnerScaleSetID:            1,
 		MinRunners:                  1,
 		MaxRunners:                  5,
 		AppConfig: &appconfig.AppConfig{
@@ -114,7 +114,7 @@ func TestConfigValidationConfigUrl(t *testing.T) {
 	config := &Config{
 		EphemeralRunnerSetNamespace: "namespace",
 		EphemeralRunnerSetName:      "deployment",
-		RunnerScaleSetId:            1,
+		RunnerScaleSetID:            1,
 	}
 
 	err := config.Validate()
@@ -125,10 +125,10 @@ func TestConfigValidationConfigUrl(t *testing.T) {
 func TestConfigValidationWithVaultConfig(t *testing.T) {
 	t.Run("valid", func(t *testing.T) {
 		config := &Config{
-			ConfigureUrl:                "https://github.com/actions",
+			ConfigureURL:                "https://github.com/actions",
 			EphemeralRunnerSetNamespace: "namespace",
 			EphemeralRunnerSetName:      "deployment",
-			RunnerScaleSetId:            1,
+			RunnerScaleSetID:            1,
 			MinRunners:                  1,
 			MaxRunners:                  5,
 			VaultType:                   vault.VaultTypeAzureKeyVault,
@@ -140,10 +140,10 @@ func TestConfigValidationWithVaultConfig(t *testing.T) {
 
 	t.Run("invalid vault type", func(t *testing.T) {
 		config := &Config{
-			ConfigureUrl:                "https://github.com/actions",
+			ConfigureURL:                "https://github.com/actions",
 			EphemeralRunnerSetNamespace: "namespace",
 			EphemeralRunnerSetName:      "deployment",
-			RunnerScaleSetId:            1,
+			RunnerScaleSetID:            1,
 			MinRunners:                  1,
 			MaxRunners:                  5,
 			VaultType:                   vault.VaultType("invalid_vault_type"),
@@ -155,10 +155,10 @@ func TestConfigValidationWithVaultConfig(t *testing.T) {
 
 	t.Run("vault type set without lookup key", func(t *testing.T) {
 		config := &Config{
-			ConfigureUrl:                "https://github.com/actions",
+			ConfigureURL:                "https://github.com/actions",
 			EphemeralRunnerSetNamespace: "namespace",
 			EphemeralRunnerSetName:      "deployment",
-			RunnerScaleSetId:            1,
+			RunnerScaleSetID:            1,
 			MinRunners:                  1,
 			MaxRunners:                  5,
 			VaultType:                   vault.VaultTypeAzureKeyVault,

@@ -1,0 +1,25 @@
+suite: autoscaling runner set runner pod spec volumes validation
+
+templates:
+  - templates/autoscalingrunnserset.yaml
+
+tests:
+  - it: should fail when runner.pod.spec.volumes is not a list
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "kubernetes"
+        pod:
+          spec:
+            volumes:
+              name: "not-a-list"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: ".Values.runner.pod.spec.volumes must be a list of volume specifications"

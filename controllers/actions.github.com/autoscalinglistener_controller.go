@@ -17,8 +17,11 @@ limitations under the License.
 package actionsgithubcom
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"maps"
+	"time"
 
 	"github.com/go-logr/logr"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -84,14 +87,14 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 
 		log.Info("Deleting resources")
-		done, err := r.cleanupResources(ctx, autoscalingListener, log)
+		requeue, err := r.cleanupResources(ctx, autoscalingListener, log)
 		if err != nil {
 			log.Error(err, "Failed to cleanup resources after deletion")
 			return ctrl.Result{}, err
 		}
-		if !done {
+		if requeue {
 			log.Info("Waiting for resources to be deleted before removing finalizer")
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{Requeue: true, RequeueAfter: time.Second}, nil
 		}
 
 		log.Info("Removing finalizer")
@@ -209,8 +212,39 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 
 	// TODO: make sure the role binding has the up-to-date role and service account
 
+	// Reconcile listener config secret and detect drift
+	cert := ""
+	if autoscalingListener.Spec.GitHubServerTLS != nil {
+		var err error
+		cert, err = r.certificate(ctx, &autoscalingRunnerSet, autoscalingListener)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to build GitHub server TLS certificate value for listener config: %w", err)
+		}
+	}
+
+	var metricsConfig *listenerMetricsServerConfig
+	if r.ListenerMetricsAddr != "0" {
+		metricsConfig = &listenerMetricsServerConfig{
+			addr:     r.ListenerMetricsAddr,
+			endpoint: r.ListenerMetricsEndpoint,
+		}
+	}
+
+	secretChanged, err := r.reconcileListenerConfigSecret(ctx, autoscalingListener, appConfig, metricsConfig, cert, log)
+	if err != nil {
+		log.Error(err, "Failed to reconcile listener config secret")
+		return ctrl.Result{}, err
+	}
+
 	listenerPod := new(corev1.Pod)
-	if err := r.Get(ctx, client.ObjectKey{Namespace: autoscalingListener.Namespace, Name: autoscalingListener.Name}, listenerPod); err != nil {
+	if err := r.Get(
+		ctx,
+		client.ObjectKey{
+			Namespace: autoscalingListener.Namespace,
+			Name:      autoscalingListener.Name,
+		},
+		listenerPod,
+	); err != nil {
 		if !kerrors.IsNotFound(err) {
 			log.Error(err, "Unable to get listener pod", "namespace", autoscalingListener.Namespace, "name", autoscalingListener.Name)
 			return ctrl.Result{}, err
@@ -226,39 +260,38 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		return r.createListenerPod(ctx, &autoscalingRunnerSet, autoscalingListener, serviceAccount, appConfig, log)
 	}
 
+	// If listener config secret changed and pod exists, restart the pod
+	if secretChanged {
+		log.Info("Listener config secret changed, restarting listener pod")
+		return ctrl.Result{}, r.deleteListenerPod(ctx, autoscalingListener, listenerPod, log)
+	}
+
 	cs := listenerContainerStatus(listenerPod)
 	switch {
+	case listenerPod.Status.Reason == "Evicted":
+		log.Info(
+			"Listener pod is evicted",
+			"phase", listenerPod.Status.Phase,
+			"reason", listenerPod.Status.Reason,
+			"message", listenerPod.Status.Message,
+		)
+
+		return ctrl.Result{}, r.deleteListenerPod(ctx, autoscalingListener, listenerPod, log)
+
 	case cs == nil:
 		log.Info("Listener pod is not ready", "namespace", listenerPod.Namespace, "name", listenerPod.Name)
 		return ctrl.Result{}, nil
 	case cs.State.Terminated != nil:
-		log.Info("Listener pod is terminated", "namespace", listenerPod.Namespace, "name", listenerPod.Name, "reason", cs.State.Terminated.Reason, "message", cs.State.Terminated.Message)
+		log.Info(
+			"Listener pod is terminated",
+			"namespace", listenerPod.Namespace,
+			"name", listenerPod.Name,
+			"reason", cs.State.Terminated.Reason,
+			"message", cs.State.Terminated.Message,
+		)
 
-		if err := r.publishRunningListener(autoscalingListener, false); err != nil {
-			log.Error(err, "Unable to publish runner listener down metric", "namespace", listenerPod.Namespace, "name", listenerPod.Name)
-		}
+		return ctrl.Result{}, r.deleteListenerPod(ctx, autoscalingListener, listenerPod, log)
 
-		if listenerPod.DeletionTimestamp.IsZero() {
-			log.Info("Deleting the listener pod", "namespace", listenerPod.Namespace, "name", listenerPod.Name)
-			if err := r.Delete(ctx, listenerPod); err != nil && !kerrors.IsNotFound(err) {
-				log.Error(err, "Unable to delete the listener pod", "namespace", listenerPod.Namespace, "name", listenerPod.Name)
-				return ctrl.Result{}, err
-			}
-
-			// delete the listener config secret as well, so it gets recreated when the listener pod is recreated, with any new data if it exists
-			var configSecret corev1.Secret
-			err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Namespace, Name: scaleSetListenerConfigName(autoscalingListener)}, &configSecret)
-			switch {
-			case err == nil && configSecret.DeletionTimestamp.IsZero():
-				log.Info("Deleting the listener config secret")
-				if err := r.Delete(ctx, &configSecret); err != nil {
-					return ctrl.Result{}, fmt.Errorf("failed to delete listener config secret: %w", err)
-				}
-			case !kerrors.IsNotFound(err):
-				return ctrl.Result{}, fmt.Errorf("failed to get the listener config secret: %w", err)
-			}
-		}
-		return ctrl.Result{}, nil
 	case cs.State.Running != nil:
 		if err := r.publishRunningListener(autoscalingListener, true); err != nil {
 			log.Error(err, "Unable to publish running listener", "namespace", listenerPod.Namespace, "name", listenerPod.Name)
@@ -268,11 +301,27 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, nil
+
 	}
 	return ctrl.Result{}, nil
 }
 
-func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) (done bool, err error) {
+func (r *AutoscalingListenerReconciler) deleteListenerPod(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, listenerPod *corev1.Pod, log logr.Logger) error {
+	if err := r.publishRunningListener(autoscalingListener, false); err != nil {
+		log.Error(err, "Unable to publish runner listener down metric", "namespace", listenerPod.Namespace, "name", listenerPod.Name)
+	}
+
+	if listenerPod.DeletionTimestamp.IsZero() {
+		log.Info("Deleting the listener pod", "namespace", listenerPod.Namespace, "name", listenerPod.Name)
+		if err := r.Delete(ctx, listenerPod); err != nil && !kerrors.IsNotFound(err) {
+			log.Error(err, "Unable to delete the listener pod", "namespace", listenerPod.Namespace, "name", listenerPod.Name)
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) (requeue bool, err error) {
 	logger.Info("Cleaning up the listener pod")
 	listenerPod := new(corev1.Pod)
 	err = r.Get(ctx, types.NamespacedName{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, listenerPod)
@@ -284,7 +333,7 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 				return false, fmt.Errorf("failed to delete listener pod: %w", err)
 			}
 		}
-		return false, nil
+		requeue = true
 	case kerrors.IsNotFound(err):
 		_ = r.publishRunningListener(autoscalingListener, false) // If error is returned, we never published metrics so it is safe to ignore
 	default:
@@ -302,7 +351,7 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 				return false, fmt.Errorf("failed to delete listener config secret: %w", err)
 			}
 		}
-		return false, nil
+		requeue = true
 	case !kerrors.IsNotFound(err):
 		return false, fmt.Errorf("failed to get listener config secret: %w", err)
 	}
@@ -319,7 +368,7 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 					return false, fmt.Errorf("failed to delete listener proxy secret: %w", err)
 				}
 			}
-			return false, nil
+			requeue = true
 		case !kerrors.IsNotFound(err):
 			return false, fmt.Errorf("failed to get listener proxy secret: %w", err)
 		}
@@ -336,7 +385,7 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 				return false, fmt.Errorf("failed to delete listener role binding: %w", err)
 			}
 		}
-		return false, nil
+		requeue = true
 	case !kerrors.IsNotFound(err):
 		return false, fmt.Errorf("failed to get listener role binding: %w", err)
 	}
@@ -352,7 +401,7 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 				return false, fmt.Errorf("failed to delete listener role: %w", err)
 			}
 		}
-		return false, nil
+		requeue = true
 	case !kerrors.IsNotFound(err):
 		return false, fmt.Errorf("failed to get listener role: %w", err)
 	}
@@ -369,13 +418,13 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 				return false, fmt.Errorf("failed to delete listener service account: %w", err)
 			}
 		}
-		return false, nil
+		requeue = true
 	case !kerrors.IsNotFound(err):
 		return false, fmt.Errorf("failed to get listener service account: %w", err)
 	}
 	logger.Info("Listener service account is deleted")
 
-	return true, nil
+	return requeue, nil
 }
 
 func (r *AutoscalingListenerReconciler) createServiceAccountForListener(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) (ctrl.Result, error) {
@@ -393,6 +442,47 @@ func (r *AutoscalingListenerReconciler) createServiceAccountForListener(ctx cont
 
 	logger.Info("Created listener service accounts", "namespace", newServiceAccount.Namespace, "name", newServiceAccount.Name)
 	return ctrl.Result{}, nil
+}
+
+func (r *AutoscalingListenerReconciler) reconcileListenerConfigSecret(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, appConfig *appconfig.AppConfig, metricsConfig *listenerMetricsServerConfig, cert string, logger logr.Logger) (changed bool, err error) {
+	desiredSecret, err := r.newScaleSetListenerConfig(autoscalingListener, appConfig, metricsConfig, cert)
+	if err != nil {
+		return false, fmt.Errorf("failed to build listener config secret: %w", err)
+	}
+
+	existingSecret := &corev1.Secret{}
+	err = r.Get(ctx, types.NamespacedName{Name: desiredSecret.Name, Namespace: desiredSecret.Namespace}, existingSecret)
+	if err != nil {
+		if kerrors.IsNotFound(err) {
+			if err := ctrl.SetControllerReference(autoscalingListener, desiredSecret, r.Scheme); err != nil {
+				return false, fmt.Errorf("failed to set controller reference: %w", err)
+			}
+
+			logger.Info("Creating listener config secret", "namespace", desiredSecret.Namespace, "name", desiredSecret.Name)
+			if err := r.Create(ctx, desiredSecret); err != nil {
+				return false, fmt.Errorf("failed to create listener config secret: %w", err)
+			}
+
+			return true, nil
+		}
+		return false, fmt.Errorf("failed to get listener config secret: %w", err)
+	}
+
+	if listenerConfigSecretDrifted(existingSecret, desiredSecret) {
+		updatedSecret := existingSecret.DeepCopy()
+		updatedSecret.Data = desiredSecret.Data
+		updatedSecret.Labels = desiredSecret.Labels
+		updatedSecret.Annotations = desiredSecret.Annotations
+
+		logger.Info("Updating listener config secret", "namespace", updatedSecret.Namespace, "name", updatedSecret.Name)
+		if err := r.Update(ctx, updatedSecret); err != nil {
+			return false, fmt.Errorf("failed to update listener config secret: %w", err)
+		}
+
+		return true, nil
+	}
+
+	return false, nil
 }
 
 func (r *AutoscalingListenerReconciler) createListenerPod(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, autoscalingListener *v1alpha1.AutoscalingListener, serviceAccount *corev1.ServiceAccount, appConfig *appconfig.AppConfig, logger logr.Logger) (ctrl.Result, error) {
@@ -661,8 +751,29 @@ func (r *AutoscalingListenerReconciler) publishRunningListener(autoscalingListen
 	return nil
 }
 
+// listenerConfigSecretDrifted detects if the listener config secret has drifted from the desired state.
+// It compares the config.json data, labels, and annotations deterministically.
+func listenerConfigSecretDrifted(existing *corev1.Secret, desired *corev1.Secret) bool {
+	// Compare config.json data
+	if !bytes.Equal(existing.Data["config.json"], desired.Data["config.json"]) {
+		return true
+	}
+
+	// Compare labels
+	if !maps.Equal(existing.Labels, desired.Labels) {
+		return true
+	}
+
+	// Compare annotations
+	if !maps.Equal(existing.Annotations, desired.Annotations) {
+		return true
+	}
+
+	return false
+}
+
 // SetupWithManager sets up the controller with the Manager.
-func (r *AutoscalingListenerReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *AutoscalingListenerReconciler) SetupWithManager(mgr ctrl.Manager, opts ...Option) error {
 	labelBasedWatchFunc := func(_ context.Context, obj client.Object) []reconcile.Request {
 		var requests []reconcile.Request
 		labels := obj.GetLabels()
@@ -686,14 +797,16 @@ func (r *AutoscalingListenerReconciler) SetupWithManager(mgr ctrl.Manager) error
 		return requests
 	}
 
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.AutoscalingListener{}).
-		Owns(&corev1.Pod{}).
-		Owns(&corev1.ServiceAccount{}).
-		Watches(&rbacv1.Role{}, handler.EnqueueRequestsFromMapFunc(labelBasedWatchFunc)).
-		Watches(&rbacv1.RoleBinding{}, handler.EnqueueRequestsFromMapFunc(labelBasedWatchFunc)).
-		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
-		Complete(r)
+	return builderWithOptions(
+		ctrl.NewControllerManagedBy(mgr).
+			For(&v1alpha1.AutoscalingListener{}).
+			Owns(&corev1.Pod{}).
+			Owns(&corev1.ServiceAccount{}).
+			Watches(&rbacv1.Role{}, handler.EnqueueRequestsFromMapFunc(labelBasedWatchFunc)).
+			Watches(&rbacv1.RoleBinding{}, handler.EnqueueRequestsFromMapFunc(labelBasedWatchFunc)).
+			WithEventFilter(predicate.ResourceVersionChangedPredicate{}),
+		opts,
+	).Complete(r)
 }
 
 func listenerContainerStatus(pod *corev1.Pod) *corev1.ContainerStatus {
