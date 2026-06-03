@@ -29,7 +29,8 @@ jobs:
   default-setup:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -52,7 +53,8 @@ jobs:
   default-setup-v2:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -74,7 +76,8 @@ jobs:
   single-namespace-setup:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -96,7 +99,8 @@ jobs:
   single-namespace-setup-v2:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -118,7 +122,8 @@ jobs:
   dind-mode-setup:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -140,7 +145,8 @@ jobs:
   dind-mode-setup-v2:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -162,7 +168,8 @@ jobs:
   kubernetes-mode-setup:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -184,7 +191,8 @@ jobs:
   kubernetes-mode-setup-v2:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -206,7 +214,8 @@ jobs:
   auth-proxy-setup:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -228,7 +237,8 @@ jobs:
   auth-proxy-setup-v2:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -250,7 +260,8 @@ jobs:
   anonymous-proxy-setup:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -272,7 +283,8 @@ jobs:
   anonymous-proxy-setup-v2:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -294,7 +306,8 @@ jobs:
   self-signed-ca-setup:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -316,7 +329,8 @@ jobs:
   self-signed-ca-setup-v2:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -335,10 +349,11 @@ jobs:
           GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
 
-  update-strategy-tests:
+  update-gha-runner-scale-set-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -357,10 +372,11 @@ jobs:
           GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
 
-  update-strategy-tests-v2:
+  update-gha-runner-scale-set-tests-v2:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -382,7 +398,8 @@ jobs:
   init-with-min-runners:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -404,7 +421,8 @@ jobs:
   init-with-min-runners-v2:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -422,4 +440,3 @@ jobs:
         env:
           GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
-
