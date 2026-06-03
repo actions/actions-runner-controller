@@ -72,7 +72,7 @@ function upgrade_scale_set() {
         --set runner.container.command={"/home/runner/run.sh"} \
         --set runner.env[0].name="TEST" \
         --set runner.env[0].value="E2E TESTS" \
-        --set runner.pod.metadata.labels.e2e\.arc\/upgrade-marker="${UPGRADE_MARKER}" \
+        --set "runner.pod.metadata.labels.e2e\.arc/upgrade-marker=${UPGRADE_MARKER}" \
         "${ROOT_DIR}/charts/gha-runner-scale-set-experimental" \
         --version="${VERSION}" \
         --debug
