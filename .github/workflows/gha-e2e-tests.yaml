@@ -367,7 +367,7 @@ jobs:
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
           organization: ${{ env.TARGET_ORG }}
       - name: Run update strategy test
-        run: hack/e2e-test.sh update-strategy-v2
+        run: hack/e2e-test.sh update-gha-runner-scale-set
         env:
           GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
@@ -390,7 +390,7 @@ jobs:
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
           organization: ${{ env.TARGET_ORG }}
       - name: Run update strategy test
-        run: hack/e2e-test.sh update-strategy
+        run: hack/e2e-test.sh update-gha-runner-scale-set-tests-v2
         env:
           GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
