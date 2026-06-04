@@ -124,8 +124,8 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	// If hash spec has changed, delete idle ephemeral runners
 	// in order to apply the change to the runners that did not yet receive a job.
-	ephemeralRunnerSpecHash := ephemeralRunnerSet.EphemeralRunnerSpecHash()
-	if ephemeralRunnerSet.Annotations[annotationKeyIntegrityHash] != ephemeralRunnerSpecHash {
+	ephemeralRunnerIntegrityHash := ephemeralRunnerSetIntegrityHash(&ephemeralRunnerSet)
+	if ephemeralRunnerSet.Annotations[annotationKeyIntegrityHash] != ephemeralRunnerIntegrityHash {
 		log.Info("EphemeralRunnerSpec has changed, deleting idle ephemeral runners to apply the new spec")
 		if _, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log); err != nil {
 			log.Error(err, "Failed to clean up EphemeralRunners")
@@ -137,7 +137,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		if ephemeralRunnerSet.Annotations == nil {
 			ephemeralRunnerSet.Annotations = make(map[string]string)
 		}
-		ephemeralRunnerSet.Annotations[annotationKeyIntegrityHash] = ephemeralRunnerSpecHash
+		ephemeralRunnerSet.Annotations[annotationKeyIntegrityHash] = ephemeralRunnerIntegrityHash
 		if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
 			log.Error(err, "Failed to update ephemeral runner set with new spec hash")
 			return ctrl.Result{}, err
@@ -181,10 +181,10 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	// Find all EphemeralRunner with matching namespace and own by this EphemeralRunnerSet.
-	ephemeralRunnerList := new(v1alpha1.EphemeralRunnerList)
+	var ephemeralRunnerList v1alpha1.EphemeralRunnerList
 	if err := r.List(
 		ctx,
-		ephemeralRunnerList,
+		&ephemeralRunnerList,
 		client.InNamespace(req.Namespace),
 		client.MatchingFields{resourceOwnerKey: req.Name},
 	); err != nil {
@@ -192,7 +192,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, err
 	}
 
-	ephemeralRunnersByState := newEphemeralRunnersByStates(ephemeralRunnerList)
+	ephemeralRunnersByState := newEphemeralRunnersByStates(&ephemeralRunnerList)
 
 	log.Info(
 		"Ephemeral runner counts",
@@ -560,7 +560,7 @@ func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunnerWithActionsClient(ct
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *EphemeralRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager, opts ...Option) error {
-	r.ResourceBuilder.setSchemeIfUnset(r.Scheme)
+	r.setSchemeIfUnset(r.Scheme)
 
 	return builderWithOptions(
 		ctrl.NewControllerManagedBy(mgr).

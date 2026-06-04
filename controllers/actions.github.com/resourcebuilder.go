@@ -766,7 +766,6 @@ func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 	annotations := map[string]string{
 		AnnotationKeyGitHubRunnerGroupName:    autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName],
 		AnnotationKeyGitHubRunnerScaleSetName: autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName],
-		annotationKeyIntegrityHash:            spec.EphemeralRunnerSpec.Hash(),
 	}
 
 	if autoscalingRunnerSet.Spec.EphemeralRunnerSetMetadata != nil {
@@ -784,11 +783,25 @@ func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 		},
 		Spec: spec,
 	}
+
+	newEphemeralRunnerSet.Annotations[annotationKeyIntegrityHash] = ephemeralRunnerSetIntegrityHash(newEphemeralRunnerSet)
+
 	if err := b.setControllerReference(autoscalingRunnerSet, newEphemeralRunnerSet); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for ephemeral runner set: %w", err)
 	}
 
 	return newEphemeralRunnerSet, nil
+}
+
+func ephemeralRunnerSetIntegrityHash(erSet *v1alpha1.EphemeralRunnerSet) string {
+	type data struct {
+		Spec v1alpha1.EphemeralRunnerSetSpec `json:"spec" protobuf:"bytes,2,opt,name=spec"`
+	}
+
+	d := data{
+		Spec: erSet.Spec,
+	}
+	return hash.ComputeTemplateHash(&d)
 }
 
 func (b *ResourceBuilder) newAutoscalingListenerProxySecret(autoscalingListener *v1alpha1.AutoscalingListener, data map[string][]byte) (*corev1.Secret, error) {
