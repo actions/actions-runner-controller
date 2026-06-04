@@ -203,6 +203,33 @@ func TestMetadataPropagation(t *testing.T) {
 	}
 }
 
+func TestEphemeralRunnerSetProxySecretZIdentityHash(t *testing.T) {
+	ephemeralRunnerSet := &v1alpha1.EphemeralRunnerSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-scale-set",
+			Namespace: "test-ns",
+			Labels: map[string]string{
+				LabelKeyGitHubScaleSetName:      "test-scale-set",
+				LabelKeyGitHubScaleSetNamespace: "test-ns",
+			},
+		},
+	}
+
+	var b ResourceBuilder
+	proxySecret, err := b.newEphemeralRunnerSetProxySecret(ephemeralRunnerSet, map[string][]byte{
+		"http_proxy": []byte("http://proxy.example.com"),
+	})
+	require.NoError(t, err)
+
+	actualHash := proxySecret.Annotations[annotationKeyIntegrityHash]
+	assert.NotEmpty(t, actualHash)
+	assert.Equal(t, ephemeralRunnerSetProxySecretZIdentityHash(proxySecret), actualHash)
+
+	changedProxySecret := proxySecret.DeepCopy()
+	changedProxySecret.Data["http_proxy"] = []byte("http://updated-proxy.example.com")
+	assert.NotEqual(t, actualHash, ephemeralRunnerSetProxySecretZIdentityHash(changedProxySecret))
+}
+
 func TestGitHubURLTrimLabelValues(t *testing.T) {
 	enterprise := strings.Repeat("a", 64)
 	organization := strings.Repeat("b", 64)
