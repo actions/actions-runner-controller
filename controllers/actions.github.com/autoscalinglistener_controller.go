@@ -17,7 +17,6 @@ limitations under the License.
 package actionsgithubcom
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"maps"
@@ -44,10 +43,8 @@ import (
 )
 
 const (
-	autoscalingListenerContainerName                  = "listener"
-	autoscalingListenerFinalizerName                  = "autoscalinglistener.actions.github.com/finalizer"
-	AnnotationKeyAutoscalingListenerSpecHash          = "actions.github.com/spec-hash"
-	AnnotationKeyAutoscalingListenerPodDependencyHash = "actions.github.com/pod-dependency-hash"
+	autoscalingListenerContainerName = "listener"
+	autoscalingListenerFinalizerName = "autoscalinglistener.actions.github.com/finalizer"
 )
 
 // AutoscalingListenerReconciler reconciles a AutoscalingListener object
@@ -470,7 +467,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			return ctrl.Result{}, err
 		}
 
-		shouldReCreate := desiredPod.Annotations[AnnotationKeyAutoscalingListenerPodDependencyHash] != listenerPod.Annotations[AnnotationKeyAutoscalingListenerPodDependencyHash]
+		shouldReCreate := desiredPod.Annotations[annotationKeyIntegrityHash] != listenerPod.Annotations[annotationKeyIntegrityHash]
 		if shouldReCreate {
 			log.Info("Listener pod dependency changed, recreating listener pod")
 			if err := r.deleteListenerPod(ctx, &autoscalingListener, &listenerPod, log); err != nil {
@@ -709,50 +706,6 @@ func (r *AutoscalingListenerReconciler) createServiceAccountForListener(ctx cont
 	return ctrl.Result{}, nil
 }
 
-func (r *AutoscalingListenerReconciler) reconcileListenerConfigSecret(
-	ctx context.Context,
-	autoscalingListener *v1alpha1.AutoscalingListener,
-	appConfig *appconfig.AppConfig,
-	metricsConfig *listenerMetricsServerConfig,
-	cert string,
-	logger logr.Logger,
-) (changed bool, err error) {
-	desiredSecret, err := r.newScaleSetListenerConfig(autoscalingListener, appConfig, metricsConfig, cert)
-	if err != nil {
-		return false, fmt.Errorf("failed to build listener config secret: %w", err)
-	}
-
-	existingSecret := &corev1.Secret{}
-	err = r.Get(ctx, types.NamespacedName{Name: desiredSecret.Name, Namespace: desiredSecret.Namespace}, existingSecret)
-	if err != nil {
-		if kerrors.IsNotFound(err) {
-			logger.Info("Creating listener config secret", "namespace", desiredSecret.Namespace, "name", desiredSecret.Name)
-			if err := r.Create(ctx, desiredSecret); err != nil {
-				return false, fmt.Errorf("failed to create listener config secret: %w", err)
-			}
-
-			return true, nil
-		}
-		return false, fmt.Errorf("failed to get listener config secret: %w", err)
-	}
-
-	if listenerConfigSecretDrifted(existingSecret, desiredSecret) {
-		updatedSecret := existingSecret.DeepCopy()
-		updatedSecret.Data = desiredSecret.Data
-		updatedSecret.Labels = desiredSecret.Labels
-		updatedSecret.Annotations = desiredSecret.Annotations
-
-		logger.Info("Updating listener config secret", "namespace", updatedSecret.Namespace, "name", updatedSecret.Name)
-		if err := r.Update(ctx, updatedSecret); err != nil {
-			return false, fmt.Errorf("failed to update listener config secret: %w", err)
-		}
-
-		return true, nil
-	}
-
-	return false, nil
-}
-
 func (r *AutoscalingListenerReconciler) certificate(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, autoscalingListener *v1alpha1.AutoscalingListener) (string, error) {
 	if autoscalingListener.Spec.GitHubServerTLS.CertificateFrom == nil {
 		return "", fmt.Errorf("githubServerTLS.certificateFrom is not specified")
@@ -833,21 +786,6 @@ func (r *AutoscalingListenerReconciler) createRoleForListener(ctx context.Contex
 	return ctrl.Result{Requeue: true}, nil
 }
 
-func (r *AutoscalingListenerReconciler) updateRoleForListener(ctx context.Context, listenerRole *rbacv1.Role, desiredRules []rbacv1.PolicyRule, desiredRulesHash string, logger logr.Logger) (ctrl.Result, error) {
-	updatedPatchRole := listenerRole.DeepCopy()
-	updatedPatchRole.Labels["role-policy-rules-hash"] = desiredRulesHash
-	updatedPatchRole.Rules = desiredRules
-
-	logger.Info("Updating listener role in namespace to have the right permission", "namespace", updatedPatchRole.Namespace, "name", updatedPatchRole.Name, "oldRules", listenerRole.Rules, "newRules", updatedPatchRole.Rules)
-	if err := r.Update(ctx, updatedPatchRole); err != nil {
-		logger.Error(err, "Unable to update listener role", "namespace", updatedPatchRole.Namespace, "name", updatedPatchRole.Name, "rules", updatedPatchRole.Rules)
-		return ctrl.Result{}, err
-	}
-
-	logger.Info("Updated listener role in namespace to have the right permission", "namespace", updatedPatchRole.Namespace, "name", updatedPatchRole.Name, "rules", updatedPatchRole.Rules)
-	return ctrl.Result{Requeue: true}, nil
-}
-
 func (r *AutoscalingListenerReconciler) createRoleBindingForListener(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, listenerRole *rbacv1.Role, serviceAccount *corev1.ServiceAccount, logger logr.Logger) (ctrl.Result, error) {
 	newRoleBinding := r.newScaleSetListenerRoleBinding(autoscalingListener, listenerRole, serviceAccount)
 
@@ -900,30 +838,9 @@ func (r *AutoscalingListenerReconciler) publishRunningListener(autoscalingListen
 	return nil
 }
 
-// listenerConfigSecretDrifted detects if the listener config secret has drifted from the desired state.
-// It compares the config.json data, labels, and annotations deterministically.
-func listenerConfigSecretDrifted(existing *corev1.Secret, desired *corev1.Secret) bool {
-	// Compare config.json data
-	if !bytes.Equal(existing.Data["config.json"], desired.Data["config.json"]) {
-		return true
-	}
-
-	// Compare labels
-	if !maps.Equal(existing.Labels, desired.Labels) {
-		return true
-	}
-
-	// Compare annotations
-	if !maps.Equal(existing.Annotations, desired.Annotations) {
-		return true
-	}
-
-	return false
-}
-
 // SetupWithManager sets up the controller with the Manager.
 func (r *AutoscalingListenerReconciler) SetupWithManager(mgr ctrl.Manager, opts ...Option) error {
-	r.ResourceBuilder.setSchemeIfUnset(r.Scheme)
+	r.setSchemeIfUnset(r.Scheme)
 
 	labelBasedWatchFunc := func(_ context.Context, obj client.Object) []reconcile.Request {
 		var requests []reconcile.Request

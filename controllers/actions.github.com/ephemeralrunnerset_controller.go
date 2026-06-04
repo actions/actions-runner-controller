@@ -23,6 +23,7 @@ import (
 	"maps"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/metrics"
@@ -99,6 +100,16 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 			return ctrl.Result{}, nil
 		}
 
+		done, err = r.cleanUpEphemeralRunnerSetProxySecret(ctx, &ephemeralRunnerSet, log)
+		if err != nil {
+			log.Error(err, "Failed to clean up EphemeralRunnerSet proxy secret")
+			return ctrl.Result{}, err
+		}
+		if !done {
+			log.Info("Waiting for proxy secret to be deleted")
+			return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+		}
+
 		log.Info("Removing finalizer")
 		if controllerutil.RemoveFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName) {
 			if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
@@ -130,6 +141,11 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		log.Info("EphemeralRunnerSpec has changed, deleting idle ephemeral runners to apply the new spec")
 		if _, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log); err != nil {
 			log.Error(err, "Failed to clean up EphemeralRunners")
+			return ctrl.Result{}, err
+		}
+
+		if _, err := r.cleanUpEphemeralRunnerSetProxySecret(ctx, &ephemeralRunnerSet, log); err != nil {
+			log.Error(err, "Failed to clean up EphemeralRunnerSet proxy secret")
 			return ctrl.Result{}, err
 		}
 
@@ -452,6 +468,44 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 	}
 
 	return false, nil
+}
+
+func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunnerSetProxySecret(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) (done bool, err error) {
+	if ephemeralRunnerSet.Spec.EphemeralRunnerSpec.Proxy == nil {
+		return true, nil
+	}
+	var proxySecret corev1.Secret
+	err = r.Get(
+		ctx,
+		types.NamespacedName{
+			Namespace: ephemeralRunnerSet.Namespace,
+			Name:      proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet),
+		},
+		&proxySecret,
+	)
+	switch {
+	case err == nil:
+		log.Info("Deleting proxy secret")
+		if err := r.Delete(ctx, &proxySecret); err != nil && !kerrors.IsNotFound(err) {
+			log.Error(err, "Failed to delete proxy secret")
+			return false, err
+		}
+		log.Info("Deleted proxy secret")
+		return false, nil
+	case kerrors.IsNotFound(err):
+		log.Info("Proxy secret already deleted")
+		return true, nil
+	default:
+		log.Error(
+			err,
+			"Unable to get ephemeralRunnerSet proxy secret",
+			"namespace",
+			ephemeralRunnerSet.Namespace,
+			"name",
+			proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet),
+		)
+		return false, err
+	}
 }
 
 // createEphemeralRunners provisions `count` number of v1alpha1.EphemeralRunner resources in the cluster.
