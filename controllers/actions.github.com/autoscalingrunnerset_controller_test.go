@@ -463,7 +463,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 				autoscalingRunnerSetTestInterval,
 			).Should(Succeed(), "EphemeralRunnerSet should be created")
 			originalRunnerSetUID := runnerSet.UID
-			originalRunnerSetHash := runnerSet.Annotations[annotationKeySpecHash]
+			originalRunnerSetHash := runnerSet.Annotations[annotationKeyIntegrityHash]
 
 			patched := autoscalingRunnerSet.DeepCopy()
 			patched.Spec.Template.Spec.Containers[0].Image = "ghcr.io/actions/runner:updated"
@@ -477,7 +477,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					g.Expect(err).NotTo(HaveOccurred(), "failed to get EphemeralRunnerSet")
 					g.Expect(current.UID).To(Equal(originalRunnerSetUID), "EphemeralRunnerSet should be updated in place")
 					g.Expect(current.Spec.EphemeralRunnerSpec.PodTemplateSpec.Spec.Containers[0].Image).To(Equal("ghcr.io/actions/runner:updated"))
-					g.Expect(current.Annotations[annotationKeySpecHash]).NotTo(Equal(originalRunnerSetHash), "EphemeralRunnerSet spec hash should change")
+					g.Expect(current.Annotations[annotationKeyIntegrityHash]).NotTo(Equal(originalRunnerSetHash), "EphemeralRunnerSet spec hash should change")
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
@@ -516,7 +516,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 				autoscalingRunnerSetTestInterval,
 			).Should(Succeed(), "EphemeralRunnerSet should be created")
 			originalRunnerSetUID := runnerSet.UID
-			originalRunnerSetHash := runnerSet.Annotations[annotationKeySpecHash]
+			originalRunnerSetHash := runnerSet.Annotations[annotationKeyIntegrityHash]
 
 			patched := autoscalingRunnerSet.DeepCopy()
 			max := 20
@@ -542,7 +542,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, current)
 					g.Expect(err).NotTo(HaveOccurred(), "failed to get EphemeralRunnerSet")
 					g.Expect(current.UID).To(Equal(originalRunnerSetUID), "EphemeralRunnerSet should not be recreated")
-					g.Expect(current.Annotations[annotationKeySpecHash]).To(Equal(originalRunnerSetHash), "EphemeralRunnerSet spec should not change")
+					g.Expect(current.Annotations[annotationKeyIntegrityHash]).To(Equal(originalRunnerSetHash), "EphemeralRunnerSet spec should not change")
 				},
 				time.Second*5,
 				autoscalingRunnerSetTestInterval,
@@ -781,7 +781,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			if patched.Annotations == nil {
 				patched.Annotations = make(map[string]string)
 			}
-			patched.Annotations[annotationKeySpecHash] = "testgroup2"
+			patched.Annotations[annotationKeyIntegrityHash] = "testgroup2"
 			patched.Spec.Template.Spec = corev1.PodSpec{
 				Containers: []corev1.Container{
 					{

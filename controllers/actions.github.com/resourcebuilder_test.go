@@ -113,7 +113,7 @@ func TestMetadataPropagation(t *testing.T) {
 	assert.Equal(t, labelValueKubernetesPartOf, ephemeralRunnerSet.Labels[LabelKeyKubernetesPartOf])
 	assert.Equal(t, "runner-set", ephemeralRunnerSet.Labels[LabelKeyKubernetesComponent])
 	assert.Equal(t, autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion], ephemeralRunnerSet.Labels[LabelKeyKubernetesVersion])
-	assert.NotEmpty(t, ephemeralRunnerSet.Annotations[annotationKeySpecHash])
+	assert.NotEmpty(t, ephemeralRunnerSet.Annotations[annotationKeyIntegrityHash])
 	assert.Equal(t, autoscalingRunnerSet.Name, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName])
 	assert.Equal(t, autoscalingRunnerSet.Namespace, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace])
 	assert.Equal(t, "", ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise])
@@ -130,7 +130,7 @@ func TestMetadataPropagation(t *testing.T) {
 	assert.Equal(t, labelValueKubernetesPartOf, listener.Labels[LabelKeyKubernetesPartOf])
 	assert.Equal(t, "runner-scale-set-listener", listener.Labels[LabelKeyKubernetesComponent])
 	assert.Equal(t, autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion], listener.Labels[LabelKeyKubernetesVersion])
-	assert.NotEmpty(t, ephemeralRunnerSet.Annotations[annotationKeySpecHash])
+	assert.NotEmpty(t, ephemeralRunnerSet.Annotations[annotationKeyIntegrityHash])
 	assert.Equal(t, autoscalingRunnerSet.Name, listener.Labels[LabelKeyGitHubScaleSetName])
 	assert.Equal(t, autoscalingRunnerSet.Namespace, listener.Labels[LabelKeyGitHubScaleSetNamespace])
 	assert.Equal(t, "", listener.Labels[LabelKeyGitHubEnterprise])
@@ -158,7 +158,14 @@ func TestMetadataPropagation(t *testing.T) {
 	assert.Equal(t, "listener-role-binding-label", listenerRoleBinding.Labels["test.com/listener-role-binding-label"])
 	assert.Equal(t, "listener-role-binding-annotation", listenerRoleBinding.Annotations["test.com/listener-role-binding-annotation"])
 
-	listenerPod, err := b.newScaleSetListenerPod(listener, &corev1.Secret{}, listenerServiceAccount, nil)
+	listenerPod, err := b.newScaleSetListenerPod(
+		listener,
+		&corev1.Secret{},
+		listenerServiceAccount,
+		listenerRole,
+		listenerRoleBinding,
+		nil,
+	)
 	require.NoError(t, err)
 	assert.Equal(t, listenerPod.Labels, listener.Labels)
 
@@ -279,7 +286,7 @@ func TestOwnershipRelationships(t *testing.T) {
 				runnerScaleSetIDAnnotationKey:         "1",
 				AnnotationKeyGitHubRunnerGroupName:    "test-group",
 				AnnotationKeyGitHubRunnerScaleSetName: "test-scale-set",
-				annotationKeySpecHash:                 "test-hash",
+				annotationKeyIntegrityHash:            "test-hash",
 			},
 		},
 		Spec: v1alpha1.AutoscalingRunnerSetSpec{
@@ -298,10 +305,20 @@ func TestOwnershipRelationships(t *testing.T) {
 	listener, err := b.newAutoscalingListener(&autoscalingRunnerSet, ephemeralRunnerSet, autoscalingRunnerSet.Namespace, "test:latest", nil)
 	require.NoError(t, err)
 	listener.UID = "test-listener-uid"
-	listenerServiceAccount := &corev1.ServiceAccount{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-sa"},
-	}
-	listenerPod, err := b.newScaleSetListenerPod(listener, &corev1.Secret{}, listenerServiceAccount, nil)
+
+	listenerServiceAccount, err := b.newScaleSetListenerServiceAccount(listener)
+	require.NoError(t, err)
+	listenerRole := b.newScaleSetListenerRole(listener)
+	listenerRoleBinding := b.newScaleSetListenerRoleBinding(listener, listenerRole, listenerServiceAccount)
+
+	listenerPod, err := b.newScaleSetListenerPod(
+		listener,
+		&corev1.Secret{},
+		listenerServiceAccount,
+		listenerRole,
+		listenerRoleBinding,
+		nil,
+	)
 	require.NoError(t, err)
 
 	require.Len(t, listenerPod.OwnerReferences, 1, "Listener Pod should have exactly one owner reference")
@@ -384,14 +401,20 @@ func TestListenerPodNodeSelector(t *testing.T) {
 	listener, err := b.newAutoscalingListener(&autoscalingRunnerSet, ephemeralRunnerSet, autoscalingRunnerSet.Namespace, "test:latest", nil)
 	require.NoError(t, err)
 
-	listenerServiceAccount := &corev1.ServiceAccount{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "test",
-		},
-	}
+	listenerServiceAccount, err := b.newScaleSetListenerServiceAccount(listener)
+	require.NoError(t, err)
+	listenerRole := b.newScaleSetListenerRole(listener)
+	listenerRoleBinding := b.newScaleSetListenerRoleBinding(listener, listenerRole, listenerServiceAccount)
 
 	t.Run("default listener pod has linux nodeSelector", func(t *testing.T) {
-		pod, err := b.newScaleSetListenerPod(listener, &corev1.Secret{}, listenerServiceAccount, nil)
+		pod, err := b.newScaleSetListenerPod(
+			listener,
+			&corev1.Secret{},
+			listenerServiceAccount,
+			listenerRole,
+			listenerRoleBinding,
+			nil,
+		)
 		require.NoError(t, err)
 		require.NotNil(t, pod.Spec.NodeSelector)
 		assert.Equal(t, "linux", pod.Spec.NodeSelector[LabelKeyKubernetesOS],
@@ -402,7 +425,14 @@ func TestListenerPodNodeSelector(t *testing.T) {
 		listenerNoTemplate := listener.DeepCopy()
 		listenerNoTemplate.Spec.Template = nil
 
-		pod, err := b.newScaleSetListenerPod(listenerNoTemplate, &corev1.Secret{}, listenerServiceAccount, nil)
+		pod, err := b.newScaleSetListenerPod(
+			listenerNoTemplate,
+			&corev1.Secret{},
+			listenerServiceAccount,
+			listenerRole,
+			listenerRoleBinding,
+			nil,
+		)
 		require.NoError(t, err)
 		require.NotNil(t, pod.Spec.NodeSelector)
 		assert.Equal(t, "linux", pod.Spec.NodeSelector[LabelKeyKubernetesOS],
@@ -420,7 +450,14 @@ func TestListenerPodNodeSelector(t *testing.T) {
 			},
 		}
 
-		pod, err := b.newScaleSetListenerPod(listenerWithTemplate, &corev1.Secret{}, listenerServiceAccount, nil)
+		pod, err := b.newScaleSetListenerPod(
+			listenerWithTemplate,
+			&corev1.Secret{},
+			listenerServiceAccount,
+			listenerRole,
+			listenerRoleBinding,
+			nil,
+		)
 		require.NoError(t, err)
 		require.NotNil(t, pod.Spec.NodeSelector,
 			"linux nodeSelector should not be cleared by template with nil nodeSelector")
@@ -439,7 +476,14 @@ func TestListenerPodNodeSelector(t *testing.T) {
 			},
 		}
 
-		pod, err := b.newScaleSetListenerPod(listenerWithTemplate, &corev1.Secret{}, listenerServiceAccount, nil)
+		pod, err := b.newScaleSetListenerPod(
+			listenerWithTemplate,
+			&corev1.Secret{},
+			listenerServiceAccount,
+			listenerRole,
+			listenerRoleBinding,
+			nil,
+		)
 		require.NoError(t, err)
 		require.NotNil(t, pod.Spec.NodeSelector)
 		assert.Equal(t, "linux", pod.Spec.NodeSelector[LabelKeyKubernetesOS])
@@ -455,7 +499,14 @@ func TestListenerPodNodeSelector(t *testing.T) {
 			},
 		}
 
-		pod, err := b.newScaleSetListenerPod(listenerWithTemplate, &corev1.Secret{}, listenerServiceAccount, nil)
+		pod, err := b.newScaleSetListenerPod(
+			listenerWithTemplate,
+			&corev1.Secret{},
+			listenerServiceAccount,
+			listenerRole,
+			listenerRoleBinding,
+			nil,
+		)
 		require.NoError(t, err)
 		// An explicitly set empty map is non-nil, so it overrides the default.
 		// This is intentional: the user explicitly opted out of nodeSelector constraints.

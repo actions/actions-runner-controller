@@ -140,13 +140,13 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	// Something has changed, we need to re-apply the pending phase and change hash annotation to trigger the update of runner scale set and listener.
-	if targetHash := autoscalingRunnerSet.Hash(); autoscalingRunnerSet.Annotations[annotationKeySpecHash] != targetHash {
+	if targetHash := autoscalingRunnerSet.Hash(); autoscalingRunnerSet.Annotations[annotationKeyIntegrityHash] != targetHash {
 		// TODO: apply the version label
 		original := autoscalingRunnerSet.DeepCopy()
 		if autoscalingRunnerSet.Annotations == nil {
 			autoscalingRunnerSet.Annotations = map[string]string{}
 		}
-		autoscalingRunnerSet.Annotations[annotationKeySpecHash] = targetHash
+		autoscalingRunnerSet.Annotations[annotationKeyIntegrityHash] = targetHash
 		autoscalingRunnerSet.Status.Phase = v1alpha1.AutoscalingRunnerSetPhasePending
 		if err := r.Patch(ctx, autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
 			log.Error(err, "Failed to update autoscaling runner set with new change hash and pending phase")

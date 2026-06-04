@@ -125,7 +125,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 	// If hash spec has changed, delete idle ephemeral runners
 	// in order to apply the change to the runners that did not yet receive a job.
 	ephemeralRunnerSpecHash := ephemeralRunnerSet.EphemeralRunnerSpecHash()
-	if ephemeralRunnerSet.Annotations[annotationKeySpecHash] != ephemeralRunnerSpecHash {
+	if ephemeralRunnerSet.Annotations[annotationKeyIntegrityHash] != ephemeralRunnerSpecHash {
 		log.Info("EphemeralRunnerSpec has changed, deleting idle ephemeral runners to apply the new spec")
 		if _, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log); err != nil {
 			log.Error(err, "Failed to clean up EphemeralRunners")
@@ -137,7 +137,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		if ephemeralRunnerSet.Annotations == nil {
 			ephemeralRunnerSet.Annotations = make(map[string]string)
 		}
-		ephemeralRunnerSet.Annotations[annotationKeySpecHash] = ephemeralRunnerSpecHash
+		ephemeralRunnerSet.Annotations[annotationKeyIntegrityHash] = ephemeralRunnerSpecHash
 		if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
 			log.Error(err, "Failed to update ephemeral runner set with new spec hash")
 			return ctrl.Result{}, err
