@@ -46,8 +46,13 @@ var commonLabelKeys = [...]string{
 	LabelKeyGitHubRepository,
 }
 
-// annotationKeyIntegrityHash is used to hash the spec of resources
-// in order to signal change without having to know the previous state.
+// annotationKeyIntegrityHash is used as a hash of the important fields
+// of each resource to determine if more drastic action should be taken.
+//
+// For example, annotations/labels are not something that should modify
+// the behavior of a resource, while the change in spec is. Therefore,
+// the spec hash should contain the spec fields in order to determine
+// modifications.
 const annotationKeyIntegrityHash = "actions.github.com/integrity-hash"
 
 const labelValueKubernetesPartOf = "gha-runner-scale-set"
