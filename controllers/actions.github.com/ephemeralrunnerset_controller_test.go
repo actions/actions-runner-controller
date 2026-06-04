@@ -71,6 +71,9 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-asrs",
 				Namespace: autoscalingNS.Name,
+				Annotations: map[string]string{
+					"arc.test/runner-set-annotation": "initial",
+				},
 			},
 			Spec: v1alpha1.EphemeralRunnerSetSpec{
 				EphemeralRunnerSpec: v1alpha1.EphemeralRunnerSpec{
@@ -310,6 +313,64 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 				ephemeralRunnerSetTestTimeout,
 				ephemeralRunnerSetTestInterval,
 			).Should(BeEquivalentTo(5), "5 EphemeralRunner should be created")
+		})
+
+		It("propagates updated EphemeralRunnerSet annotations to newly created EphemeralRunners", func() {
+			ers := new(v1alpha1.EphemeralRunnerSet)
+			err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunnerSet.Name, Namespace: ephemeralRunnerSet.Namespace}, ers)
+			Expect(err).NotTo(HaveOccurred(), "failed to get EphemeralRunnerSet")
+
+			updated := ers.DeepCopy()
+			updated.Spec.Replicas = 1
+			updated.Spec.PatchID = 0
+			err = k8sClient.Patch(ctx, updated, client.MergeFrom(ers))
+			Expect(err).NotTo(HaveOccurred(), "failed to scale EphemeralRunnerSet")
+
+			runnerList := new(v1alpha1.EphemeralRunnerList)
+			Eventually(
+				func(g Gomega) {
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
+					g.Expect(err).NotTo(HaveOccurred(), "failed to list EphemeralRunners")
+					g.Expect(runnerList.Items).To(HaveLen(1))
+					g.Expect(runnerList.Items[0].Annotations["arc.test/runner-set-annotation"]).To(Equal("initial"))
+				},
+				ephemeralRunnerSetTestTimeout,
+				ephemeralRunnerSetTestInterval,
+			).Should(Succeed())
+
+			ers = new(v1alpha1.EphemeralRunnerSet)
+			err = k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunnerSet.Name, Namespace: ephemeralRunnerSet.Namespace}, ers)
+			Expect(err).NotTo(HaveOccurred(), "failed to get EphemeralRunnerSet")
+
+			updated = ers.DeepCopy()
+			updated.Annotations["arc.test/runner-set-annotation"] = "updated"
+			updated.Annotations["arc.test/new-runner-set-annotation"] = "added"
+			updated.Spec.Replicas = 2
+			updated.Spec.PatchID = 1
+			err = k8sClient.Patch(ctx, updated, client.MergeFrom(ers))
+			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunnerSet annotations")
+
+			Eventually(
+				func(g Gomega) {
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
+					g.Expect(err).NotTo(HaveOccurred(), "failed to list EphemeralRunners")
+					g.Expect(runnerList.Items).To(HaveLen(2))
+
+					annotationsByValue := map[string]int{}
+					var updatedRunnerHasNewAnnotation bool
+					for _, runner := range runnerList.Items {
+						annotationsByValue[runner.Annotations["arc.test/runner-set-annotation"]]++
+						if runner.Annotations["arc.test/runner-set-annotation"] == "updated" && runner.Annotations["arc.test/new-runner-set-annotation"] == "added" {
+							updatedRunnerHasNewAnnotation = true
+						}
+					}
+					g.Expect(annotationsByValue["initial"]).To(Equal(1))
+					g.Expect(annotationsByValue["updated"]).To(Equal(1))
+					g.Expect(updatedRunnerHasNewAnnotation).To(BeTrue())
+				},
+				ephemeralRunnerSetTestTimeout,
+				ephemeralRunnerSetTestInterval,
+			).Should(Succeed())
 		})
 
 		It("Should scale up when patch ID changes", func() {
