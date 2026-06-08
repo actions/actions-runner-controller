@@ -206,21 +206,21 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 	)
 	switch {
 	case err == nil:
-		newRole := r.newScaleSetListenerRole(&autoscalingListener)
+		desiredRole := r.newScaleSetListenerRole(&autoscalingListener)
 		updatedRole := listenerRole.DeepCopy()
 		var shouldUpdate bool
-		desiredLabels := r.filterAndMergeLabels(listenerRole.Labels, newRole.Labels)
+		desiredLabels := r.filterAndMergeLabels(listenerRole.Labels, desiredRole.Labels)
 		if !maps.Equal(listenerRole.Labels, desiredLabels) {
 			updatedRole.Labels = desiredLabels
 			shouldUpdate = true
 		}
-		desiredAnnotations := r.mergeAnnotations(listenerRole.Annotations, newRole.Annotations)
+		desiredAnnotations := r.mergeAnnotations(listenerRole.Annotations, desiredRole.Annotations)
 		if !maps.Equal(listenerRole.Annotations, desiredAnnotations) {
 			updatedRole.Annotations = desiredAnnotations
 			shouldUpdate = true
 		}
-		if !reflect.DeepEqual(listenerRole.Rules, newRole.Rules) {
-			updatedRole.Rules = newRole.Rules
+		if !reflect.DeepEqual(listenerRole.Rules, desiredRole.Rules) {
+			updatedRole.Rules = desiredRole.Rules
 			shouldUpdate = true
 		}
 		if shouldUpdate {

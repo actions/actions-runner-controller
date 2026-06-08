@@ -220,7 +220,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 
 		runnerName := string(secret.Data["runnerName"])
-
+		original := ephemeralRunner.DeepCopy()
 		ephemeralRunner.Status.RunnerID = runnerID
 		ephemeralRunner.Status.RunnerName = runnerName
 

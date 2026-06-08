@@ -149,11 +149,13 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			autoscalingRunnerSet.Annotations = map[string]string{}
 		}
 		autoscalingRunnerSet.Annotations[annotationKeyIntegrityHash] = targetHash
-		autoscalingRunnerSet.Status.Phase = v1alpha1.AutoscalingRunnerSetPhasePending
 		if err := r.Patch(ctx, &autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
 			log.Error(err, "Failed to update autoscaling runner set with new change hash and pending phase")
 			return ctrl.Result{}, err
 		}
+
+		original = autoscalingRunnerSet.DeepCopy()
+		autoscalingRunnerSet.Status.Phase = v1alpha1.AutoscalingRunnerSetPhasePending
 		if err := r.Status().Patch(ctx, &autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
 			log.Error(err, "Failed to update autoscaling runner set status with pending phase")
 			return ctrl.Result{}, err
@@ -1013,7 +1015,14 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeNoPermissionServi
 	c.logger.Info("Removing finalizer from no permission service account", "name", serviceAccountName)
 
 	serviceAccount := new(corev1.ServiceAccount)
-	err := c.client.Get(ctx, types.NamespacedName{Name: serviceAccountName, Namespace: c.autoscalingRunnerSet.Namespace}, serviceAccount)
+	err := c.client.Get(
+		ctx,
+		types.NamespacedName{
+			Name:      serviceAccountName,
+			Namespace: c.autoscalingRunnerSet.Namespace,
+		},
+		serviceAccount,
+	)
 	switch {
 	case err == nil:
 		if !controllerutil.ContainsFinalizer(serviceAccount, AutoscalingRunnerSetCleanupFinalizerName) {
