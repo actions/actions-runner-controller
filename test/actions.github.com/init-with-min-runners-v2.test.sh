@@ -19,8 +19,6 @@ WORKFLOW_FILE="arc-test-workflow.yaml"
 ARC_NAME="arc"
 ARC_NAMESPACE="arc-systems"
 
-UPGRADE_MARKER="e2e-upgrade-${SCALE_SET_NAME}-$(date +%s)"
-
 function install_arc() {
     echo "Installing ARC"
     helm install arc \
@@ -45,7 +43,7 @@ function install_scale_set() {
         --set controllerServiceAccount.namespace="${ARC_NAMESPACE}" \
         --set auth.url="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
         --set auth.githubToken="${GITHUB_TOKEN}" \
-        --set scaleset.minRunners=1 \
+        --set scaleset.minRunners=5 \
         "${ROOT_DIR}/charts/gha-runner-scale-set-experimental"
 
     if ! NAME="${SCALE_SET_NAME}" NAMESPACE="${ARC_NAMESPACE}" wait_for_scale_set; then
