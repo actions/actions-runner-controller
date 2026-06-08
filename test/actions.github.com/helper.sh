@@ -10,6 +10,10 @@ export TARGET_ORG="${TARGET_ORG:-actions-runner-controller}"
 export TARGET_REPO="${TARGET_REPO:-arc_e2e_test_dummy}"
 export IMAGE_NAME="${IMAGE_NAME:-arc-test-image}"
 
+function log() {
+    echo "[$(date -u +%FT%T%Z)] $*" >&2
+}
+
 # Trims a single pair of matching surrounding quotes from the provided string.
 # Examples:
 #   trim_quotes '"1.2.3"' -> 1.2.3
@@ -56,7 +60,7 @@ function chart_version() {
 
     version="$(trim_quotes "${version}" | tr -d "[:space:]")"
     if [[ -z "${version}" ]]; then
-        echo "Failed to extract version from ${chart_yaml} via yq" >&2
+        log "Failed to extract version from ${chart_yaml} via yq"
         return 1
     fi
     printf '%s\n' "${version}"
@@ -65,14 +69,14 @@ function chart_version() {
 
 function ensure_version_set() {
     if [[ -z "${VERSION:-}" ]]; then
-        echo 'VERSION is not set. Set it in the test, e.g. export VERSION="$(chart_version path/to/Chart.yaml)".' >&2
+        log 'VERSION is not set. Set it in the test, e.g. export VERSION="$(chart_version path/to/Chart.yaml)".'
         return 1
     fi
 
     # Defensive: if a tool produced quoted output, normalize it before using in tags/args.
     export VERSION="$(printf '%s' "${VERSION}" | tr -d "\"'[:space:]")"
     if [[ -z "${VERSION}" ]]; then
-        echo "VERSION resolved to an empty value" >&2
+        log "VERSION resolved to an empty value"
         return 1
     fi
 
@@ -86,7 +90,7 @@ export COMMIT_SHA
 
 function build_image() {
     ensure_version_set || return 1
-    echo "Building ARC image ${IMAGE}"
+    log "Building ARC image ${IMAGE}"
 
     cd "${ROOT_DIR}" || exit 1
 
@@ -103,46 +107,46 @@ function build_image() {
 
 function create_cluster() {
     ensure_version_set || return 1
-    echo "Deleting minikube cluster if exists"
+    log "Deleting minikube cluster if exists"
     minikube delete || true
 
-    echo "Creating minikube cluster"
+    log "Creating minikube cluster"
     minikube start --driver=docker --container-runtime=docker --wait=all
 
-    echo "Verifying ns works"
+    log "Verifying ns works"
     if ! minikube ssh "nslookup github.com >/dev/null 2>&1"; then
-        echo "Nameserver configuration failed"
+        log "Nameserver configuration failed"
         exit 1
     fi
 
-    echo "Loading image into minikube cluster"
+    log "Loading image into minikube cluster"
     minikube image load "${IMAGE}"
 
-    echo "Loading runner image into minikube cluster"
+    log "Loading runner image into minikube cluster"
     minikube image load "ghcr.io/actions/actions-runner:latest"
 }
 
 function delete_cluster() {
-    echo "Deleting minikube cluster"
+    log "Deleting minikube cluster"
     minikube delete
 }
 
 function log_arc() {
-    echo "ARC logs"
+    log "ARC logs"
     kubectl logs -n "${NAMESPACE}" -l "app.kubernetes.io/part-of=gha-rs-controller,app.kubernetes.io/component=controller-manager"
 }
 
 function wait_for_arc() {
-    echo "Waiting for ARC to be ready"
+    log "Waiting for ARC to be ready"
     local count=0
     while true; do
         POD_NAME=$(kubectl get pods -n "${NAMESPACE}" -l "app.kubernetes.io/part-of=gha-rs-controller,app.kubernetes.io/component=controller-manager" -o name 2>/dev/null || true)
         if [ -n "$POD_NAME" ]; then
-            echo "Pod found: $POD_NAME"
+            log "Pod found: $POD_NAME"
             break
         fi
         if [ "$count" -ge 60 ]; then
-            echo "Timeout waiting for controller pod with labels app.kubernetes.io/part-of=gha-rs-controller,app.kubernetes.io/component=controller-manager"
+            log "Timeout waiting for controller pod with labels app.kubernetes.io/part-of=gha-rs-controller,app.kubernetes.io/component=controller-manager"
             return 1
         fi
         sleep 1
@@ -159,12 +163,12 @@ function wait_for_scale_set() {
     while true; do
         POD_NAME=$(kubectl get pods -n "${NAMESPACE}" -l "actions.github.com/scale-set-name=${NAME}" -o name)
         if [ -n "$POD_NAME" ]; then
-            echo "Pod found: ${POD_NAME}"
+            log "Pod found: ${POD_NAME}"
             break
         fi
 
         if [ "$count" -ge 60 ]; then
-            echo "Timeout waiting for listener pod with label actions.github.com/scale-set-name=${NAME}"
+            log "Timeout waiting for listener pod with label actions.github.com/scale-set-name=${NAME}"
             return 1
         fi
 
@@ -176,8 +180,10 @@ function wait_for_scale_set() {
 }
 
 function cleanup_scale_set() {
+    log "Uninstalling Helm release ${INSTALLATION_NAME}"
     helm uninstall "${INSTALLATION_NAME}" --namespace "${NAMESPACE}" --debug
 
+    log "Waiting for autoscaling runner sets to be deleted"
     kubectl wait --timeout=40s --for=delete autoscalingrunnersets -n "${NAMESPACE}" -l app.kubernetes.io/instance="${INSTALLATION_NAME}"
 }
 
@@ -197,7 +203,24 @@ function print_results() {
     fi
 }
 
-function run_workflow() {
+function extract_run_id() {
+    local workflow_output="$1"
+    local run_id
+
+    run_id="$(printf '%s\n' "${workflow_output}" | awk '/^[[:space:]]*[0-9]+[[:space:]]*$/ { gsub(/[[:space:]]/, ""); print; exit }')"
+    if [[ -z "${run_id}" ]]; then
+        run_id="$(printf '%s\n' "${workflow_output}" | awk 'match($0, /actions\/runs\/[0-9]+/) { run=substr($0, RSTART, RLENGTH); sub(/^actions\/runs\//, "", run); print run; exit }')"
+    fi
+
+    if [[ -z "${run_id}" ]]; then
+        log "Failed to extract run id from output: ${workflow_output}"
+        return 1
+    fi
+
+    printf '%s\n' "${run_id}"
+}
+
+function start_workflow() {
     local repo
     repo="${TARGET_ORG}/${TARGET_REPO}"
 
@@ -240,50 +263,74 @@ function run_workflow() {
     fi
 
     if [[ -z "${workflow_id}" ]]; then
-        echo "Workflow not found in ${repo}: ${WORKFLOW_FILE}" >&2
-        echo "Available workflows in ${repo}:" >&2
+        log "Workflow not found in ${repo}: ${WORKFLOW_FILE}" >&2
+        log "Available workflows in ${repo}:" >&2
         gh workflow list -R "${repo}" --limit 50 || true
-        echo "Hint: set TARGET_ORG/TARGET_REPO to a repo that contains the workflow on its default branch, or set WORKFLOW_FILE to a valid workflow name/id/filename." >&2
+        log "Hint: set TARGET_ORG/TARGET_REPO to a repo that contains the workflow on its default branch, or set WORKFLOW_FILE to a valid workflow name/id/filename." >&2
         return 1
     fi
 
-    echo "Resolved workflow id: ${workflow_id} (ref: ${WORKFLOW_REF})"
+    log "Resolved workflow id: ${workflow_id} (ref: ${WORKFLOW_REF})"
 
     local queue_time
     queue_time="$(date -u +%FT%TZ)"
 
-    echo "Running workflow ${WORKFLOW_FILE}"
-    gh workflow run -R "${repo}" "${workflow_id}" --ref "${WORKFLOW_REF}" -f arc_name="${SCALE_SET_NAME}" || return 1
+    log "Running workflow ${WORKFLOW_FILE}"
+    local workflow_output
+    workflow_output="$(gh workflow run -R "${repo}" "${workflow_id}" --ref "${WORKFLOW_REF}" -f arc_name="${SCALE_SET_NAME}")" || return 1
+    if [[ -n "${workflow_output}" ]]; then
+        log "${workflow_output}"
+    fi
 
-    echo "Waiting for run to start"
+    log "Waiting for run to start"
     local count=0
     local run_id=
+    local run_id_output=
     while true; do
         if [[ "${count}" -ge 12 ]]; then
-            echo "Timeout waiting for run to start"
+            log "Timeout waiting for run to start"
             return 1
         fi
-        run_id=$(gh run list -R "${repo}" --workflow "${workflow_id}" --created ">${queue_time}" --json "name,databaseId" --jq ".[] | select(.name | contains(\"${SCALE_SET_NAME}\")) | .databaseId")
-        echo "Run ID: ${run_id}"
+        run_id_output=$(gh run list -R "${repo}" --workflow "${workflow_id}" --created ">${queue_time}" --json "name,databaseId" --jq ".[] | select(.name | contains(\"${SCALE_SET_NAME}\")) | .databaseId")
+        if [[ -n "${run_id_output}" ]]; then
+            run_id=$(extract_run_id "${run_id_output}" || true)
+        fi
+        log "Run ID: ${run_id}"
         if [ -n "$run_id" ]; then
-            echo "Run found!"
+            log "Run found!"
             break
         fi
 
-        echo "Run not found yet, waiting 5 seconds"
+        log "Run not found yet, waiting 5 seconds"
         sleep 5
         count=$((count + 1))
     done
 
-    echo "Waiting for run to complete"
+    echo "${run_id}"
+}
+
+function wait_for_run_completion() {
+    local run_id="$1"
+    local repo="${TARGET_ORG}/${TARGET_REPO}"
+
+    log "Waiting for run ${run_id} to complete"
     gh run watch "${run_id}" -R "${repo}" --exit-status &>/dev/null
     local status=$?
     if [[ "${status}" -ne 0 ]]; then
-        echo "Run failed with exit code ${status}"
+        log "Run failed with exit code ${status}"
         return 1
     fi
 
-    echo "Run completed successfully"
+    log "Run completed successfully"
+}
+
+function run_workflow() {
+    local run_id
+    if ! run_id=$(start_workflow); then
+        log "Failed to start workflow"
+        return 1
+    fi
+    wait_for_run_completion "${run_id}"
 }
 
 function retry() {
@@ -295,10 +342,10 @@ function retry() {
 
     until "$@"; do
         if [[ $n -ge $retries ]]; then
-            echo "Attempt $n failed! No more retries left."
+            log "Attempt $n failed! No more retries left."
             return 1
         else
-            echo "Attempt $n failed! Retrying in $delay seconds..."
+            log "Attempt $n failed! Retrying in $delay seconds..."
             sleep "$delay"
             n=$((n + 1))
         fi
@@ -306,7 +353,7 @@ function retry() {
 }
 
 function install_openebs() {
-    echo "Install openebs/dynamic-localpv-provisioner"
+    log "Install openebs/dynamic-localpv-provisioner"
     helm repo add openebs https://openebs.github.io/openebs
     helm repo update
     helm install openebs openebs/openebs -n openebs --create-namespace
