@@ -25,6 +25,7 @@ function install_arc() {
         --namespace "arc-systems" \
         --create-namespace \
         --set controller.manager.container.image="${IMAGE_NAME}:${IMAGE_TAG}" \
+        --set controller.manager.config.updateStrategy="eventual" \
         "${ROOT_DIR}/charts/gha-runner-scale-set-controller-experimental" \
         --debug
 
@@ -50,58 +51,6 @@ function install_scale_set() {
         NAMESPACE="${ARC_NAMESPACE}" log_arc
         return 1
     fi
-}
-
-function upgrade_scale_set() {
-    echo "Upgrading scale set ${SCALE_SET_NAME}/${SCALE_SET_NAMESPACE}"
-
-    echo "Generated upgrade marker: ${UPGRADE_MARKER}"
-
-    PATCH_APPLIED_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    echo "Captured PATCH_APPLIED_TIME: ${PATCH_APPLIED_TIME}"
-
-    helm upgrade "${SCALE_SET_NAME}" \
-        --namespace "${SCALE_SET_NAMESPACE}" \
-        --set auth.url="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
-        --set auth.githubToken="${GITHUB_TOKEN}" \
-        --set scaleset.minRunners=1 \
-        --set runner.container.image="ghcr.io/actions/actions-runner:latest" \
-        --set runner.container.command={"/home/runner/run.sh"} \
-        --set runner.container.env[0].name="TEST" \
-        --set runner.container.env[0].value="E2E TESTS" \
-        --set "runner.pod.metadata.labels.e2e\.arc/upgrade-marker=${UPGRADE_MARKER}" \
-        "${ROOT_DIR}/charts/gha-runner-scale-set" \
-        --version="${VERSION}" \
-        --debug
-
-}
-
-function assert_idle_pod_recreated() {
-    echo "Waiting for idle pod recreation"
-    local count=0
-
-    while true; do
-        local pods
-        if ! pods=$(kubectl get pods -n "${SCALE_SET_NAMESPACE}" -l "actions.github.com/scale-set-name=${SCALE_SET_NAME},e2e.arc/upgrade-marker=${UPGRADE_MARKER}" -o jsonpath='{.items[*].metadata.name}'); then
-            echo "Failed to get pods: $pods"
-            return 1
-        fi
-
-        if [[ -n "$pods" ]]; then
-            echo "Found idle pod with upgrade marker: $pods"
-            return 0
-        fi
-
-        if ((count >= 30)); then
-            echo "Timeout waiting for idle pod recreation after upgrade"
-            return 1
-        fi
-
-        echo "No idle pod with upgrade marker found yet, retrying... ($((count + 1))/30)"
-        sleep 10
-        ((count++))
-    done
-
 }
 
 function assert_5_runners() {
