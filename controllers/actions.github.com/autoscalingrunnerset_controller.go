@@ -660,6 +660,64 @@ func (r *AutoscalingRunnerSetReconciler) updateRunnerScaleSetName(ctx context.Co
 	return ctrl.Result{}, nil
 }
 
+<<<<<<< HEAD
+=======
+func (r *AutoscalingRunnerSetReconciler) updateRunnerScaleSetLabels(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (ctrl.Result, error) {
+	runnerScaleSetID, err := strconv.Atoi(autoscalingRunnerSet.Annotations[runnerScaleSetIDAnnotationKey])
+	if err != nil {
+		logger.Error(err, "Failed to parse runner scale set ID")
+		return ctrl.Result{}, err
+	}
+
+	scaleSetName := autoscalingRunnerSet.Spec.RunnerScaleSetName
+	if len(scaleSetName) == 0 {
+		scaleSetName = autoscalingRunnerSet.Name
+	}
+
+	actionsClient, err := r.GetActionsService(ctx, autoscalingRunnerSet)
+	if err != nil {
+		logger.Error(err, "Failed to initialize Actions service client for updating runner scale set labels")
+		return ctrl.Result{}, err
+	}
+
+	labels := buildRunnerScaleSetLabels(scaleSetName, autoscalingRunnerSet.Spec.RunnerScaleSetLabels, logger)
+
+	updatedRunnerScaleSet, err := actionsClient.UpdateRunnerScaleSet(ctx, runnerScaleSetID, &scaleset.RunnerScaleSet{Labels: labels})
+	if err != nil {
+		// If the scale set no longer exists on the GitHub side (404), the stored ID
+		// annotation is stale. Clear it (and the labels annotation) so the next
+		// reconcile falls through to createRunnerScaleSet and obtains a fresh ID.
+		if strings.Contains(err.Error(), "404") {
+			logger.Info("Runner scale set not found during label update; clearing stale ID annotation to trigger re-registration", "runnerScaleSetId", runnerScaleSetID)
+			if patchErr := patch(ctx, r.Client, autoscalingRunnerSet, func(obj *v1alpha1.AutoscalingRunnerSet) {
+				delete(obj.Annotations, runnerScaleSetIDAnnotationKey)
+				delete(obj.Annotations, AnnotationKeyGitHubRunnerScaleSetLabels)
+			}); patchErr != nil {
+				logger.Error(patchErr, "Failed to clear stale runner scale set ID annotation")
+				return ctrl.Result{}, patchErr
+			}
+			return ctrl.Result{}, nil
+		}
+		logger.Error(err, "Failed to update runner scale set labels", "runnerScaleSetId", runnerScaleSetID)
+		return ctrl.Result{}, err
+	}
+
+	labelsAnnotation := runnerScaleSetLabelsAnnotation(scaleSetName, autoscalingRunnerSet.Spec.RunnerScaleSetLabels)
+
+	logger.Info("Updating runner scale set labels annotation")
+	if err := patch(ctx, r.Client, autoscalingRunnerSet, func(obj *v1alpha1.AutoscalingRunnerSet) {
+		obj.Annotations[AnnotationKeyGitHubRunnerScaleSetLabels] = labelsAnnotation
+		obj.Annotations[AnnotationKeyGitHubRunnerScaleSetName] = updatedRunnerScaleSet.Name
+	}); err != nil {
+		logger.Error(err, "Failed to update runner scale set labels annotation")
+		return ctrl.Result{}, err
+	}
+
+	logger.Info("Updated runner scale set labels", "labels", labelsAnnotation)
+	return ctrl.Result{}, nil
+}
+
+>>>>>>> 1eb2eae (fix for personal fork)
 func (r *AutoscalingRunnerSetReconciler) deleteRunnerScaleSet(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) error {
 	scaleSetID, ok := autoscalingRunnerSet.Annotations[runnerScaleSetIDAnnotationKey]
 	if !ok {
