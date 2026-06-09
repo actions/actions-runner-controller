@@ -28,6 +28,9 @@ type EphemeralRunnerSetSpec struct {
 	PatchID int `json:"patchID"`
 	// EphemeralRunnerSpec is the spec of the ephemeral runner
 	EphemeralRunnerSpec EphemeralRunnerSpec `json:"ephemeralRunnerSpec,omitempty"`
+	// EphemeralRunnerMetadata is the metadata to be applied to all ephemeral runners created by this set.
+	// If the EphemeralRunnerMetadata is updated, the update applies to new ephemeral runners created after the update,
+	// but does not apply to existing ephemeral runners.
 	// +optional
 	EphemeralRunnerMetadata *ResourceMeta `json:"ephemeralRunnerMetadata,omitempty"`
 }
@@ -74,12 +77,17 @@ type EphemeralRunnerSet struct {
 	Status EphemeralRunnerSetStatus `json:"status,omitempty"`
 }
 
+// EphemeralRunnerSpecHash computes the hash value of the EphemeralRunnerSpec and returns it as a string.
+func (ers *EphemeralRunnerSet) EphemeralRunnerSpecHash() string {
+	return ers.Spec.EphemeralRunnerSpec.Hash()
+}
+
 func (ers *EphemeralRunnerSet) GitHubConfigSecret() string {
 	return ers.Spec.EphemeralRunnerSpec.GitHubConfigSecret
 }
 
 func (ers *EphemeralRunnerSet) GitHubConfigUrl() string {
-	return ers.Spec.EphemeralRunnerSpec.GitHubConfigUrl
+	return ers.Spec.EphemeralRunnerSpec.GitHubConfigURL
 }
 
 func (ers *EphemeralRunnerSet) GitHubProxy() *ProxyConfig {

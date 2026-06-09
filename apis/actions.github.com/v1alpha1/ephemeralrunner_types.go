@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"github.com/actions/actions-runner-controller/hash"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -77,7 +78,7 @@ func (er *EphemeralRunner) GitHubConfigSecret() string {
 }
 
 func (er *EphemeralRunner) GitHubConfigUrl() string {
-	return er.Spec.GitHubConfigUrl
+	return er.Spec.GitHubConfigURL
 }
 
 func (er *EphemeralRunner) GitHubProxy() *ProxyConfig {
@@ -102,7 +103,7 @@ func (er *EphemeralRunner) VaultProxy() *ProxyConfig {
 // EphemeralRunnerSpec defines the desired state of EphemeralRunner
 type EphemeralRunnerSpec struct {
 	// +required
-	GitHubConfigUrl string `json:"githubConfigUrl,omitempty"`
+	GitHubConfigURL string `json:"githubConfigUrl,omitempty"`
 
 	// +required
 	GitHubConfigSecret string `json:"githubConfigSecret,omitempty"`
@@ -126,6 +127,10 @@ type EphemeralRunnerSpec struct {
 	EphemeralRunnerConfigSecretMetadata *ResourceMeta `json:"ephemeralRunnerConfigSecretMetadata,omitempty"`
 
 	corev1.PodTemplateSpec `json:",inline"`
+}
+
+func (s *EphemeralRunnerSpec) Hash() string {
+	return hash.ComputeTemplateHash(s)
 }
 
 // EphemeralRunnerStatus defines the observed state of EphemeralRunner

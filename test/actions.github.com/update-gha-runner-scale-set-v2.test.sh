@@ -19,13 +19,14 @@ WORKFLOW_FILE="arc-test-sleepy-matrix.yaml"
 ARC_NAME="arc"
 ARC_NAMESPACE="arc-systems"
 
+UPGRADE_MARKER="e2e-upgrade-${SCALE_SET_NAME}-$(date +%s)"
+
 function install_arc() {
     echo "Installing ARC"
     helm install "${ARC_NAME}" \
         --namespace "${ARC_NAMESPACE}" \
         --create-namespace \
         --set controller.manager.container.image="${IMAGE_NAME}:${IMAGE_TAG}" \
-        --set controller.manager.config.updateStrategy="eventual" \
         "${ROOT_DIR}/charts/gha-runner-scale-set-controller-experimental" \
         --debug
 
@@ -44,6 +45,8 @@ function install_scale_set() {
         --set controllerServiceAccount.namespace="${ARC_NAMESPACE}" \
         --set auth.url="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
         --set auth.githubToken="${GITHUB_TOKEN}" \
+        --set scaleset.name="${SCALE_SET_NAME}" \
+        --set scaleset.minRunners=5 \
         "${ROOT_DIR}/charts/gha-runner-scale-set-experimental" \
         --version="${VERSION}" \
         --debug
@@ -56,87 +59,75 @@ function install_scale_set() {
 
 function upgrade_scale_set() {
     echo "Upgrading scale set ${SCALE_SET_NAME}/${SCALE_SET_NAMESPACE}"
+
+    echo "Generated upgrade marker: ${UPGRADE_MARKER}"
+
     helm upgrade "${SCALE_SET_NAME}" \
         --namespace "${SCALE_SET_NAMESPACE}" \
         --set controllerServiceAccount.name="${ARC_NAME}-gha-rs-controller" \
         --set controllerServiceAccount.namespace="${ARC_NAMESPACE}" \
         --set auth.url="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
         --set auth.githubToken="${GITHUB_TOKEN}" \
+        --set scaleset.name="${SCALE_SET_NAME}" \
         --set runner.container.image="ghcr.io/actions/actions-runner:latest" \
         --set runner.container.command={"/home/runner/run.sh"} \
-        --set runner.env[0].name="TEST" \
-        --set runner.env[0].value="E2E TESTS" \
+        --set runner.container.env[0].name="TEST" \
+        --set runner.container.env[0].value="E2E TESTS" \
+        --set "runner.pod.metadata.labels.e2e\.arc/upgrade-marker=${UPGRADE_MARKER}" \
         "${ROOT_DIR}/charts/gha-runner-scale-set-experimental" \
         --version="${VERSION}" \
         --debug
 
 }
 
-function assert_listener_deleted() {
+function assert_idle_pod_recreated() {
+    echo "Waiting for idle pod recreation"
     local count=0
-    while true; do
-        LISTENER_COUNT="$(kubectl get pods -l actions.github.com/scale-set-name="${SCALE_SET_NAME}" -n "${ARC_NAMESPACE}" --field-selector=status.phase=Running -o=jsonpath='{.items}' | jq 'length')"
-        RUNNERS_COUNT="$(kubectl get pods -l app.kubernetes.io/component=runner -n "${SCALE_SET_NAMESPACE}" --field-selector=status.phase=Running -o=jsonpath='{.items}' | jq 'length')"
-        RESOURCES="$(kubectl get pods -A)"
 
-        if [ "${LISTENER_COUNT}" -eq 0 ]; then
-            echo "Listener has been deleted"
-            echo "${RESOURCES}"
-            return 0
-        fi
-        if [ "${count}" -ge 60 ]; then
-            echo "Timeout waiting for listener to be deleted"
-            echo "${RESOURCES}"
+    while true; do
+        local pods
+        if ! pods=$(kubectl get pods -n "${SCALE_SET_NAMESPACE}" -l "actions.github.com/scale-set-name=${SCALE_SET_NAME},e2e.arc/upgrade-marker=${UPGRADE_MARKER}" -o jsonpath='{.items[*].metadata.name}'); then
+            echo "Failed to get pods: $pods"
             return 1
         fi
 
-        echo "Waiting for listener to be deleted"
-        echo "Listener count: ${LISTENER_COUNT} target: 0 | Runners count: ${RUNNERS_COUNT} target: 3"
-
-        sleep 1
-        count=$((count + 1))
-    done
-}
-
-function assert_listener_recreated() {
-    count=0
-    while true; do
-        LISTENER_COUNT="$(kubectl get pods -l actions.github.com/scale-set-name="${SCALE_SET_NAME}" -n "${ARC_NAMESPACE}" --field-selector=status.phase=Running -o=jsonpath='{.items}' | jq 'length')"
-        RUNNERS_COUNT="$(kubectl get pods -l app.kubernetes.io/component=runner -n "${SCALE_SET_NAMESPACE}" --field-selector=status.phase=Running -o=jsonpath='{.items}' | jq 'length')"
-        RESOURCES="$(kubectl get pods -A)"
-
-        if [ "${LISTENER_COUNT}" -eq 1 ]; then
-            echo "Listener is up!"
-            echo "${RESOURCES}"
+        if [[ -n "$pods" ]]; then
+            echo "Found idle pod with upgrade marker: $pods"
             return 0
         fi
-        if [ "${count}" -ge 120 ]; then
-            echo "Timeout waiting for listener to be recreated"
-            echo "${RESOURCES}"
+
+        if ((count >= 30)); then
+            echo "Timeout waiting for idle pod recreation after upgrade"
             return 1
         fi
 
-        echo "Waiting for listener to be recreated"
-        echo "Listener count: ${LISTENER_COUNT} target: 1 | Runners count: ${RUNNERS_COUNT} target: 0"
-
-        sleep 1
-        count=$((count + 1))
+        echo "No idle pod with upgrade marker found yet, retrying... ($((count + 1))/30)"
+        sleep 10
+        ((count++))
     done
+
 }
 
 function main() {
     local failed=()
+    local run_id=""
 
     build_image
     create_cluster
     install_arc
     install_scale_set
 
-    WORKFLOW_FILE="${WORKFLOW_FILE}" SCALE_SET_NAME="${SCALE_SET_NAME}" run_workflow || failed+=("run_workflow")
-
     upgrade_scale_set || failed+=("upgrade_scale_set")
-    assert_listener_deleted || failed+=("assert_listener_deleted")
-    assert_listener_recreated || failed+=("assert_listener_recreated")
+
+    if ! run_id=$(WORKFLOW_FILE="${WORKFLOW_FILE}" SCALE_SET_NAME="${SCALE_SET_NAME}" start_workflow); then
+        failed+=("run_workflow")
+    fi
+
+    assert_idle_pod_recreated || failed+=("assert_idle_pod_recreated")
+
+    if [[ -n "${run_id}" ]]; then
+        wait_for_run_completion "${run_id}" || failed+=("wait_for_run_completion")
+    fi
 
     INSTALLATION_NAME="${SCALE_SET_NAME}" NAMESPACE="${SCALE_SET_NAMESPACE}" cleanup_scale_set || failed+=("cleanup_scale_set")
 

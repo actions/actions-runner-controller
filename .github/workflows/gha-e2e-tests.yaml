@@ -29,7 +29,8 @@ jobs:
   default-setup:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -52,7 +53,8 @@ jobs:
   default-setup-v2:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -74,7 +76,8 @@ jobs:
   single-namespace-setup:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -96,7 +99,8 @@ jobs:
   single-namespace-setup-v2:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -118,29 +122,8 @@ jobs:
   dind-mode-setup:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{github.head_ref}}
-
-      - name: Get configure token
-        id: config-token
-        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
-        with:
-          application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
-          application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
-          organization: ${{ env.TARGET_ORG }}
-      - name: Run dind mode setup test
-        run: hack/e2e-test.sh dind-mode-setup-v2
-        env:
-          GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
-        shell: bash
-
-  dind-mode-setup-v2:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -159,10 +142,11 @@ jobs:
           GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
 
-  kubernetes-mode-setup:
+  dind-mode-setup-v2:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -175,16 +159,17 @@ jobs:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
           organization: ${{ env.TARGET_ORG }}
-      - name: Run kubernetes mode setup test
-        run: hack/e2e-test.sh kubernetes-mode-setup-v2
+      - name: Run dind mode setup test
+        run: hack/e2e-test.sh dind-mode-setup-v2
         env:
           GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
 
-  kubernetes-mode-setup-v2:
+  kubernetes-mode-setup:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -203,10 +188,11 @@ jobs:
           GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
 
-  auth-proxy-setup:
+  kubernetes-mode-setup-v2:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -219,16 +205,17 @@ jobs:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
           organization: ${{ env.TARGET_ORG }}
-      - name: Run single namespace setup test
-        run: hack/e2e-test.sh single-namespace-setup-v2
+      - name: Run kubernetes mode setup test
+        run: hack/e2e-test.sh kubernetes-mode-setup-v2
         env:
           GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
 
-  auth-proxy-setup-v2:
+  auth-proxy-setup:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -247,10 +234,11 @@ jobs:
           GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
 
-  anonymous-proxy-setup:
+  auth-proxy-setup-v2:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -263,16 +251,17 @@ jobs:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
           organization: ${{ env.TARGET_ORG }}
-      - name: Run anonymous proxy setup test
-        run: hack/e2e-test.sh anonymous-proxy-setup-v2
+      - name: Run single namespace setup test
+        run: hack/e2e-test.sh single-namespace-setup-v2
         env:
           GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
 
-  anonymous-proxy-setup-v2:
+  anonymous-proxy-setup:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -291,10 +280,11 @@ jobs:
           GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
 
-  self-signed-ca-setup:
+  anonymous-proxy-setup-v2:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -307,16 +297,17 @@ jobs:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
           organization: ${{ env.TARGET_ORG }}
-      - name: Run self signed CA setup test
-        run: hack/e2e-test.sh self-signed-ca-setup-v2
+      - name: Run anonymous proxy setup test
+        run: hack/e2e-test.sh anonymous-proxy-setup-v2
         env:
           GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
 
-  self-signed-ca-setup-v2:
+  self-signed-ca-setup:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -335,10 +326,11 @@ jobs:
           GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
 
-  update-strategy-tests:
+  self-signed-ca-setup-v2:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -351,16 +343,17 @@ jobs:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
           organization: ${{ env.TARGET_ORG }}
-      - name: Run update strategy test
-        run: hack/e2e-test.sh update-strategy-v2
+      - name: Run self signed CA setup test
+        run: hack/e2e-test.sh self-signed-ca-setup-v2
         env:
           GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
 
-  update-strategy-tests-v2:
+  update-gha-runner-scale-set-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -374,7 +367,30 @@ jobs:
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
           organization: ${{ env.TARGET_ORG }}
       - name: Run update strategy test
-        run: hack/e2e-test.sh update-strategy
+        run: hack/e2e-test.sh update-gha-runner-scale-set
+        env:
+          GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
+        shell: bash
+
+  update-gha-runner-scale-set-tests-v2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{github.head_ref}}
+
+      - name: Get configure token
+        id: config-token
+        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
+        with:
+          application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
+          application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
+          organization: ${{ env.TARGET_ORG }}
+      - name: Run update strategy test
+        run: hack/e2e-test.sh update-gha-runner-scale-set-v2
         env:
           GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
@@ -382,29 +398,8 @@ jobs:
   init-with-min-runners:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{github.head_ref}}
-
-      - name: Get configure token
-        id: config-token
-        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
-        with:
-          application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
-          application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
-          organization: ${{ env.TARGET_ORG }}
-      - name: Run init with min runners test
-        run: hack/e2e-test.sh init-with-min-runners-v2
-        env:
-          GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
-        shell: bash
-
-  init-with-min-runners-v2:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
     steps:
       - uses: actions/checkout@v6
         with:
@@ -423,3 +418,25 @@ jobs:
           GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
 
+  init-with-min-runners-v2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{github.head_ref}}
+
+      - name: Get configure token
+        id: config-token
+        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
+        with:
+          application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
+          application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
+          organization: ${{ env.TARGET_ORG }}
+      - name: Run init with min runners test
+        run: hack/e2e-test.sh init-with-min-runners-v2
+        env:
+          GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
+        shell: bash

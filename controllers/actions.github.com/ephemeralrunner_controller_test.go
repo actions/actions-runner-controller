@@ -41,7 +41,7 @@ func newExampleRunner(name, namespace, configSecretName string) *v1alpha1.Epheme
 			Namespace: namespace,
 		},
 		Spec: v1alpha1.EphemeralRunnerSpec{
-			GitHubConfigUrl:    "https://github.com/owner/repo",
+			GitHubConfigURL:    "https://github.com/owner/repo",
 			GitHubConfigSecret: configSecretName,
 			RunnerScaleSetID:   1,
 			PodTemplateSpec: corev1.PodTemplateSpec{
@@ -198,12 +198,13 @@ var _ = Describe("EphemeralRunner", func() {
 			Expect(err).To(BeNil(), "failed to delete pod")
 
 			pod = new(corev1.Pod)
-			Eventually(func() (bool, error) {
-				if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod); err != nil {
-					return false, err
-				}
-				return true, nil
-			},
+			Eventually(
+				func() (bool, error) {
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod); err != nil {
+						return false, err
+					}
+					return true, nil
+				},
 				ephemeralRunnerTimeout,
 				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(true))
@@ -547,9 +548,10 @@ var _ = Describe("EphemeralRunner", func() {
 
 		It("It should mark as failed when job is not assigned and pod is failed", func() {
 			er := new(v1alpha1.EphemeralRunner)
-			Eventually(func() error {
-				return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, er)
-			},
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, er)
+				},
 				ephemeralRunnerTimeout,
 				ephemeralRunnerInterval,
 			).Should(Succeed(), "failed to get ephemeral runner")
@@ -1362,7 +1364,7 @@ var _ = Describe("EphemeralRunner", func() {
 			Expect(err).NotTo(HaveOccurred(), "failed to create secret credentials")
 
 			ephemeralRunner := newExampleRunner("test-runner", autoScalingNS.Name, configSecret.Name)
-			ephemeralRunner.Spec.GitHubConfigUrl = "http://example.com/org/repo"
+			ephemeralRunner.Spec.GitHubConfigURL = "http://example.com/org/repo"
 			ephemeralRunner.Spec.Proxy = &v1alpha1.ProxyConfig{
 				HTTP: &v1alpha1.ProxyServerConfig{
 					Url:                 proxy.URL,
@@ -1524,7 +1526,7 @@ var _ = Describe("EphemeralRunner", func() {
 			}
 
 			ephemeralRunner := newExampleRunner("test-runner", autoScalingNS.Name, configSecret.Name)
-			ephemeralRunner.Spec.GitHubConfigUrl = server.URL + "/my-org"
+			ephemeralRunner.Spec.GitHubConfigURL = server.URL + "/my-org"
 			ephemeralRunner.Spec.GitHubServerTLS = &v1alpha1.TLSConfig{
 				CertificateFrom: &v1alpha1.TLSCertificateSource{
 					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
