@@ -474,6 +474,56 @@ func (r *AutoscalingRunnerSetReconciler) removeFinalizersFromDependentResources(
 	return c.Err()
 }
 
+// buildRunnerScaleSetLabels constructs the []scaleset.Label for a runner scale set
+// from the spec's RunnerScaleSetName and RunnerScaleSetLabels, deduplicating entries.
+func buildRunnerScaleSetLabels(scaleSetName string, specLabels []string, logger logr.Logger) []scaleset.Label {
+	labels := []scaleset.Label{
+		{
+			Name: scaleSetName,
+			Type: "System",
+		},
+	}
+
+	if len(specLabels) == 0 {
+		return labels
+	}
+
+	unique := make(map[string]bool, len(specLabels)+1)
+	unique[scaleSetName] = true
+
+	for _, label := range specLabels {
+		if _, exists := unique[label]; exists {
+			logger.Info("Duplicate label found. Skipping adding duplicate label to runner scale set", "label", label)
+			continue
+		}
+		labels = append(labels, scaleset.Label{
+			Name: label,
+			Type: "System",
+		})
+		unique[label] = true
+	}
+
+	return labels
+}
+
+// runnerScaleSetLabelsAnnotation computes a stable annotation value representing the
+// current desired runner scale set labels. Labels are sorted to ensure deterministic comparison.
+func runnerScaleSetLabelsAnnotation(scaleSetName string, specLabels []string) string {
+	unique := make(map[string]bool, len(specLabels)+1)
+	unique[scaleSetName] = true
+
+	sorted := []string{scaleSetName}
+	for _, label := range specLabels {
+		if _, exists := unique[label]; exists {
+			continue
+		}
+		sorted = append(sorted, label)
+		unique[label] = true
+	}
+	sort.Strings(sorted)
+	return strings.Join(sorted, ",")
+}
+
 func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (ctrl.Result, error) {
 	original := autoscalingRunnerSet.DeepCopy()
 	logger.Info("Creating a new runner scale set")
@@ -659,9 +709,6 @@ func (r *AutoscalingRunnerSetReconciler) updateRunnerScaleSetName(ctx context.Co
 	logger.Info("Updated runner scale set with match name", "name", updatedRunnerScaleSet.Name)
 	return ctrl.Result{}, nil
 }
-
-<<<<<<< HEAD
-=======
 func (r *AutoscalingRunnerSetReconciler) updateRunnerScaleSetLabels(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (ctrl.Result, error) {
 	runnerScaleSetID, err := strconv.Atoi(autoscalingRunnerSet.Annotations[runnerScaleSetIDAnnotationKey])
 	if err != nil {
@@ -717,7 +764,6 @@ func (r *AutoscalingRunnerSetReconciler) updateRunnerScaleSetLabels(ctx context.
 	return ctrl.Result{}, nil
 }
 
->>>>>>> 1eb2eae (fix for personal fork)
 func (r *AutoscalingRunnerSetReconciler) deleteRunnerScaleSet(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) error {
 	scaleSetID, ok := autoscalingRunnerSet.Annotations[runnerScaleSetIDAnnotationKey]
 	if !ok {

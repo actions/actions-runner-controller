@@ -165,14 +165,6 @@ spec:
                       type: object
                     proxySecretRef:
                       type: string
-                    runnerLabels:
-                      description: |-
-                        RunnerLabels are the GitHub Actions runner labels to be set on the runner.
-                        These are stored as a Kubernetes annotation on the runner Pod to avoid the
-                        63-character value limit imposed on Kubernetes labels.
-                      items:
-                        type: string
-                      type: array
                     runnerScaleSetId:
                       type: integer
                     spec:
@@ -8312,11 +8304,6 @@ spec:
                 replicas:
                   description: Replicas is the number of desired EphemeralRunner resources in the k8s namespace.
                   type: integer
-                runnerLabels:
-                  description: RunnerLabels are the GitHub Actions runner labels propagated from the parent AutoscalingRunnerSet.
-                  items:
-                    type: string
-                  type: array
               required:
                 - patchID
               type: object
