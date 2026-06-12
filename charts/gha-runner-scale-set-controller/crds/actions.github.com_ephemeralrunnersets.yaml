@@ -8315,15 +8315,19 @@ spec:
               properties:
                 currentReplicas:
                   description: CurrentReplicas is the number of currently running EphemeralRunner resources being managed by this EphemeralRunnerSet.
+                  minimum: 0
                   type: integer
                 failedEphemeralRunners:
+                  minimum: 0
                   type: integer
                 pendingEphemeralRunners:
+                  minimum: 0
                   type: integer
                 phase:
                   description: EphemeralRunnerSetPhase is the phase of the ephemeral runner set resource
                   type: string
                 runningEphemeralRunners:
+                  minimum: 0
                   type: integer
               required:
                 - currentReplicas
