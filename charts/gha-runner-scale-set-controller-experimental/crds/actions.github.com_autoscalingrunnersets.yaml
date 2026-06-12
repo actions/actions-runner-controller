@@ -16544,6 +16544,7 @@ spec:
               description: AutoscalingRunnerSetStatus defines the observed state of AutoscalingRunnerSet
               properties:
                 currentRunners:
+                  minimum: 0
                   type: integer
                 failedEphemeralRunners:
                   type: integer

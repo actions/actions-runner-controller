@@ -315,6 +315,7 @@ type HistogramMetric struct {
 // AutoscalingRunnerSetStatus defines the observed state of AutoscalingRunnerSet
 type AutoscalingRunnerSetStatus struct {
 	// +optional
+	// +kubebuilder:validation:Minimum=0
 	CurrentRunners int `json:"currentRunners"`
 
 	// +optional
