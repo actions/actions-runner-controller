@@ -245,7 +245,6 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 }
 
 func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, state *ephemeralRunnersByState, log logr.Logger) error {
-	original := ephemeralRunnerSet.DeepCopy()
 	var phase v1alpha1.EphemeralRunnerSetPhase
 	switch {
 	case len(state.outdated) > 0:
@@ -262,7 +261,7 @@ func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemer
 	// Update the status if needed.
 	if ephemeralRunnerSet.Status != desiredStatus {
 		ephemeralRunnerSet.Status = desiredStatus
-		if err := r.Status().Patch(ctx, ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
+		if err := r.Status().Update(ctx, ephemeralRunnerSet); err != nil {
 			log.Error(err, "Failed to update EphemeralRunnerSet status")
 			return err
 		}
