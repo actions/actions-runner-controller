@@ -44,10 +44,13 @@ type EphemeralRunnerSetStatus struct {
 	// +optional
 	CurrentReplicas int `json:"currentReplicas"`
 	// +optional
+	// +kubebuilder:validation:Minimum=0
 	PendingEphemeralRunners int `json:"pendingEphemeralRunners"`
 	// +optional
+	// +kubebuilder:validation:Minimum=0
 	RunningEphemeralRunners int `json:"runningEphemeralRunners"`
 	// +optional
+	// +kubebuilder:validation:Minimum=0
 	FailedEphemeralRunners int `json:"failedEphemeralRunners"`
 	// +optional
 	Phase EphemeralRunnerSetPhase `json:"phase"`
