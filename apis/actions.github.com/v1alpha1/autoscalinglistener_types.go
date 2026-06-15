@@ -31,7 +31,7 @@ type AutoscalingListenerSpec struct {
 	GitHubConfigSecret string `json:"githubConfigSecret,omitempty"`
 
 	// +required
-	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Minimum:=1
 	RunnerScaleSetID int `json:"runnerScaleSetId,omitempty"`
 
 	// +required
@@ -43,13 +43,13 @@ type AutoscalingListenerSpec struct {
 	// +required
 	EphemeralRunnerSetName string `json:"ephemeralRunnerSetName,omitempty"`
 
-	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Minimum:=0
 	// +required
-	MaxRunners int `json:"maxRunners,omitempty"`
+	MaxRunners int `json:"maxRunners"`
 
-	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Minimum:=0
 	// +required
-	MinRunners int `json:"minRunners,omitempty"`
+	MinRunners int `json:"minRunners"`
 
 	// +required
 	Image string `json:"image,omitempty"`
