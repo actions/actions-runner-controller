@@ -109,6 +109,7 @@ type AutoscalingListener struct {
 	Status AutoscalingListenerStatus `json:"status,omitempty"`
 }
 
+// AutoscalingListenerList is a list of AutoscalingListener resources
 // +kubebuilder:object:root=true
 // AutoscalingListenerList contains a list of AutoscalingListener
 type AutoscalingListenerList struct {
