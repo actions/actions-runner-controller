@@ -41,10 +41,13 @@ const EphemeralRunnerContainerName = "runner"
 
 // EphemeralRunner is the Schema for the ephemeralrunners API
 type EphemeralRunner struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   EphemeralRunnerSpec   `json:"spec,omitempty"`
+	// +optional
+	Spec EphemeralRunnerSpec `json:"spec,omitempty"`
+	// +optional
 	Status EphemeralRunnerStatus `json:"status,omitempty"`
 }
 

@@ -98,10 +98,9 @@ spec:
                     githubServerTLS:
                       properties:
                         certificateFrom:
-                          description: Required
                           properties:
                             configMapKeyRef:
-                              description: Required
+                              description: Selects a key from a ConfigMap.
                               properties:
                                 key:
                                   description: The key to select.
@@ -122,7 +121,11 @@ spec:
                                 - key
                               type: object
                               x-kubernetes-map-type: atomic
+                          required:
+                            - configMapKeyRef
                           type: object
+                      required:
+                        - certificateFrom
                       type: object
                     metadata:
                       description: |-
@@ -153,16 +156,18 @@ spec:
                             credentialSecretRef:
                               type: string
                             url:
-                              description: Required
                               type: string
+                          required:
+                            - url
                           type: object
                         https:
                           properties:
                             credentialSecretRef:
                               type: string
                             url:
-                              description: Required
                               type: string
+                          required:
+                            - url
                           type: object
                         noProxy:
                           items:
@@ -8277,16 +8282,18 @@ spec:
                                 credentialSecretRef:
                                   type: string
                                 url:
-                                  description: Required
                                   type: string
+                              required:
+                                - url
                               type: object
                             https:
                               properties:
                                 credentialSecretRef:
                                   type: string
                                 url:
-                                  description: Required
                                   type: string
+                              required:
+                                - url
                               type: object
                             noProxy:
                               items:
@@ -8310,8 +8317,6 @@ spec:
                 replicas:
                   description: Replicas is the number of desired EphemeralRunner resources in the k8s namespace.
                   type: integer
-              required:
-                - patchID
               type: object
             status:
               description: EphemeralRunnerSetStatus defines the observed state of EphemeralRunnerSet
@@ -8332,8 +8337,6 @@ spec:
                 runningEphemeralRunners:
                   minimum: 0
                   type: integer
-              required:
-                - currentReplicas
               type: object
           type: object
       served: true

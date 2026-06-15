@@ -24,36 +24,36 @@ import (
 
 // AutoscalingListenerSpec defines the desired state of AutoscalingListener
 type AutoscalingListenerSpec struct {
-	// Required
+	// +required
 	GitHubConfigURL string `json:"githubConfigUrl,omitempty"`
 
-	// Required
+	// +required
 	GitHubConfigSecret string `json:"githubConfigSecret,omitempty"`
 
-	// Required
+	// +required
 	RunnerScaleSetID int `json:"runnerScaleSetId,omitempty"`
 
-	// Required
+	// +required
 	AutoscalingRunnerSetNamespace string `json:"autoscalingRunnerSetNamespace,omitempty"`
 
-	// Required
+	// +required
 	AutoscalingRunnerSetName string `json:"autoscalingRunnerSetName,omitempty"`
 
-	// Required
+	// +required
 	EphemeralRunnerSetName string `json:"ephemeralRunnerSetName,omitempty"`
 
-	// Required
-	// +kubebuilder:validation:Minimum:=0
+	// +kubebuilder:validation:Minimum=0
+	// +required
 	MaxRunners int `json:"maxRunners,omitempty"`
 
-	// Required
-	// +kubebuilder:validation:Minimum:=0
+	// +kubebuilder:validation:Minimum=0
+	// +required
 	MinRunners int `json:"minRunners,omitempty"`
 
-	// Required
+	// +required
 	Image string `json:"image,omitempty"`
 
-	// Required
+	// +required
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
 	// +optional
@@ -99,17 +99,22 @@ type AutoscalingListenerStatus struct{}
 
 // AutoscalingListener is the Schema for the autoscalinglisteners API
 type AutoscalingListener struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   AutoscalingListenerSpec   `json:"spec,omitempty"`
+	// +optional
+	Spec AutoscalingListenerSpec `json:"spec,omitempty"`
+	// +optional
 	Status AutoscalingListenerStatus `json:"status,omitempty"`
 }
 
+// AutoscalingListenerList is a list of AutoscalingListener resources
 // +kubebuilder:object:root=true
 // AutoscalingListenerList contains a list of AutoscalingListener
 type AutoscalingListenerList struct {
 	metav1.TypeMeta `json:",inline"`
+	// +optional
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []AutoscalingListener `json:"items"`
 }
