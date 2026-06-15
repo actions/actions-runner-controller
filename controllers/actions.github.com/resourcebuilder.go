@@ -122,12 +122,13 @@ func (b *ResourceBuilder) newAutoscalingListener(autoscalingRunnerSet *v1alpha1.
 	}
 
 	effectiveMinRunners := 0
+	if autoscalingRunnerSet.Spec.MinRunners != nil {
+		effectiveMinRunners = *autoscalingRunnerSet.Spec.MinRunners
+	}
+
 	effectiveMaxRunners := math.MaxInt32
 	if autoscalingRunnerSet.Spec.MaxRunners != nil {
 		effectiveMaxRunners = *autoscalingRunnerSet.Spec.MaxRunners
-	}
-	if autoscalingRunnerSet.Spec.MinRunners != nil {
-		effectiveMinRunners = *autoscalingRunnerSet.Spec.MinRunners
 	}
 
 	spec := v1alpha1.AutoscalingListenerSpec{
