@@ -38,7 +38,7 @@ jobs:
 
       - name: Get configure token
         id: config-token
-        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
+        uses: peter-murray/workflow-application-token-action@cb731e00cb6754f584507134ff389dfb3dc42bbc
         with:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
@@ -62,7 +62,7 @@ jobs:
 
       - name: Get configure token
         id: config-token
-        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
+        uses: peter-murray/workflow-application-token-action@cb731e00cb6754f584507134ff389dfb3dc42bbc
         with:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
@@ -85,7 +85,7 @@ jobs:
 
       - name: Get configure token
         id: config-token
-        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
+        uses: peter-murray/workflow-application-token-action@cb731e00cb6754f584507134ff389dfb3dc42bbc
         with:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
@@ -108,7 +108,7 @@ jobs:
 
       - name: Get configure token
         id: config-token
-        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
+        uses: peter-murray/workflow-application-token-action@cb731e00cb6754f584507134ff389dfb3dc42bbc
         with:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
@@ -131,7 +131,7 @@ jobs:
 
       - name: Get configure token
         id: config-token
-        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
+        uses: peter-murray/workflow-application-token-action@cb731e00cb6754f584507134ff389dfb3dc42bbc
         with:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
@@ -154,7 +154,7 @@ jobs:
 
       - name: Get configure token
         id: config-token
-        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
+        uses: peter-murray/workflow-application-token-action@cb731e00cb6754f584507134ff389dfb3dc42bbc
         with:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
@@ -177,7 +177,7 @@ jobs:
 
       - name: Get configure token
         id: config-token
-        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
+        uses: peter-murray/workflow-application-token-action@cb731e00cb6754f584507134ff389dfb3dc42bbc
         with:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
@@ -200,7 +200,7 @@ jobs:
 
       - name: Get configure token
         id: config-token
-        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
+        uses: peter-murray/workflow-application-token-action@cb731e00cb6754f584507134ff389dfb3dc42bbc
         with:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
@@ -223,7 +223,7 @@ jobs:
 
       - name: Get configure token
         id: config-token
-        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
+        uses: peter-murray/workflow-application-token-action@cb731e00cb6754f584507134ff389dfb3dc42bbc
         with:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
@@ -246,7 +246,7 @@ jobs:
 
       - name: Get configure token
         id: config-token
-        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
+        uses: peter-murray/workflow-application-token-action@cb731e00cb6754f584507134ff389dfb3dc42bbc
         with:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
@@ -269,7 +269,7 @@ jobs:
 
       - name: Get configure token
         id: config-token
-        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
+        uses: peter-murray/workflow-application-token-action@cb731e00cb6754f584507134ff389dfb3dc42bbc
         with:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
@@ -292,7 +292,7 @@ jobs:
 
       - name: Get configure token
         id: config-token
-        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
+        uses: peter-murray/workflow-application-token-action@cb731e00cb6754f584507134ff389dfb3dc42bbc
         with:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
@@ -315,7 +315,7 @@ jobs:
 
       - name: Get configure token
         id: config-token
-        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
+        uses: peter-murray/workflow-application-token-action@cb731e00cb6754f584507134ff389dfb3dc42bbc
         with:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
@@ -338,7 +338,7 @@ jobs:
 
       - name: Get configure token
         id: config-token
-        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
+        uses: peter-murray/workflow-application-token-action@cb731e00cb6754f584507134ff389dfb3dc42bbc
         with:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
@@ -361,7 +361,7 @@ jobs:
 
       - name: Get configure token
         id: config-token
-        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
+        uses: peter-murray/workflow-application-token-action@cb731e00cb6754f584507134ff389dfb3dc42bbc
         with:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
@@ -384,7 +384,7 @@ jobs:
 
       - name: Get configure token
         id: config-token
-        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
+        uses: peter-murray/workflow-application-token-action@cb731e00cb6754f584507134ff389dfb3dc42bbc
         with:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
@@ -407,7 +407,7 @@ jobs:
 
       - name: Get configure token
         id: config-token
-        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
+        uses: peter-murray/workflow-application-token-action@cb731e00cb6754f584507134ff389dfb3dc42bbc
         with:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
@@ -430,7 +430,7 @@ jobs:
 
       - name: Get configure token
         id: config-token
-        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
+        uses: peter-murray/workflow-application-token-action@cb731e00cb6754f584507134ff389dfb3dc42bbc
         with:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
