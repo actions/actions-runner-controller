@@ -1241,7 +1241,7 @@ var _ = Describe("Test client optional configuration", Ordered, func() {
 					RunnerGroup:        "testgroup",
 					Proxy: &v1alpha1.ProxyConfig{
 						HTTP: &v1alpha1.ProxyServerConfig{
-							Url: proxy.URL,
+							URL: proxy.URL,
 						},
 					},
 					Template: corev1.PodTemplateSpec{
@@ -1319,7 +1319,7 @@ var _ = Describe("Test client optional configuration", Ordered, func() {
 					RunnerGroup:        "testgroup",
 					Proxy: &v1alpha1.ProxyConfig{
 						HTTP: &v1alpha1.ProxyServerConfig{
-							Url:                 "http://test:password@" + proxy.Listener.Addr().String(),
+							URL:                 "http://test:password@" + proxy.Listener.Addr().String(),
 							CredentialSecretRef: "proxy-credentials",
 						},
 					},

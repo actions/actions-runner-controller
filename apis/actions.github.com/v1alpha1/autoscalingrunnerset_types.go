@@ -182,9 +182,9 @@ func (c *ProxyConfig) ToHTTPProxyConfig(secretFetcher func(string) (*corev1.Secr
 	}
 
 	if c.HTTP != nil {
-		u, err := url.Parse(c.HTTP.Url)
+		u, err := url.Parse(c.HTTP.URL)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse proxy http url %q: %w", c.HTTP.Url, err)
+			return nil, fmt.Errorf("failed to parse proxy http url %q: %w", c.HTTP.URL, err)
 		}
 
 		if c.HTTP.CredentialSecretRef != "" {
@@ -207,9 +207,9 @@ func (c *ProxyConfig) ToHTTPProxyConfig(secretFetcher func(string) (*corev1.Secr
 	}
 
 	if c.HTTPS != nil {
-		u, err := url.Parse(c.HTTPS.Url)
+		u, err := url.Parse(c.HTTPS.URL)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse proxy https url %q: %w", c.HTTPS.Url, err)
+			return nil, fmt.Errorf("failed to parse proxy https url %q: %w", c.HTTPS.URL, err)
 		}
 
 		if c.HTTPS.CredentialSecretRef != "" {
@@ -263,7 +263,7 @@ func (c *ProxyConfig) ProxyFunc(secretFetcher func(string) (*corev1.Secret, erro
 
 type ProxyServerConfig struct {
 	// Required
-	Url string `json:"url,omitempty"`
+	URL string `json:"url,omitempty"`
 
 	// +optional
 	CredentialSecretRef string `json:"credentialSecretRef,omitempty"`
