@@ -40,8 +40,7 @@ import (
 // +kubebuilder:printcolumn:JSONPath=".status.phase",name=Phase,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.pendingEphemeralRunners",name=Pending Runners,type=integer
 // +kubebuilder:printcolumn:JSONPath=".status.runningEphemeralRunners",name=Running Runners,type=integer
-// +kubebuilder:printcolumn:JSONPath=".status.finishedEphemeralRunners",name=Finished Runners,type=integer
-// +kubebuilder:printcolumn:JSONPath=".status.deletingEphemeralRunners",name=Deleting Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.failedEphemeralRunners",name=Failed Runners,type=integer
 
 // AutoscalingRunnerSet is the Schema for the autoscalingrunnersets API
 type AutoscalingRunnerSet struct {
@@ -115,16 +114,16 @@ type AutoscalingRunnerSetSpec struct {
 	EphemeralRunnerConfigSecretMetadata *ResourceMeta `json:"ephemeralRunnerConfigSecretMetadata,omitempty"`
 
 	// +optional
-	// +kubebuilder:validation:Minimum:=0
+	// +kubebuilder:validation:Minimum=0
 	MaxRunners *int `json:"maxRunners,omitempty"`
 
 	// +optional
-	// +kubebuilder:validation:Minimum:=0
+	// +kubebuilder:validation:Minimum=0
 	MinRunners *int `json:"minRunners,omitempty"`
 }
 
 type TLSConfig struct {
-	// Required
+	// +required
 	CertificateFrom *TLSCertificateSource `json:"certificateFrom,omitempty"`
 }
 
@@ -161,7 +160,7 @@ func (c *TLSConfig) ToCertPool(keyFetcher func(name, key string) ([]byte, error)
 }
 
 type TLSCertificateSource struct {
-	// Required
+	// +required
 	ConfigMapKeyRef *corev1.ConfigMapKeySelector `json:"configMapKeyRef,omitempty"`
 }
 
@@ -262,7 +261,7 @@ func (c *ProxyConfig) ProxyFunc(secretFetcher func(string) (*corev1.Secret, erro
 }
 
 type ProxyServerConfig struct {
-	// Required
+	// +required
 	URL string `json:"url,omitempty"`
 
 	// +optional

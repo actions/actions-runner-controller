@@ -89,10 +89,9 @@ spec:
                 githubServerTLS:
                   properties:
                     certificateFrom:
-                      description: Required
                       properties:
                         configMapKeyRef:
-                          description: Required
+                          description: Selects a key from a ConfigMap.
                           properties:
                             key:
                               description: The key to select.
@@ -113,7 +112,11 @@ spec:
                             - key
                           type: object
                           x-kubernetes-map-type: atomic
+                      required:
+                        - configMapKeyRef
                       type: object
+                  required:
+                    - certificateFrom
                   type: object
                 metadata:
                   description: |-
@@ -144,16 +147,18 @@ spec:
                         credentialSecretRef:
                           type: string
                         url:
-                          description: Required
                           type: string
+                      required:
+                        - url
                       type: object
                     https:
                       properties:
                         credentialSecretRef:
                           type: string
                         url:
-                          description: Required
                           type: string
+                      required:
+                        - url
                       type: object
                     noProxy:
                       items:
@@ -8268,16 +8273,18 @@ spec:
                             credentialSecretRef:
                               type: string
                             url:
-                              description: Required
                               type: string
+                          required:
+                            - url
                           type: object
                         https:
                           properties:
                             credentialSecretRef:
                               type: string
                             url:
-                              description: Required
                               type: string
+                          required:
+                            - url
                           type: object
                         noProxy:
                           items:
