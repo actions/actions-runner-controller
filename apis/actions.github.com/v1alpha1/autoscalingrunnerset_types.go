@@ -44,10 +44,13 @@ import (
 
 // AutoscalingRunnerSet is the Schema for the autoscalingrunnersets API
 type AutoscalingRunnerSet struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   AutoscalingRunnerSetSpec   `json:"spec,omitempty"`
+	// +optional
+	Spec AutoscalingRunnerSetSpec `json:"spec,omitempty"`
+	// +optional
 	Status AutoscalingRunnerSetStatus `json:"status,omitempty"`
 }
 

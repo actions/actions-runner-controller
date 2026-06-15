@@ -31,6 +31,7 @@ type AutoscalingListenerSpec struct {
 	GitHubConfigSecret string `json:"githubConfigSecret,omitempty"`
 
 	// +required
+	// +kubebuilder:validation:Minimum=1
 	RunnerScaleSetID int `json:"runnerScaleSetId,omitempty"`
 
 	// +required
@@ -53,7 +54,7 @@ type AutoscalingListenerSpec struct {
 	// +required
 	Image string `json:"image,omitempty"`
 
-	// +required
+	// +optional
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
 	// +optional

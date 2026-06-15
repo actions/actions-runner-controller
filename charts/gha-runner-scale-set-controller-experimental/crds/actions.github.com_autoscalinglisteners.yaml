@@ -232,6 +232,7 @@ spec:
                     type: object
                 type: object
               runnerScaleSetId:
+                minimum: 1
                 type: integer
               serviceAccountMetadata:
                 description: ResourceMeta carries metadata common to all internal
@@ -8808,7 +8809,6 @@ spec:
             - githubConfigSecret
             - githubConfigUrl
             - image
-            - imagePullSecrets
             - maxRunners
             - minRunners
             - runnerScaleSetId
