@@ -16547,12 +16547,15 @@ spec:
                   minimum: 0
                   type: integer
                 failedEphemeralRunners:
+                  minimum: 0
                   type: integer
                 pendingEphemeralRunners:
+                  minimum: 0
                   type: integer
                 phase:
                   type: string
                 runningEphemeralRunners:
+                  minimum: 0
                   type: integer
               type: object
           type: object

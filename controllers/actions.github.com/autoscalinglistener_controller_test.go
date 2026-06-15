@@ -954,11 +954,11 @@ var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 
 		proxy := &v1alpha1.ProxyConfig{
 			HTTP: &v1alpha1.ProxyServerConfig{
-				Url:                 "http://localhost:8080",
+				URL:                 "http://localhost:8080",
 				CredentialSecretRef: "proxy-credentials",
 			},
 			HTTPS: &v1alpha1.ProxyServerConfig{
-				Url:                 "https://localhost:8443",
+				URL:                 "https://localhost:8443",
 				CredentialSecretRef: "proxy-credentials",
 			},
 			NoProxy: []string{

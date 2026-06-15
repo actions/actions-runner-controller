@@ -1327,11 +1327,11 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 					RunnerScaleSetID:   100,
 					Proxy: &v1alpha1.ProxyConfig{
 						HTTP: &v1alpha1.ProxyServerConfig{
-							Url:                 "http://proxy.example.com",
+							URL:                 "http://proxy.example.com",
 							CredentialSecretRef: secretCredentials.Name,
 						},
 						HTTPS: &v1alpha1.ProxyServerConfig{
-							Url:                 "https://proxy.example.com",
+							URL:                 "https://proxy.example.com",
 							CredentialSecretRef: secretCredentials.Name,
 						},
 						NoProxy: []string{"example.com", "example.org"},
@@ -1510,7 +1510,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 					RunnerScaleSetID:   100,
 					Proxy: &v1alpha1.ProxyConfig{
 						HTTP: &v1alpha1.ProxyServerConfig{
-							Url:                 proxy.URL,
+							URL:                 proxy.URL,
 							CredentialSecretRef: "proxy-credentials",
 						},
 					},
