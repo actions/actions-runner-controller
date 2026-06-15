@@ -165,7 +165,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 
 		desiredLabels := r.filterAndMergeLabels(serviceAccount.Labels, desiredServiceAccount.Labels)
 		labelsModified := !maps.Equal(serviceAccount.Labels, desiredLabels)
-		desiredAnnotations := r.mergeAnnotations(serviceAccount.Annotations, desiredServiceAccount.Annotations)
+		desiredAnnotations := r.filterAndMergeAnnotations(serviceAccount.Annotations, desiredServiceAccount.Annotations)
 		annotationsModified := !maps.Equal(serviceAccount.Annotations, desiredAnnotations)
 		if labelsModified || annotationsModified {
 			updatedServiceAccount := serviceAccount.DeepCopy()
@@ -208,7 +208,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		desiredRole := r.newScaleSetListenerRole(&autoscalingListener)
 		desiredLabels := r.filterAndMergeLabels(listenerRole.Labels, desiredRole.Labels)
 		labelsModified := !maps.Equal(listenerRole.Labels, desiredLabels)
-		desiredAnnotations := r.mergeAnnotations(listenerRole.Annotations, desiredRole.Annotations)
+		desiredAnnotations := r.filterAndMergeAnnotations(listenerRole.Annotations, desiredRole.Annotations)
 		annotationsModified := !maps.Equal(listenerRole.Annotations, desiredAnnotations)
 		rulesModified := !reflect.DeepEqual(listenerRole.Rules, desiredRole.Rules)
 		if labelsModified || annotationsModified || rulesModified {
@@ -250,7 +250,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		)
 		desiredLabels := r.filterAndMergeLabels(listenerRoleBinding.Labels, desiredRoleBinding.Labels)
 		labelsModified := !maps.Equal(listenerRoleBinding.Labels, desiredLabels)
-		desiredAnnotations := r.mergeAnnotations(listenerRoleBinding.Annotations, desiredRoleBinding.Annotations)
+		desiredAnnotations := r.filterAndMergeAnnotations(listenerRoleBinding.Annotations, desiredRoleBinding.Annotations)
 		annotationsModified := !maps.Equal(listenerRoleBinding.Annotations, desiredAnnotations)
 		if labelsModified || annotationsModified {
 			updatedRoleBinding := listenerRoleBinding.DeepCopy()
@@ -305,7 +305,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			}
 			desiredLabels := r.filterAndMergeLabels(proxySecret.Labels, desiredListenerProxy.Labels)
 			labelsModified := !maps.Equal(proxySecret.Labels, desiredLabels)
-			desiredAnnotations := r.mergeAnnotations(proxySecret.Annotations, desiredListenerProxy.Annotations)
+			desiredAnnotations := r.filterAndMergeAnnotations(proxySecret.Annotations, desiredListenerProxy.Annotations)
 			annotationsModified := !maps.Equal(proxySecret.Annotations, desiredAnnotations)
 			if labelsModified || annotationsModified {
 				updatedProxySecret := proxySecret.DeepCopy()
@@ -391,7 +391,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 		desiredLabels := r.filterAndMergeLabels(listenerConfigSecret.Labels, desiredSecret.Labels)
 		labelsModified := !maps.Equal(listenerConfigSecret.Labels, desiredLabels)
-		desiredAnnotations := r.mergeAnnotations(listenerConfigSecret.Annotations, desiredSecret.Annotations)
+		desiredAnnotations := r.filterAndMergeAnnotations(listenerConfigSecret.Annotations, desiredSecret.Annotations)
 		annotationsModified := !maps.Equal(listenerConfigSecret.Annotations, desiredAnnotations)
 
 		if labelsModified || annotationsModified {
@@ -462,7 +462,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			return ctrl.Result{}, err
 		}
 
-		shouldReCreate := desiredPod.Annotations[annotationKeyIntegrityHash] != listenerPod.Annotations[annotationKeyIntegrityHash]
+		shouldReCreate := desiredPod.Annotations[AnnotationKeyIntegrityHash] != listenerPod.Annotations[AnnotationKeyIntegrityHash]
 		if shouldReCreate {
 			log.Info("Listener pod dependency changed, recreating listener pod")
 			if err := r.deleteListenerPod(ctx, &autoscalingListener, &listenerPod, log); err != nil {
@@ -475,7 +475,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 
 		desiredLabels := r.filterAndMergeLabels(listenerPod.Labels, desiredPod.Labels)
 		labelsModified := !maps.Equal(listenerPod.Labels, desiredLabels)
-		desiredAnnotations := r.mergeAnnotations(listenerPod.Annotations, desiredPod.Annotations)
+		desiredAnnotations := r.filterAndMergeAnnotations(listenerPod.Annotations, desiredPod.Annotations)
 		annotationsModified := !maps.Equal(listenerPod.Annotations, desiredAnnotations)
 
 		if labelsModified || annotationsModified {

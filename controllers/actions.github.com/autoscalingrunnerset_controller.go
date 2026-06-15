@@ -142,13 +142,13 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	// Something has changed, we need to re-apply the pending phase and change hash annotation to trigger the update of runner scale set and listener.
-	if targetHash := autoscalingRunnerSet.Hash(); autoscalingRunnerSet.Annotations[annotationKeyIntegrityHash] != targetHash {
+	if targetHash := autoscalingRunnerSet.Hash(); autoscalingRunnerSet.Annotations[AnnotationKeyIntegrityHash] != targetHash {
 		// TODO: apply the version label
 		original := autoscalingRunnerSet.DeepCopy()
 		if autoscalingRunnerSet.Annotations == nil {
 			autoscalingRunnerSet.Annotations = map[string]string{}
 		}
-		autoscalingRunnerSet.Annotations[annotationKeyIntegrityHash] = targetHash
+		autoscalingRunnerSet.Annotations[AnnotationKeyIntegrityHash] = targetHash
 		if err := r.Patch(ctx, &autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
 			log.Error(err, "Failed to update autoscaling runner set with new change hash and pending phase")
 			return ctrl.Result{}, err
@@ -291,12 +291,12 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			return ctrl.Result{}, nil
 		}
 
-		if ephemeralRunnerSet.Annotations[annotationKeyIntegrityHash] != desired.Annotations[annotationKeyIntegrityHash] {
+		if ephemeralRunnerSet.Annotations[AnnotationKeyIntegrityHash] != desired.Annotations[AnnotationKeyIntegrityHash] {
 			original := ephemeralRunnerSet.DeepCopy()
 			ephemeralRunnerSet.Spec.EphemeralRunnerMetadata = desired.Spec.EphemeralRunnerMetadata
 			ephemeralRunnerSet.Spec.EphemeralRunnerSpec = desired.Spec.EphemeralRunnerSpec
 			ephemeralRunnerSet.Labels = r.filterAndMergeLabels(ephemeralRunnerSet.Labels, desired.Labels)
-			ephemeralRunnerSet.Annotations = r.mergeAnnotations(ephemeralRunnerSet.Annotations, desired.Annotations)
+			ephemeralRunnerSet.Annotations = r.filterAndMergeAnnotations(ephemeralRunnerSet.Annotations, desired.Annotations)
 
 			log.Info("Updating ephemeral runner set spec to match the desired spec")
 			if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
@@ -315,7 +315,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		if ephemeralRunnerLabelsModified || ephemeralRunnerAnnotationsModified || ephemeralRunnerMetadataModified {
 			original := ephemeralRunnerSet.DeepCopy()
 			ephemeralRunnerSet.Labels = r.filterAndMergeLabels(ephemeralRunnerSet.Labels, desired.Labels)
-			ephemeralRunnerSet.Annotations = r.mergeAnnotations(ephemeralRunnerSet.Annotations, desired.Annotations)
+			ephemeralRunnerSet.Annotations = r.filterAndMergeAnnotations(ephemeralRunnerSet.Annotations, desired.Annotations)
 			ephemeralRunnerSet.Spec.EphemeralRunnerMetadata = desired.Spec.EphemeralRunnerMetadata
 			log.Info("Updating ephemeral runner set metadata to match desired labels and annotations")
 			if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
