@@ -22,7 +22,7 @@ spec:
           name: RunnerId
           type: number
         - jsonPath: .status.phase
-          name: Status
+          name: Phase
           type: string
         - jsonPath: .status.jobRepositoryName
           name: JobRepository
