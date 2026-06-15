@@ -170,7 +170,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			updatedServiceAccount.Labels = desiredLabels
 			shouldUpdate = true
 		}
-		desiredAnnotations := r.mergeAnnotations(serviceAccount.Annotations, desiredServiceAccount.Annotations)
+		desiredAnnotations := r.filterAndMergeAnnotations(serviceAccount.Annotations, desiredServiceAccount.Annotations)
 		if !maps.Equal(serviceAccount.Annotations, desiredAnnotations) {
 			updatedServiceAccount.Annotations = desiredAnnotations
 			shouldUpdate = true
@@ -214,7 +214,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			updatedRole.Labels = desiredLabels
 			shouldUpdate = true
 		}
-		desiredAnnotations := r.mergeAnnotations(listenerRole.Annotations, desiredRole.Annotations)
+		desiredAnnotations := r.filterAndMergeAnnotations(listenerRole.Annotations, desiredRole.Annotations)
 		if !maps.Equal(listenerRole.Annotations, desiredAnnotations) {
 			updatedRole.Annotations = desiredAnnotations
 			shouldUpdate = true
@@ -257,7 +257,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			updatedRoleBinding.Labels = desiredLabels
 			shouldUpdate = true
 		}
-		desiredAnnotations := r.mergeAnnotations(listenerRoleBinding.Annotations, desiredRoleBinding.Annotations)
+		desiredAnnotations := r.filterAndMergeAnnotations(listenerRoleBinding.Annotations, desiredRoleBinding.Annotations)
 		if !maps.Equal(listenerRoleBinding.Annotations, desiredAnnotations) {
 			updatedRoleBinding.Annotations = desiredAnnotations
 			shouldUpdate = true
@@ -313,7 +313,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 				updatedProxySecret.Labels = desiredLabels
 				shouldUpdate = true
 			}
-			desiredAnnotations := r.mergeAnnotations(proxySecret.Annotations, desiredListenerProxy.Annotations)
+			desiredAnnotations := r.filterAndMergeAnnotations(proxySecret.Annotations, desiredListenerProxy.Annotations)
 			if !maps.Equal(proxySecret.Annotations, desiredAnnotations) {
 				updatedProxySecret.Annotations = desiredAnnotations
 				shouldUpdate = true
@@ -400,7 +400,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			updatedSecret.Labels = desiredLabels
 			shouldUpdate = true
 		}
-		desiredAnnotations := r.mergeAnnotations(listenerConfigSecret.Annotations, desiredSecret.Annotations)
+		desiredAnnotations := r.filterAndMergeAnnotations(listenerConfigSecret.Annotations, desiredSecret.Annotations)
 		if !maps.Equal(listenerConfigSecret.Annotations, desiredAnnotations) {
 			updatedSecret.Annotations = desiredAnnotations
 			shouldUpdate = true
@@ -467,7 +467,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			return ctrl.Result{}, err
 		}
 
-		shouldReCreate := desiredPod.Annotations[annotationKeyIntegrityHash] != listenerPod.Annotations[annotationKeyIntegrityHash]
+		shouldReCreate := desiredPod.Annotations[AnnotationKeyIntegrityHash] != listenerPod.Annotations[AnnotationKeyIntegrityHash]
 		if shouldReCreate {
 			log.Info("Listener pod dependency changed, recreating listener pod")
 			if err := r.deleteListenerPod(ctx, &autoscalingListener, &listenerPod, log); err != nil {
@@ -485,7 +485,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			updatedPod.Labels = desiredLabels
 			shouldUpdate = true
 		}
-		desiredAnnotations := r.mergeAnnotations(listenerPod.Annotations, desiredPod.Annotations)
+		desiredAnnotations := r.filterAndMergeAnnotations(listenerPod.Annotations, desiredPod.Annotations)
 		if !maps.Equal(listenerPod.Annotations, desiredAnnotations) {
 			updatedPod.Annotations = desiredAnnotations
 			shouldUpdate = true
