@@ -330,20 +330,6 @@ const (
 	AutoscalingRunnerSetPhaseOutdated AutoscalingRunnerSetPhase = "Outdated"
 )
 
-func (ars *AutoscalingRunnerSet) Hash() string {
-	type data struct {
-		Spec   *AutoscalingRunnerSetSpec
-		Labels map[string]string
-	}
-
-	d := &data{
-		Spec:   ars.Spec.DeepCopy(),
-		Labels: ars.Labels,
-	}
-
-	return hash.ComputeTemplateHash(d)
-}
-
 func (ars *AutoscalingRunnerSet) ListenerSpecHash() string {
 	arsSpec := ars.Spec.DeepCopy()
 	spec := arsSpec
