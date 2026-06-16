@@ -8802,16 +8802,6 @@ spec:
                       It is used to identify which vault integration should be used to resolve secrets.
                     type: string
                 type: object
-            required:
-            - autoscalingRunnerSetName
-            - autoscalingRunnerSetNamespace
-            - ephemeralRunnerSetName
-            - githubConfigSecret
-            - githubConfigUrl
-            - image
-            - maxRunners
-            - minRunners
-            - runnerScaleSetId
             type: object
           status:
             description: AutoscalingListenerStatus defines the observed state of AutoscalingListener

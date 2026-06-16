@@ -171,7 +171,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			shouldUpdate = true
 		}
 		desiredAnnotations := r.filterAndMergeAnnotations(serviceAccount.Annotations, desiredServiceAccount.Annotations)
-		if !maps.Equal(serviceAccount.Annotations, desiredAnnotations) {
+		if !r.annotationsEqual(serviceAccount.Annotations, desiredAnnotations) {
 			updatedServiceAccount.Annotations = desiredAnnotations
 			shouldUpdate = true
 		}
@@ -215,7 +215,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			shouldUpdate = true
 		}
 		desiredAnnotations := r.filterAndMergeAnnotations(listenerRole.Annotations, desiredRole.Annotations)
-		if !maps.Equal(listenerRole.Annotations, desiredAnnotations) {
+		if !r.annotationsEqual(listenerRole.Annotations, desiredAnnotations) {
 			updatedRole.Annotations = desiredAnnotations
 			shouldUpdate = true
 		}
@@ -258,7 +258,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			shouldUpdate = true
 		}
 		desiredAnnotations := r.filterAndMergeAnnotations(listenerRoleBinding.Annotations, desiredRoleBinding.Annotations)
-		if !maps.Equal(listenerRoleBinding.Annotations, desiredAnnotations) {
+		if !r.annotationsEqual(listenerRoleBinding.Annotations, desiredAnnotations) {
 			updatedRoleBinding.Annotations = desiredAnnotations
 			shouldUpdate = true
 		}
@@ -314,7 +314,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 				shouldUpdate = true
 			}
 			desiredAnnotations := r.filterAndMergeAnnotations(proxySecret.Annotations, desiredListenerProxy.Annotations)
-			if !maps.Equal(proxySecret.Annotations, desiredAnnotations) {
+			if !r.annotationsEqual(proxySecret.Annotations, desiredAnnotations) {
 				updatedProxySecret.Annotations = desiredAnnotations
 				shouldUpdate = true
 			}
@@ -401,7 +401,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			shouldUpdate = true
 		}
 		desiredAnnotations := r.filterAndMergeAnnotations(listenerConfigSecret.Annotations, desiredSecret.Annotations)
-		if !maps.Equal(listenerConfigSecret.Annotations, desiredAnnotations) {
+		if !r.annotationsEqual(listenerConfigSecret.Annotations, desiredAnnotations) {
 			updatedSecret.Annotations = desiredAnnotations
 			shouldUpdate = true
 		}
@@ -467,9 +467,17 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			return ctrl.Result{}, err
 		}
 
-		shouldReCreate := desiredPod.Annotations[AnnotationKeyIntegrityHash] != listenerPod.Annotations[AnnotationKeyIntegrityHash]
-		if shouldReCreate {
-			log.Info("Listener pod dependency changed, recreating listener pod")
+		if desiredPod.Annotations[AnnotationKeyIntegrityHash] != listenerPod.Annotations[AnnotationKeyIntegrityHash] {
+			// Since the pod is controlled by a pod controller, we tag the pod with integrity hash.
+			// If the integrity hash is changed, that means the new spec is different. Keep in mind, the tagged hash
+			// is created by hashing only the fields this controller sets.
+			log.Info(
+				"Listener pod dependency changed, recreating listener pod",
+				"desiredSpec",
+				mustJSON(desiredPod.Spec),
+				"currentSpec",
+				mustJSON(listenerPod.Spec),
+			)
 			if err := r.deleteListenerPod(ctx, &autoscalingListener, &listenerPod, log); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -486,7 +494,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			shouldUpdate = true
 		}
 		desiredAnnotations := r.filterAndMergeAnnotations(listenerPod.Annotations, desiredPod.Annotations)
-		if !maps.Equal(listenerPod.Annotations, desiredAnnotations) {
+		if !r.annotationsEqual(listenerPod.Annotations, desiredAnnotations) {
 			updatedPod.Annotations = desiredAnnotations
 			shouldUpdate = true
 		}
@@ -519,7 +527,11 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			return ctrl.Result{}, err
 		}
 
-		log.Info("Creating listener pod", "namespace", desiredPod.Namespace, "name", desiredPod.Name)
+		log.Info(
+			"Creating listener pod",
+			"namespace", desiredPod.Namespace,
+			"name", desiredPod.Name,
+		)
 		if err := r.Create(ctx, desiredPod); err != nil {
 			log.Error(err, "Unable to create listener pod", "namespace", desiredPod.Namespace, "name", desiredPod.Name)
 			return ctrl.Result{}, err

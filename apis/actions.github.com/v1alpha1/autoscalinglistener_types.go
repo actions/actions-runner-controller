@@ -24,34 +24,34 @@ import (
 
 // AutoscalingListenerSpec defines the desired state of AutoscalingListener
 type AutoscalingListenerSpec struct {
-	// +required
+	// +optional
 	GitHubConfigURL string `json:"githubConfigUrl,omitempty"`
 
-	// +required
+	// +optional
 	GitHubConfigSecret string `json:"githubConfigSecret,omitempty"`
 
-	// +required
+	// +optional
 	// +kubebuilder:validation:Minimum:=1
 	RunnerScaleSetID int `json:"runnerScaleSetId,omitempty"`
 
-	// +required
+	// +optional
 	AutoscalingRunnerSetNamespace string `json:"autoscalingRunnerSetNamespace,omitempty"`
 
-	// +required
+	// +optional
 	AutoscalingRunnerSetName string `json:"autoscalingRunnerSetName,omitempty"`
 
-	// +required
+	// +optional
 	EphemeralRunnerSetName string `json:"ephemeralRunnerSetName,omitempty"`
 
 	// +kubebuilder:validation:Minimum:=0
-	// +required
+	// +optional
 	MaxRunners int `json:"maxRunners"`
 
 	// +kubebuilder:validation:Minimum:=0
-	// +required
+	// +optional
 	MinRunners int `json:"minRunners"`
 
-	// +required
+	// +optional
 	Image string `json:"image,omitempty"`
 
 	// +optional

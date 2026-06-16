@@ -56,10 +56,10 @@ type AutoscalingRunnerSet struct {
 
 // AutoscalingRunnerSetSpec defines the desired state of AutoscalingRunnerSet
 type AutoscalingRunnerSetSpec struct {
-	// +required
+	// +optional
 	GitHubConfigUrl string `json:"githubConfigUrl,omitempty"`
 
-	// +required
+	// +optional
 	GitHubConfigSecret string `json:"githubConfigSecret,omitempty"`
 
 	// +optional
@@ -80,7 +80,7 @@ type AutoscalingRunnerSetSpec struct {
 	// +optional
 	VaultConfig *VaultConfig `json:"vaultConfig,omitempty"`
 
-	// +required
+	// +optional
 	Template corev1.PodTemplateSpec `json:"template,omitempty"`
 
 	// +optional
@@ -345,20 +345,6 @@ const (
 	AutoscalingRunnerSetPhaseRunning  AutoscalingRunnerSetPhase = "Running"
 	AutoscalingRunnerSetPhaseOutdated AutoscalingRunnerSetPhase = "Outdated"
 )
-
-func (ars *AutoscalingRunnerSet) Hash() string {
-	type data struct {
-		Spec   *AutoscalingRunnerSetSpec
-		Labels map[string]string
-	}
-
-	d := &data{
-		Spec:   ars.Spec.DeepCopy(),
-		Labels: ars.Labels,
-	}
-
-	return hash.ComputeTemplateHash(d)
-}
 
 func (ars *AutoscalingRunnerSet) ListenerSpecHash() string {
 	arsSpec := ars.Spec.DeepCopy()

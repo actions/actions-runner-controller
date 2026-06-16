@@ -8297,10 +8297,6 @@ spec:
                         It is used to identify which vault integration should be used to resolve secrets.
                       type: string
                   type: object
-              required:
-                - githubConfigSecret
-                - githubConfigUrl
-                - runnerScaleSetId
               type: object
             status:
               description: EphemeralRunnerStatus defines the observed state of EphemeralRunner

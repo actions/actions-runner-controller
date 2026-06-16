@@ -105,17 +105,17 @@ func (er *EphemeralRunner) VaultProxy() *ProxyConfig {
 
 // EphemeralRunnerSpec defines the desired state of EphemeralRunner
 type EphemeralRunnerSpec struct {
-	// +required
+	// +optional
 	GitHubConfigURL string `json:"githubConfigUrl,omitempty"`
 
-	// +required
+	// +optional
 	GitHubConfigSecret string `json:"githubConfigSecret,omitempty"`
 
 	// +optional
 	GitHubServerTLS *TLSConfig `json:"githubServerTLS,omitempty"`
 
-	// +required
-	RunnerScaleSetID int `json:"runnerScaleSetId,omitempty"`
+	// +optional
+	RunnerScaleSetID int `json:"runnerScaleSetId"`
 
 	// +optional
 	Proxy *ProxyConfig `json:"proxy,omitempty"`
@@ -129,6 +129,7 @@ type EphemeralRunnerSpec struct {
 	// +optional
 	EphemeralRunnerConfigSecretMetadata *ResourceMeta `json:"ephemeralRunnerConfigSecretMetadata,omitempty"`
 
+	// +optional
 	corev1.PodTemplateSpec `json:",inline"`
 }
 

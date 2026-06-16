@@ -461,7 +461,14 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			listener := new(v1alpha1.AutoscalingListener)
 			Eventually(
 				func() error {
-					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
+					return k8sClient.Get(
+						ctx,
+						client.ObjectKey{
+							Name:      scaleSetListenerName(autoscalingRunnerSet),
+							Namespace: autoscalingRunnerSet.Namespace,
+						},
+						listener,
+					)
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
@@ -472,13 +479,21 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			runnerSet := new(v1alpha1.EphemeralRunnerSet)
 			Eventually(
 				func() error {
-					return k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, runnerSet)
+					return k8sClient.Get(
+						ctx,
+						client.ObjectKey{
+							Name:      autoscalingRunnerSet.Name,
+							Namespace: autoscalingRunnerSet.Namespace,
+						},
+						runnerSet,
+					)
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
 			).Should(Succeed(), "EphemeralRunnerSet should be created")
 			originalRunnerSetUID := runnerSet.UID
 			originalRunnerSetHash := runnerSet.Annotations[AnnotationKeyIntegrityHash]
+			originalResourceVersion := runnerSet.ResourceVersion
 
 			patched := autoscalingRunnerSet.DeepCopy()
 			patched.Spec.Template.Spec.Containers[0].Image = "ghcr.io/actions/runner:updated"
@@ -492,7 +507,8 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					g.Expect(err).NotTo(HaveOccurred(), "failed to get EphemeralRunnerSet")
 					g.Expect(current.UID).To(Equal(originalRunnerSetUID), "EphemeralRunnerSet should be updated in place")
 					g.Expect(current.Spec.EphemeralRunnerSpec.PodTemplateSpec.Spec.Containers[0].Image).To(Equal("ghcr.io/actions/runner:updated"))
-					g.Expect(current.Annotations[AnnotationKeyIntegrityHash]).NotTo(Equal(originalRunnerSetHash), "EphemeralRunnerSet spec hash should change")
+					g.Expect(current.Annotations[AnnotationKeyIntegrityHash]).To(Equal(originalRunnerSetHash), "EphemeralRunnerSet hash integrity key should not be modified")
+					g.Expect(current.ResourceVersion).NotTo(Equal(originalResourceVersion), "EphemeralRunnerSet ResourceVersion should change after update")
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
@@ -504,34 +520,50 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, current)
 					g.Expect(err).NotTo(HaveOccurred(), "failed to get Listener")
 					g.Expect(current.UID).To(Equal(originalListenerUID), "Listener should not be recreated")
-					g.Expect(current.ResourceVersion).To(Equal(originalListenerResourceVersion), "Listener should not be updated")
+					g.Expect(current.ResourceVersion).To(Equal(originalListenerResourceVersion), "Listener ResourceVersion should not change after update")
 				},
-				time.Second*5,
+				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
 			).Should(Succeed())
 		})
 
-		It("recreates only the Listener when max runners changes", func() {
+		It("Updates only the Listener when max runners changes", func() {
 			listener := new(v1alpha1.AutoscalingListener)
 			Eventually(
 				func() error {
-					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
+					return k8sClient.Get(
+						ctx,
+						client.ObjectKey{
+							Name:      scaleSetListenerName(autoscalingRunnerSet),
+							Namespace: autoscalingRunnerSet.Namespace,
+						},
+						listener,
+					)
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
 			).Should(Succeed(), "Listener should be created")
 			originalListenerUID := listener.UID
+			originalListenerResourceVersion := listener.ResourceVersion
+			originalListenerIntegrityHash := listener.Annotations[AnnotationKeyIntegrityHash]
 
 			runnerSet := new(v1alpha1.EphemeralRunnerSet)
 			Eventually(
 				func() error {
-					return k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, runnerSet)
+					return k8sClient.Get(
+						ctx,
+						client.ObjectKey{
+							Name:      autoscalingRunnerSet.Name,
+							Namespace: autoscalingRunnerSet.Namespace,
+						},
+						runnerSet,
+					)
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
 			).Should(Succeed(), "EphemeralRunnerSet should be created")
-			originalRunnerSetUID := runnerSet.UID
-			originalRunnerSetHash := runnerSet.Annotations[AnnotationKeyIntegrityHash]
+			originalERSRunnerSetUID := runnerSet.UID
+			originalERSResourceVersion := runnerSet.ResourceVersion
 
 			patched := autoscalingRunnerSet.DeepCopy()
 			max := 20
@@ -544,8 +576,10 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					current := new(v1alpha1.AutoscalingListener)
 					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, current)
 					g.Expect(err).NotTo(HaveOccurred(), "failed to get Listener")
-					g.Expect(current.UID).NotTo(Equal(originalListenerUID), "Listener should be recreated")
+					g.Expect(current.UID).To(Equal(originalListenerUID), "Listener should be updated")
+					g.Expect(current.Annotations[AnnotationKeyIntegrityHash]).To(Equal(originalListenerIntegrityHash), "Listener hash integrity key should not be modified")
 					g.Expect(current.Spec.MaxRunners).To(Equal(max))
+					g.Expect(current.ResourceVersion).NotTo(Equal(originalListenerResourceVersion), "Listener ResourceVersion should change after update")
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
@@ -556,8 +590,8 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					current := new(v1alpha1.EphemeralRunnerSet)
 					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, current)
 					g.Expect(err).NotTo(HaveOccurred(), "failed to get EphemeralRunnerSet")
-					g.Expect(current.UID).To(Equal(originalRunnerSetUID), "EphemeralRunnerSet should not be recreated")
-					g.Expect(current.Annotations[AnnotationKeyIntegrityHash]).To(Equal(originalRunnerSetHash), "EphemeralRunnerSet spec should not change")
+					g.Expect(current.UID).To(Equal(originalERSRunnerSetUID), "EphemeralRunnerSet should not be recreated")
+					g.Expect(current.ResourceVersion).To(Equal(originalERSResourceVersion), "EphemeralRunnerSet spec should not change")
 				},
 				time.Second*5,
 				autoscalingRunnerSetTestInterval,
@@ -568,7 +602,14 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			runnerSet := new(v1alpha1.EphemeralRunnerSet)
 			Eventually(
 				func() (string, error) {
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, runnerSet)
+					err := k8sClient.Get(
+						ctx,
+						client.ObjectKey{
+							Name:      autoscalingRunnerSet.Name,
+							Namespace: autoscalingRunnerSet.Namespace,
+						},
+						runnerSet,
+					)
 					if err != nil {
 						return "", err
 					}
@@ -586,7 +627,14 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			Eventually(
 				func() (string, error) {
 					current := new(v1alpha1.EphemeralRunnerSet)
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, current)
+					err := k8sClient.Get(
+						ctx,
+						client.ObjectKey{
+							Name:      autoscalingRunnerSet.Name,
+							Namespace: autoscalingRunnerSet.Namespace,
+						},
+						current,
+					)
 					if err != nil {
 						return "", err
 					}
@@ -601,7 +649,14 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			runnerSet := new(v1alpha1.EphemeralRunnerSet)
 			Eventually(
 				func() (string, error) {
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, runnerSet)
+					err := k8sClient.Get(
+						ctx,
+						client.ObjectKey{
+							Name:      autoscalingRunnerSet.Name,
+							Namespace: autoscalingRunnerSet.Namespace,
+						},
+						runnerSet,
+					)
 					if err != nil {
 						return "", err
 					}
@@ -614,6 +669,8 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			patched := autoscalingRunnerSet.DeepCopy()
 			patched.Spec.EphemeralRunnerSetMetadata.Annotations["arc.test/metadata-annotation"] = "updated"
 			patched.Spec.EphemeralRunnerSetMetadata.Annotations["arc.test/new-metadata-annotation"] = "added"
+			originalERSIntegrityHash := runnerSet.Annotations[AnnotationKeyIntegrityHash]
+			patched.Spec.EphemeralRunnerSetMetadata.Annotations[AnnotationKeyIntegrityHash] = "must-not-be-modified"
 			err := k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))
 			Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingRunnerSet EphemeralRunnerSet metadata")
 
@@ -624,6 +681,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					g.Expect(err).NotTo(HaveOccurred(), "failed to get EphemeralRunnerSet")
 					g.Expect(current.Annotations["arc.test/metadata-annotation"]).To(Equal("updated"))
 					g.Expect(current.Annotations["arc.test/new-metadata-annotation"]).To(Equal("added"))
+					g.Expect(current.Annotations[AnnotationKeyIntegrityHash]).To(Equal(originalERSIntegrityHash), "EphemeralRunnerSet hash integrity key should not be modified")
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
@@ -634,7 +692,14 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			runnerSet := new(v1alpha1.EphemeralRunnerSet)
 			Eventually(
 				func(g Gomega) {
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, runnerSet)
+					err := k8sClient.Get(
+						ctx,
+						client.ObjectKey{
+							Name:      autoscalingRunnerSet.Name,
+							Namespace: autoscalingRunnerSet.Namespace,
+						},
+						runnerSet,
+					)
 					g.Expect(err).NotTo(HaveOccurred(), "failed to get EphemeralRunnerSet")
 					g.Expect(runnerSet.Spec.EphemeralRunnerMetadata).NotTo(BeNil())
 					g.Expect(runnerSet.Spec.EphemeralRunnerMetadata.Labels["arc.test/runner-metadata-label"]).To(Equal("initial"))
@@ -719,22 +784,38 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			listener := new(v1alpha1.AutoscalingListener)
 			Eventually(
 				func() error {
-					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
+					return k8sClient.Get(
+						ctx,
+						client.ObjectKey{
+							Name:      scaleSetListenerName(autoscalingRunnerSet),
+							Namespace: autoscalingRunnerSet.Namespace,
+						},
+						listener,
+					)
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
 			).Should(Succeed(), "Listener should be created")
 			originalListenerUID := listener.UID
+			originalListenerIntegrityHash := listener.Annotations[AnnotationKeyIntegrityHash]
 
 			runnerSet := new(v1alpha1.EphemeralRunnerSet)
 			Eventually(
 				func() error {
-					return k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, runnerSet)
+					return k8sClient.Get(
+						ctx,
+						client.ObjectKey{
+							Name:      autoscalingRunnerSet.Name,
+							Namespace: autoscalingRunnerSet.Namespace,
+						},
+						runnerSet,
+					)
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
 			).Should(Succeed(), "EphemeralRunnerSet should be created")
-			originalRunnerSetUID := runnerSet.UID
+			originalEphemeralRunnerSetUID := runnerSet.UID
+			originalEphemeralRunnerSetIntegrityHash := runnerSet.Annotations[AnnotationKeyIntegrityHash]
 
 			patched := autoscalingRunnerSet.DeepCopy()
 			patched.Spec.GitHubConfigSecret = updatedSecret.Name
@@ -757,8 +838,9 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					current := new(v1alpha1.EphemeralRunnerSet)
 					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, current)
 					g.Expect(err).NotTo(HaveOccurred(), "failed to get EphemeralRunnerSet")
-					g.Expect(current.UID).To(Equal(originalRunnerSetUID), "EphemeralRunnerSet should be updated in place")
+					g.Expect(current.UID).To(Equal(originalEphemeralRunnerSetUID), "EphemeralRunnerSet should be updated in place")
 					g.Expect(current.Spec.EphemeralRunnerSpec.GitHubConfigSecret).To(Equal(updatedSecret.Name))
+					g.Expect(current.Annotations[AnnotationKeyIntegrityHash]).To(Equal(originalEphemeralRunnerSetIntegrityHash), "EphemeralRunnerSet hash integrity key should not be modified")
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
@@ -769,8 +851,9 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					current := new(v1alpha1.AutoscalingListener)
 					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, current)
 					g.Expect(err).NotTo(HaveOccurred(), "failed to get Listener")
-					g.Expect(current.UID).NotTo(Equal(originalListenerUID), "Listener should be recreated")
-					g.Expect(current.Spec.GitHubConfigSecret).To(Equal(updatedSecret.Name))
+					g.Expect(current.UID).To(Equal(originalListenerUID), "Listener should be updated in place")
+					g.Expect(updatedSecret.Name).To(Equal(current.Spec.GitHubConfigSecret))
+					g.Expect(current.Annotations[AnnotationKeyIntegrityHash]).To(Equal(originalListenerIntegrityHash), "Listener hash integrity key should not be modified")
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
@@ -1211,10 +1294,11 @@ var _ = Describe("Test AutoscalingController creation failures", Ordered, func()
 					},
 				},
 				Spec: v1alpha1.AutoscalingRunnerSetSpec{
-					GitHubConfigUrl: "https://github.com/owner/repo",
-					MaxRunners:      &max,
-					MinRunners:      &min,
-					RunnerGroup:     "testgroup",
+					GitHubConfigUrl:    "https://github.com/owner/repo",
+					GitHubConfigSecret: "secret1",
+					MaxRunners:         &max,
+					MinRunners:         &min,
+					RunnerGroup:        "testgroup",
 					Template: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
