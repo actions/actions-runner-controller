@@ -115,6 +115,10 @@ func (b *ResourceBuilder) setControllerReference(owner client.Object, object cli
 	return ctrl.SetControllerReference(owner, object, b.Scheme)
 }
 
+func autoscalingRunnerSetIntegrityHash(ars *v1alpha1.AutoscalingRunnerSet) string {
+	return hash.ComputeTemplateHash(&ars.Spec)
+}
+
 func (b *ResourceBuilder) newAutoscalingListener(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, namespace, image string, imagePullSecrets []corev1.LocalObjectReference) (*v1alpha1.AutoscalingListener, error) {
 	runnerScaleSetID, err := strconv.Atoi(autoscalingRunnerSet.Annotations[runnerScaleSetIDAnnotationKey])
 	if err != nil {
@@ -1143,4 +1147,21 @@ func (b *ResourceBuilder) filterAndMergeAnnotations(base, overwrite map[string]s
 	}
 
 	return result
+}
+
+// compareAnnotations compares two maps of annotations, ignoring the integrity hash annotation.
+func (b *ResourceBuilder) annotationsEqual(m1, m2 map[string]string) bool {
+	if len(m1) != len(m2) {
+		return false
+	}
+
+	for k, v1 := range m1 {
+		if k == AnnotationKeyIntegrityHash {
+			continue
+		}
+		if v2, ok := m2[k]; !ok || v1 != v2 {
+			return false
+		}
+	}
+	return true
 }

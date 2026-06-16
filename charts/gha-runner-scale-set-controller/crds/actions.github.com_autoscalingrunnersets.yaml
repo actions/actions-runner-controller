@@ -16541,10 +16541,6 @@ spec:
                         It is used to identify which vault integration should be used to resolve secrets.
                       type: string
                   type: object
-              required:
-                - githubConfigSecret
-                - githubConfigUrl
-                - template
               type: object
             status:
               description: AutoscalingRunnerSetStatus defines the observed state of AutoscalingRunnerSet
