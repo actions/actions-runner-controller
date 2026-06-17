@@ -291,12 +291,13 @@ func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemer
 
 	// Update the status if needed.
 	if ephemeralRunnerSet.Status != desiredStatus {
-		ephemeralRunnerSet.Status = desiredStatus
-		if err := r.Status().Update(ctx, ephemeralRunnerSet); err != nil {
+		updated := ephemeralRunnerSet.DeepCopy()
+		updated.Status = desiredStatus
+		if err := r.Status().Patch(ctx, updated, client.MergeFrom(ephemeralRunnerSet)); err != nil {
 			log.Error(err, "Failed to update EphemeralRunnerSet status")
 			return err
 		}
-		log.Info("Updated EphemeralRunnerSet status", "status", ephemeralRunnerSet.Status)
+		log.Info("Updated EphemeralRunnerSet status", "status", updated.Status)
 
 	}
 	return nil

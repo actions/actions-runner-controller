@@ -151,7 +151,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			// Scaling up the EphemeralRunnerSet
 			updated := created.DeepCopy()
 			updated.Spec.Replicas = 5
-			err := k8sClient.Update(ctx, updated)
+			err := k8sClient.Patch(ctx, updated, client.MergeFrom(created))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunnerSet")
 
 			// Check if the number of ephemeral runners are created
@@ -213,7 +213,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			// Scale up the EphemeralRunnerSet
 			updated := created.DeepCopy()
 			updated.Spec.Replicas = 5
-			err = k8sClient.Update(ctx, updated)
+			err = k8sClient.Patch(ctx, updated, client.MergeFrom(created))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunnerSet")
 
 			// Wait for the EphemeralRunnerSet to be scaled up
@@ -1101,7 +1101,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			// Scale up the EphemeralRunnerSet
 			updated := created.DeepCopy()
 			updated.Spec.Replicas = 3
-			err := k8sClient.Update(ctx, updated)
+			err := k8sClient.Patch(ctx, updated, client.MergeFrom(created))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunnerSet replica count")
 
 			runnerList := new(v1alpha1.EphemeralRunnerList)
