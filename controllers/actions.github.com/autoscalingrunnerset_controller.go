@@ -147,6 +147,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		if autoscalingRunnerSet.Annotations == nil {
 			autoscalingRunnerSet.Annotations = map[string]string{}
 		}
+		autoscalingRunnerSet.Annotations[AnnotationKeyIntegrityHash] = targetHash
 		if err := r.Patch(ctx, &autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
 			log.Error(err, "Failed to update autoscaling runner set with new change hash and pending phase")
 			return ctrl.Result{}, err
