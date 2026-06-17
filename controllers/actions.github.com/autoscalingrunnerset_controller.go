@@ -361,10 +361,11 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			!maps.Equal(listener.Labels, desired.Labels) ||
 			!r.annotationsEqual(listener.Annotations, desired.Annotations) {
 			log.Info("Updating listener")
+			original := listener.DeepCopy()
 			listener.Spec = desired.Spec
 			listener.Annotations = r.filterAndMergeAnnotations(listener.Annotations, desired.Annotations)
 			listener.Labels = r.filterAndMergeLabels(listener.Labels, desired.Labels)
-			if err := r.Update(ctx, &listener); err != nil {
+			if err := r.Patch(ctx, &listener, client.MergeFrom(original)); err != nil {
 				log.Error(err, "Failed to update AutoscalingListener with new spec")
 				return ctrl.Result{}, err
 			}

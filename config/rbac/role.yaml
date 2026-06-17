@@ -52,7 +52,7 @@ rules:
   - delete
   - get
   - list
-  - update
+  - patch
   - watch
 - apiGroups:
   - actions.github.com
@@ -167,5 +167,5 @@ rules:
   - delete
   - get
   - list
-  - update
+  - patch
   - watch
