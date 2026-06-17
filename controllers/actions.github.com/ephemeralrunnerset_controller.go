@@ -291,12 +291,13 @@ func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemer
 
 	// Update the status if needed.
 	if ephemeralRunnerSet.Status != desiredStatus {
-		ephemeralRunnerSet.Status = desiredStatus
-		if err := r.Status().Update(ctx, ephemeralRunnerSet); err != nil {
+		updated := ephemeralRunnerSet.DeepCopy()
+		updated.Status = desiredStatus
+		if err := r.Status().Patch(ctx, updated, client.MergeFrom(ephemeralRunnerSet)); err != nil {
 			log.Error(err, "Failed to update EphemeralRunnerSet status")
 			return err
 		}
-		log.Info("Updated EphemeralRunnerSet status", "status", ephemeralRunnerSet.Status)
+		log.Info("Updated EphemeralRunnerSet status", "status", updated.Status)
 
 	}
 	return nil
@@ -513,7 +514,7 @@ func (r *EphemeralRunnerSetReconciler) reconcileEphemeralRunnerSetProxySecret(ct
 		}
 		if shouldUpdate {
 			log.Info("Updating ephemeralRunnerSet proxy secret")
-			if err := r.Update(ctx, updatedProxySecret); err != nil {
+			if err := r.Patch(ctx, updatedProxySecret, client.MergeFrom(&proxySecret)); err != nil {
 				return nil, false, fmt.Errorf("failed to update ephemeralRunnerSet proxy secret: %w", err)
 			}
 			return updatedProxySecret, true, nil

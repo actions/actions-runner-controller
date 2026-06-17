@@ -62,10 +62,10 @@ type AutoscalingListenerReconciler struct {
 
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=pods/status,verbs=get
-// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update
-// +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create;update
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=create;delete;get;list;watch;update
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=create;delete;get;list;watch;update
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=create;delete;get;list;watch;patch
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=create;delete;get;list;watch;patch
 // +kubebuilder:rbac:groups=actions.github.com,resources=autoscalinglisteners,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=actions.github.com,resources=autoscalinglisteners/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=actions.github.com,resources=autoscalinglisteners/finalizers,verbs=update
@@ -178,7 +178,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		if shouldUpdate {
 			log.Info("Updating listener service account")
 
-			if err := r.Update(ctx, updatedServiceAccount); err != nil {
+			if err := r.Patch(ctx, updatedServiceAccount, client.MergeFrom(&serviceAccount)); err != nil {
 				log.Error(err, "Failed to update listener service account")
 				return ctrl.Result{}, err
 			}
@@ -225,7 +225,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 		if shouldUpdate {
 			log.Info("Updating listener role")
-			if err := r.Update(ctx, updatedRole); err != nil {
+			if err := r.Patch(ctx, updatedRole, client.MergeFrom(&listenerRole)); err != nil {
 				log.Error(err, "Failed to update listener role")
 				return ctrl.Result{}, err
 			}
@@ -264,7 +264,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 		if shouldUpdate {
 			log.Info("Updating listener role binding")
-			if err := r.Update(ctx, updatedRoleBinding); err != nil {
+			if err := r.Patch(ctx, updatedRoleBinding, client.MergeFrom(&listenerRoleBinding)); err != nil {
 				log.Error(err, "Failed to update listener role binding")
 				return ctrl.Result{}, err
 			}
@@ -320,7 +320,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			}
 			if shouldUpdate {
 				log.Info("Updating listener proxy secret")
-				if err := r.Update(ctx, updatedProxySecret); err != nil {
+				if err := r.Patch(ctx, updatedProxySecret, client.MergeFrom(&proxySecret)); err != nil {
 					log.Error(err, "Failed to update listener proxy secret")
 					return ctrl.Result{}, err
 				}
@@ -408,7 +408,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 
 		if shouldUpdate {
 			log.Info("Updating listener config secret", "namespace", updatedSecret.Namespace, "name", updatedSecret.Name)
-			if err := r.Update(ctx, updatedSecret); err != nil {
+			if err := r.Patch(ctx, updatedSecret, client.MergeFrom(&listenerConfigSecret)); err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to update listener config secret: %w", err)
 			}
 			return ctrl.Result{Requeue: true}, nil
@@ -501,7 +501,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 
 		if shouldUpdate {
 			log.Info("Updating listener pod", "namespace", updatedPod.Namespace, "name", updatedPod.Name)
-			if err := r.Update(ctx, updatedPod); err != nil {
+			if err := r.Patch(ctx, updatedPod, client.MergeFrom(&listenerPod)); err != nil {
 				log.Error(err, "Unable to update listener pod", "namespace", updatedPod.Namespace, "name", updatedPod.Name)
 				return ctrl.Result{}, err
 			}

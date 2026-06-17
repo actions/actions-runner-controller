@@ -1227,8 +1227,9 @@ var _ = Describe("Test AutoscalingController creation failures", Ordered, func()
 				autoscalingRunnerSetTestInterval,
 			).Should(BeEquivalentTo(autoscalingRunnerSetFinalizerName), "AutoScalingRunnerSet should have a finalizer")
 
-			ars.Annotations = make(map[string]string)
-			err = k8sClient.Update(ctx, ars)
+			updated := ars.DeepCopy()
+			updated.Annotations = make(map[string]string)
+			err = k8sClient.Patch(ctx, updated, client.MergeFrom(ars))
 			Expect(err).NotTo(HaveOccurred(), "Update autoscaling runner set without annotation should be successful")
 
 			Eventually(
