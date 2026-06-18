@@ -701,6 +701,9 @@ func (r *AutoscalingRunnerSetReconciler) updateRunnerScaleSetName(ctx context.Co
 
 	logger.Info("Updating runner scale set name as an annotation")
 	original := autoscalingRunnerSet.DeepCopy()
+	if autoscalingRunnerSet.Annotations == nil {
+		autoscalingRunnerSet.Annotations = make(map[string]string, 1)
+	}
 	autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName] = updatedRunnerScaleSet.Name
 	if err := r.Patch(ctx, autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
 		logger.Error(err, "Failed to update runner scale set name annotation")

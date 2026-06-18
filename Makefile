@@ -78,6 +78,16 @@ test-with-deps: setup-envtest
 	KUBEBUILDER_ASSETS="$$($(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(GOBIN) -p path)" \
 	  make test
 
+.PHONY: benchmark-actions-github-com
+benchmark-actions-github-com: setup-envtest
+	@echo "Running reconcile benchmarks for actions.github.com..."
+	KUBEBUILDER_ASSETS="$$($(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(GOBIN) -p path)" \
+	  go test ./controllers/actions.github.com \
+	    -run '^$$' \
+	    -bench 'BenchmarkActionsGithub_Reconcile_.*' \
+	    -benchmem \
+	    -count=5 \
+	    -benchtime=1s
 
 # Build manager binary
 manager: generate fmt vet
@@ -365,7 +375,6 @@ SHELLCHECK=$(TOOLS_PATH)/shellcheck
 
 # find or download envtest
 envtest:
-ifeq (, $(shell which setup-envtest))
 ifeq (, $(wildcard $(GOBIN)/setup-envtest))
 	@{ \
 	set -e ;\
@@ -377,9 +386,6 @@ ifeq (, $(wildcard $(GOBIN)/setup-envtest))
 	}
 endif
 ENVTEST=$(GOBIN)/setup-envtest
-else
-ENVTEST=$(shell which setup-envtest)
-endif
 
 .PHONY: setup-envtest
 setup-envtest: envtest
