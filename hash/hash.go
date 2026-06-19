@@ -14,18 +14,19 @@ import (
 	"k8s.io/apimachinery/pkg/util/rand"
 )
 
+var deepObjectPrinter = spew.ConfigState{
+	Indent:         " ",
+	SortKeys:       true,
+	DisableMethods: true,
+	SpewKeys:       true,
+}
+
 // DeepHashObject writes specified object to hash using the spew library
 // which follows pointers and prints actual values of the nested objects
 // ensuring the hash does not change when a pointer changes.
 func DeepHashObject(hasher hash.Hash, objectToWrite interface{}) {
 	hasher.Reset()
-	printer := spew.ConfigState{
-		Indent:         " ",
-		SortKeys:       true,
-		DisableMethods: true,
-		SpewKeys:       true,
-	}
-	printer.Fprintf(hasher, "%#v", objectToWrite)
+	deepObjectPrinter.Fprintf(hasher, "%#v", objectToWrite)
 }
 
 // ComputeHash returns a hash value calculated from template and
@@ -37,16 +38,7 @@ func DeepHashObject(hasher hash.Hash, objectToWrite interface{}) {
 // k8s.io/kubernetes/pkg/controller.ComputeHash.
 func ComputeTemplateHash(template interface{}) string {
 	hasher := fnv.New32a()
-
-	hasher.Reset()
-
-	printer := spew.ConfigState{
-		Indent:         " ",
-		SortKeys:       true,
-		DisableMethods: true,
-		SpewKeys:       true,
-	}
-	printer.Fprintf(hasher, "%#v", template)
+	DeepHashObject(hasher, template)
 
 	return rand.SafeEncodeString(strconv.FormatUint(uint64(hasher.Sum32()), 10))
 }
