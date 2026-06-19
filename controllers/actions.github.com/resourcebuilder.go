@@ -813,7 +813,7 @@ func ephemeralRunnerSetIntegrityHash(ers *v1alpha1.EphemeralRunnerSet) string {
 	d := data{
 		EphemeralRunnerSpec: ers.Spec.EphemeralRunnerSpec,
 	}
-	return hash.ComputeTemplateHash(&d)
+	return hash.ComputeTemplateHashJSON(&d)
 }
 
 func (b *ResourceBuilder) newAutoscalingListenerProxySecret(autoscalingListener *v1alpha1.AutoscalingListener, data map[string][]byte) (*corev1.Secret, error) {
@@ -1015,7 +1015,7 @@ func ephemeralRunnerSetProxySecretZIdentityHash(secret *corev1.Secret) string {
 		Data: secret.Data,
 	}
 
-	return hash.ComputeTemplateHash(&d)
+	return hash.ComputeTemplateHashJSON(&d)
 }
 
 func scaleSetListenerConfigName(autoscalingListener *v1alpha1.AutoscalingListener) string {

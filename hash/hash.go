@@ -5,6 +5,7 @@
 package hash
 
 import (
+	"encoding/json"
 	"hash"
 	"hash/fnv"
 	"strconv"
@@ -46,6 +47,20 @@ func ComputeTemplateHash(template interface{}) string {
 		SpewKeys:       true,
 	}
 	printer.Fprintf(hasher, "%#v", template)
+
+	return rand.SafeEncodeString(strconv.FormatUint(uint64(hasher.Sum32()), 10))
+}
+
+// ComputeTemplateHashJSON computes a stable hash using JSON marshaling.
+// It is faster than spew-based hashing for large nested specs with map/slice fields.
+func ComputeTemplateHashJSON(template interface{}) string {
+	bytes, err := json.Marshal(template)
+	if err != nil {
+		return ComputeTemplateHash(template)
+	}
+
+	hasher := fnv.New32a()
+	_, _ = hasher.Write(bytes)
 
 	return rand.SafeEncodeString(strconv.FormatUint(uint64(hasher.Sum32()), 10))
 }

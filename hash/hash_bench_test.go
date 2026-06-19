@@ -76,6 +76,27 @@ func BenchmarkComputeTemplateHash(b *testing.B) {
 	}
 }
 
+func BenchmarkComputeTemplateHashJSON(b *testing.B) {
+	cases := []struct {
+		name string
+		size int
+	}{
+		{name: "small", size: 3},
+		{name: "medium", size: 15},
+		{name: "large", size: 60},
+	}
+
+	for _, tc := range cases {
+		b.Run(tc.name, func(b *testing.B) {
+			tpl := newBenchmarkTemplate(tc.size)
+			b.ReportAllocs()
+			for b.Loop() {
+				_ = ComputeTemplateHashJSON(&tpl)
+			}
+		})
+	}
+}
+
 func BenchmarkFNVHashStringObjects(b *testing.B) {
 	cases := []struct {
 		name string

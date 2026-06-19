@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/actions/actions-runner-controller/hash"
 	"github.com/actions/actions-runner-controller/vault"
@@ -175,13 +176,31 @@ type ProxyConfig struct {
 	NoProxy []string `json:"noProxy,omitempty"`
 }
 
+var parsedProxyURLCache sync.Map
+
+func parseProxyURLCached(rawURL string) (url.URL, error) {
+	if cached, ok := parsedProxyURLCache.Load(rawURL); ok {
+		if parsed, ok := cached.(url.URL); ok {
+			return parsed, nil
+		}
+	}
+
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return url.URL{}, err
+	}
+
+	parsedProxyURLCache.Store(rawURL, *parsed)
+	return *parsed, nil
+}
+
 func (c *ProxyConfig) ToHTTPProxyConfig(secretFetcher func(string) (*corev1.Secret, error)) (*httpproxy.Config, error) {
 	config := &httpproxy.Config{
 		NoProxy: strings.Join(c.NoProxy, ","),
 	}
 
 	if c.HTTP != nil {
-		u, err := url.Parse(c.HTTP.URL)
+		u, err := parseProxyURLCached(c.HTTP.URL)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse proxy http url %q: %w", c.HTTP.URL, err)
 		}
@@ -206,7 +225,7 @@ func (c *ProxyConfig) ToHTTPProxyConfig(secretFetcher func(string) (*corev1.Secr
 	}
 
 	if c.HTTPS != nil {
-		u, err := url.Parse(c.HTTPS.URL)
+		u, err := parseProxyURLCached(c.HTTPS.URL)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse proxy https url %q: %w", c.HTTPS.URL, err)
 		}
