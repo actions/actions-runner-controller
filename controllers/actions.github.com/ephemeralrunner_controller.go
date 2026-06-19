@@ -28,6 +28,7 @@ import (
 	"github.com/actions/scaleset"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -580,6 +581,8 @@ func (r *EphemeralRunnerReconciler) markAsFailed(ctx context.Context, ephemeralR
 	ephemeralRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseFailed
 	ephemeralRunner.Status.Reason = reason
 	ephemeralRunner.Status.Message = errMessage
+	ephemeralRunner.Status.ObservedGeneration = ephemeralRunner.Generation
+	setReadyCondition(&ephemeralRunner.Status.Conditions, ephemeralRunner.Generation, metav1.ConditionFalse, reason, errMessage)
 	if err := r.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
 		return fmt.Errorf("failed to update ephemeral runner status Phase/Message: %w", err)
 	}
@@ -600,6 +603,8 @@ func (r *EphemeralRunnerReconciler) markAsOutdated(ctx context.Context, ephemera
 	ephemeralRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseOutdated
 	ephemeralRunner.Status.Reason = "Outdated"
 	ephemeralRunner.Status.Message = "Runner is deprecated"
+	ephemeralRunner.Status.ObservedGeneration = ephemeralRunner.Generation
+	setReadyCondition(&ephemeralRunner.Status.Conditions, ephemeralRunner.Generation, metav1.ConditionFalse, "Outdated", "Runner is deprecated")
 
 	if err := r.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
 		return fmt.Errorf("failed to update ephemeral runner status Phase/Message: %w", err)
@@ -633,6 +638,8 @@ func (r *EphemeralRunnerReconciler) deletePodAsFailed(ctx context.Context, ephem
 	ephemeralRunner.Status.Ready = false
 	ephemeralRunner.Status.Reason = pod.Status.Reason
 	ephemeralRunner.Status.Message = pod.Status.Message
+	ephemeralRunner.Status.ObservedGeneration = ephemeralRunner.Generation
+	setReadyCondition(&ephemeralRunner.Status.Conditions, ephemeralRunner.Generation, metav1.ConditionFalse, "PodFailed", "Runner pod failed and will be restarted")
 
 	if err := r.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
 		return fmt.Errorf("failed to update ephemeral runner status with failure count: %w", err)
@@ -811,11 +818,24 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 		}
 	}
 
-	phase := v1alpha1.EphemeralRunnerPhase(pod.Status.Phase)
-	phaseChanged := ephemeralRunner.Status.Phase != phase
-	readyChanged := ready != ephemeralRunner.Status.Ready
+	original := ephemeralRunner.DeepCopy()
+	ephemeralRunner.Status.Phase = v1alpha1.EphemeralRunnerPhase(pod.Status.Phase)
+	ephemeralRunner.Status.Ready = ready
+	ephemeralRunner.Status.Reason = pod.Status.Reason
+	ephemeralRunner.Status.Message = pod.Status.Message
+	ephemeralRunner.Status.ObservedGeneration = ephemeralRunner.Generation
 
-	if !phaseChanged && !readyChanged {
+	readyStatus := metav1.ConditionFalse
+	reason := "RunnerOffline"
+	message := "Runner pod is not ready"
+	if ready {
+		readyStatus = metav1.ConditionTrue
+		reason = "RunnerOnline"
+		message = "Runner is online and ready to execute a job"
+	}
+	setReadyCondition(&ephemeralRunner.Status.Conditions, ephemeralRunner.Generation, readyStatus, reason, message)
+
+	if apiequality.Semantic.DeepEqual(original.Status, ephemeralRunner.Status) {
 		return nil
 	}
 
@@ -826,11 +846,6 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 		"statusMessage", pod.Status.Message,
 		"ready", ready,
 	)
-	original := ephemeralRunner.DeepCopy()
-	ephemeralRunner.Status.Phase = phase
-	ephemeralRunner.Status.Ready = ready
-	ephemeralRunner.Status.Reason = pod.Status.Reason
-	ephemeralRunner.Status.Message = pod.Status.Message
 
 	if err := r.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
 		return fmt.Errorf("failed to update runner status for Phase/Reason/Message/Ready: %w", err)
