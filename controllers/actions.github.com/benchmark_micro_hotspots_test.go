@@ -8,6 +8,7 @@ import (
 	"time"
 
 	actionsv1alpha1 "github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -116,7 +117,7 @@ func BenchmarkActionsGithub_ClassifyEphemeralRunnersByState(b *testing.B) {
 
 			b.ResetTimer()
 			for b.Loop() {
-				_ = newEphemeralRunnersByStates(runnerList, tc.includeSlice)
+				_ = newEphemeralRunnersByStates(runnerList, tc.includeSlice, true)
 			}
 		})
 	}
@@ -190,6 +191,58 @@ func BenchmarkActionsGithub_ClientPatch_EphemeralRunnerSetAnnotation(b *testing.
 		}
 		updated.Annotations[AnnotationKeyIntegrityHash] = "bench-hash-" + strconv.Itoa(i%2)
 		_ = fakeClient.Patch(ctx, updated, client.MergeFrom(current))
+	}
+}
+
+func BenchmarkActionsGithub_Reconcile_EphemeralRunnerSetProxySecret_NoOp(b *testing.B) {
+	scheme := runtime.NewScheme()
+	_ = actionsv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	ers := NewMinimalEphemeralRunnerSet("default", "proxy-noop-ers")
+	ers.Labels = map[string]string{
+		LabelKeyGitHubScaleSetName:      "scale-set",
+		LabelKeyGitHubScaleSetNamespace: "default",
+	}
+	ers.Spec.EphemeralRunnerSpec.Proxy = &actionsv1alpha1.ProxyConfig{
+		HTTP:  &actionsv1alpha1.ProxyServerConfig{URL: "http://proxy.example.com:8080"},
+		HTTPS: &actionsv1alpha1.ProxyServerConfig{URL: "https://proxy.example.com:8443"},
+		NoProxy: []string{
+			"kubernetes.default.svc",
+			"metadata.google.internal",
+		},
+	}
+
+	proxyData, err := ers.Spec.EphemeralRunnerSpec.Proxy.ToSecretData(func(string) (*corev1.Secret, error) {
+		return nil, nil
+	})
+	if err != nil {
+		b.Fatalf("failed to build proxy secret data: %v", err)
+	}
+
+	reconciler := &EphemeralRunnerSetReconciler{Scheme: scheme, Log: logr.Discard()}
+	proxySecret, err := reconciler.newEphemeralRunnerSetProxySecret(ers, proxyData)
+	if err != nil {
+		b.Fatalf("failed to build proxy secret: %v", err)
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(ers, proxySecret).
+		WithStatusSubresource(&actionsv1alpha1.EphemeralRunnerSet{}).
+		Build()
+
+	reconciler.Client = fakeClient
+
+	ctx := context.Background()
+	log := logr.Discard()
+
+	b.ResetTimer()
+	for b.Loop() {
+		_, _, err := reconciler.reconcileEphemeralRunnerSetProxySecret(ctx, ers, log)
+		if err != nil {
+			b.Fatalf("unexpected reconcile error: %v", err)
+		}
 	}
 }
 

@@ -214,7 +214,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, err
 	}
 
-	runnerState := newEphemeralRunnersByStates(&ephemeralRunnerList, false)
+	runnerState := newEphemeralRunnersByStates(&ephemeralRunnerList, false, ephemeralRunnerSet.Spec.PatchID != 0)
 
 	log.Info(
 		"Ephemeral runner counts",
@@ -254,7 +254,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		var fullState *ephemeralRunnersByState
 		getFullState := func() *ephemeralRunnersByState {
 			if fullState == nil {
-				fullState = newEphemeralRunnersByStates(&ephemeralRunnerList, true)
+				fullState = newEphemeralRunnersByStates(&ephemeralRunnerList, true, true)
 			}
 			return fullState
 		}
@@ -410,7 +410,7 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 		return true, nil
 	}
 
-	ephemeralRunnerState := newEphemeralRunnersByStates(ephemeralRunnerList, true)
+	ephemeralRunnerState := newEphemeralRunnersByStates(ephemeralRunnerList, true, false)
 
 	log.Info(
 		"Clean up runner counts",
@@ -561,25 +561,34 @@ func (r *EphemeralRunnerSetReconciler) reconcileEphemeralRunnerSetProxySecret(ct
 			return nil, false, fmt.Errorf("failed to convert proxy config to secret data: %w", err)
 		}
 
-		desiredRunnerSetProxy, err := r.newEphemeralRunnerSetProxySecret(ephemeralRunnerSet, proxySecretData)
-		if err != nil {
-			return nil, false, fmt.Errorf("failed to build desired ephemeralRunnerSet proxy secret: %w", err)
+		desiredProxyHash := ephemeralRunnerSetProxySecretZIdentityHash(&corev1.Secret{Data: proxySecretData})
+		expectedScaleSetName := ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName]
+		expectedScaleSetNamespace := ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace]
+		var updatedProxySecret *corev1.Secret
+		ensureUpdatedProxySecret := func() *corev1.Secret {
+			if updatedProxySecret == nil {
+				updatedProxySecret = proxySecret.DeepCopy()
+			}
+			return updatedProxySecret
 		}
-
-		updatedProxySecret := proxySecret.DeepCopy()
 		var shouldUpdate bool
-		if !maps.EqualFunc(proxySecret.Data, desiredRunnerSetProxy.Data, bytes.Equal) {
-			updatedProxySecret.Data = desiredRunnerSetProxy.Data
+		if !maps.EqualFunc(proxySecret.Data, proxySecretData, bytes.Equal) {
+			ensureUpdatedProxySecret().Data = proxySecretData
 			shouldUpdate = true
 		}
-		desiredLabels := r.filterAndMergeLabels(proxySecret.Labels, desiredRunnerSetProxy.Labels)
-		if !maps.Equal(proxySecret.Labels, desiredLabels) {
-			updatedProxySecret.Labels = desiredLabels
+		if proxySecret.Labels[LabelKeyGitHubScaleSetName] != expectedScaleSetName || proxySecret.Labels[LabelKeyGitHubScaleSetNamespace] != expectedScaleSetNamespace {
+			desiredLabels := r.filterAndMergeLabels(proxySecret.Labels, map[string]string{
+				LabelKeyGitHubScaleSetName:      expectedScaleSetName,
+				LabelKeyGitHubScaleSetNamespace: expectedScaleSetNamespace,
+			})
+			ensureUpdatedProxySecret().Labels = desiredLabels
 			shouldUpdate = true
 		}
-		desiredAnnotations := r.filterAndMergeAnnotations(proxySecret.Annotations, desiredRunnerSetProxy.Annotations)
-		if !maps.Equal(proxySecret.Annotations, desiredAnnotations) {
-			updatedProxySecret.Annotations = desiredAnnotations
+		if proxySecret.Annotations[AnnotationKeyIntegrityHash] != desiredProxyHash {
+			desiredAnnotations := r.filterAndMergeAnnotations(proxySecret.Annotations, map[string]string{
+				AnnotationKeyIntegrityHash: desiredProxyHash,
+			})
+			ensureUpdatedProxySecret().Annotations = desiredAnnotations
 			shouldUpdate = true
 		}
 		if shouldUpdate {
@@ -617,14 +626,13 @@ func (r *EphemeralRunnerSetReconciler) createEphemeralRunners(ctx context.Contex
 			ephemeralRunner.Spec.ProxySecretRef = proxyEphemeralRunnerSetSecretName(runnerSet)
 		}
 
-		log.Info("Creating new ephemeral runner", "progress", i+1, "total", count)
 		if err := r.Create(ctx, ephemeralRunner); err != nil {
 			log.Error(err, "failed to make ephemeral runner")
 			errs = append(errs, err)
 			continue
 		}
 
-		log.Info("Created new ephemeral runner", "runner", ephemeralRunner.Name)
+		log.Info("Created new ephemeral runner", "progress", i+1, "total", count, "runner", ephemeralRunner.Name)
 	}
 
 	return multierr.Combine(errs...)
@@ -823,14 +831,16 @@ type ephemeralRunnersByState struct {
 	latestPatchID int
 }
 
-func newEphemeralRunnersByStates(ephemeralRunnerList *v1alpha1.EphemeralRunnerList, includeSlices bool) *ephemeralRunnersByState {
+func newEphemeralRunnersByStates(ephemeralRunnerList *v1alpha1.EphemeralRunnerList, includeSlices bool, trackLatestPatchID bool) *ephemeralRunnersByState {
 	var ephemeralRunnerState ephemeralRunnersByState
 
 	for i := range ephemeralRunnerList.Items {
 		r := &ephemeralRunnerList.Items[i]
-		patchID, err := strconv.Atoi(r.Annotations[AnnotationKeyPatchID])
-		if err == nil && patchID > ephemeralRunnerState.latestPatchID {
-			ephemeralRunnerState.latestPatchID = patchID
+		if trackLatestPatchID {
+			patchID, err := strconv.Atoi(r.Annotations[AnnotationKeyPatchID])
+			if err == nil && patchID > ephemeralRunnerState.latestPatchID {
+				ephemeralRunnerState.latestPatchID = patchID
+			}
 		}
 		if !r.DeletionTimestamp.IsZero() {
 			ephemeralRunnerState.deletingCount++
