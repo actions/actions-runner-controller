@@ -74,7 +74,6 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	if err := r.Get(ctx, req.NamespacedName, &autoscalingRunnerSet); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	original := autoscalingRunnerSet.DeepCopy()
 
 	if !autoscalingRunnerSet.DeletionTimestamp.IsZero() {
 		if !controllerutil.ContainsFinalizer(&autoscalingRunnerSet, autoscalingRunnerSetFinalizerName) {
@@ -99,7 +98,9 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			return ctrl.Result{}, err
 		}
 
-		if controllerutil.RemoveFinalizer(&autoscalingRunnerSet, autoscalingRunnerSetFinalizerName) {
+		if controllerutil.ContainsFinalizer(&autoscalingRunnerSet, autoscalingRunnerSetFinalizerName) {
+			original := autoscalingRunnerSet.DeepCopy()
+			controllerutil.RemoveFinalizer(&autoscalingRunnerSet, autoscalingRunnerSetFinalizerName)
 			log.Info("Removing finalizer")
 			if err := r.Patch(ctx, &autoscalingRunnerSet, client.MergeFrom(original)); err != nil && !kerrors.IsNotFound(err) {
 				log.Error(err, "Failed to update autoscaling runner set without finalizer")
@@ -129,7 +130,9 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, nil
 	}
 
-	if controllerutil.AddFinalizer(&autoscalingRunnerSet, autoscalingRunnerSetFinalizerName) {
+	if !controllerutil.ContainsFinalizer(&autoscalingRunnerSet, autoscalingRunnerSetFinalizerName) {
+		original := autoscalingRunnerSet.DeepCopy()
+		controllerutil.AddFinalizer(&autoscalingRunnerSet, autoscalingRunnerSetFinalizerName)
 		log.Info("Adding finalizer")
 
 		if err := r.Patch(ctx, &autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
@@ -141,6 +144,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, nil
 	}
 
+	// Something has changed, we need to re-apply the pending phase and change hash annotation to trigger the update of runner scale set and listener.
 	// Something has changed, we need to re-apply the pending phase and change hash annotation to trigger the update of runner scale set and listener.
 	if targetHash := autoscalingRunnerSetIntegrityHash(&autoscalingRunnerSet); autoscalingRunnerSet.Annotations[AnnotationKeyIntegrityHash] != targetHash {
 		original := autoscalingRunnerSet.DeepCopy()

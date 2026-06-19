@@ -24,6 +24,7 @@ import (
 	"maps"
 	"sort"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
@@ -55,6 +56,13 @@ type EphemeralRunnerSetReconciler struct {
 	Scheme         *runtime.Scheme
 	PublishMetrics bool
 	ResourceBuilder
+	specHashCache sync.Map
+}
+
+type specHashCacheEntry struct {
+	uid        types.UID
+	generation int64
+	hash       string
 }
 
 // +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunnersets,verbs=get;list;watch;create;update;patch;delete
@@ -80,9 +88,11 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	var ephemeralRunnerSet v1alpha1.EphemeralRunnerSet
 	if err := r.Get(ctx, req.NamespacedName, &ephemeralRunnerSet); err != nil {
+		if kerrors.IsNotFound(err) {
+			r.clearSpecHashCache(req.NamespacedName)
+		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	original := ephemeralRunnerSet.DeepCopy()
 
 	// Requested deletion does not need reconciled.
 	if !ephemeralRunnerSet.DeletionTimestamp.IsZero() {
@@ -112,7 +122,9 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 
 		log.Info("Removing finalizer")
-		if controllerutil.RemoveFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName) {
+		if controllerutil.ContainsFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName) {
+			original := ephemeralRunnerSet.DeepCopy()
+			controllerutil.RemoveFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName)
 			if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
 				log.Error(err, "Failed to update ephemeral runner set with removed finalizer")
 				return ctrl.Result{}, err
@@ -120,12 +132,15 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 
 		log.Info("Successfully removed finalizer after cleanup")
+		r.clearSpecHashCache(req.NamespacedName)
 		return ctrl.Result{}, nil
 	}
 
 	// Add finalizer if not present
-	if controllerutil.AddFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName) {
+	if !controllerutil.ContainsFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName) {
 		log.Info("Adding finalizer")
+		original := ephemeralRunnerSet.DeepCopy()
+		controllerutil.AddFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName)
 		if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
 			log.Error(err, "Failed to update ephemeral runner set with new finalizer")
 			return ctrl.Result{}, err
@@ -137,32 +152,38 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	// If hash spec has changed, delete idle ephemeral runners
 	// in order to apply the change to the runners that did not yet receive a job.
-	ephemeralRunnerIntegrityHash := ephemeralRunnerSetIntegrityHash(&ephemeralRunnerSet)
-	if ephemeralRunnerSet.Annotations[AnnotationKeyIntegrityHash] != ephemeralRunnerIntegrityHash {
-		log.Info("EphemeralRunnerSpec has changed, deleting idle ephemeral runners to apply the new spec")
-		if _, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log); err != nil {
-			log.Error(err, "Failed to clean up EphemeralRunners")
-			return ctrl.Result{}, err
+	storedIntegrityHash := ephemeralRunnerSet.Annotations[AnnotationKeyIntegrityHash]
+	if !r.hasSpecHashCache(req.NamespacedName, ephemeralRunnerSet.UID, ephemeralRunnerSet.Generation, storedIntegrityHash) {
+		ephemeralRunnerIntegrityHash := ephemeralRunnerSetIntegrityHash(&ephemeralRunnerSet)
+		if storedIntegrityHash != ephemeralRunnerIntegrityHash {
+			log.Info("EphemeralRunnerSpec has changed, deleting idle ephemeral runners to apply the new spec")
+			if _, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log); err != nil {
+				log.Error(err, "Failed to clean up EphemeralRunners")
+				return ctrl.Result{}, err
+			}
+
+			if _, _, err := r.reconcileEphemeralRunnerSetProxySecret(ctx, &ephemeralRunnerSet, log); err != nil {
+				log.Error(err, "Failed to update EphemeralRunnerSet proxy secret")
+				return ctrl.Result{}, err
+			}
+
+			log.Info("Updating EphemeralRunnerSet with new spec hash")
+			original := ephemeralRunnerSet.DeepCopy()
+			if ephemeralRunnerSet.Annotations == nil {
+				ephemeralRunnerSet.Annotations = make(map[string]string)
+			}
+			ephemeralRunnerSet.Annotations[AnnotationKeyIntegrityHash] = ephemeralRunnerIntegrityHash
+			if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
+				log.Error(err, "Failed to update ephemeral runner set with new spec hash")
+				return ctrl.Result{}, err
+			}
+			r.setSpecHashCache(req.NamespacedName, ephemeralRunnerSet.UID, ephemeralRunnerSet.Generation, ephemeralRunnerIntegrityHash)
+
+			log.Info("Updated ephemeral runner set with new spec hash")
+			return ctrl.Result{}, nil
 		}
 
-		if _, _, err := r.reconcileEphemeralRunnerSetProxySecret(ctx, &ephemeralRunnerSet, log); err != nil {
-			log.Error(err, "Failed to update EphemeralRunnerSet proxy secret")
-			return ctrl.Result{}, err
-		}
-
-		log.Info("Updating EphemeralRunnerSet with new spec hash")
-		original := ephemeralRunnerSet.DeepCopy()
-		if ephemeralRunnerSet.Annotations == nil {
-			ephemeralRunnerSet.Annotations = make(map[string]string)
-		}
-		ephemeralRunnerSet.Annotations[AnnotationKeyIntegrityHash] = ephemeralRunnerIntegrityHash
-		if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
-			log.Error(err, "Failed to update ephemeral runner set with new spec hash")
-			return ctrl.Result{}, err
-		}
-
-		log.Info("Updated ephemeral runner set with new spec hash")
-		return ctrl.Result{}, nil
+		r.setSpecHashCache(req.NamespacedName, ephemeralRunnerSet.UID, ephemeralRunnerSet.Generation, ephemeralRunnerIntegrityHash)
 	}
 
 	if ephemeralRunnerSet.Status.Phase == v1alpha1.EphemeralRunnerSetPhaseOutdated {
@@ -268,6 +289,28 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	return ctrl.Result{}, r.updateStatus(ctx, &ephemeralRunnerSet, ephemeralRunnersByState, log)
+}
+
+func (r *EphemeralRunnerSetReconciler) setSpecHashCache(namespacedName types.NamespacedName, uid types.UID, generation int64, hash string) {
+	r.specHashCache.Store(namespacedName, specHashCacheEntry{uid: uid, generation: generation, hash: hash})
+}
+
+func (r *EphemeralRunnerSetReconciler) hasSpecHashCache(namespacedName types.NamespacedName, uid types.UID, generation int64, hash string) bool {
+	entry, ok := r.specHashCache.Load(namespacedName)
+	if !ok {
+		return false
+	}
+
+	specHashEntry, ok := entry.(specHashCacheEntry)
+	if !ok {
+		return false
+	}
+
+	return specHashEntry.uid == uid && specHashEntry.generation == generation && specHashEntry.hash == hash
+}
+
+func (r *EphemeralRunnerSetReconciler) clearSpecHashCache(namespacedName types.NamespacedName) {
+	r.specHashCache.Delete(namespacedName)
 }
 
 func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, state *ephemeralRunnersByState, log logr.Logger) error {

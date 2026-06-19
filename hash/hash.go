@@ -5,9 +5,9 @@
 package hash
 
 import (
-	"fmt"
 	"hash"
 	"hash/fnv"
+	"strconv"
 
 	"github.com/davecgh/go-spew/spew"
 	"k8s.io/apimachinery/pkg/util/rand"
@@ -47,5 +47,5 @@ func ComputeTemplateHash(template interface{}) string {
 	}
 	printer.Fprintf(hasher, "%#v", template)
 
-	return rand.SafeEncodeString(fmt.Sprint(hasher.Sum32()))
+	return rand.SafeEncodeString(strconv.FormatUint(uint64(hasher.Sum32()), 10))
 }

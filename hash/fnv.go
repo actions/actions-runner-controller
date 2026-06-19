@@ -1,8 +1,8 @@
 package hash
 
 import (
-	"fmt"
 	"hash/fnv"
+	"strconv"
 
 	"k8s.io/apimachinery/pkg/util/rand"
 )
@@ -14,11 +14,11 @@ func FNVHashStringObjects(objs ...interface{}) string {
 		DeepHashObject(hash, obj)
 	}
 
-	return rand.SafeEncodeString(fmt.Sprint(hash.Sum32()))
+	return rand.SafeEncodeString(strconv.FormatUint(uint64(hash.Sum32()), 10))
 }
 
 func FNVHashString(name string) string {
 	hash := fnv.New32a()
 	hash.Write([]byte(name))
-	return rand.SafeEncodeString(fmt.Sprint(hash.Sum32()))
+	return rand.SafeEncodeString(strconv.FormatUint(uint64(hash.Sum32()), 10))
 }
