@@ -19,6 +19,7 @@ import (
 	prometheusdto "github.com/prometheus/client_model/go"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -1282,15 +1283,28 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					if err != nil {
 						return v1alpha1.EphemeralRunnerSetStatus{}, err
 					}
-					return updated.Status, nil
+					status := updated.Status
+					status.Conditions = nil
+					status.ObservedGeneration = 0
+					return status, nil
 				},
 				ephemeralRunnerSetTestTimeout,
 				ephemeralRunnerSetTestInterval,
 			).Should(BeEquivalentTo(desiredStatus), "Status is not eventually updated to the desired one")
 
 			updated = new(v1alpha1.EphemeralRunnerSet)
-			err = k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunnerSet.Name, Namespace: ephemeralRunnerSet.Namespace}, updated)
-			Expect(err).NotTo(HaveOccurred(), "Failed to fetch ephemeral runner set")
+			Eventually(
+				func(g Gomega) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunnerSet.Name, Namespace: ephemeralRunnerSet.Namespace}, updated)
+					g.Expect(err).NotTo(HaveOccurred(), "Failed to fetch ephemeral runner set")
+					g.Expect(updated.Status.ObservedGeneration).To(BeEquivalentTo(updated.Generation), "ObservedGeneration should match the generation")
+					readyCondition := meta.FindStatusCondition(updated.Status.Conditions, v1alpha1.ConditionTypeReady)
+					g.Expect(readyCondition).NotTo(BeNil(), "Ready condition should be set")
+					g.Expect(readyCondition.Status).To(BeEquivalentTo(metav1.ConditionTrue), "Ready condition should be true")
+				},
+				ephemeralRunnerSetTestTimeout,
+				ephemeralRunnerSetTestInterval,
+			).Should(Succeed(), "ObservedGeneration and Ready condition should be updated")
 
 			updatedOriginal := updated.DeepCopy()
 			updated.Spec.Replicas = 0
@@ -1322,7 +1336,10 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					if err != nil {
 						return v1alpha1.EphemeralRunnerSetStatus{}, err
 					}
-					return updated.Status, nil
+					status := updated.Status
+					status.Conditions = nil
+					status.ObservedGeneration = 0
+					return status, nil
 				},
 				ephemeralRunnerSetTestTimeout,
 				ephemeralRunnerSetTestInterval,
@@ -1341,7 +1358,10 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					if err != nil {
 						return v1alpha1.EphemeralRunnerSetStatus{}, err
 					}
-					return updated.Status, nil
+					status := updated.Status
+					status.Conditions = nil
+					status.ObservedGeneration = 0
+					return status, nil
 				},
 				ephemeralRunnerSetTestTimeout,
 				ephemeralRunnerSetTestInterval,

@@ -24,7 +24,9 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -533,11 +535,14 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			"message", listenerPod.Status.Message,
 		)
 
+		if err := r.updateStatus(ctx, &autoscalingListener, metav1.ConditionFalse, "PodEvicted", "Listener pod was evicted", log); err != nil {
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{}, r.deleteListenerPod(ctx, &autoscalingListener, &listenerPod, log)
 
 	case cs == nil:
 		log.Info("Listener pod is not ready", "namespace", listenerPod.Namespace, "name", listenerPod.Name)
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, r.updateStatus(ctx, &autoscalingListener, metav1.ConditionFalse, "PodNotReady", "Listener pod is not ready", log)
 	case cs.State.Terminated != nil:
 		log.Info(
 			"Listener pod is terminated",
@@ -547,6 +552,9 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			"message", cs.State.Terminated.Message,
 		)
 
+		if err := r.updateStatus(ctx, &autoscalingListener, metav1.ConditionFalse, "PodTerminated", "Listener pod is terminated", log); err != nil {
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{}, r.deleteListenerPod(ctx, &autoscalingListener, &listenerPod, log)
 
 	case cs.State.Running != nil:
@@ -557,10 +565,34 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			// notify the reconciler again.
 			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, r.updateStatus(ctx, &autoscalingListener, metav1.ConditionTrue, "PodRunning", "Listener pod is running", log)
 
+	default: // waiting or any other non-running state
+		log.Info("Listener pod is not running", "namespace", listenerPod.Namespace, "name", listenerPod.Name)
+		return ctrl.Result{}, r.updateStatus(ctx, &autoscalingListener, metav1.ConditionFalse, "PodNotReady", "Listener pod is not ready", log)
 	}
-	return ctrl.Result{}, nil
+}
+
+func (r *AutoscalingListenerReconciler) updateStatus(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, status metav1.ConditionStatus, reason, message string, log logr.Logger) error {
+	original := autoscalingListener.DeepCopy()
+	autoscalingListener.Status.ObservedGeneration = autoscalingListener.Generation
+	setReadyCondition(&autoscalingListener.Status.Conditions, autoscalingListener.Generation, status, reason, message)
+
+	if apiequality.Semantic.DeepEqual(original.Status, autoscalingListener.Status) {
+		return nil
+	}
+
+	if err := r.Status().Patch(ctx, autoscalingListener, client.MergeFrom(original)); err != nil {
+		// The listener is deleted and re-created on spec changes; losing a status
+		// update for a listener that no longer exists is fine.
+		if kerrors.IsNotFound(err) {
+			return nil
+		}
+		log.Error(err, "Failed to patch autoscaling listener status")
+		return err
+	}
+
+	return nil
 }
 
 func (r *AutoscalingListenerReconciler) deleteListenerPod(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, listenerPod *corev1.Pod, log logr.Logger) error {

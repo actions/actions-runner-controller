@@ -31,7 +31,9 @@ import (
 	"github.com/google/go-cmp/cmp"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -154,9 +156,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			return ctrl.Result{}, err
 		}
 
-		original = autoscalingRunnerSet.DeepCopy()
-		autoscalingRunnerSet.Status.Phase = v1alpha1.AutoscalingRunnerSetPhasePending
-		if err := r.Status().Patch(ctx, &autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
+		if err := r.updateStatus(ctx, &autoscalingRunnerSet, v1alpha1.AutoscalingRunnerSetPhasePending, log); err != nil {
 			log.Error(err, "Failed to update autoscaling runner set status with pending phase")
 			return ctrl.Result{}, err
 		}
@@ -420,13 +420,31 @@ func (r *AutoscalingRunnerSetReconciler) cleanUpResources(ctx context.Context, a
 
 // Update the status of autoscaling runner set if necessary
 func (r *AutoscalingRunnerSetReconciler) updateStatus(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, phase v1alpha1.AutoscalingRunnerSetPhase, log logr.Logger) error {
-	phaseDiff := phase != autoscalingRunnerSet.Status.Phase
-	if !phaseDiff {
+	original := autoscalingRunnerSet.DeepCopy()
+
+	autoscalingRunnerSet.Status.Phase = phase
+	autoscalingRunnerSet.Status.ObservedGeneration = autoscalingRunnerSet.Generation
+
+	readyStatus := metav1.ConditionFalse
+	message := "AutoscalingRunnerSet is not ready"
+	switch phase {
+	case v1alpha1.AutoscalingRunnerSetPhaseRunning:
+		readyStatus = metav1.ConditionTrue
+		message = "Runner scale set, ephemeral runner set and listener are up to date"
+	case v1alpha1.AutoscalingRunnerSetPhasePending:
+		message = "AutoscalingRunnerSet spec changed; waiting for the runner scale set and listener to be updated"
+	}
+	setReadyCondition(
+		&autoscalingRunnerSet.Status.Conditions,
+		autoscalingRunnerSet.Generation,
+		readyStatus,
+		string(phase),
+		message,
+	)
+
+	if apiequality.Semantic.DeepEqual(original.Status, autoscalingRunnerSet.Status) {
 		return nil
 	}
-
-	original := autoscalingRunnerSet.DeepCopy()
-	autoscalingRunnerSet.Status.Phase = phase
 
 	if err := r.Status().Patch(ctx, autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
 		log.Error(err, "Failed to patch autoscaling runner set status")

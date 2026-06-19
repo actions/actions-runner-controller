@@ -139,6 +139,18 @@ func (s *EphemeralRunnerSpec) Hash() string {
 
 // EphemeralRunnerStatus defines the observed state of EphemeralRunner
 type EphemeralRunnerStatus struct {
+	// ObservedGeneration is the most recent generation observed by the controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Conditions describe the current state of the EphemeralRunner.
+	// The Ready condition is True when the runner is online and ready to
+	// execute a job.
+	// +optional
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
 	// Turns true only if the runner is online.
 	// +optional
 	Ready bool `json:"ready"`
