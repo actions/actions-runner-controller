@@ -42,11 +42,11 @@ type AutoscalingListenerSpec struct {
 	// +optional
 	EphemeralRunnerSetName string `json:"ephemeralRunnerSetName,omitempty"`
 
-	// +kubebuilder:validation:Minimum:=0
+	// +kubebuilder:validation:Minimum=0
 	// +optional
 	MaxRunners int `json:"maxRunners,omitempty"`
 
-	// +kubebuilder:validation:Minimum:=0
+	// +kubebuilder:validation:Minimum=0
 	// +optional
 	MinRunners int `json:"minRunners,omitempty"`
 
