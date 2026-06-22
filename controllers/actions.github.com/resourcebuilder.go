@@ -8,8 +8,6 @@ import (
 	"maps"
 	"math"
 	"net"
-	"reflect"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -28,7 +26,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -100,148 +97,6 @@ type ResourceBuilder struct {
 	SecretResolver
 	Scheme        *runtime.Scheme
 	ResourceCache ResourceCache
-}
-
-type ResourceCacheObjectRef struct {
-	ObjectType      string
-	Namespace       string
-	Name            string
-	UID             types.UID
-	ResourceVersion string
-}
-
-type ResourceCacheKey struct {
-	MainUID    types.UID
-	ObjectType string
-	Namespace  string
-	Name       string
-}
-
-type ResourceCacheValue struct {
-	MainObject      ResourceCacheObjectRef
-	ResourceVersion string
-	Dependencies    []ResourceCacheObjectRef
-	Object          client.Object
-}
-
-type ResourceCache map[ResourceCacheKey]ResourceCacheValue
-
-func (b *ResourceBuilder) cacheDesiredResource(mainObject client.Object, desiredObject client.Object, dependencies ...client.Object) (ResourceCacheValue, bool) {
-	return b.ResourceCache.Upsert(mainObject, desiredObject, dependencies...)
-}
-
-func (b *ResourceBuilder) cachedDesiredResource(mainObject client.Object, desiredObject client.Object, dependencies ...client.Object) (client.Object, bool) {
-	return b.ResourceCache.Get(mainObject, desiredObject, dependencies...)
-}
-
-func (c ResourceCache) Get(mainObject client.Object, desiredObject client.Object, dependencies ...client.Object) (client.Object, bool) {
-	value, ok := c[newResourceCacheKey(mainObject, desiredObject)]
-	if !ok || !value.Matches(mainObject, dependencies...) {
-		return nil, false
-	}
-
-	return value.Object.DeepCopyObject().(client.Object), true
-}
-
-func (c *ResourceCache) Upsert(mainObject client.Object, desiredObject client.Object, dependencies ...client.Object) (ResourceCacheValue, bool) {
-	if *c == nil {
-		*c = make(ResourceCache)
-	}
-
-	key := newResourceCacheKey(mainObject, desiredObject)
-	value := newResourceCacheValue(desiredObject, dependencies...)
-	value.MainObject = newResourceCacheObjectRef(mainObject)
-
-	previous, ok := (*c)[key]
-	if ok && previous.MainObject == value.MainObject && previous.ResourceVersion == value.ResourceVersion && slices.Equal(previous.Dependencies, value.Dependencies) {
-		return previous, false
-	}
-
-	(*c)[key] = value
-	return value, true
-}
-
-func (c ResourceCache) DeleteByMainUID(uid types.UID) int {
-	var deleted int
-	for key := range c {
-		if key.MainUID == uid {
-			delete(c, key)
-			deleted++
-		}
-	}
-	return deleted
-}
-
-func (v ResourceCacheValue) Matches(mainObject client.Object, dependencies ...client.Object) bool {
-	if v.MainObject != newResourceCacheObjectRef(mainObject) {
-		return false
-	}
-
-	refs := newResourceCacheObjectRefs(dependencies...)
-	return slices.Equal(v.Dependencies, refs)
-}
-
-func newResourceCacheKey(mainObject client.Object, desiredObject client.Object) ResourceCacheKey {
-	return ResourceCacheKey{
-		MainUID:    mainObject.GetUID(),
-		ObjectType: resourceCacheObjectType(desiredObject),
-		Namespace:  desiredObject.GetNamespace(),
-		Name:       resourceCacheObjectName(desiredObject),
-	}
-}
-
-func newResourceCacheValue(object client.Object, dependencies ...client.Object) ResourceCacheValue {
-	return ResourceCacheValue{
-		MainObject:      ResourceCacheObjectRef{},
-		ResourceVersion: object.GetResourceVersion(),
-		Dependencies:    newResourceCacheObjectRefs(dependencies...),
-		Object:          object.DeepCopyObject().(client.Object),
-	}
-}
-
-func newResourceCacheObjectRefs(objects ...client.Object) []ResourceCacheObjectRef {
-	refs := make([]ResourceCacheObjectRef, 0, len(objects))
-	for _, object := range objects {
-		refs = append(refs, newResourceCacheObjectRef(object))
-	}
-	slices.SortFunc(refs, func(a, b ResourceCacheObjectRef) int {
-		return strings.Compare(a.cacheSortKey(), b.cacheSortKey())
-	})
-	return refs
-}
-
-func newResourceCacheObjectRef(object client.Object) ResourceCacheObjectRef {
-	resourceVersion := object.GetResourceVersion()
-	if resourceVersion == "" {
-		resourceVersion = hash.ComputeTemplateHashJSON(object)
-	}
-
-	return ResourceCacheObjectRef{
-		ObjectType:      resourceCacheObjectType(object),
-		Namespace:       object.GetNamespace(),
-		Name:            resourceCacheObjectName(object),
-		UID:             object.GetUID(),
-		ResourceVersion: resourceVersion,
-	}
-}
-
-func (r ResourceCacheObjectRef) cacheSortKey() string {
-	return r.ObjectType + "/" + r.Namespace + "/" + r.Name + "/" + string(r.UID)
-}
-
-func resourceCacheObjectType(object client.Object) string {
-	t := reflect.TypeOf(object)
-	if t.Kind() == reflect.Pointer {
-		t = t.Elem()
-	}
-	return t.PkgPath() + "." + t.Name()
-}
-
-func resourceCacheObjectName(object client.Object) string {
-	if object.GetName() != "" {
-		return object.GetName()
-	}
-	return object.GetGenerateName()
 }
 
 func (b *ResourceBuilder) setSchemeIfUnset(scheme *runtime.Scheme) {
