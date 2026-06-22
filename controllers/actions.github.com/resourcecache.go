@@ -22,10 +22,9 @@ type ResourceCacheObjectRef struct {
 }
 
 type ResourceCacheKey struct {
-	MainUID    types.UID
-	ObjectType string
-	Namespace  string
-	Name       string
+	MainUID   types.UID
+	Namespace string
+	Name      string
 }
 
 type ResourceCacheValue struct {
@@ -35,18 +34,49 @@ type ResourceCacheValue struct {
 	Object          client.Object
 }
 
-type ResourceCache map[ResourceCacheKey]ResourceCacheValue
+type resourceCacheShard uint8
 
-func (b *ResourceBuilder) cacheDesiredResource(mainObject client.Object, desiredObject client.Object, dependencies ...client.Object) (ResourceCacheValue, bool) {
-	return b.ResourceCache.Upsert(mainObject, desiredObject, dependencies...)
+const (
+	resourceCacheShardAutoscalingListener resourceCacheShard = iota
+	resourceCacheShardListenerConfigSecret
+	resourceCacheShardListenerPod
+	resourceCacheShardListenerServiceAccount
+	resourceCacheShardListenerRole
+	resourceCacheShardListenerRoleBinding
+	resourceCacheShardEphemeralRunnerSet
+	resourceCacheShardAutoscalingListenerProxySecret
+	resourceCacheShardEphemeralRunner
+	resourceCacheShardEphemeralRunnerPod
+	resourceCacheShardEphemeralRunnerJitSecret
+	resourceCacheShardEphemeralRunnerSetProxySecret
+	resourceCacheShardCount
+)
+
+type ResourceCache struct {
+	shards [resourceCacheShardCount]resourceCacheShardState
 }
 
-func (b *ResourceBuilder) cachedDesiredResource(mainObject client.Object, desiredObject client.Object, dependencies ...client.Object) (client.Object, bool) {
-	return b.ResourceCache.Get(mainObject, desiredObject, dependencies...)
+type resourceCacheShardState struct {
+	once    sync.Once
+	mu      sync.RWMutex
+	entries map[ResourceCacheKey]ResourceCacheValue
 }
 
-func (c ResourceCache) Get(mainObject client.Object, desiredObject client.Object, dependencies ...client.Object) (client.Object, bool) {
-	value, ok := c[newResourceCacheKey(mainObject, desiredObject)]
+func (b *ResourceBuilder) cacheDesiredResource(shard resourceCacheShard, mainObject client.Object, desiredObject client.Object, dependencies ...client.Object) (ResourceCacheValue, bool) {
+	return b.ResourceCache.Upsert(shard, mainObject, desiredObject, dependencies...)
+}
+
+func (b *ResourceBuilder) cachedDesiredResource(shard resourceCacheShard, mainObject client.Object, desiredObject client.Object, dependencies ...client.Object) (client.Object, bool) {
+	return b.ResourceCache.Get(shard, mainObject, desiredObject, dependencies...)
+}
+
+func (c *ResourceCache) Get(shard resourceCacheShard, mainObject client.Object, desiredObject client.Object, dependencies ...client.Object) (client.Object, bool) {
+	state := c.shard(shard)
+	key := newResourceCacheKey(mainObject, desiredObject)
+
+	state.mu.RLock()
+	value, ok := state.entries[key]
+	state.mu.RUnlock()
 	if !ok || !value.Matches(mainObject, dependencies...) {
 		return nil, false
 	}
@@ -54,35 +84,77 @@ func (c ResourceCache) Get(mainObject client.Object, desiredObject client.Object
 	return value.Object.DeepCopyObject().(client.Object), true
 }
 
-func (c *ResourceCache) Upsert(mainObject client.Object, desiredObject client.Object, dependencies ...client.Object) (ResourceCacheValue, bool) {
-	if *c == nil {
-		*c = make(ResourceCache)
-	}
-
+func (c *ResourceCache) Upsert(shard resourceCacheShard, mainObject client.Object, desiredObject client.Object, dependencies ...client.Object) (ResourceCacheValue, bool) {
+	state := c.shard(shard)
 	key := newResourceCacheKey(mainObject, desiredObject)
 	mainObjectRef := newResourceCacheObjectRef(mainObject)
 	resourceVersion := desiredObject.GetResourceVersion()
 
-	previous, ok := (*c)[key]
+	state.mu.RLock()
+	previous, ok := state.entries[key]
+	if ok && previous.MainObject == mainObjectRef && previous.ResourceVersion == resourceVersion && previous.dependenciesMatch(dependencies...) {
+		state.mu.RUnlock()
+		return previous, false
+	}
+	state.mu.RUnlock()
+
+	state.mu.Lock()
+	defer state.mu.Unlock()
+
+	previous, ok = state.entries[key]
 	if ok && previous.MainObject == mainObjectRef && previous.ResourceVersion == resourceVersion && previous.dependenciesMatch(dependencies...) {
 		return previous, false
 	}
 
 	dependencyRefs := newResourceCacheObjectRefs(dependencies...)
 	value := newResourceCacheValue(mainObjectRef, resourceVersion, dependencyRefs, desiredObject)
-	(*c)[key] = value
+	state.entries[key] = value
 	return value, true
 }
 
-func (c ResourceCache) DeleteByMainUID(uid types.UID) int {
+func (c *ResourceCache) DeleteByMainUID(uid types.UID) int {
 	var deleted int
-	for key := range c {
-		if key.MainUID == uid {
-			delete(c, key)
-			deleted++
+	for shard := range c.shards {
+		state := &c.shards[shard]
+		state.mu.Lock()
+		for key := range state.entries {
+			if key.MainUID == uid {
+				delete(state.entries, key)
+				deleted++
+			}
 		}
+		state.mu.Unlock()
 	}
 	return deleted
+}
+
+func (c *ResourceCache) Len() int {
+	var count int
+	for shard := range c.shards {
+		state := &c.shards[shard]
+		state.mu.RLock()
+		count += len(state.entries)
+		state.mu.RUnlock()
+	}
+	return count
+}
+
+func (c *ResourceCache) Value(shard resourceCacheShard, mainObject client.Object, desiredObject client.Object) (ResourceCacheValue, bool) {
+	state := c.shard(shard)
+	key := newResourceCacheKey(mainObject, desiredObject)
+
+	state.mu.RLock()
+	value, ok := state.entries[key]
+	state.mu.RUnlock()
+	return value, ok
+}
+
+func (c *ResourceCache) shard(shard resourceCacheShard) *resourceCacheShardState {
+	state := &c.shards[shard]
+	state.once.Do(func() {
+		state.entries = make(map[ResourceCacheKey]ResourceCacheValue)
+	})
+	return state
 }
 
 func (v ResourceCacheValue) Matches(mainObject client.Object, dependencies ...client.Object) bool {
@@ -95,10 +167,9 @@ func (v ResourceCacheValue) Matches(mainObject client.Object, dependencies ...cl
 
 func newResourceCacheKey(mainObject client.Object, desiredObject client.Object) ResourceCacheKey {
 	return ResourceCacheKey{
-		MainUID:    mainObject.GetUID(),
-		ObjectType: resourceCacheObjectType(desiredObject),
-		Namespace:  desiredObject.GetNamespace(),
-		Name:       resourceCacheObjectName(desiredObject),
+		MainUID:   mainObject.GetUID(),
+		Namespace: desiredObject.GetNamespace(),
+		Name:      resourceCacheObjectName(desiredObject),
 	}
 }
 
