@@ -55,11 +55,11 @@ jobs:
       TARGET_REPO: actions-runner-controller
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Get Token
         id: get_workflow_token
-        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
+        uses: peter-murray/workflow-application-token-action@cb731e00cb6754f584507134ff389dfb3dc42bbc
         with:
           application_id: ${{ secrets.ACTIONS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.ACTIONS_ACCESS_PK }}
@@ -90,7 +90,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee

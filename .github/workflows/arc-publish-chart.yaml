@@ -40,7 +40,7 @@ jobs:
       publish-chart: ${{ steps.publish-chart-step.outputs.publish }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -134,7 +134,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -145,7 +145,7 @@ jobs:
 
       - name: Get Token
         id: get_workflow_token
-        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
+        uses: peter-murray/workflow-application-token-action@cb731e00cb6754f584507134ff389dfb3dc42bbc
         with:
           application_id: ${{ secrets.ACTIONS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.ACTIONS_ACCESS_PK }}
@@ -184,7 +184,7 @@ jobs:
       # this workaround is intended to move the index.yaml to the target repo
       # where the github pages are hosted
       - name: Checkout target repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.CHART_TARGET_ORG }}/${{ env.CHART_TARGET_REPO }}
           path: ${{ env.CHART_TARGET_REPO }}
