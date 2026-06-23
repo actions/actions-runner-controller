@@ -110,7 +110,7 @@ var _ = Describe("EphemeralRunner", func() {
 				Client: mgr.GetClient(),
 				Scheme: mgr.GetScheme(),
 				Log:    logf.Log,
-				ResourceBuilder: ResourceBuilder{
+				ResourceBuilder: &ResourceBuilder{
 					SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient(
 						scalefake.WithClient(
 							scalefake.NewClient(
@@ -1233,7 +1233,7 @@ var _ = Describe("EphemeralRunner", func() {
 				Client: mgr.GetClient(),
 				Scheme: mgr.GetScheme(),
 				Log:    logf.Log,
-				ResourceBuilder: ResourceBuilder{
+				ResourceBuilder: &ResourceBuilder{
 					SecretResolver: secretresolver.New(
 						mgr.GetClient(),
 						scalefake.NewMultiClient(
@@ -1320,7 +1320,7 @@ var _ = Describe("EphemeralRunner", func() {
 				Client: mgr.GetClient(),
 				Scheme: mgr.GetScheme(),
 				Log:    logf.Log,
-				ResourceBuilder: ResourceBuilder{
+				ResourceBuilder: &ResourceBuilder{
 					SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient(
 						scalefake.WithClient(
 							scalefake.NewClient(
@@ -1344,7 +1344,7 @@ var _ = Describe("EphemeralRunner", func() {
 
 		It("uses an actions client with proxy transport", func() {
 			// Use an actual client
-			controller.ResourceBuilder = ResourceBuilder{
+			controller.ResourceBuilder = &ResourceBuilder{
 				SecretResolver: secretresolver.New(
 					mgr.GetClient(),
 					multiclient.NewScaleset(),
@@ -1503,7 +1503,7 @@ var _ = Describe("EphemeralRunner", func() {
 				Client: mgr.GetClient(),
 				Scheme: mgr.GetScheme(),
 				Log:    logf.Log,
-				ResourceBuilder: ResourceBuilder{
+				ResourceBuilder: &ResourceBuilder{
 					SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient()),
 				},
 			}
@@ -1537,7 +1537,7 @@ var _ = Describe("EphemeralRunner", func() {
 			defer server.Close()
 
 			// Use an actual client
-			controller.ResourceBuilder = ResourceBuilder{
+			controller.ResourceBuilder = &ResourceBuilder{
 				SecretResolver: secretresolver.New(
 					mgr.GetClient(),
 					multiclient.NewScaleset(),

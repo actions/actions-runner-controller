@@ -55,7 +55,7 @@ type EphemeralRunnerSetReconciler struct {
 	Log            logr.Logger
 	Scheme         *runtime.Scheme
 	PublishMetrics bool
-	ResourceBuilder
+	*ResourceBuilder
 	specHashCache sync.Map
 }
 
@@ -561,7 +561,7 @@ func (r *EphemeralRunnerSetReconciler) reconcileEphemeralRunnerSetProxySecret(ct
 			return nil, false, fmt.Errorf("failed to convert proxy config to secret data: %w", err)
 		}
 
-		desiredProxyHash := ephemeralRunnerSetProxySecretZIdentityHash(&corev1.Secret{Data: proxySecretData})
+		desiredProxyHash := ephemeralRunnerSetProxySecretIdentityHash(&corev1.Secret{Data: proxySecretData})
 		expectedScaleSetName := ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName]
 		expectedScaleSetNamespace := ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace]
 		var updatedProxySecret *corev1.Secret

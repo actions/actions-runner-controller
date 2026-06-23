@@ -55,7 +55,7 @@ type AutoscalingRunnerSetReconciler struct {
 	ControllerNamespace                           string
 	DefaultRunnerScaleSetListenerImage            string
 	DefaultRunnerScaleSetListenerImagePullSecrets []string
-	ResourceBuilder
+	*ResourceBuilder
 }
 
 // +kubebuilder:rbac:groups=actions.github.com,resources=autoscalingrunnersets,verbs=get;list;watch;create;update;patch;delete

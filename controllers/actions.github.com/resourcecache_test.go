@@ -58,7 +58,7 @@ func TestResourceCacheUpsertReplacesByDependencyResourceVersion(t *testing.T) {
 		},
 	}
 
-	var cache ResourceCache
+	cache := NewResourceCache()
 	value, replaced := cache.Upsert(resourceCacheShardListenerPod, mainObject, desiredPod, configSecret, serviceAccount, role)
 	assert.True(t, replaced)
 	assert.Equal(t, 1, cache.Len())
@@ -93,7 +93,7 @@ func TestResourceCacheDeleteByMainUID(t *testing.T) {
 	podA := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "listener-a", Namespace: "ns"}}
 	podB := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "listener-b", Namespace: "ns"}}
 
-	var cache ResourceCache
+	cache := NewResourceCache()
 	cache.Upsert(resourceCacheShardListenerPod, listenerA, podA)
 	cache.Upsert(resourceCacheShardListenerConfigSecret, listenerA, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "listener-a-config", Namespace: "ns"}})
 	cache.Upsert(resourceCacheShardListenerPod, listenerB, podB)
@@ -108,7 +108,7 @@ func TestResourceCacheSeparatesShards(t *testing.T) {
 	listenerSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "listener", Namespace: "ns", ResourceVersion: "1"}}
 	proxySecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "listener", Namespace: "ns", ResourceVersion: "2"}}
 
-	var cache ResourceCache
+	cache := NewResourceCache()
 	cache.Upsert(resourceCacheShardListenerConfigSecret, mainObject, listenerSecret)
 	cache.Upsert(resourceCacheShardAutoscalingListenerProxySecret, mainObject, proxySecret)
 
@@ -183,7 +183,8 @@ func TestResourceBuilderCachesListenerPodDependencies(t *testing.T) {
 		},
 	}
 
-	b := ResourceBuilder{}
+	cache := NewResourceCache()
+	b := ResourceBuilder{ResourceCache: &cache}
 	listenerPod, err := b.newScaleSetListenerPod(listener, podConfig, serviceAccount, role, roleBinding, nil)
 	require.NoError(t, err)
 

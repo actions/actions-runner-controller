@@ -53,20 +53,39 @@ const (
 )
 
 type ResourceCache struct {
-	shards [resourceCacheShardCount]resourceCacheShardState
+	shards [resourceCacheShardCount]*resourceCacheShardState
+}
+
+func NewResourceCache() ResourceCache {
+	cache := ResourceCache{}
+	for shard := range cache.shards {
+		cache.shards[shard] = newResourceCacheShardState()
+	}
+	return cache
 }
 
 type resourceCacheShardState struct {
-	once    sync.Once
 	mu      sync.RWMutex
 	entries map[ResourceCacheKey]ResourceCacheValue
 }
 
+func newResourceCacheShardState() *resourceCacheShardState {
+	return &resourceCacheShardState{
+		entries: make(map[ResourceCacheKey]ResourceCacheValue, 512),
+	}
+}
+
 func (b *ResourceBuilder) cacheDesiredResource(shard resourceCacheShard, mainObject client.Object, desiredObject client.Object, dependencies ...client.Object) (ResourceCacheValue, bool) {
+	if b.ResourceCache == nil {
+		return ResourceCacheValue{}, true
+	}
 	return b.ResourceCache.Upsert(shard, mainObject, desiredObject, dependencies...)
 }
 
 func (b *ResourceBuilder) cachedDesiredResource(shard resourceCacheShard, mainObject client.Object, desiredObject client.Object, dependencies ...client.Object) (client.Object, bool) {
+	if b.ResourceCache == nil {
+		return nil, false
+	}
 	return b.ResourceCache.Get(shard, mainObject, desiredObject, dependencies...)
 }
 
@@ -115,7 +134,7 @@ func (c *ResourceCache) Upsert(shard resourceCacheShard, mainObject client.Objec
 func (c *ResourceCache) DeleteByMainUID(uid types.UID) int {
 	var deleted int
 	for shard := range c.shards {
-		state := &c.shards[shard]
+		state := c.shards[shard]
 		state.mu.Lock()
 		for key := range state.entries {
 			if key.MainUID == uid {
@@ -131,7 +150,7 @@ func (c *ResourceCache) DeleteByMainUID(uid types.UID) int {
 func (c *ResourceCache) Len() int {
 	var count int
 	for shard := range c.shards {
-		state := &c.shards[shard]
+		state := c.shards[shard]
 		state.mu.RLock()
 		count += len(state.entries)
 		state.mu.RUnlock()
@@ -150,11 +169,7 @@ func (c *ResourceCache) Value(shard resourceCacheShard, mainObject client.Object
 }
 
 func (c *ResourceCache) shard(shard resourceCacheShard) *resourceCacheShardState {
-	state := &c.shards[shard]
-	state.once.Do(func() {
-		state.entries = make(map[ResourceCacheKey]ResourceCacheValue)
-	})
-	return state
+	return c.shards[shard]
 }
 
 func (v ResourceCacheValue) Matches(mainObject client.Object, dependencies ...client.Object) bool {

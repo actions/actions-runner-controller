@@ -223,11 +223,11 @@ func TestEphemeralRunnerSetProxySecretZIdentityHash(t *testing.T) {
 
 	actualHash := proxySecret.Annotations[AnnotationKeyIntegrityHash]
 	assert.NotEmpty(t, actualHash)
-	assert.Equal(t, ephemeralRunnerSetProxySecretZIdentityHash(proxySecret), actualHash)
+	assert.Equal(t, ephemeralRunnerSetProxySecretIdentityHash(proxySecret), actualHash)
 
 	changedProxySecret := proxySecret.DeepCopy()
 	changedProxySecret.Data["http_proxy"] = []byte("http://updated-proxy.example.com")
-	assert.NotEqual(t, actualHash, ephemeralRunnerSetProxySecretZIdentityHash(changedProxySecret))
+	assert.NotEqual(t, actualHash, ephemeralRunnerSetProxySecretIdentityHash(changedProxySecret))
 }
 
 func TestGitHubURLTrimLabelValues(t *testing.T) {

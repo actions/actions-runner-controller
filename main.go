@@ -40,6 +40,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/client-go/util/workqueue"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -299,10 +300,11 @@ func main() {
 			secretresolver.WithLogger(slogLogger),
 		)
 
-		rb := actionsgithubcom.ResourceBuilder{
+		rb := &actionsgithubcom.ResourceBuilder{
 			ExcludeLabelPropagationPrefixes: excludeLabelPropagationPrefixes,
 			SecretResolver:                  secretResolver,
 			Scheme:                          mgr.GetScheme(),
+			ResourceCache:                   ptr.To(actionsgithubcom.NewResourceCache()),
 		}
 
 		log.Info("Resource builder initializing")

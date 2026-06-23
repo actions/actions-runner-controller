@@ -72,7 +72,7 @@ func BenchmarkActionsGithub_Reconcile_AutoscalingRunnerSet_AddFinalizer(b *testi
 		Scheme:              scheme,
 		Log:                 logr.Discard(),
 		ControllerNamespace: "test-ns",
-		ResourceBuilder: ResourceBuilder{
+		ResourceBuilder: &ResourceBuilder{
 			SecretResolver: secretresolver.New(fakeClient, NewFakeMultiClient()),
 		},
 	}
@@ -142,7 +142,7 @@ func BenchmarkActionsGithub_Reconcile_AutoscalingRunnerSet_RemoveFinalizer(b *te
 		Scheme:              scheme,
 		Log:                 logr.Discard(),
 		ControllerNamespace: "test-ns",
-		ResourceBuilder: ResourceBuilder{
+		ResourceBuilder: &ResourceBuilder{
 			SecretResolver: secretresolver.New(fakeClient, NewFakeMultiClient()),
 		},
 	}
@@ -231,7 +231,7 @@ func BenchmarkActionsGithub_Reconcile_AutoscalingRunnerSet_CreateScaleSet(b *tes
 		Scheme:              scheme,
 		Log:                 logr.Discard(),
 		ControllerNamespace: "test-ns",
-		ResourceBuilder: ResourceBuilder{
+		ResourceBuilder: &ResourceBuilder{
 			SecretResolver: secretresolver.New(fakeClient, fakeScaleClient),
 		},
 	}
@@ -306,7 +306,7 @@ func BenchmarkActionsGithub_Reconcile_AutoscalingRunnerSet_OutdatedCleanup(b *te
 		Scheme:              scheme,
 		Log:                 logr.Discard(),
 		ControllerNamespace: "test-ns",
-		ResourceBuilder: ResourceBuilder{
+		ResourceBuilder: &ResourceBuilder{
 			SecretResolver: secretresolver.New(fakeClient, NewFakeMultiClient()),
 		},
 	}
@@ -385,7 +385,7 @@ func BenchmarkActionsGithub_Reconcile_AutoscalingRunnerSet_CreateEphemeralRunner
 		Scheme:              scheme,
 		Log:                 logr.Discard(),
 		ControllerNamespace: "test-ns",
-		ResourceBuilder: ResourceBuilder{
+		ResourceBuilder: &ResourceBuilder{
 			SecretResolver: secretresolver.New(fakeClient, NewFakeMultiClient()),
 		},
 	}
@@ -482,7 +482,7 @@ func BenchmarkActionsGithub_Reconcile_AutoscalingRunnerSet_CreateListener(b *tes
 		Log:                                logr.Discard(),
 		ControllerNamespace:                "test-ns",
 		DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc:latest",
-		ResourceBuilder: ResourceBuilder{
+		ResourceBuilder: &ResourceBuilder{
 			SecretResolver: secretresolver.New(fakeClient, NewFakeMultiClient()),
 		},
 	}

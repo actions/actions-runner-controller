@@ -49,7 +49,7 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 			scalefake.NewMultiClient(),
 		)
 
-		rb := ResourceBuilder{
+		rb := &ResourceBuilder{
 			SecretResolver: secretResolver,
 		}
 
@@ -592,7 +592,7 @@ var _ = Describe("Test AutoScalingListener customization", func() {
 
 		secretResolver := secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient())
 
-		rb := ResourceBuilder{
+		rb := &ResourceBuilder{
 			SecretResolver: secretResolver,
 		}
 
@@ -921,7 +921,7 @@ var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
 		secretResolver := secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient())
 
-		rb := ResourceBuilder{
+		rb := &ResourceBuilder{
 			SecretResolver: secretResolver,
 		}
 
@@ -1126,7 +1126,7 @@ var _ = Describe("Test AutoScalingListener controller with template modification
 
 		secretResolver := secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient())
 
-		rb := ResourceBuilder{
+		rb := &ResourceBuilder{
 			SecretResolver: secretResolver,
 		}
 
@@ -1231,7 +1231,7 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 
 		secretResolver := secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient())
 
-		rb := ResourceBuilder{
+		rb := &ResourceBuilder{
 			SecretResolver: secretResolver,
 		}
 

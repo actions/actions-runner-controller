@@ -110,7 +110,7 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunner_NoOp(b *testing.B) {
 		Client: k8sClient,
 		Scheme: scheme,
 		Log:    logr.Discard(),
-		ResourceBuilder: ResourceBuilder{
+		ResourceBuilder: &ResourceBuilder{
 			SecretResolver: secretresolver.New(k8sClient, multiClient),
 		},
 	}
@@ -187,7 +187,7 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunner_FinalizerAdd(b *testing.B)
 			Client: k8sClient,
 			Scheme: scheme,
 			Log:    logr.Discard(),
-			ResourceBuilder: ResourceBuilder{
+			ResourceBuilder: &ResourceBuilder{
 				SecretResolver: secretresolver.New(k8sClient, multiClient),
 			},
 		}
@@ -230,7 +230,7 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunner_FinalizerAdd(b *testing.B)
 			Client: k8sClient,
 			Scheme: scheme,
 			Log:    logr.Discard(),
-			ResourceBuilder: ResourceBuilder{
+			ResourceBuilder: &ResourceBuilder{
 				SecretResolver: secretresolver.New(k8sClient, multiClient),
 			},
 		}
@@ -291,7 +291,7 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunner_Deletion(b *testing.B) {
 			Client: k8sClient,
 			Scheme: scheme,
 			Log:    logr.Discard(),
-			ResourceBuilder: ResourceBuilder{
+			ResourceBuilder: &ResourceBuilder{
 				SecretResolver: secretresolver.New(k8sClient, multiClient),
 			},
 		}
@@ -337,7 +337,7 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunner_Deletion(b *testing.B) {
 			Client: k8sClient,
 			Scheme: scheme,
 			Log:    logr.Discard(),
-			ResourceBuilder: ResourceBuilder{
+			ResourceBuilder: &ResourceBuilder{
 				SecretResolver: secretresolver.New(k8sClient, multiClient),
 			},
 		}
@@ -409,7 +409,7 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunner_DeletionWithActionsCleanup
 			Client: k8sClient,
 			Scheme: scheme,
 			Log:    logr.Discard(),
-			ResourceBuilder: ResourceBuilder{
+			ResourceBuilder: &ResourceBuilder{
 				SecretResolver: secretresolver.New(k8sClient, multiClient),
 			},
 		}
@@ -460,7 +460,7 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunner_DeletionWithActionsCleanup
 			Client: k8sClient,
 			Scheme: scheme,
 			Log:    logr.Discard(),
-			ResourceBuilder: ResourceBuilder{
+			ResourceBuilder: &ResourceBuilder{
 				SecretResolver: secretresolver.New(k8sClient, multiClient),
 			},
 		}
@@ -533,7 +533,7 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunner_RetryableError(b *testing.
 			Client: k8sClient,
 			Scheme: scheme,
 			Log:    logr.Discard(),
-			ResourceBuilder: ResourceBuilder{
+			ResourceBuilder: &ResourceBuilder{
 				SecretResolver: secretresolver.New(k8sClient, multiClient),
 			},
 		}
@@ -584,7 +584,7 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunner_RetryableError(b *testing.
 			Client: k8sClient,
 			Scheme: scheme,
 			Log:    logr.Discard(),
-			ResourceBuilder: ResourceBuilder{
+			ResourceBuilder: &ResourceBuilder{
 				SecretResolver: secretresolver.New(k8sClient, multiClient),
 			},
 		}
@@ -676,7 +676,7 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunner_DonePhaseCleanup(b *testin
 			Client: k8sClient,
 			Scheme: scheme,
 			Log:    logr.Discard(),
-			ResourceBuilder: ResourceBuilder{
+			ResourceBuilder: &ResourceBuilder{
 				SecretResolver: secretresolver.New(k8sClient, multiClient),
 			},
 		}
@@ -749,7 +749,7 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunner_DonePhaseCleanup(b *testin
 			Client: k8sClient,
 			Scheme: scheme,
 			Log:    logr.Discard(),
-			ResourceBuilder: ResourceBuilder{
+			ResourceBuilder: &ResourceBuilder{
 				SecretResolver: secretresolver.New(k8sClient, multiClient),
 			},
 		}
@@ -820,7 +820,7 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunner_RequeueAfter(b *testing.B)
 			Client: k8sClient,
 			Scheme: scheme,
 			Log:    logr.Discard(),
-			ResourceBuilder: ResourceBuilder{
+			ResourceBuilder: &ResourceBuilder{
 				SecretResolver: secretresolver.New(k8sClient, multiClient),
 			},
 		}
@@ -870,7 +870,7 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunner_RequeueAfter(b *testing.B)
 			Client: k8sClient,
 			Scheme: scheme,
 			Log:    logr.Discard(),
-			ResourceBuilder: ResourceBuilder{
+			ResourceBuilder: &ResourceBuilder{
 				SecretResolver: secretresolver.New(k8sClient, multiClient),
 			},
 		}

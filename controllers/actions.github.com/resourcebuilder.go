@@ -96,7 +96,7 @@ type ResourceBuilder struct {
 	ExcludeLabelPropagationPrefixes []string
 	SecretResolver
 	Scheme        *runtime.Scheme
-	ResourceCache ResourceCache
+	ResourceCache *ResourceCache
 }
 
 func (b *ResourceBuilder) setSchemeIfUnset(scheme *runtime.Scheme) {
@@ -1077,7 +1077,7 @@ func (b *ResourceBuilder) newEphemeralRunnerSetProxySecret(ephemeralRunnerSet *v
 		Data: data,
 	}
 
-	runnerPodProxySecret.Annotations[AnnotationKeyIntegrityHash] = ephemeralRunnerSetProxySecretZIdentityHash(runnerPodProxySecret)
+	runnerPodProxySecret.Annotations[AnnotationKeyIntegrityHash] = ephemeralRunnerSetProxySecretIdentityHash(runnerPodProxySecret)
 
 	if err := b.setControllerReference(ephemeralRunnerSet, runnerPodProxySecret); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for ephemeral runner set proxy secret: %w", err)
@@ -1087,7 +1087,7 @@ func (b *ResourceBuilder) newEphemeralRunnerSetProxySecret(ephemeralRunnerSet *v
 	return runnerPodProxySecret, nil
 }
 
-func ephemeralRunnerSetProxySecretZIdentityHash(secret *corev1.Secret) string {
+func ephemeralRunnerSetProxySecretIdentityHash(secret *corev1.Secret) string {
 	type data struct {
 		Data map[string][]byte `json:"data"`
 	}

@@ -57,7 +57,7 @@ type AutoscalingListenerReconciler struct {
 	ListenerMetricsAddr     string
 	ListenerMetricsEndpoint string
 
-	ResourceBuilder
+	*ResourceBuilder
 }
 
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete

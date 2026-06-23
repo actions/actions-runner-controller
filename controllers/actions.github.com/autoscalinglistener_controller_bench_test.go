@@ -72,7 +72,7 @@ func BenchmarkActionsGithub_Reconcile_AutoscalingListener_FinalizerAdd(b *testin
 		Build()
 
 	secretResolver := secretresolver.New(fakeClient, NewFakeMultiClient())
-	rb := ResourceBuilder{SecretResolver: secretResolver}
+	rb := &ResourceBuilder{SecretResolver: secretResolver}
 
 	reconciler := &AutoscalingListenerReconciler{
 		Client:          fakeClient,
@@ -145,7 +145,7 @@ func BenchmarkActionsGithub_Reconcile_AutoscalingListener_FinalizerRemove(b *tes
 		Build()
 
 	secretResolver := secretresolver.New(fakeClient, NewFakeMultiClient())
-	rb := ResourceBuilder{SecretResolver: secretResolver}
+	rb := &ResourceBuilder{SecretResolver: secretResolver}
 
 	reconciler := &AutoscalingListenerReconciler{
 		Client:          fakeClient,
@@ -214,7 +214,7 @@ func BenchmarkActionsGithub_Reconcile_AutoscalingListener_MissingARSDeletion(b *
 		Build()
 
 	secretResolver := secretresolver.New(fakeClient, NewFakeMultiClient())
-	rb := ResourceBuilder{SecretResolver: secretResolver}
+	rb := &ResourceBuilder{SecretResolver: secretResolver}
 
 	reconciler := &AutoscalingListenerReconciler{
 		Client:          fakeClient,
@@ -288,7 +288,7 @@ func BenchmarkActionsGithub_Reconcile_AutoscalingListener_CreateServiceAccount(b
 		Build()
 
 	secretResolver := secretresolver.New(fakeClient, NewFakeMultiClient())
-	rb := ResourceBuilder{SecretResolver: secretResolver}
+	rb := &ResourceBuilder{SecretResolver: secretResolver}
 
 	reconciler := &AutoscalingListenerReconciler{
 		Client:          fakeClient,
@@ -374,7 +374,7 @@ func BenchmarkActionsGithub_Reconcile_AutoscalingListener_UpdateServiceAccount(b
 		Build()
 
 	secretResolver := secretresolver.New(fakeClient, NewFakeMultiClient())
-	rb := ResourceBuilder{SecretResolver: secretResolver}
+	rb := &ResourceBuilder{SecretResolver: secretResolver}
 
 	reconciler := &AutoscalingListenerReconciler{
 		Client:          fakeClient,
@@ -453,7 +453,7 @@ func BenchmarkActionsGithub_Reconcile_AutoscalingListener_CreateRole(b *testing.
 		Build()
 
 	secretResolver := secretresolver.New(fakeClient, NewFakeMultiClient())
-	rb := ResourceBuilder{SecretResolver: secretResolver}
+	rb := &ResourceBuilder{SecretResolver: secretResolver}
 
 	reconciler := &AutoscalingListenerReconciler{
 		Client:          fakeClient,
@@ -554,7 +554,7 @@ func BenchmarkActionsGithub_Reconcile_AutoscalingListener_UpdateRole(b *testing.
 		Build()
 
 	secretResolver := secretresolver.New(fakeClient, NewFakeMultiClient())
-	rb := ResourceBuilder{SecretResolver: secretResolver}
+	rb := &ResourceBuilder{SecretResolver: secretResolver}
 
 	reconciler := &AutoscalingListenerReconciler{
 		Client:          fakeClient,
@@ -643,7 +643,7 @@ func BenchmarkActionsGithub_Reconcile_AutoscalingListener_CreateRoleBinding(b *t
 		Build()
 
 	secretResolver := secretresolver.New(fakeClient, NewFakeMultiClient())
-	rb := ResourceBuilder{SecretResolver: secretResolver}
+	rb := &ResourceBuilder{SecretResolver: secretResolver}
 
 	reconciler := &AutoscalingListenerReconciler{
 		Client:          fakeClient,
@@ -758,7 +758,7 @@ func BenchmarkActionsGithub_Reconcile_AutoscalingListener_UpdateRoleBinding(b *t
 		Build()
 
 	secretResolver := secretresolver.New(fakeClient, NewFakeMultiClient())
-	rb := ResourceBuilder{SecretResolver: secretResolver}
+	rb := &ResourceBuilder{SecretResolver: secretResolver}
 
 	reconciler := &AutoscalingListenerReconciler{
 		Client:          fakeClient,
@@ -927,7 +927,7 @@ func BenchmarkActionsGithub_Reconcile_AutoscalingListener_SteadyState(b *testing
 		Build()
 
 	secretResolver := secretresolver.New(fakeClient, NewFakeMultiClient())
-	rb := ResourceBuilder{SecretResolver: secretResolver}
+	rb := &ResourceBuilder{SecretResolver: secretResolver}
 
 	reconciler := &AutoscalingListenerReconciler{
 		Client:          fakeClient,
