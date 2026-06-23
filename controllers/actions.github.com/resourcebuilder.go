@@ -1151,7 +1151,15 @@ func (b *ResourceBuilder) filterAndMergeAnnotations(base, overwrite map[string]s
 
 // compareAnnotations compares two maps of annotations, ignoring the integrity hash annotation.
 func (b *ResourceBuilder) annotationsEqual(m1, m2 map[string]string) bool {
-	if len(m1) != len(m2) {
+	l1 := len(m1)
+	if _, ok := m1[AnnotationKeyIntegrityHash]; !ok {
+		l1++
+	}
+	l2 := len(m2)
+	if _, ok := m2[AnnotationKeyIntegrityHash]; !ok {
+		l2++
+	}
+	if l1 != l2 {
 		return false
 	}
 
