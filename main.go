@@ -116,6 +116,8 @@ func main() {
 		k8sClientRateLimiterBurst int
 
 		workqueueRateLimiter string
+
+		enableGitHubErrorAnnotations bool
 	)
 	var c github.Config
 	err = envconfig.Process("github", &c)
@@ -163,6 +165,7 @@ func main() {
 	flag.IntVar(&k8sClientRateLimiterQPS, "k8s-client-rate-limiter-qps", 20, "The QPS value of the K8s client rate limiter.")
 	flag.IntVar(&k8sClientRateLimiterBurst, "k8s-client-rate-limiter-burst", 30, "The burst value of the K8s client rate limiter.")
 	flag.StringVar(&workqueueRateLimiter, "workqueue-rate-limiter", "", `The workqueue rate limiter to use. Valid values are "bucket_rate_limiter" (default) and "typed_rate_limiter" (per-item only, no global token bucket).`)
+	flag.BoolVar(&enableGitHubErrorAnnotations, "enable-github-error-annotations", false, "Enable creating GitHub Check Run annotations when runner pods fail with unrecoverable errors. Requires checks:write permission on the GitHub App or PAT.")
 	flag.Parse()
 
 	runnerPodDefaults.RunnerImagePullSecrets = runnerImagePullSecrets
@@ -336,12 +339,20 @@ func main() {
 		}
 
 		runnerOpts := append(controllerOpts, actionsgithubcom.WithMaxConcurrentReconciles(opts.RunnerMaxConcurrentReconciles))
-		if err = (&actionsgithubcom.EphemeralRunnerReconciler{
+		ephemeralRunnerReconciler := &actionsgithubcom.EphemeralRunnerReconciler{
 			Client:          mgr.GetClient(),
 			Log:             log.WithName("EphemeralRunner").WithValues("version", build.Version),
 			Scheme:          mgr.GetScheme(),
 			ResourceBuilder: rb,
-		}).SetupWithManager(mgr, runnerOpts...); err != nil {
+		}
+		if enableGitHubErrorAnnotations {
+			log.Info("GitHub error annotations enabled — runner pod failures will create Check Run annotations")
+			ephemeralRunnerReconciler.GitHubAnnotator = &actionsgithubcom.DynamicCheckRunAnnotator{
+				Log:            log.WithName("GitHubAnnotator"),
+				SecretResolver: secretResolver,
+			}
+		}
+		if err = ephemeralRunnerReconciler.SetupWithManager(mgr, runnerOpts...); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunner")
 			os.Exit(1)
 		}

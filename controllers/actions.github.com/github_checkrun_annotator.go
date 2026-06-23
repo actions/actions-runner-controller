@@ -16,8 +16,7 @@ import (
 
 const checkRunName = "runner-pod-failure"
 
-// CheckRunAnnotator implements GitHubAnnotator by creating GitHub Check Runs
-// using the go-github client library.
+// CheckRunAnnotator is a basic implementation that rejects calls without credentials.
 type CheckRunAnnotator struct {
 	Log logr.Logger
 }
@@ -27,11 +26,11 @@ func (a *CheckRunAnnotator) CreateErrorAnnotation(ctx context.Context, opts Erro
 		return fmt.Errorf("cannot create check run annotation: repository is empty (org-level runners not supported)")
 	}
 
-	return fmt.Errorf("check run annotation requires a GitHub client; use NewCheckRunAnnotatorWithConfig instead")
+	return fmt.Errorf("check run annotation requires credentials; use CheckRunAnnotatorWithCredentials or DynamicCheckRunAnnotator")
 }
 
-// CheckRunAnnotatorWithCredentials implements GitHubAnnotator with credential resolution.
-// It creates a go-github client per call using the provided AppConfig.
+// CheckRunAnnotatorWithCredentials implements GitHubAnnotator with static credentials.
+// Useful for testing or single-repo deployments.
 type CheckRunAnnotatorWithCredentials struct {
 	Log       logr.Logger
 	AppConfig *appconfig.AppConfig
@@ -44,25 +43,58 @@ func (a *CheckRunAnnotatorWithCredentials) CreateErrorAnnotation(ctx context.Con
 		return nil
 	}
 
-	client, err := a.newGitHubClient()
+	client, err := newGitHubClientFromConfig(a.AppConfig, a.ConfigURL)
 	if err != nil {
 		return fmt.Errorf("failed to create GitHub client for annotations: %w", err)
 	}
 
+	return createCheckRun(ctx, client, opts, a.Log)
+}
+
+// DynamicCheckRunAnnotator implements GitHubAnnotator by resolving credentials
+// dynamically per-runner via the SecretResolver. This is the production implementation
+// used when wired up in main.go.
+type DynamicCheckRunAnnotator struct {
+	Log            logr.Logger
+	SecretResolver SecretResolver
+}
+
+func (a *DynamicCheckRunAnnotator) CreateErrorAnnotation(ctx context.Context, opts ErrorAnnotationOpts) error {
+	if opts.Repository == "" {
+		a.Log.Info("Skipping GitHub annotation: no repository (org-level runner)", "owner", opts.Owner)
+		return nil
+	}
+
+	if opts.runner == nil {
+		return fmt.Errorf("runner object is required for dynamic credential resolution")
+	}
+
+	appConfig, err := a.SecretResolver.GetAppConfig(ctx, opts.runner)
+	if err != nil {
+		return fmt.Errorf("failed to resolve credentials for annotation: %w", err)
+	}
+
+	client, err := newGitHubClientFromConfig(appConfig, opts.runner.GitHubConfigUrl())
+	if err != nil {
+		return fmt.Errorf("failed to create GitHub client: %w", err)
+	}
+
+	return createCheckRun(ctx, client, opts, a.Log)
+}
+
+func createCheckRun(ctx context.Context, client *github.Client, opts ErrorAnnotationOpts, log logr.Logger) error {
 	summary := fmt.Sprintf(
-		"Runner pod `%s/%s` failed to start after %s retries.\n\n**Error:** %s",
+		"Runner pod `%s/%s` failed to start after multiple retries.\n\n**Error:** %s",
 		opts.Namespace,
 		opts.RunnerName,
-		"multiple",
 		opts.Message,
 	)
 
 	title := fmt.Sprintf("Runner startup failure: %s", opts.Reason)
-
 	status := "completed"
 	conclusion := "failure"
 
-	checkRun := &github.CreateCheckRunOptions{
+	checkRunOpts := &github.CreateCheckRunOptions{
 		Name:       checkRunName,
 		Status:     &status,
 		Conclusion: &conclusion,
@@ -72,41 +104,39 @@ func (a *CheckRunAnnotatorWithCredentials) CreateErrorAnnotation(ctx context.Con
 		},
 	}
 
-	// If we have a specific workflow run, try to get its head SHA for the check run
 	if opts.WorkflowRunID > 0 {
 		run, _, err := client.Actions.GetWorkflowRunByID(ctx, opts.Owner, opts.Repository, opts.WorkflowRunID)
 		if err == nil && run.GetHeadSHA() != "" {
-			checkRun.HeadSHA = run.GetHeadSHA()
+			checkRunOpts.HeadSHA = run.GetHeadSHA()
 		} else {
-			a.Log.Info("Could not resolve head SHA from workflow run, using default branch", "workflowRunID", opts.WorkflowRunID)
+			log.Info("Could not resolve head SHA from workflow run", "workflowRunID", opts.WorkflowRunID)
 		}
 	}
 
-	// If no head SHA resolved, we cannot create a check run (it's required)
-	if checkRun.HeadSHA == "" {
-		a.Log.Info("No head SHA available for check run, skipping annotation")
+	if checkRunOpts.HeadSHA == "" {
+		log.Info("No head SHA available for check run, skipping annotation")
 		return nil
 	}
 
-	_, _, err = client.Checks.CreateCheckRun(ctx, opts.Owner, opts.Repository, *checkRun)
+	_, _, err := client.Checks.CreateCheckRun(ctx, opts.Owner, opts.Repository, *checkRunOpts)
 	if err != nil {
 		return fmt.Errorf("failed to create check run: %w", err)
 	}
 
-	a.Log.Info("Created GitHub check run annotation", "owner", opts.Owner, "repo", opts.Repository, "runner", opts.RunnerName)
+	log.Info("Created GitHub check run annotation", "owner", opts.Owner, "repo", opts.Repository, "runner", opts.RunnerName)
 	return nil
 }
 
-func (a *CheckRunAnnotatorWithCredentials) newGitHubClient() (*github.Client, error) {
-	ghConfig, err := actions.ParseGitHubConfigFromURL(a.ConfigURL)
+func newGitHubClientFromConfig(appConfig *appconfig.AppConfig, configURL string) (*github.Client, error) {
+	ghConfig, err := actions.ParseGitHubConfigFromURL(configURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse GitHub config URL: %w", err)
 	}
 
 	apiURL := ghConfig.GitHubAPIURL("")
 
-	if a.AppConfig.Token != "" {
-		ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: a.AppConfig.Token})
+	if appConfig.Token != "" {
+		ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: appConfig.Token})
 		httpClient := oauth2.NewClient(context.Background(), ts)
 		if apiURL.Host == "api.github.com" {
 			return github.NewClient(httpClient), nil
@@ -118,7 +148,7 @@ func (a *CheckRunAnnotatorWithCredentials) newGitHubClient() (*github.Client, er
 		return client, nil
 	}
 
-	appID, err := strconv.ParseInt(a.AppConfig.AppID, 10, 64)
+	appID, err := strconv.ParseInt(appConfig.AppID, 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse app ID: %w", err)
 	}
@@ -126,8 +156,8 @@ func (a *CheckRunAnnotatorWithCredentials) newGitHubClient() (*github.Client, er
 	transport, err := ghinstallation.New(
 		http.DefaultTransport,
 		appID,
-		a.AppConfig.AppInstallationID,
-		[]byte(a.AppConfig.AppPrivateKey),
+		appConfig.AppInstallationID,
+		[]byte(appConfig.AppPrivateKey),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create GitHub App transport: %w", err)

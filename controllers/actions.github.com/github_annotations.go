@@ -17,14 +17,18 @@ type GitHubAnnotator interface {
 
 // ErrorAnnotationOpts contains the information needed to create a GitHub error annotation.
 type ErrorAnnotationOpts struct {
-	Owner        string
-	Repository   string
-	RunnerName   string
-	Namespace    string
-	Message      string
-	Reason       string
+	Owner         string
+	Repository    string
+	RunnerName    string
+	Namespace     string
+	Message       string
+	Reason        string
 	WorkflowRunID int64
-	JobID        string
+	JobID         string
+
+	// runner is the EphemeralRunner object, used internally by DynamicCheckRunAnnotator
+	// to resolve credentials via SecretResolver.
+	runner *v1alpha1.EphemeralRunner
 }
 
 // annotateRunnerFailure attempts to create a GitHub Check Run annotation for a failed runner.
@@ -49,6 +53,7 @@ func annotateRunnerFailure(ctx context.Context, annotator GitHubAnnotator, ephem
 		Reason:        ephemeralRunner.Status.Reason,
 		WorkflowRunID: ephemeralRunner.Status.WorkflowRunID,
 		JobID:         ephemeralRunner.Status.JobID,
+		runner:        ephemeralRunner,
 	}
 
 	if err := annotator.CreateErrorAnnotation(ctx, opts); err != nil {
