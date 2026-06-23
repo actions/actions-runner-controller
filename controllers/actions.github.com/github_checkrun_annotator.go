@@ -106,10 +106,10 @@ func createCheckRun(ctx context.Context, client *github.Client, opts ErrorAnnota
 
 	if opts.WorkflowRunID > 0 {
 		run, _, err := client.Actions.GetWorkflowRunByID(ctx, opts.Owner, opts.Repository, opts.WorkflowRunID)
-		if err == nil && run.GetHeadSHA() != "" {
+		if err != nil {
+			log.Info("Could not resolve head SHA from workflow run", "workflowRunID", opts.WorkflowRunID, "error", err)
+		} else if run.GetHeadSHA() != "" {
 			checkRunOpts.HeadSHA = run.GetHeadSHA()
-		} else {
-			log.Info("Could not resolve head SHA from workflow run", "workflowRunID", opts.WorkflowRunID)
 		}
 	}
 
