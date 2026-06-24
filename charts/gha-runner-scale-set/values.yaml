@@ -118,6 +118,10 @@ githubConfigSecret:
 ## empty, and configuration should be applied to the template.
 # containerMode:
 #   type: "dind"  ## type can be set to "dind", "kubernetes", or "kubernetes-novolume"
+#   ## When containerMode.type=dind, set rootless to true to run the dind container
+#   ## using the "docker:dind-rootless" image without privileged mode. The dind
+#   ## container instead runs with an Unconfined AppArmor and seccomp profile.
+#   rootless: false
 #   ## the following is required when containerMode.type=kubernetes
 #   kubernetesModeWorkVolumeClaim:
 #     accessModes: ["ReadWriteOnce"]

@@ -110,7 +110,8 @@ volumeMounts:
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-container" -}}
-image: docker:dind
+{{- $rootless := and .Values.containerMode (.Values.containerMode.rootless) }}
+image: {{ if $rootless }}docker:dind-rootless{{ else }}docker:dind{{ end }}
 args:
   - dockerd
   - --host=unix:///var/run/docker.sock
@@ -119,7 +120,15 @@ env:
   - name: DOCKER_GROUP_GID
     value: "123"
 securityContext:
+{{- if $rootless }}
+  privileged: false
+  appArmorProfile:
+    type: Unconfined
+  seccompProfile:
+    type: Unconfined
+{{- else }}
   privileged: true
+{{- end }}
 {{- if (ge (.Capabilities.KubeVersion.Minor | int) 29) }}
 restartPolicy: Always
 startupProbe:
