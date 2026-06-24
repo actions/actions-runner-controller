@@ -141,8 +141,10 @@ func (b *ResourceBuilder) newAutoscalingListener(autoscalingRunnerSet *v1alpha1.
 		Image:            image,
 		ImagePullSecrets: imagePullSecrets,
 	})
-	if cached, ok := b.cachedDesiredResource(resourceCacheShardAutoscalingListener, autoscalingRunnerSet, cacheKeyObject, ephemeralRunnerSet, inputDependency); ok {
-		return cached.(*v1alpha1.AutoscalingListener), nil
+	if b.ResourceCache != nil {
+		if cached, ok := b.ResourceCache.autoscalingListener.Get(autoscalingRunnerSet, cacheKeyObject, ephemeralRunnerSet, inputDependency); ok {
+			return cached, nil
+		}
 	}
 
 	effectiveMinRunners := 0
@@ -207,7 +209,9 @@ func (b *ResourceBuilder) newAutoscalingListener(autoscalingRunnerSet *v1alpha1.
 		},
 		Spec: spec,
 	}
-	b.cacheDesiredResource(resourceCacheShardAutoscalingListener, autoscalingRunnerSet, autoscalingListener, ephemeralRunnerSet, inputDependency)
+	if b.ResourceCache != nil {
+		b.ResourceCache.autoscalingListener.Upsert(autoscalingRunnerSet, autoscalingListener, ephemeralRunnerSet, inputDependency)
+	}
 
 	return autoscalingListener, nil
 }
@@ -318,7 +322,9 @@ func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha
 	if err := b.setControllerReference(autoscalingListener, desiredSecret); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for listener config secret: %w", err)
 	}
-	b.cacheDesiredResource(resourceCacheShardListenerConfigSecret, autoscalingListener, desiredSecret)
+	if b.ResourceCache != nil {
+		b.ResourceCache.listenerConfigSecret.Upsert(autoscalingListener, desiredSecret)
+	}
 
 	return desiredSecret, nil
 }
@@ -349,8 +355,10 @@ func (b *ResourceBuilder) newScaleSetListenerPod(
 			Namespace: autoscalingListener.Namespace,
 		},
 	}
-	if cached, ok := b.cachedDesiredResource(resourceCacheShardListenerPod, autoscalingListener, cacheKeyObject, podConfig, serviceAccount, role, roleBinding); ok {
-		return cached.(*corev1.Pod), nil
+	if b.ResourceCache != nil {
+		if cached, ok := b.ResourceCache.listenerPod.Get(autoscalingListener, cacheKeyObject, podConfig, serviceAccount, role, roleBinding); ok {
+			return cached, nil
+		}
 	}
 
 	envs := []corev1.EnvVar{
@@ -489,7 +497,9 @@ func (b *ResourceBuilder) newScaleSetListenerPod(
 	if autoscalingListener.Spec.Template != nil {
 		mergeListenerPodWithTemplate(newRunnerScaleSetListenerPod, autoscalingListener.Spec.Template)
 	}
-	b.cacheDesiredResource(resourceCacheShardListenerPod, autoscalingListener, newRunnerScaleSetListenerPod, podConfig, serviceAccount, role, roleBinding)
+	if b.ResourceCache != nil {
+		b.ResourceCache.listenerPod.Upsert(autoscalingListener, newRunnerScaleSetListenerPod, podConfig, serviceAccount, role, roleBinding)
+	}
 
 	return newRunnerScaleSetListenerPod, nil
 }
@@ -650,8 +660,10 @@ func (b *ResourceBuilder) newScaleSetListenerServiceAccount(autoscalingListener 
 			Namespace: autoscalingListener.Namespace,
 		},
 	}
-	if cached, ok := b.cachedDesiredResource(resourceCacheShardListenerServiceAccount, autoscalingListener, cacheKeyObject); ok {
-		return cached.(*corev1.ServiceAccount), nil
+	if b.ResourceCache != nil {
+		if cached, ok := b.ResourceCache.listenerServiceAccount.Get(autoscalingListener, cacheKeyObject); ok {
+			return cached, nil
+		}
 	}
 
 	base := &corev1.ServiceAccount{
@@ -676,7 +688,9 @@ func (b *ResourceBuilder) newScaleSetListenerServiceAccount(autoscalingListener 
 	if err := b.setControllerReference(autoscalingListener, base); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for listener service account: %w", err)
 	}
-	b.cacheDesiredResource(resourceCacheShardListenerServiceAccount, autoscalingListener, base)
+	if b.ResourceCache != nil {
+		b.ResourceCache.listenerServiceAccount.Upsert(autoscalingListener, base)
+	}
 
 	return base, nil
 }
@@ -704,8 +718,10 @@ func (b *ResourceBuilder) newScaleSetListenerRole(autoscalingListener *v1alpha1.
 			Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
 		},
 	}
-	if cached, ok := b.cachedDesiredResource(resourceCacheShardListenerRole, autoscalingListener, cacheKeyObject); ok {
-		return cached.(*rbacv1.Role)
+	if b.ResourceCache != nil {
+		if cached, ok := b.ResourceCache.listenerRole.Get(autoscalingListener, cacheKeyObject); ok {
+			return cached
+		}
 	}
 
 	labels := b.filterAndMergeLabels(autoscalingListener.Labels, map[string]string{
@@ -732,7 +748,9 @@ func (b *ResourceBuilder) newScaleSetListenerRole(autoscalingListener *v1alpha1.
 	}
 
 	newRole.Annotations[AnnotationKeyIntegrityHash] = scaleSetRoleIntegrityHash(newRole)
-	b.cacheDesiredResource(resourceCacheShardListenerRole, autoscalingListener, newRole)
+	if b.ResourceCache != nil {
+		b.ResourceCache.listenerRole.Upsert(autoscalingListener, newRole)
+	}
 
 	return newRole
 }
@@ -756,8 +774,10 @@ func (b *ResourceBuilder) newScaleSetListenerRoleBinding(autoscalingListener *v1
 			Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
 		},
 	}
-	if cached, ok := b.cachedDesiredResource(resourceCacheShardListenerRoleBinding, autoscalingListener, cacheKeyObject, listenerRole, serviceAccount); ok {
-		return cached.(*rbacv1.RoleBinding)
+	if b.ResourceCache != nil {
+		if cached, ok := b.ResourceCache.listenerRoleBinding.Get(autoscalingListener, cacheKeyObject, listenerRole, serviceAccount); ok {
+			return cached
+		}
 	}
 
 	roleRef := rbacv1.RoleRef{
@@ -798,7 +818,9 @@ func (b *ResourceBuilder) newScaleSetListenerRoleBinding(autoscalingListener *v1
 	}
 
 	newRoleBinding.Annotations[AnnotationKeyIntegrityHash] = scaleSetListenerRoleBindingIntegrityHash(newRoleBinding)
-	b.cacheDesiredResource(resourceCacheShardListenerRoleBinding, autoscalingListener, newRoleBinding, listenerRole, serviceAccount)
+	if b.ResourceCache != nil {
+		b.ResourceCache.listenerRoleBinding.Upsert(autoscalingListener, newRoleBinding, listenerRole, serviceAccount)
+	}
 
 	return newRoleBinding
 }
@@ -876,7 +898,9 @@ func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 	if err := b.setControllerReference(autoscalingRunnerSet, newEphemeralRunnerSet); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for ephemeral runner set: %w", err)
 	}
-	b.cacheDesiredResource(resourceCacheShardEphemeralRunnerSet, autoscalingRunnerSet, newEphemeralRunnerSet)
+	if b.ResourceCache != nil {
+		b.ResourceCache.ephemeralRunnerSet.Upsert(autoscalingRunnerSet, newEphemeralRunnerSet)
+	}
 
 	return newEphemeralRunnerSet, nil
 }
@@ -911,7 +935,9 @@ func (b *ResourceBuilder) newAutoscalingListenerProxySecret(autoscalingListener 
 	if err := b.setControllerReference(autoscalingListener, newProxySecret); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for listener proxy secret: %w", err)
 	}
-	b.cacheDesiredResource(resourceCacheShardAutoscalingListenerProxySecret, autoscalingListener, newProxySecret)
+	if b.ResourceCache != nil {
+		b.ResourceCache.autoscalingListenerProxySecret.Upsert(autoscalingListener, newProxySecret)
+	}
 
 	return newProxySecret, nil
 }
@@ -958,7 +984,9 @@ func (b *ResourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.Epheme
 	if err := b.setControllerReference(ephemeralRunnerSet, ephemeralRunner); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for ephemeral runner: %w", err)
 	}
-	b.cacheDesiredResource(resourceCacheShardEphemeralRunner, ephemeralRunnerSet, ephemeralRunner)
+	if b.ResourceCache != nil {
+		b.ResourceCache.ephemeralRunner.Upsert(ephemeralRunnerSet, ephemeralRunner)
+	}
 
 	return ephemeralRunner, nil
 }
@@ -1025,7 +1053,9 @@ func (b *ResourceBuilder) newEphemeralRunnerPod(runner *v1alpha1.EphemeralRunner
 	if err := b.setControllerReference(runner, &newPod); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for ephemeral runner pod: %w", err)
 	}
-	b.cacheDesiredResource(resourceCacheShardEphemeralRunnerPod, runner, &newPod, secret)
+	if b.ResourceCache != nil {
+		b.ResourceCache.ephemeralRunnerPod.Upsert(runner, &newPod, secret)
+	}
 
 	return &newPod, nil
 }
@@ -1058,7 +1088,9 @@ func (b *ResourceBuilder) newEphemeralRunnerJitSecret(ephemeralRunner *v1alpha1.
 	if err := b.setControllerReference(ephemeralRunner, jitSecret); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for ephemeral runner jit secret: %w", err)
 	}
-	b.cacheDesiredResource(resourceCacheShardEphemeralRunnerJitSecret, ephemeralRunner, jitSecret)
+	if b.ResourceCache != nil {
+		b.ResourceCache.ephemeralRunnerJitSecret.Upsert(ephemeralRunner, jitSecret)
+	}
 
 	return jitSecret, nil
 }
@@ -1082,7 +1114,9 @@ func (b *ResourceBuilder) newEphemeralRunnerSetProxySecret(ephemeralRunnerSet *v
 	if err := b.setControllerReference(ephemeralRunnerSet, runnerPodProxySecret); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for ephemeral runner set proxy secret: %w", err)
 	}
-	b.cacheDesiredResource(resourceCacheShardEphemeralRunnerSetProxySecret, ephemeralRunnerSet, runnerPodProxySecret)
+	if b.ResourceCache != nil {
+		b.ResourceCache.ephemeralRunnerSetProxySecret.Upsert(ephemeralRunnerSet, runnerPodProxySecret)
+	}
 
 	return runnerPodProxySecret, nil
 }

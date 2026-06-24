@@ -59,21 +59,20 @@ func TestResourceCacheUpsertReplacesByDependencyResourceVersion(t *testing.T) {
 	}
 
 	cache := NewResourceCache()
-	value, replaced := cache.Upsert(resourceCacheShardListenerPod, mainObject, desiredPod, configSecret, serviceAccount, role)
+	value, replaced := cache.listenerPod.Upsert(mainObject, desiredPod, configSecret, serviceAccount, role)
 	assert.True(t, replaced)
-	assert.Equal(t, 1, cache.Len())
-	_, ok := cache.Value(resourceCacheShardListenerPod, mainObject, desiredPod)
+	_, ok := cache.listenerPod.Value(mainObject, desiredPod)
 	assert.True(t, ok)
 	assert.Equal(t, "1", value.ResourceVersion)
 
-	_, replaced = cache.Upsert(resourceCacheShardListenerPod, mainObject, desiredPod, role, configSecret, serviceAccount)
+	_, replaced = cache.listenerPod.Upsert(mainObject, desiredPod, role, configSecret, serviceAccount)
 	assert.False(t, replaced, "dependency ordering should not affect the cache value")
-	assert.Equal(t, 1, cache.Len())
+	_, ok = cache.listenerPod.Value(mainObject, desiredPod)
+	assert.True(t, ok)
 
 	configSecret.ResourceVersion = "2"
-	value, replaced = cache.Upsert(resourceCacheShardListenerPod, mainObject, desiredPod, configSecret, serviceAccount, role)
+	value, replaced = cache.listenerPod.Upsert(mainObject, desiredPod, configSecret, serviceAccount, role)
 	assert.True(t, replaced)
-	assert.Equal(t, 1, cache.Len())
 	assert.Contains(t, value.Dependencies, ResourceCacheObjectRef{
 		ObjectType:      resourceCacheObjectType(configSecret),
 		Namespace:       "controller-ns",
@@ -83,7 +82,7 @@ func TestResourceCacheUpsertReplacesByDependencyResourceVersion(t *testing.T) {
 	})
 
 	desiredPod.Labels["mutated"] = "after-cache"
-	cachedPod := value.Object.(*corev1.Pod)
+	cachedPod := value.Object
 	assert.NotContains(t, cachedPod.Labels, "mutated")
 }
 
@@ -94,29 +93,33 @@ func TestResourceCacheDeleteByMainUID(t *testing.T) {
 	podB := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "listener-b", Namespace: "ns"}}
 
 	cache := NewResourceCache()
-	cache.Upsert(resourceCacheShardListenerPod, listenerA, podA)
-	cache.Upsert(resourceCacheShardListenerConfigSecret, listenerA, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "listener-a-config", Namespace: "ns"}})
-	cache.Upsert(resourceCacheShardListenerPod, listenerB, podB)
+	cache.listenerPod.Upsert(listenerA, podA)
+	cache.listenerConfigSecret.Upsert(listenerA, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "listener-a-config", Namespace: "ns"}})
+	cache.listenerPod.Upsert(listenerB, podB)
 
 	assert.Equal(t, 2, cache.DeleteByMainUID(listenerA.UID))
-	assert.Equal(t, 1, cache.Len())
+	_, ok := cache.listenerPod.Value(listenerA, podA)
+	assert.False(t, ok)
+	_, ok = cache.listenerConfigSecret.Value(listenerA, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "listener-a-config", Namespace: "ns"}})
+	assert.False(t, ok)
+	_, ok = cache.listenerPod.Value(listenerB, podB)
+	assert.True(t, ok)
 	assert.Equal(t, 0, cache.DeleteByMainUID(listenerA.UID))
 }
 
-func TestResourceCacheSeparatesShards(t *testing.T) {
+func TestResourceCacheSeparatesResourceTypes(t *testing.T) {
 	mainObject := &v1alpha1.AutoscalingListener{ObjectMeta: metav1.ObjectMeta{Name: "listener", Namespace: "ns", UID: "listener-uid"}}
 	listenerSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "listener", Namespace: "ns", ResourceVersion: "1"}}
 	proxySecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "listener", Namespace: "ns", ResourceVersion: "2"}}
 
 	cache := NewResourceCache()
-	cache.Upsert(resourceCacheShardListenerConfigSecret, mainObject, listenerSecret)
-	cache.Upsert(resourceCacheShardAutoscalingListenerProxySecret, mainObject, proxySecret)
+	cache.listenerConfigSecret.Upsert(mainObject, listenerSecret)
+	cache.autoscalingListenerProxySecret.Upsert(mainObject, proxySecret)
 
-	assert.Equal(t, 2, cache.Len())
-	value, ok := cache.Value(resourceCacheShardListenerConfigSecret, mainObject, listenerSecret)
+	value, ok := cache.listenerConfigSecret.Value(mainObject, listenerSecret)
 	require.True(t, ok)
 	assert.Equal(t, "1", value.ResourceVersion)
-	value, ok = cache.Value(resourceCacheShardAutoscalingListenerProxySecret, mainObject, proxySecret)
+	value, ok = cache.autoscalingListenerProxySecret.Value(mainObject, proxySecret)
 	require.True(t, ok)
 	assert.Equal(t, "2", value.ResourceVersion)
 }
@@ -188,7 +191,7 @@ func TestResourceBuilderCachesListenerPodDependencies(t *testing.T) {
 	listenerPod, err := b.newScaleSetListenerPod(listener, podConfig, serviceAccount, role, roleBinding, nil)
 	require.NoError(t, err)
 
-	value, ok := b.ResourceCache.Value(resourceCacheShardListenerPod, listener, listenerPod)
+	value, ok := b.ResourceCache.listenerPod.Value(listener, listenerPod)
 	require.True(t, ok)
 	assert.IsType(t, &corev1.Pod{}, value.Object)
 	assert.ElementsMatch(t, []ResourceCacheObjectRef{
@@ -201,13 +204,13 @@ func TestResourceBuilderCachesListenerPodDependencies(t *testing.T) {
 
 func BenchmarkResourceCacheGetHit(b *testing.B) {
 	mainObject, desiredPod, configSecret, serviceAccount, role := newResourceCacheBenchmarkObjects()
-	var cache ResourceCache
-	cache.Upsert(resourceCacheShardListenerPod, mainObject, desiredPod, configSecret, serviceAccount, role)
+	cache := NewResourceCache()
+	cache.listenerPod.Upsert(mainObject, desiredPod, configSecret, serviceAccount, role)
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, ok := cache.Get(resourceCacheShardListenerPod, mainObject, desiredPod, configSecret, serviceAccount, role); !ok {
+		if _, ok := cache.listenerPod.Get(mainObject, desiredPod, configSecret, serviceAccount, role); !ok {
 			b.Fatal("expected cache hit")
 		}
 	}
@@ -215,13 +218,13 @@ func BenchmarkResourceCacheGetHit(b *testing.B) {
 
 func BenchmarkResourceCacheUpsertNoChange(b *testing.B) {
 	mainObject, desiredPod, configSecret, serviceAccount, role := newResourceCacheBenchmarkObjects()
-	var cache ResourceCache
-	cache.Upsert(resourceCacheShardListenerPod, mainObject, desiredPod, configSecret, serviceAccount, role)
+	cache := NewResourceCache()
+	cache.listenerPod.Upsert(mainObject, desiredPod, configSecret, serviceAccount, role)
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, replaced := cache.Upsert(resourceCacheShardListenerPod, mainObject, desiredPod, configSecret, serviceAccount, role); replaced {
+		if _, replaced := cache.listenerPod.Upsert(mainObject, desiredPod, configSecret, serviceAccount, role); replaced {
 			b.Fatal("expected unchanged cache entry")
 		}
 	}
@@ -229,26 +232,27 @@ func BenchmarkResourceCacheUpsertNoChange(b *testing.B) {
 
 func BenchmarkResourceCacheUpsertReplace(b *testing.B) {
 	mainObject, desiredPod, configSecret, serviceAccount, role := newResourceCacheBenchmarkObjects()
-	var cache ResourceCache
-	cache.Upsert(resourceCacheShardListenerPod, mainObject, desiredPod, configSecret, serviceAccount, role)
+	cache := NewResourceCache()
+	cache.listenerPod.Upsert(mainObject, desiredPod, configSecret, serviceAccount, role)
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		desiredPod.ResourceVersion = strconv.Itoa(i)
-		if _, replaced := cache.Upsert(resourceCacheShardListenerPod, mainObject, desiredPod, configSecret, serviceAccount, role); !replaced {
+		if _, replaced := cache.listenerPod.Upsert(mainObject, desiredPod, configSecret, serviceAccount, role); !replaced {
 			b.Fatal("expected cache replacement")
 		}
 	}
 }
 
 func BenchmarkResourceCacheUpsertNoChangeParallel(b *testing.B) {
-	cases := newResourceCacheParallelBenchmarkCases()
+	podCases := newResourceCacheParallelPodBenchmarkCases()
+	operations := newResourceCacheParallelBenchmarkOperations()
 
-	b.Run("SameShard", func(b *testing.B) {
-		var cache ResourceCache
-		for _, tc := range cases {
-			cache.Upsert(resourceCacheShardListenerPod, tc.mainObject, tc.desiredObject, tc.dependencies...)
+	b.Run("SameResourceType", func(b *testing.B) {
+		cache := NewResourceCache()
+		for _, tc := range podCases {
+			cache.listenerPod.Upsert(tc.mainObject, tc.desiredPod, tc.dependencies...)
 		}
 
 		var index atomic.Uint64
@@ -256,18 +260,18 @@ func BenchmarkResourceCacheUpsertNoChangeParallel(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				tc := cases[index.Add(1)%uint64(len(cases))]
-				if _, replaced := cache.Upsert(resourceCacheShardListenerPod, tc.mainObject, tc.desiredObject, tc.dependencies...); replaced {
+				tc := podCases[index.Add(1)%uint64(len(podCases))]
+				if _, replaced := cache.listenerPod.Upsert(tc.mainObject, tc.desiredPod, tc.dependencies...); replaced {
 					b.Fatal("expected unchanged cache entry")
 				}
 			}
 		})
 	})
 
-	b.Run("Sharded", func(b *testing.B) {
-		var cache ResourceCache
-		for _, tc := range cases {
-			cache.Upsert(tc.shard, tc.mainObject, tc.desiredObject, tc.dependencies...)
+	b.Run("DifferentResourceTypes", func(b *testing.B) {
+		cache := NewResourceCache()
+		for _, op := range operations {
+			op.seed(&cache)
 		}
 
 		var index atomic.Uint64
@@ -275,8 +279,8 @@ func BenchmarkResourceCacheUpsertNoChangeParallel(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				tc := cases[index.Add(1)%uint64(len(cases))]
-				if _, replaced := cache.Upsert(tc.shard, tc.mainObject, tc.desiredObject, tc.dependencies...); replaced {
+				op := operations[index.Add(1)%uint64(len(operations))]
+				if op.upsertNoChange(&cache) {
 					b.Fatal("expected unchanged cache entry")
 				}
 			}
@@ -285,12 +289,13 @@ func BenchmarkResourceCacheUpsertNoChangeParallel(b *testing.B) {
 }
 
 func BenchmarkResourceCacheUpsertReplaceParallel(b *testing.B) {
-	cases := newResourceCacheParallelBenchmarkCases()
+	podCases := newResourceCacheParallelPodBenchmarkCases()
+	operations := newResourceCacheParallelBenchmarkOperations()
 
-	b.Run("SameShard", func(b *testing.B) {
-		var cache ResourceCache
-		for _, tc := range cases {
-			cache.Upsert(resourceCacheShardListenerPod, tc.mainObject, tc.desiredObject, tc.dependencies...)
+	b.Run("SameResourceType", func(b *testing.B) {
+		cache := NewResourceCache()
+		for _, tc := range podCases {
+			cache.listenerPod.Upsert(tc.mainObject, tc.desiredPod, tc.dependencies...)
 		}
 
 		var index atomic.Uint64
@@ -299,20 +304,20 @@ func BenchmarkResourceCacheUpsertReplaceParallel(b *testing.B) {
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
 				iteration := index.Add(1)
-				tc := cases[iteration%uint64(len(cases))]
-				desiredObject := tc.desiredObject.DeepCopyObject().(client.Object)
-				desiredObject.SetResourceVersion(strconv.FormatUint(iteration, 10))
-				if _, replaced := cache.Upsert(resourceCacheShardListenerPod, tc.mainObject, desiredObject, tc.dependencies...); !replaced {
+				tc := podCases[iteration%uint64(len(podCases))]
+				desiredPod := tc.desiredPod.DeepCopy()
+				desiredPod.SetResourceVersion(strconv.FormatUint(iteration, 10))
+				if _, replaced := cache.listenerPod.Upsert(tc.mainObject, desiredPod, tc.dependencies...); !replaced {
 					b.Fatal("expected cache replacement")
 				}
 			}
 		})
 	})
 
-	b.Run("Sharded", func(b *testing.B) {
-		var cache ResourceCache
-		for _, tc := range cases {
-			cache.Upsert(tc.shard, tc.mainObject, tc.desiredObject, tc.dependencies...)
+	b.Run("DifferentResourceTypes", func(b *testing.B) {
+		cache := NewResourceCache()
+		for _, op := range operations {
+			op.seed(&cache)
 		}
 
 		var index atomic.Uint64
@@ -321,10 +326,8 @@ func BenchmarkResourceCacheUpsertReplaceParallel(b *testing.B) {
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
 				iteration := index.Add(1)
-				tc := cases[iteration%uint64(len(cases))]
-				desiredObject := tc.desiredObject.DeepCopyObject().(client.Object)
-				desiredObject.SetResourceVersion(strconv.FormatUint(iteration, 10))
-				if _, replaced := cache.Upsert(tc.shard, tc.mainObject, desiredObject, tc.dependencies...); !replaced {
+				op := operations[iteration%uint64(len(operations))]
+				if !op.upsertReplace(&cache, iteration) {
 					b.Fatal("expected cache replacement")
 				}
 			}
@@ -379,14 +382,64 @@ func newResourceCacheBenchmarkObjects() (*v1alpha1.AutoscalingListener, *corev1.
 	return mainObject, desiredPod, configSecret, serviceAccount, role
 }
 
-type resourceCacheBenchmarkCase struct {
-	shard         resourceCacheShard
-	mainObject    client.Object
-	desiredObject client.Object
-	dependencies  []client.Object
+type resourceCachePodBenchmarkCase struct {
+	mainObject   *v1alpha1.AutoscalingListener
+	desiredPod   *corev1.Pod
+	dependencies []client.Object
 }
 
-func newResourceCacheParallelBenchmarkCases() []resourceCacheBenchmarkCase {
+type resourceCacheBenchmarkOperation struct {
+	seed           func(*ResourceCache)
+	upsertNoChange func(*ResourceCache) bool
+	upsertReplace  func(*ResourceCache, uint64) bool
+}
+
+func newResourceCacheParallelPodBenchmarkCases() []resourceCachePodBenchmarkCase {
+	mainObject, desiredPod, configSecret, serviceAccount, role := newResourceCacheBenchmarkObjects()
+
+	listenerB := mainObject.DeepCopy()
+	listenerB.Name = "listener-pod-b"
+	listenerB.UID = "listener-pod-b-uid"
+	desiredPodB := desiredPod.DeepCopy()
+	desiredPodB.Name = listenerB.Name
+
+	listenerC := mainObject.DeepCopy()
+	listenerC.Name = "listener-pod-c"
+	listenerC.UID = "listener-pod-c-uid"
+	desiredPodC := desiredPod.DeepCopy()
+	desiredPodC.Name = listenerC.Name
+
+	listenerD := mainObject.DeepCopy()
+	listenerD.Name = "listener-pod-d"
+	listenerD.UID = "listener-pod-d-uid"
+	desiredPodD := desiredPod.DeepCopy()
+	desiredPodD.Name = listenerD.Name
+
+	return []resourceCachePodBenchmarkCase{
+		{
+			mainObject:   mainObject,
+			desiredPod:   desiredPod,
+			dependencies: []client.Object{configSecret, serviceAccount, role},
+		},
+		{
+			mainObject:   listenerB,
+			desiredPod:   desiredPodB,
+			dependencies: []client.Object{configSecret, serviceAccount, role},
+		},
+		{
+			mainObject:   listenerC,
+			desiredPod:   desiredPodC,
+			dependencies: []client.Object{configSecret, serviceAccount, role},
+		},
+		{
+			mainObject:   listenerD,
+			desiredPod:   desiredPodD,
+			dependencies: []client.Object{configSecret, serviceAccount, role},
+		},
+	}
+}
+
+func newResourceCacheParallelBenchmarkOperations() []resourceCacheBenchmarkOperation {
 	mainObject, desiredPod, configSecret, serviceAccount, role := newResourceCacheBenchmarkObjects()
 
 	listener := mainObject.DeepCopy()
@@ -404,27 +457,66 @@ func newResourceCacheParallelBenchmarkCases() []resourceCacheBenchmarkCase {
 	listenerConfig.UID = "listener-config-uid"
 	configSecretDesired := configSecret.DeepCopy()
 
-	return []resourceCacheBenchmarkCase{
+	return []resourceCacheBenchmarkOperation{
 		{
-			shard:         resourceCacheShardListenerPod,
-			mainObject:    mainObject,
-			desiredObject: desiredPod,
-			dependencies:  []client.Object{configSecret, serviceAccount, role},
+			seed: func(cache *ResourceCache) {
+				cache.listenerPod.Upsert(mainObject, desiredPod, configSecret, serviceAccount, role)
+			},
+			upsertNoChange: func(cache *ResourceCache) bool {
+				_, replaced := cache.listenerPod.Upsert(mainObject, desiredPod, configSecret, serviceAccount, role)
+				return replaced
+			},
+			upsertReplace: func(cache *ResourceCache, iteration uint64) bool {
+				pod := desiredPod.DeepCopy()
+				pod.SetResourceVersion(strconv.FormatUint(iteration, 10))
+				_, replaced := cache.listenerPod.Upsert(mainObject, pod, configSecret, serviceAccount, role)
+				return replaced
+			},
 		},
 		{
-			shard:         resourceCacheShardListenerServiceAccount,
-			mainObject:    listener,
-			desiredObject: serviceAccountDesired,
+			seed: func(cache *ResourceCache) {
+				cache.listenerServiceAccount.Upsert(listener, serviceAccountDesired)
+			},
+			upsertNoChange: func(cache *ResourceCache) bool {
+				_, replaced := cache.listenerServiceAccount.Upsert(listener, serviceAccountDesired)
+				return replaced
+			},
+			upsertReplace: func(cache *ResourceCache, iteration uint64) bool {
+				serviceAccount := serviceAccountDesired.DeepCopy()
+				serviceAccount.SetResourceVersion(strconv.FormatUint(iteration, 10))
+				_, replaced := cache.listenerServiceAccount.Upsert(listener, serviceAccount)
+				return replaced
+			},
 		},
 		{
-			shard:         resourceCacheShardListenerRole,
-			mainObject:    listenerRole,
-			desiredObject: roleDesired,
+			seed: func(cache *ResourceCache) {
+				cache.listenerRole.Upsert(listenerRole, roleDesired)
+			},
+			upsertNoChange: func(cache *ResourceCache) bool {
+				_, replaced := cache.listenerRole.Upsert(listenerRole, roleDesired)
+				return replaced
+			},
+			upsertReplace: func(cache *ResourceCache, iteration uint64) bool {
+				role := roleDesired.DeepCopy()
+				role.SetResourceVersion(strconv.FormatUint(iteration, 10))
+				_, replaced := cache.listenerRole.Upsert(listenerRole, role)
+				return replaced
+			},
 		},
 		{
-			shard:         resourceCacheShardListenerConfigSecret,
-			mainObject:    listenerConfig,
-			desiredObject: configSecretDesired,
+			seed: func(cache *ResourceCache) {
+				cache.listenerConfigSecret.Upsert(listenerConfig, configSecretDesired)
+			},
+			upsertNoChange: func(cache *ResourceCache) bool {
+				_, replaced := cache.listenerConfigSecret.Upsert(listenerConfig, configSecretDesired)
+				return replaced
+			},
+			upsertReplace: func(cache *ResourceCache, iteration uint64) bool {
+				secret := configSecretDesired.DeepCopy()
+				secret.SetResourceVersion(strconv.FormatUint(iteration, 10))
+				_, replaced := cache.listenerConfigSecret.Upsert(listenerConfig, secret)
+				return replaced
+			},
 		},
 	}
 }
