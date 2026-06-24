@@ -22,13 +22,10 @@ import (
 	"testing"
 
 	actionsv1alpha1 "github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
-	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
-	clientgotesting "k8s.io/client-go/testing"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -86,18 +83,14 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunnerSet_NoOp(b *testing.B) {
 				runners = append(runners, runner)
 			}
 
-			fakeClient := newLegacyFakeClientBuilder(scheme).
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
 				WithObjects(runners...).
 				WithStatusSubresource(&actionsv1alpha1.EphemeralRunnerSet{}, &actionsv1alpha1.EphemeralRunner{}).
 				WithIndex(&actionsv1alpha1.EphemeralRunner{}, resourceOwnerKey, newGroupVersionOwnerKindIndexer("EphemeralRunnerSet")).
 				Build()
 
-			reconciler := &EphemeralRunnerSetReconciler{
-				Client:          fakeClient,
-				Scheme:          scheme,
-				Log:             logr.Discard(),
-				ResourceBuilder: &ResourceBuilder{Scheme: scheme},
-			}
+			reconciler := newBenchmarkEphemeralRunnerSetReconciler(fakeClient, scheme)
 
 			ctx := context.Background()
 			req := ctrl.Request{
@@ -108,12 +101,16 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunnerSet_NoOp(b *testing.B) {
 			}
 
 			WarmupIteration(b, func() {
-				_, _ = reconciler.Reconcile(ctx, req)
+				if _, err := reconciler.Reconcile(ctx, req); err != nil {
+					b.Fatal(err)
+				}
 			})
 
 			b.ResetTimer()
 			for b.Loop() {
-				_, _ = reconciler.Reconcile(ctx, req)
+				if _, err := reconciler.Reconcile(ctx, req); err != nil {
+					b.Fatal(err)
+				}
 			}
 		})
 	}
@@ -155,6 +152,7 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunnerSet_ScaleUp(b *testing.B) {
 
 				ers.Status.CurrentReplicas = tc.current
 				ers.Status.Phase = actionsv1alpha1.EphemeralRunnerSetPhaseRunning
+				ers.Status.RunningEphemeralRunners = tc.current
 
 				runners := make([]client.Object, 0, tc.current+1)
 				runners = append(runners, ers)
@@ -175,18 +173,14 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunnerSet_ScaleUp(b *testing.B) {
 					runners = append(runners, runner)
 				}
 
-				fakeClient := newLegacyFakeClientBuilder(scheme).
+				fakeClient := fake.NewClientBuilder().
+					WithScheme(scheme).
 					WithObjects(runners...).
 					WithStatusSubresource(&actionsv1alpha1.EphemeralRunnerSet{}, &actionsv1alpha1.EphemeralRunner{}).
 					WithIndex(&actionsv1alpha1.EphemeralRunner{}, resourceOwnerKey, newGroupVersionOwnerKindIndexer("EphemeralRunnerSet")).
 					Build()
 
-				reconciler := &EphemeralRunnerSetReconciler{
-					Client:          fakeClient,
-					Scheme:          scheme,
-					Log:             logr.Discard(),
-					ResourceBuilder: &ResourceBuilder{Scheme: scheme},
-				}
+				reconciler := newBenchmarkEphemeralRunnerSetReconciler(fakeClient, scheme)
 
 				ctx := context.Background()
 				req := ctrl.Request{
@@ -197,7 +191,9 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunnerSet_ScaleUp(b *testing.B) {
 				}
 
 				b.StartTimer()
-				_, _ = reconciler.Reconcile(ctx, req)
+				if _, err := reconciler.Reconcile(ctx, req); err != nil {
+					b.Fatal(err)
+				}
 			}
 		})
 	}
@@ -228,18 +224,14 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunnerSet_FinalizerAdd(b *testing
 				ers := NewMinimalEphemeralRunnerSet("default", "test-ers")
 				ers.Spec.Replicas = tc.replicas
 
-				fakeClient := newLegacyFakeClientBuilder(scheme).
+				fakeClient := fake.NewClientBuilder().
+					WithScheme(scheme).
 					WithObjects(ers).
 					WithStatusSubresource(&actionsv1alpha1.EphemeralRunnerSet{}, &actionsv1alpha1.EphemeralRunner{}).
 					WithIndex(&actionsv1alpha1.EphemeralRunner{}, resourceOwnerKey, newGroupVersionOwnerKindIndexer("EphemeralRunnerSet")).
 					Build()
 
-				reconciler := &EphemeralRunnerSetReconciler{
-					Client:          fakeClient,
-					Scheme:          scheme,
-					Log:             logr.Discard(),
-					ResourceBuilder: &ResourceBuilder{Scheme: scheme},
-				}
+				reconciler := newBenchmarkEphemeralRunnerSetReconciler(fakeClient, scheme)
 
 				ctx := context.Background()
 				req := ctrl.Request{
@@ -250,7 +242,9 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunnerSet_FinalizerAdd(b *testing
 				}
 
 				b.StartTimer()
-				_, _ = reconciler.Reconcile(ctx, req)
+				if _, err := reconciler.Reconcile(ctx, req); err != nil {
+					b.Fatal(err)
+				}
 			}
 		})
 	}
@@ -309,18 +303,14 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunnerSet_HashChangeDetection(b *
 					runners = append(runners, runner)
 				}
 
-				fakeClient := newLegacyFakeClientBuilder(scheme).
+				fakeClient := fake.NewClientBuilder().
+					WithScheme(scheme).
 					WithObjects(runners...).
 					WithStatusSubresource(&actionsv1alpha1.EphemeralRunnerSet{}, &actionsv1alpha1.EphemeralRunner{}).
 					WithIndex(&actionsv1alpha1.EphemeralRunner{}, resourceOwnerKey, newGroupVersionOwnerKindIndexer("EphemeralRunnerSet")).
 					Build()
 
-				reconciler := &EphemeralRunnerSetReconciler{
-					Client:          fakeClient,
-					Scheme:          scheme,
-					Log:             logr.Discard(),
-					ResourceBuilder: &ResourceBuilder{Scheme: scheme},
-				}
+				reconciler := newBenchmarkEphemeralRunnerSetReconciler(fakeClient, scheme)
 
 				ctx := context.Background()
 				req := ctrl.Request{
@@ -331,7 +321,9 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunnerSet_HashChangeDetection(b *
 				}
 
 				b.StartTimer()
-				_, _ = reconciler.Reconcile(ctx, req)
+				if _, err := reconciler.Reconcile(ctx, req); err != nil {
+					b.Fatal(err)
+				}
 			}
 		})
 	}
@@ -391,18 +383,14 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunnerSet_OutdatedPhaseStatusUpda
 					runners = append(runners, runner)
 				}
 
-				fakeClient := newLegacyFakeClientBuilder(scheme).
+				fakeClient := fake.NewClientBuilder().
+					WithScheme(scheme).
 					WithObjects(runners...).
 					WithStatusSubresource(&actionsv1alpha1.EphemeralRunnerSet{}, &actionsv1alpha1.EphemeralRunner{}).
 					WithIndex(&actionsv1alpha1.EphemeralRunner{}, resourceOwnerKey, newGroupVersionOwnerKindIndexer("EphemeralRunnerSet")).
 					Build()
 
-				reconciler := &EphemeralRunnerSetReconciler{
-					Client:          fakeClient,
-					Scheme:          scheme,
-					Log:             logr.Discard(),
-					ResourceBuilder: &ResourceBuilder{Scheme: scheme},
-				}
+				reconciler := newBenchmarkEphemeralRunnerSetReconciler(fakeClient, scheme)
 
 				ctx := context.Background()
 				req := ctrl.Request{
@@ -413,14 +401,10 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunnerSet_OutdatedPhaseStatusUpda
 				}
 
 				b.StartTimer()
-				_, _ = reconciler.Reconcile(ctx, req)
+				if _, err := reconciler.Reconcile(ctx, req); err != nil {
+					b.Fatal(err)
+				}
 			}
 		})
 	}
-}
-
-func newLegacyFakeClientBuilder(scheme *runtime.Scheme) *fake.ClientBuilder {
-	return fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjectTracker(clientgotesting.NewObjectTracker(scheme, serializer.NewCodecFactory(scheme).UniversalDecoder()))
 }

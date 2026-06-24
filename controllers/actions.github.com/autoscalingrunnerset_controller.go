@@ -207,12 +207,14 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 				return ctrl.Result{}, nil
 			}
 
-			original := ephemeralRunnerSet.DeepCopy()
-			ephemeralRunnerSet.Spec.Replicas = 0
-			ephemeralRunnerSet.Spec.PatchID = 0
-			if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
-				log.Error(err, "Failed to patch ephemeral runner set with 0 replicas and reset patch ID for the outdated runner set")
-				return ctrl.Result{}, err
+			if ephemeralRunnerSet.Spec.Replicas > 0 || ephemeralRunnerSet.Spec.PatchID > 0 {
+				original := ephemeralRunnerSet.DeepCopy()
+				ephemeralRunnerSet.Spec.Replicas = 0
+				ephemeralRunnerSet.Spec.PatchID = 0
+				if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
+					log.Error(err, "Failed to patch ephemeral runner set with 0 replicas and reset patch ID for the outdated runner set")
+					return ctrl.Result{}, err
+				}
 			}
 
 			return ctrl.Result{}, nil
