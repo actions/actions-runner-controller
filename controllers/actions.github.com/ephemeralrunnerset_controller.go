@@ -150,6 +150,37 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, nil
 	}
 
+	patchEphemeralRunnerSetProxySecretData := func(proxySecret *corev1.Secret) (bool, error) {
+		proxySecretData, err := ephemeralRunnerSet.Spec.EphemeralRunnerSpec.Proxy.ToSecretData(func(s string) (*corev1.Secret, error) {
+			secret := new(corev1.Secret)
+			err := r.Get(ctx, types.NamespacedName{Namespace: ephemeralRunnerSet.Namespace, Name: s}, secret)
+			return secret, err
+		})
+		if err != nil {
+			return false, fmt.Errorf("failed to convert proxy config to secret data: %w", err)
+		}
+
+		if maps.EqualFunc(proxySecret.Data, proxySecretData, bytes.Equal) {
+			return false, nil
+		}
+
+		desiredProxySecret, err := r.newEphemeralRunnerSetProxySecret(&ephemeralRunnerSet, proxySecretData)
+		if err != nil {
+			return false, fmt.Errorf("failed to build ephemeralRunnerSet proxy secret: %w", err)
+		}
+
+		updatedProxySecret := proxySecret.DeepCopy()
+		updatedProxySecret.Data = proxySecretData
+		updatedProxySecret.Labels = r.filterAndMergeLabels(proxySecret.Labels, desiredProxySecret.Labels)
+		updatedProxySecret.Annotations = r.filterAndMergeAnnotations(proxySecret.Annotations, desiredProxySecret.Annotations)
+
+		log.Info("Updating ephemeralRunnerSet proxy secret")
+		if err := r.Patch(ctx, updatedProxySecret, client.MergeFrom(proxySecret)); err != nil {
+			return false, fmt.Errorf("failed to update ephemeralRunnerSet proxy secret: %w", err)
+		}
+		return true, nil
+	}
+
 	// If hash spec has changed, delete idle ephemeral runners
 	// in order to apply the change to the runners that did not yet receive a job.
 	storedIntegrityHash := ephemeralRunnerSet.Annotations[AnnotationKeyIntegrityHash]
@@ -162,9 +193,35 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 				return ctrl.Result{}, err
 			}
 
-			if _, _, err := r.reconcileEphemeralRunnerSetProxySecret(ctx, &ephemeralRunnerSet, log); err != nil {
-				log.Error(err, "Failed to update EphemeralRunnerSet proxy secret")
-				return ctrl.Result{}, err
+			if ephemeralRunnerSet.Spec.EphemeralRunnerSpec.Proxy != nil {
+				var proxySecret corev1.Secret
+				err := r.Get(
+					ctx,
+					types.NamespacedName{
+						Namespace: ephemeralRunnerSet.Namespace,
+						Name:      proxyEphemeralRunnerSetSecretName(&ephemeralRunnerSet),
+					},
+					&proxySecret,
+				)
+				switch {
+				case err == nil:
+					updated, err := patchEphemeralRunnerSetProxySecretData(&proxySecret)
+					if err != nil {
+						return ctrl.Result{}, err
+					}
+					if updated {
+						return ctrl.Result{RequeueAfter: 1}, nil
+					}
+				case kerrors.IsNotFound(err):
+					log.Info("Creating a ephemeralRunnerSet proxy secret for the runner pods")
+					if err := r.createProxySecret(ctx, &ephemeralRunnerSet, log); err != nil {
+						return ctrl.Result{}, fmt.Errorf("failed to create ephemeralRunnerSet proxy secret: %w", err)
+					}
+					return ctrl.Result{}, nil
+				default:
+					log.Error(err, "Unable to get ephemeralRunnerSet proxy secret", "namespace", ephemeralRunnerSet.Namespace, "name", proxyEphemeralRunnerSetSecretName(&ephemeralRunnerSet))
+					return ctrl.Result{}, err
+				}
 			}
 
 			log.Info("Updating EphemeralRunnerSet with new spec hash")
@@ -194,12 +251,38 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, nil
 	}
 
-	// Create or update proxy secret if needed
-	if _, updated, err := r.reconcileEphemeralRunnerSetProxySecret(ctx, &ephemeralRunnerSet, log); err != nil {
-		log.Error(err, "Unable to reconcile ephemeralRunnerSet proxy secret", "namespace", ephemeralRunnerSet.Namespace, "name", proxyEphemeralRunnerSetSecretName(&ephemeralRunnerSet))
-		return ctrl.Result{}, err
-	} else if updated {
-		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+	var proxySecret *corev1.Secret
+	if ephemeralRunnerSet.Spec.EphemeralRunnerSpec.Proxy != nil {
+		var secret corev1.Secret
+		err := r.Get(
+			ctx,
+			types.NamespacedName{
+				Namespace: ephemeralRunnerSet.Namespace,
+				Name:      proxyEphemeralRunnerSetSecretName(&ephemeralRunnerSet),
+			},
+			&secret,
+		)
+		proxySecret = &secret
+		switch {
+		case err == nil:
+			updated, err := patchEphemeralRunnerSetProxySecretData(proxySecret)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			if updated {
+				return ctrl.Result{RequeueAfter: 1}, nil
+			}
+		case kerrors.IsNotFound(err):
+			// Create a compiled secret for the runner pods in the runnerset namespace
+			log.Info("Creating a ephemeralRunnerSet proxy secret for the runner pods")
+			if err := r.createProxySecret(ctx, &ephemeralRunnerSet, log); err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to create ephemeralRunnerSet proxy secret: %w", err)
+			}
+			return ctrl.Result{}, nil
+		default:
+			log.Error(err, "Unable to get ephemeralRunnerSet proxy secret", "namespace", ephemeralRunnerSet.Namespace, "name", proxyEphemeralRunnerSetSecretName(&ephemeralRunnerSet))
+			return ctrl.Result{}, err
+		}
 	}
 
 	// Find all EphemeralRunner with matching namespace and own by this EphemeralRunnerSet.
@@ -301,7 +384,31 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 	}
 
-	return ctrl.Result{}, r.updateStatus(ctx, &ephemeralRunnerSet, runnerState, log)
+	if err := r.updateStatus(ctx, &ephemeralRunnerSet, runnerState, log); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if proxySecret != nil {
+		expectedScaleSetName := ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName]
+		expectedScaleSetNamespace := ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace]
+		labelsChanged := proxySecret.Labels[LabelKeyGitHubScaleSetName] != expectedScaleSetName || proxySecret.Labels[LabelKeyGitHubScaleSetNamespace] != expectedScaleSetNamespace
+
+		if labelsChanged {
+			updatedProxySecret := proxySecret.DeepCopy()
+			updatedProxySecret.Labels = r.filterAndMergeLabels(proxySecret.Labels, map[string]string{
+				LabelKeyGitHubScaleSetName:      expectedScaleSetName,
+				LabelKeyGitHubScaleSetNamespace: expectedScaleSetNamespace,
+			})
+
+			log.Info("Updating ephemeralRunnerSet proxy secret metadata")
+			if err := r.Patch(ctx, updatedProxySecret, client.MergeFrom(proxySecret)); err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to update ephemeralRunnerSet proxy secret metadata: %w", err)
+			}
+			return ctrl.Result{RequeueAfter: 1}, nil
+		}
+	}
+
+	return ctrl.Result{}, nil
 }
 
 func (r *EphemeralRunnerSetReconciler) setSpecHashCache(namespacedName types.NamespacedName, uid types.UID, generation int64, hash string) {
@@ -533,81 +640,6 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunnerSetProxySecret(ctx 
 			proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet),
 		)
 		return false, err
-	}
-}
-
-func (r *EphemeralRunnerSetReconciler) reconcileEphemeralRunnerSetProxySecret(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) (secret *corev1.Secret, updated bool, err error) {
-	if ephemeralRunnerSet.Spec.EphemeralRunnerSpec.Proxy == nil {
-		return nil, false, nil
-	}
-
-	var proxySecret corev1.Secret
-	err = r.Get(
-		ctx,
-		types.NamespacedName{
-			Namespace: ephemeralRunnerSet.Namespace,
-			Name:      proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet),
-		},
-		&proxySecret,
-	)
-	switch {
-	case err == nil:
-		proxySecretData, err := ephemeralRunnerSet.Spec.EphemeralRunnerSpec.Proxy.ToSecretData(func(s string) (*corev1.Secret, error) {
-			secret := new(corev1.Secret)
-			err := r.Get(ctx, types.NamespacedName{Namespace: ephemeralRunnerSet.Namespace, Name: s}, secret)
-			return secret, err
-		})
-		if err != nil {
-			return nil, false, fmt.Errorf("failed to convert proxy config to secret data: %w", err)
-		}
-
-		desiredProxyHash := ephemeralRunnerSetProxySecretIdentityHash(&corev1.Secret{Data: proxySecretData})
-		expectedScaleSetName := ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName]
-		expectedScaleSetNamespace := ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace]
-		var updatedProxySecret *corev1.Secret
-		ensureUpdatedProxySecret := func() *corev1.Secret {
-			if updatedProxySecret == nil {
-				updatedProxySecret = proxySecret.DeepCopy()
-			}
-			return updatedProxySecret
-		}
-		var shouldUpdate bool
-		if !maps.EqualFunc(proxySecret.Data, proxySecretData, bytes.Equal) {
-			ensureUpdatedProxySecret().Data = proxySecretData
-			shouldUpdate = true
-		}
-		if proxySecret.Labels[LabelKeyGitHubScaleSetName] != expectedScaleSetName || proxySecret.Labels[LabelKeyGitHubScaleSetNamespace] != expectedScaleSetNamespace {
-			desiredLabels := r.filterAndMergeLabels(proxySecret.Labels, map[string]string{
-				LabelKeyGitHubScaleSetName:      expectedScaleSetName,
-				LabelKeyGitHubScaleSetNamespace: expectedScaleSetNamespace,
-			})
-			ensureUpdatedProxySecret().Labels = desiredLabels
-			shouldUpdate = true
-		}
-		if proxySecret.Annotations[AnnotationKeyIntegrityHash] != desiredProxyHash {
-			desiredAnnotations := r.filterAndMergeAnnotations(proxySecret.Annotations, map[string]string{
-				AnnotationKeyIntegrityHash: desiredProxyHash,
-			})
-			ensureUpdatedProxySecret().Annotations = desiredAnnotations
-			shouldUpdate = true
-		}
-		if shouldUpdate {
-			log.Info("Updating ephemeralRunnerSet proxy secret")
-			if err := r.Patch(ctx, updatedProxySecret, client.MergeFrom(&proxySecret)); err != nil {
-				return nil, false, fmt.Errorf("failed to update ephemeralRunnerSet proxy secret: %w", err)
-			}
-			return updatedProxySecret, true, nil
-		}
-		return &proxySecret, false, nil
-	case kerrors.IsNotFound(err):
-		// Create a compiled secret for the runner pods in the runnerset namespace
-		log.Info("Creating a ephemeralRunnerSet proxy secret for the runner pods")
-		if err := r.createProxySecret(ctx, ephemeralRunnerSet, log); err != nil {
-			return nil, false, fmt.Errorf("failed to create ephemeralRunnerSet proxy secret: %w", err)
-		}
-		return nil, false, nil
-	default:
-		return nil, false, err
 	}
 }
 

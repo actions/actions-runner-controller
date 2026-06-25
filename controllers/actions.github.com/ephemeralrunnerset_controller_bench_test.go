@@ -199,6 +199,114 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunnerSet_ScaleUp(b *testing.B) {
 	}
 }
 
+func BenchmarkActionsGithub_Reconcile_EphemeralRunnerSet_ScaleUpWithProxy(b *testing.B) {
+	testCases := []struct {
+		name      string
+		current   int
+		desired   int
+		scaleUpBy int
+	}{
+		{name: "small_scale_0_to_3", current: 0, desired: 3, scaleUpBy: 3},
+		{name: "medium_scale_5_to_15", current: 5, desired: 15, scaleUpBy: 10},
+		{name: "large_scale_10_to_60", current: 10, desired: 60, scaleUpBy: 50},
+	}
+
+	for _, tc := range testCases {
+		b.Run(tc.name, func(b *testing.B) {
+			scheme := runtime.NewScheme()
+			_ = actionsv1alpha1.AddToScheme(scheme)
+			_ = corev1.AddToScheme(scheme)
+
+			b.ResetTimer()
+			for b.Loop() {
+				b.StopTimer()
+
+				ers := NewMinimalEphemeralRunnerSet("default", "test-ers")
+				ers.Labels = map[string]string{
+					LabelKeyGitHubScaleSetName:      "test-scale-set",
+					LabelKeyGitHubScaleSetNamespace: "default",
+				}
+				ers.Spec.Replicas = tc.desired
+				ers.Spec.EphemeralRunnerSpec.Proxy = &actionsv1alpha1.ProxyConfig{
+					HTTP:    &actionsv1alpha1.ProxyServerConfig{URL: "http://proxy.example.com:8080"},
+					HTTPS:   &actionsv1alpha1.ProxyServerConfig{URL: "https://proxy.example.com:8443"},
+					NoProxy: []string{"kubernetes.default.svc", "127.0.0.1"},
+				}
+				controllerutil.AddFinalizer(ers, EphemeralRunnerSetFinalizerName)
+
+				integrityHash := ephemeralRunnerSetIntegrityHash(ers)
+				if ers.Annotations == nil {
+					ers.Annotations = make(map[string]string)
+				}
+				ers.Annotations[AnnotationKeyIntegrityHash] = integrityHash
+
+				ers.Status.CurrentReplicas = tc.current
+				ers.Status.Phase = actionsv1alpha1.EphemeralRunnerSetPhaseRunning
+				ers.Status.RunningEphemeralRunners = tc.current
+
+				proxySecret := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      proxyEphemeralRunnerSetSecretName(ers),
+						Namespace: ers.Namespace,
+						Labels: map[string]string{
+							LabelKeyGitHubScaleSetName:      ers.Labels[LabelKeyGitHubScaleSetName],
+							LabelKeyGitHubScaleSetNamespace: ers.Labels[LabelKeyGitHubScaleSetNamespace],
+						},
+						Annotations: map[string]string{},
+					},
+					Data: map[string][]byte{
+						"http_proxy":  []byte("http://proxy.example.com:8080"),
+						"https_proxy": []byte("https://proxy.example.com:8443"),
+						"no_proxy":    []byte("kubernetes.default.svc,127.0.0.1"),
+					},
+				}
+				proxySecret.Annotations[AnnotationKeyIntegrityHash] = ephemeralRunnerSetProxySecretIdentityHash(proxySecret)
+
+				runners := make([]client.Object, 0, tc.current+2)
+				runners = append(runners, ers, proxySecret)
+
+				for j := 0; j < tc.current; j++ {
+					runner := NewMinimalEphemeralRunner("default", fmt.Sprintf("test-runner-%d", j))
+					runner.Status.Phase = actionsv1alpha1.EphemeralRunnerPhaseRunning
+					runner.Status.RunnerID = j + 100
+					runner.OwnerReferences = []metav1.OwnerReference{
+						{
+							APIVersion: actionsv1alpha1.GroupVersion.String(),
+							Kind:       "EphemeralRunnerSet",
+							Name:       ers.Name,
+							UID:        ers.UID,
+							Controller: func() *bool { t := true; return &t }(),
+						},
+					}
+					runners = append(runners, runner)
+				}
+
+				fakeClient := fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithObjects(runners...).
+					WithStatusSubresource(&actionsv1alpha1.EphemeralRunnerSet{}, &actionsv1alpha1.EphemeralRunner{}).
+					WithIndex(&actionsv1alpha1.EphemeralRunner{}, resourceOwnerKey, newGroupVersionOwnerKindIndexer("EphemeralRunnerSet")).
+					Build()
+
+				reconciler := newBenchmarkEphemeralRunnerSetReconciler(fakeClient, scheme)
+
+				ctx := context.Background()
+				req := ctrl.Request{
+					NamespacedName: types.NamespacedName{
+						Namespace: "default",
+						Name:      "test-ers",
+					},
+				}
+
+				b.StartTimer()
+				if _, err := reconciler.Reconcile(ctx, req); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
 // BenchmarkActionsGithub_Reconcile_EphemeralRunnerSet_FinalizerAdd benchmarks the
 // reconciliation path where the finalizer needs to be added to a new EphemeralRunnerSet
 func BenchmarkActionsGithub_Reconcile_EphemeralRunnerSet_FinalizerAdd(b *testing.B) {
