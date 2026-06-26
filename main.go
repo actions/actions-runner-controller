@@ -299,11 +299,12 @@ func main() {
 			secretresolver.WithLogger(slogLogger),
 		)
 
+		resourceCache := actionsgithubcom.NewResourceCache()
 		rb := &actionsgithubcom.ResourceBuilder{
 			ExcludeLabelPropagationPrefixes: excludeLabelPropagationPrefixes,
 			SecretResolver:                  secretResolver,
 			Scheme:                          mgr.GetScheme(),
-			ResourceCache:                   actionsgithubcom.NewResourceCache(),
+			ResourceCache:                   &resourceCache,
 		}
 
 		log.Info("Resource builder initializing")

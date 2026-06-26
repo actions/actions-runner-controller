@@ -498,6 +498,24 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, r.deleteListenerPod(ctx, &autoscalingListener, &listenerPod, log)
 
 	case cs == nil:
+		if result, updated, err := r.reconcileListenerMetadata(
+			ctx,
+			&serviceAccount,
+			desiredServiceAccount,
+			&listenerRole,
+			desiredRole,
+			&listenerRoleBinding,
+			desiredRoleBinding,
+			proxySecret,
+			desiredListenerProxy,
+			&listenerConfigSecret,
+			desiredConfigSecret,
+			&listenerPod,
+			desiredPod,
+			log,
+		); err != nil || updated {
+			return result, err
+		}
 		log.Info("Listener pod is not ready", "namespace", listenerPod.Namespace, "name", listenerPod.Name)
 		return ctrl.Result{}, nil
 	case cs.State.Terminated != nil:

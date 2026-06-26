@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -1308,9 +1309,9 @@ var _ = Describe("Test client optional configuration", Ordered, func() {
 		})
 
 		It("should be able to make requests to a server using a proxy", func() {
-			serverSuccessfullyCalled := false
+			var serverSuccessfullyCalled atomic.Bool
 			proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				serverSuccessfullyCalled = true
+				serverSuccessfullyCalled.Store(true)
 				w.WriteHeader(http.StatusOK)
 			}))
 			defer proxy.Close()
@@ -1355,7 +1356,7 @@ var _ = Describe("Test client optional configuration", Ordered, func() {
 			// wait for server to be called
 			Eventually(
 				func() (bool, error) {
-					return serverSuccessfullyCalled, nil
+					return serverSuccessfullyCalled.Load(), nil
 				},
 				autoscalingRunnerSetTestTimeout,
 				1*time.Nanosecond,
@@ -1523,9 +1524,9 @@ var _ = Describe("Test client optional configuration", Ordered, func() {
 			certPath := filepath.Join(certsFolder, "server.crt")
 			keyPath := filepath.Join(certsFolder, "server.key")
 
-			serverSuccessfullyCalled := false
+			var serverSuccessfullyCalled atomic.Bool
 			server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				serverSuccessfullyCalled = true
+				serverSuccessfullyCalled.Store(true)
 				w.WriteHeader(http.StatusOK)
 			}))
 			cert, err := tls.LoadX509KeyPair(certPath, keyPath)
@@ -1580,7 +1581,7 @@ var _ = Describe("Test client optional configuration", Ordered, func() {
 			// wait for server to be called
 			Eventually(
 				func() (bool, error) {
-					return serverSuccessfullyCalled, nil
+					return serverSuccessfullyCalled.Load(), nil
 				},
 				autoscalingRunnerSetTestTimeout,
 				1*time.Nanosecond,

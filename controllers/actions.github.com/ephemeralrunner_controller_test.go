@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
@@ -1351,7 +1352,7 @@ var _ = Describe("EphemeralRunner", func() {
 				),
 			}
 
-			proxySuccessfulllyCalled := false
+			var proxySuccessfulllyCalled atomic.Bool
 			proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				header := r.Header.Get("Proxy-Authorization")
 				Expect(header).NotTo(BeEmpty())
@@ -1361,7 +1362,7 @@ var _ = Describe("EphemeralRunner", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(string(decoded)).To(Equal("test:password"))
 
-				proxySuccessfulllyCalled = true
+				proxySuccessfulllyCalled.Store(true)
 				w.WriteHeader(http.StatusOK)
 			}))
 			GinkgoT().Cleanup(func() {
@@ -1396,7 +1397,7 @@ var _ = Describe("EphemeralRunner", func() {
 
 			Eventually(
 				func() bool {
-					return proxySuccessfulllyCalled
+					return proxySuccessfulllyCalled.Load()
 				},
 				2*time.Second,
 				ephemeralRunnerInterval,
@@ -1524,9 +1525,9 @@ var _ = Describe("EphemeralRunner", func() {
 			certPath := filepath.Join(certsFolder, "server.crt")
 			keyPath := filepath.Join(certsFolder, "server.key")
 
-			serverSuccessfullyCalled := false
+			var serverSuccessfullyCalled atomic.Bool
 			server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				serverSuccessfullyCalled = true
+				serverSuccessfullyCalled.Store(true)
 				w.WriteHeader(http.StatusOK)
 			}))
 			cert, err := tls.LoadX509KeyPair(certPath, keyPath)
@@ -1562,7 +1563,7 @@ var _ = Describe("EphemeralRunner", func() {
 
 			Eventually(
 				func() bool {
-					return serverSuccessfullyCalled
+					return serverSuccessfullyCalled.Load()
 				},
 				2*time.Second,
 				ephemeralRunnerInterval,

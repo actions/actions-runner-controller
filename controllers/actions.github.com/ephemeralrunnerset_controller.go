@@ -217,7 +217,6 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 					if err := r.createProxySecret(ctx, &ephemeralRunnerSet, log); err != nil {
 						return ctrl.Result{}, fmt.Errorf("failed to create ephemeralRunnerSet proxy secret: %w", err)
 					}
-					return ctrl.Result{}, nil
 				default:
 					log.Error(err, "Unable to get ephemeralRunnerSet proxy secret", "namespace", ephemeralRunnerSet.Namespace, "name", proxyEphemeralRunnerSetSecretName(&ephemeralRunnerSet))
 					return ctrl.Result{}, err

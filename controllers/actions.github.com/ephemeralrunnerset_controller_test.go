@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1480,7 +1481,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 		err := k8sClient.Create(ctx, secretCredentials)
 		Expect(err).NotTo(HaveOccurred(), "failed to create secret credentials")
 
-		proxySuccessfulllyCalled := false
+		var proxySuccessfulllyCalled atomic.Bool
 		proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			header := r.Header.Get("Proxy-Authorization")
 			Expect(header).NotTo(BeEmpty())
@@ -1490,7 +1491,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(decoded)).To(Equal("test:password"))
 
-			proxySuccessfulllyCalled = true
+			proxySuccessfulllyCalled.Store(true)
 			w.WriteHeader(http.StatusOK)
 		}))
 		GinkgoT().Cleanup(func() {
@@ -1562,7 +1563,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 
 		Eventually(
 			func() bool {
-				return proxySuccessfulllyCalled
+				return proxySuccessfulllyCalled.Load()
 			},
 			2*time.Second,
 			ephemeralRunnerInterval,
