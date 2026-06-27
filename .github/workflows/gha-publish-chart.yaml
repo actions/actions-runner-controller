@@ -55,7 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           # If inputs.ref is empty, it'll resolve to the default branch
           ref: ${{ inputs.ref }}
@@ -130,7 +130,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           # If inputs.ref is empty, it'll resolve to the default branch
           ref: ${{ inputs.ref }}
@@ -177,7 +177,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           # If inputs.ref is empty, it'll resolve to the default branch
           ref: ${{ inputs.ref }}
@@ -225,7 +225,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           # If inputs.ref is empty, it'll resolve to the default branch
           ref: ${{ inputs.ref }}
@@ -273,7 +273,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           # If inputs.ref is empty, it'll resolve to the default branch
           ref: ${{ inputs.ref }}
