@@ -14,6 +14,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -1197,7 +1198,10 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					if err != nil {
 						return v1alpha1.EphemeralRunnerSetStatus{}, err
 					}
-					return updated.Status, nil
+					status := updated.Status
+					status.Conditions = nil
+					status.ObservedGeneration = 0
+					return status, nil
 				},
 				ephemeralRunnerSetTestTimeout,
 				ephemeralRunnerSetTestInterval,
@@ -1206,6 +1210,11 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			updated = new(v1alpha1.EphemeralRunnerSet)
 			err = k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunnerSet.Name, Namespace: ephemeralRunnerSet.Namespace}, updated)
 			Expect(err).NotTo(HaveOccurred(), "Failed to fetch ephemeral runner set")
+
+			Expect(updated.Status.ObservedGeneration).To(BeEquivalentTo(updated.Generation), "ObservedGeneration should match the generation")
+			readyCondition := meta.FindStatusCondition(updated.Status.Conditions, v1alpha1.ConditionTypeReady)
+			Expect(readyCondition).NotTo(BeNil(), "Ready condition should be set")
+			Expect(readyCondition.Status).To(BeEquivalentTo(metav1.ConditionTrue), "Ready condition should be true")
 
 			updatedOriginal := updated.DeepCopy()
 			updated.Spec.Replicas = 0
@@ -1241,7 +1250,10 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					if err != nil {
 						return v1alpha1.EphemeralRunnerSetStatus{}, err
 					}
-					return updated.Status, nil
+					status := updated.Status
+					status.Conditions = nil
+					status.ObservedGeneration = 0
+					return status, nil
 				},
 				ephemeralRunnerSetTestTimeout,
 				ephemeralRunnerSetTestInterval,
@@ -1264,7 +1276,10 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					if err != nil {
 						return v1alpha1.EphemeralRunnerSetStatus{}, err
 					}
-					return updated.Status, nil
+					status := updated.Status
+					status.Conditions = nil
+					status.ObservedGeneration = 0
+					return status, nil
 				},
 				ephemeralRunnerSetTestTimeout,
 				ephemeralRunnerSetTestInterval,

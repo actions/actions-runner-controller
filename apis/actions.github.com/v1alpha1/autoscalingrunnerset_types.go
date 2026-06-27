@@ -314,6 +314,16 @@ type HistogramMetric struct {
 
 // AutoscalingRunnerSetStatus defines the observed state of AutoscalingRunnerSet
 type AutoscalingRunnerSetStatus struct {
+	// ObservedGeneration is the most recent generation observed by the controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Conditions describe the current state of the AutoscalingRunnerSet.
+	// +optional
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
 	// +optional
 	CurrentRunners int `json:"currentRunners"`
 

@@ -1,5 +1,8 @@
 package v1alpha1
 
+// ConditionTypeReady is the condition type reported in the status of all resources in this API group.
+const ConditionTypeReady = "Ready"
+
 // ResourceMeta carries metadata common to all internal resources
 type ResourceMeta struct {
 	// +optional

@@ -21,6 +21,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -894,11 +895,22 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					if err != nil {
 						return v1alpha1.AutoscalingRunnerSetStatus{}, fmt.Errorf("failed to get AutoScalingRunnerSet: %w", err)
 					}
-					return updated.Status, nil
+					status := updated.Status
+					status.Conditions = nil
+					status.ObservedGeneration = 0
+					return status, nil
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
 			).Should(BeEquivalentTo(desiredStatus), "AutoScalingRunnerSet status should be updated")
+
+			updatedRunnerSet := new(v1alpha1.AutoscalingRunnerSet)
+			err = k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, updatedRunnerSet)
+			Expect(err).NotTo(HaveOccurred(), "failed to get AutoScalingRunnerSet")
+			Expect(updatedRunnerSet.Status.ObservedGeneration).To(BeEquivalentTo(updatedRunnerSet.Generation), "ObservedGeneration should match the generation")
+			readyCondition := meta.FindStatusCondition(updatedRunnerSet.Status.Conditions, v1alpha1.ConditionTypeReady)
+			Expect(readyCondition).NotTo(BeNil(), "Ready condition should be set")
+			Expect(readyCondition.Status).To(BeEquivalentTo(metav1.ConditionTrue), "Ready condition should be true")
 
 			// Patch the AutoScalingRunnerSet image which should trigger
 			// the recreation of the Listener and EphemeralRunnerSet
@@ -1001,7 +1013,10 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 				if err != nil {
 					return v1alpha1.AutoscalingRunnerSetStatus{}, fmt.Errorf("failed to get AutoScalingRunnerSet: %w", err)
 				}
-				return updated.Status, nil
+				status := updated.Status
+				status.Conditions = nil
+				status.ObservedGeneration = 0
+				return status, nil
 			},
 			autoscalingRunnerSetTestTimeout,
 			autoscalingRunnerSetTestInterval,

@@ -34,7 +34,9 @@ import (
 	"github.com/go-logr/logr"
 	"go.uber.org/multierr"
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -282,17 +284,29 @@ func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemer
 	default:
 		phase = ephemeralRunnerSet.Status.Phase
 	}
-	desiredStatus := v1alpha1.EphemeralRunnerSetStatus{
-		CurrentReplicas:         total,
-		Phase:                   phase,
-		PendingEphemeralRunners: len(state.pending),
-		RunningEphemeralRunners: len(state.running),
-		FailedEphemeralRunners:  len(state.failed),
+	ephemeralRunnerSet.Status.CurrentReplicas = total
+	ephemeralRunnerSet.Status.Phase = phase
+	ephemeralRunnerSet.Status.PendingEphemeralRunners = len(state.pending)
+	ephemeralRunnerSet.Status.RunningEphemeralRunners = len(state.running)
+	ephemeralRunnerSet.Status.FailedEphemeralRunners = len(state.failed)
+	ephemeralRunnerSet.Status.ObservedGeneration = ephemeralRunnerSet.Generation
+
+	readyStatus := metav1.ConditionTrue
+	message := "EphemeralRunnerSet is running"
+	if phase == v1alpha1.EphemeralRunnerSetPhaseOutdated {
+		readyStatus = metav1.ConditionFalse
+		message = "EphemeralRunnerSet contains outdated ephemeral runners"
 	}
+	setReadyCondition(
+		&ephemeralRunnerSet.Status.Conditions,
+		ephemeralRunnerSet.Generation,
+		readyStatus,
+		string(phase),
+		message,
+	)
 
 	// Update the status if needed.
-	if ephemeralRunnerSet.Status != desiredStatus {
-		ephemeralRunnerSet.Status = desiredStatus
+	if !apiequality.Semantic.DeepEqual(original.Status, ephemeralRunnerSet.Status) {
 		if err := r.Status().Patch(ctx, ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
 			log.Error(err, "Failed to update EphemeralRunnerSet status")
 			return err

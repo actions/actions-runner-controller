@@ -31,7 +31,9 @@ import (
 	"github.com/google/go-cmp/cmp"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -156,6 +158,13 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 
 		original = autoscalingRunnerSet.DeepCopy()
 		autoscalingRunnerSet.Status.Phase = v1alpha1.AutoscalingRunnerSetPhasePending
+		setReadyCondition(
+			&autoscalingRunnerSet.Status.Conditions,
+			autoscalingRunnerSet.Generation,
+			metav1.ConditionFalse,
+			string(v1alpha1.AutoscalingRunnerSetPhasePending),
+			"AutoscalingRunnerSet spec changed; waiting for the runner scale set and listener to be updated",
+		)
 		if err := r.Status().Patch(ctx, &autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
 			log.Error(err, "Failed to update autoscaling runner set status with pending phase")
 			return ctrl.Result{}, err
@@ -433,22 +442,33 @@ func (r *AutoscalingRunnerSetReconciler) cleanUpResources(ctx context.Context, a
 
 // Update the status of autoscaling runner set if necessary
 func (r *AutoscalingRunnerSetReconciler) updateStatus(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, phase v1alpha1.AutoscalingRunnerSetPhase, log logr.Logger) error {
-	countDiff := ephemeralRunnerSet != nil && ephemeralRunnerSet.Status.CurrentReplicas != autoscalingRunnerSet.Status.CurrentRunners
-	phaseDiff := phase != autoscalingRunnerSet.Status.Phase
-	if !countDiff && !phaseDiff {
-		return nil
-	}
-
 	original := autoscalingRunnerSet.DeepCopy()
-	if phaseDiff {
-		autoscalingRunnerSet.Status.Phase = phase
-	}
 
-	if countDiff && ephemeralRunnerSet != nil {
+	autoscalingRunnerSet.Status.Phase = phase
+	if ephemeralRunnerSet != nil {
 		autoscalingRunnerSet.Status.CurrentRunners = ephemeralRunnerSet.Status.CurrentReplicas
 		autoscalingRunnerSet.Status.PendingEphemeralRunners = ephemeralRunnerSet.Status.PendingEphemeralRunners
 		autoscalingRunnerSet.Status.RunningEphemeralRunners = ephemeralRunnerSet.Status.RunningEphemeralRunners
 		autoscalingRunnerSet.Status.FailedEphemeralRunners = ephemeralRunnerSet.Status.FailedEphemeralRunners
+	}
+	autoscalingRunnerSet.Status.ObservedGeneration = autoscalingRunnerSet.Generation
+
+	readyStatus := metav1.ConditionFalse
+	message := "AutoscalingRunnerSet is not ready"
+	if phase == v1alpha1.AutoscalingRunnerSetPhaseRunning {
+		readyStatus = metav1.ConditionTrue
+		message = "Runner scale set, ephemeral runner set and listener are up to date"
+	}
+	setReadyCondition(
+		&autoscalingRunnerSet.Status.Conditions,
+		autoscalingRunnerSet.Generation,
+		readyStatus,
+		string(phase),
+		message,
+	)
+
+	if apiequality.Semantic.DeepEqual(original.Status, autoscalingRunnerSet.Status) {
+		return nil
 	}
 
 	if err := r.Status().Patch(ctx, autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
