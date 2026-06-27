@@ -230,10 +230,16 @@ runner:
       initContainers: []
       volumes: []
 
-  # container field is applied to the container named "runner". You cannot override the name of the runner container
+  # container field is applied to the container named "runner". You cannot override the name of the runner container.
+  # Additional container fields are passed through as-is (e.g. resources, securityContext, imagePullPolicy, etc.)
   container:
     image: "ghcr.io/actions/actions-runner:latest"
     command: ["/home/runner/run.sh"]
+    # env: []
+    # volumeMounts: []
+    # args: []
+    # securityContext: {}
+    # resources: {}
 
   dind:
     # If official runner image is used, or the dind image doesn't contain
