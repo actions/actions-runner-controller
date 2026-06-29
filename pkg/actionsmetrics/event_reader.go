@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -16,6 +17,16 @@ import (
 	"github.com/actions/actions-runner-controller/github"
 )
 
+const (
+	inProgressJobCheckInterval = 5 * time.Second
+)
+
+// InProgressJob stores timing with labels for an in-progress job
+type InProgressJob struct {
+	StartTime time.Time
+	Labels    prometheus.Labels
+}
+
 type EventReader struct {
 	Log logr.Logger
 
@@ -24,6 +35,11 @@ type EventReader struct {
 
 	// Event queue
 	Events chan interface{}
+
+	// Map of in-progress jobs by job ID
+	InProgressJobs map[int64]InProgressJob
+
+	inProgressJobsLock sync.RWMutex
 }
 
 // HandleWorkflowJobEvent send event to reader channel for processing
@@ -38,10 +54,27 @@ func (reader *EventReader) HandleWorkflowJobEvent(event interface{}) {
 //
 // Should be called asynchronously with `go`
 func (reader *EventReader) ProcessWorkflowJobEvents(ctx context.Context) {
+	// Create a ticker that runs every `inProgressJobCheckInterval`
+	ticker := time.NewTicker(inProgressJobCheckInterval)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case event := <-reader.Events:
 			reader.ProcessWorkflowJobEvent(ctx, event)
+		case <-ticker.C:
+			// For all in-progress jobs, increment the metric by 5 seconds using the stored labels
+			reader.inProgressJobsLock.Lock()
+			for _, jobInfo := range reader.InProgressJobs {
+				// By default, the duration is the check interval
+				inProgressJobDuration := inProgressJobCheckInterval.Seconds()
+				if jobInfo.StartTime.Add(inProgressJobCheckInterval).After(time.Now()) {
+					// If the job started less than the check interval ago, use the actual duration
+					inProgressJobDuration = time.Since(jobInfo.StartTime).Seconds()
+				}
+				githubWorkflowJobInProgressDurationSeconds.With(jobInfo.Labels).Add(inProgressJobDuration)
+			}
+			reader.inProgressJobsLock.Unlock()
 		case <-ctx.Done():
 			return
 		}
@@ -122,6 +155,20 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 	case "in_progress":
 		githubWorkflowJobsStartedTotal.With(labels).Inc()
 
+		// Store the start time and labels of this job
+		jobID := *e.WorkflowJob.ID
+		reader.inProgressJobsLock.Lock()
+		// Make a copy of the labels to avoid any potential concurrent modification issues
+		labelsCopy := make(prometheus.Labels)
+		for k, v := range labels {
+			labelsCopy[k] = v
+		}
+		reader.InProgressJobs[jobID] = InProgressJob{
+			StartTime: time.Now(),
+			Labels:    labelsCopy,
+		}
+		reader.inProgressJobsLock.Unlock()
+
 		if reader.GitHubClient == nil {
 			return
 		}
@@ -138,6 +185,11 @@ func (reader *EventReader) ProcessWorkflowJobEvent(ctx context.Context, event in
 
 	case "completed":
 		githubWorkflowJobsCompletedTotal.With(labels).Inc()
+
+		// Remove the job from tracking since it's no longer in progress
+		reader.inProgressJobsLock.Lock()
+		delete(reader.InProgressJobs, *e.WorkflowJob.ID)
+		reader.inProgressJobsLock.Unlock()
 
 		// job_conclusion -> (neutral, success, skipped, cancelled, timed_out, action_required, failure)
 		githubWorkflowJobConclusionsTotal.With(extraLabel("job_conclusion", *e.WorkflowJob.Conclusion, labels)).Inc()
