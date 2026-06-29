@@ -8345,6 +8345,8 @@ spec:
                   type: integer
               type: object
           type: object
+      selectableFields:
+        - jsonPath: .status.phase
       served: true
       storage: true
       subresources:

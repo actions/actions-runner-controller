@@ -28,6 +28,7 @@ const EphemeralRunnerContainerName = "runner"
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:selectablefield:JSONPath=.status.phase
 // +kubebuilder:printcolumn:JSONPath=".spec.githubConfigUrl",name="GitHub Config URL",type=string
 // +kubebuilder:printcolumn:JSONPath=".status.runnerId",name=RunnerId,type=number
 // +kubebuilder:printcolumn:JSONPath=".status.phase",name=Phase,type=string
