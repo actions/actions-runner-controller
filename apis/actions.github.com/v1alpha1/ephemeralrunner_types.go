@@ -41,10 +41,13 @@ const EphemeralRunnerContainerName = "runner"
 
 // EphemeralRunner is the Schema for the ephemeralrunners API
 type EphemeralRunner struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   EphemeralRunnerSpec   `json:"spec,omitempty"`
+	// +optional
+	Spec EphemeralRunnerSpec `json:"spec,omitempty"`
+	// +optional
 	Status EphemeralRunnerStatus `json:"status,omitempty"`
 }
 
@@ -102,17 +105,17 @@ func (er *EphemeralRunner) VaultProxy() *ProxyConfig {
 
 // EphemeralRunnerSpec defines the desired state of EphemeralRunner
 type EphemeralRunnerSpec struct {
-	// +required
+	// +optional
 	GitHubConfigURL string `json:"githubConfigUrl,omitempty"`
 
-	// +required
+	// +optional
 	GitHubConfigSecret string `json:"githubConfigSecret,omitempty"`
 
 	// +optional
 	GitHubServerTLS *TLSConfig `json:"githubServerTLS,omitempty"`
 
-	// +required
-	RunnerScaleSetID int `json:"runnerScaleSetId,omitempty"`
+	// +optional
+	RunnerScaleSetID int `json:"runnerScaleSetId"`
 
 	// +optional
 	Proxy *ProxyConfig `json:"proxy,omitempty"`
@@ -126,6 +129,7 @@ type EphemeralRunnerSpec struct {
 	// +optional
 	EphemeralRunnerConfigSecretMetadata *ResourceMeta `json:"ephemeralRunnerConfigSecretMetadata,omitempty"`
 
+	// +optional
 	corev1.PodTemplateSpec `json:",inline"`
 }
 

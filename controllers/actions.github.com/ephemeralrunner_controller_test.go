@@ -1367,7 +1367,7 @@ var _ = Describe("EphemeralRunner", func() {
 			ephemeralRunner.Spec.GitHubConfigURL = "http://example.com/org/repo"
 			ephemeralRunner.Spec.Proxy = &v1alpha1.ProxyConfig{
 				HTTP: &v1alpha1.ProxyServerConfig{
-					Url:                 proxy.URL,
+					URL:                 proxy.URL,
 					CredentialSecretRef: "proxy-credentials",
 				},
 			}
@@ -1388,10 +1388,10 @@ var _ = Describe("EphemeralRunner", func() {
 			ephemeralRunner := newExampleRunner("test-runner", autoScalingNS.Name, configSecret.Name)
 			ephemeralRunner.Spec.Proxy = &v1alpha1.ProxyConfig{
 				HTTP: &v1alpha1.ProxyServerConfig{
-					Url: "http://proxy.example.com:8080",
+					URL: "http://proxy.example.com:8080",
 				},
 				HTTPS: &v1alpha1.ProxyServerConfig{
-					Url: "http://proxy.example.com:8080",
+					URL: "http://proxy.example.com:8080",
 				},
 				NoProxy: []string{"example.com"},
 			}

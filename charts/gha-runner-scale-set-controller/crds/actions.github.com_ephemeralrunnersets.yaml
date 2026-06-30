@@ -98,10 +98,9 @@ spec:
                     githubServerTLS:
                       properties:
                         certificateFrom:
-                          description: Required
                           properties:
                             configMapKeyRef:
-                              description: Required
+                              description: Selects a key from a ConfigMap.
                               properties:
                                 key:
                                   description: The key to select.
@@ -122,7 +121,11 @@ spec:
                                 - key
                               type: object
                               x-kubernetes-map-type: atomic
+                          required:
+                            - configMapKeyRef
                           type: object
+                      required:
+                        - certificateFrom
                       type: object
                     metadata:
                       description: |-
@@ -153,16 +156,18 @@ spec:
                             credentialSecretRef:
                               type: string
                             url:
-                              description: Required
                               type: string
+                          required:
+                            - url
                           type: object
                         https:
                           properties:
                             credentialSecretRef:
                               type: string
                             url:
-                              description: Required
                               type: string
+                          required:
+                            - url
                           type: object
                         noProxy:
                           items:
@@ -8277,16 +8282,18 @@ spec:
                                 credentialSecretRef:
                                   type: string
                                 url:
-                                  description: Required
                                   type: string
+                              required:
+                                - url
                               type: object
                             https:
                               properties:
                                 credentialSecretRef:
                                   type: string
                                 url:
-                                  description: Required
                                   type: string
+                              required:
+                                - url
                               type: object
                             noProxy:
                               items:
@@ -8299,10 +8306,6 @@ spec:
                             It is used to identify which vault integration should be used to resolve secrets.
                           type: string
                       type: object
-                  required:
-                    - githubConfigSecret
-                    - githubConfigUrl
-                    - runnerScaleSetId
                   type: object
                 patchID:
                   description: PatchID is the unique identifier for the patch issued by the listener app
@@ -8310,26 +8313,26 @@ spec:
                 replicas:
                   description: Replicas is the number of desired EphemeralRunner resources in the k8s namespace.
                   type: integer
-              required:
-                - patchID
               type: object
             status:
               description: EphemeralRunnerSetStatus defines the observed state of EphemeralRunnerSet
               properties:
                 currentReplicas:
                   description: CurrentReplicas is the number of currently running EphemeralRunner resources being managed by this EphemeralRunnerSet.
+                  minimum: 0
                   type: integer
                 failedEphemeralRunners:
+                  minimum: 0
                   type: integer
                 pendingEphemeralRunners:
+                  minimum: 0
                   type: integer
                 phase:
                   description: EphemeralRunnerSetPhase is the phase of the ephemeral runner set resource
                   type: string
                 runningEphemeralRunners:
+                  minimum: 0
                   type: integer
-              required:
-                - currentReplicas
               type: object
           type: object
       served: true
