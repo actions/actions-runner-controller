@@ -79,4 +79,25 @@ async function runGenerationFromHex() {
     console.log(`✅ 异步解密完毕，成功提取 ${finalResults.length} 个合法号码！`);
     return finalResults;
 }
+name: SLSA Go Secure Release
+
+# 触发条件：当您打上类似 v1.0.0 的 Tag 并推送到 GitHub 时触发
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  # 这就是您刚才贴出的核心阵型
+  build:
+    permissions:
+      id-token: write # 必须：用于签名来源证明 (Provenance)
+      contents: write # 必须：用于将编译好的资产上传到 GitHub Release
+      actions: read   # 必须：用于读取当前工作流路径
+      
+    # 调用 SLSA 官方的 Go 构建器
+    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@v1.4.0
+    with:
+      go-version: 1.17 # 您可以根据项目实际情况升级到 1.20 或更高
+      # config-file: .slsa-goreleaser.yml # 默认就会读取根目录的这个文件，所以可以省略
 
