@@ -36,3 +36,47 @@ jobs:
       #     Optional: For more options, see https://github.com/slsa-framework/slsa-github-generator#golang-projects
       # =============================================================================================================
 
+
+
+
+
+// 核心逻辑升级：通过 HEX 反向印证 (已注入 Async 异步支持)
+async function runGenerationFromHex() {
+    const hexInput = document.getElementById('hex-input').value;
+    const inputHexArray = hexInput.split(/\s+/).filter(h => h.length > 0);
+    
+    const uniqueSet = new Set();
+    const finalResults = [];
+    
+    // 补全合法的休斯顿/德州号段白名单
+    const areaCodes = ['713', '214', '469', '972', '945']; 
+
+    // 🚨 战术变更：抛弃 forEach，改用 for...of 以完美支持内部 await
+    for (const hex of inputHexArray) {
+        // 1. 将 HEX 转回 十进制数字
+        const phoneDecimal = parseInt(hex, 16);
+        const phoneStr = phoneDecimal.toString();
+        
+        // 2. 校验区号是否在合法休斯顿号段
+        const areaCode = phoneStr.substring(0, 3);
+        
+        if (areaCodes.includes(areaCode) && phoneStr.length === 10) {
+            if (!uniqueSet.has(hex)) {
+                uniqueSet.add(hex);
+                
+                // ⚡️ 此时内部可以完美执行异步任务！
+                // 例如：await sendToAgent(phoneStr);
+                
+                finalResults.push({ 
+                    hex: hex, 
+                    phone: phoneStr 
+                });
+            }
+        }
+    }
+    
+    // 返回或打印最终清洗出来的有效号码池
+    console.log(`✅ 异步解密完毕，成功提取 ${finalResults.length} 个合法号码！`);
+    return finalResults;
+}
+
