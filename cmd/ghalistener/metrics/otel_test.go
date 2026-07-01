@@ -73,10 +73,13 @@ func TestOTelRecorder_EmitsThreeSpans(t *testing.T) {
 		assert.Equal(t, expectedTraceID, s.SpanContext().TraceID())
 	}
 
-	expectedParent := newSpanID(42)
+	// Parent must be the contract job span ID the runner emits:
+	// sha256("job-{run_id}-{run_attempt}-{job_name}")[:8].
+	expectedParent := newJobSpanID(99999, 1, "build")
 	for _, s := range spans {
 		assert.Equal(t, expectedParent, s.Parent().SpanID())
 	}
+	assert.Equal(t, "81606d47848a59c0", expectedParent.String())
 
 	q := byName["runner.queue"]
 	require.NotNil(t, q)
@@ -225,6 +228,21 @@ func TestCompositeRecorder_DelegatesAll(t *testing.T) {
 	assert.Len(t, exp2.Spans(), 1)
 }
 
+// Conformance vectors from the normative ID contract
+// (actions/runner docs/otel-id-contract.md). A conforming
+// implementation MUST reproduce these exactly; the runner's L0 suite
+// asserts the same values.
+func TestIDContractGoldenVectors(t *testing.T) {
+	assert.Equal(t, "acad1e2a107636235fd56bb742499bd0", newTraceID(99999, 1).String(),
+		`trace ID must be sha256("{run_id}-{run_attempt}")[:16]`)
+	assert.Equal(t, "81606d47848a59c0", newJobSpanID(99999, 1, "build").String(),
+		`job span ID must be sha256("job-{run_id}-{run_attempt}-{job_name}")[:8]`)
+	assert.Equal(t, newTraceID(99999, 1), newTraceID(99999, 0),
+		"run_attempt 0 must normalize to 1")
+	assert.Equal(t, newJobSpanID(99999, 1, "build"), newJobSpanID(99999, 0, "build"),
+		"run_attempt 0 must normalize to 1")
+}
+
 func TestDeterministicIDs(t *testing.T) {
 	tid1 := newTraceID(12345, 1)
 	tid2 := newTraceID(12345, 1)
@@ -232,9 +250,9 @@ func TestDeterministicIDs(t *testing.T) {
 	assert.Equal(t, tid1, tid2, "same inputs must produce same trace ID")
 	assert.NotEqual(t, tid1, tid3, "different attempt must produce different trace ID")
 
-	sid1 := newSpanID(42)
-	sid2 := newSpanID(42)
-	sid3 := newSpanID(43)
+	sid1 := newJobSpanID(42, 1, "build")
+	sid2 := newJobSpanID(42, 1, "build")
+	sid3 := newJobSpanID(42, 1, "deploy")
 	assert.Equal(t, sid1, sid2)
 	assert.NotEqual(t, sid1, sid3)
 }

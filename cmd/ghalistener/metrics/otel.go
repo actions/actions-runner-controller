@@ -2,8 +2,7 @@ package metrics
 
 import (
 	"context"
-	"crypto/md5"
-	"encoding/binary"
+	"crypto/sha256"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -29,10 +28,15 @@ var _ listener.MetricsRecorder = &OTelRecorder{}
 //   - runner.startup:   ScaleSetAssignTime → RunnerAssignTime
 //   - runner.execution: RunnerAssignTime → FinishTime
 //
-// The deterministic ID scheme (MD5 of runID-attempt for trace ID,
-// big-endian int64 for span ID) is compatible with otel-explorer's
-// GitHub Actions trace view, allowing ARC spans to merge into existing
-// workflow traces with zero correlation configuration.
+// The deterministic ID scheme follows the normative contract in
+// actions/runner docs/otel-id-contract.md (SHA-256, truncated):
+//
+//	trace ID = sha256("{run_id}-{run_attempt}")[:16]
+//	job span = sha256("job-{run_id}-{run_attempt}-{job_name}")[:8]
+//
+// where job_name is the job's display name. The runner's native OTLP
+// exporter emits the job span with these exact IDs, so ARC spans merge
+// under it with zero correlation configuration.
 type OTelRecorder struct {
 	mu       sync.Mutex
 	exporter sdktrace.SpanExporter
@@ -93,7 +97,10 @@ func (r *OTelRecorder) RecordDesiredRunners(_ int)                           {}
 
 func buildJobSpans(msg *scaleset.JobCompleted, attempt int64) []sdktrace.ReadOnlySpan {
 	traceID := newTraceID(msg.WorkflowRunID, attempt)
-	parentSpanID := toSpanID(msg.JobID)
+	// Parent to the contract job span the runner emits. JobDisplayName
+	// is the job's display name (GitHub API job.name), the job_name the
+	// contract mandates — not the github.job YAML key.
+	parentSpanID := newJobSpanID(msg.WorkflowRunID, attempt, msg.JobDisplayName)
 	parentSC := trace.NewSpanContext(trace.SpanContextConfig{
 		TraceID:    traceID,
 		SpanID:     parentSpanID,
@@ -215,34 +222,33 @@ func newStub(
 	}
 }
 
-// Deterministic ID generation — compatible with otel-explorer's
-// pkg/githubapi/ids.go scheme.
+// Deterministic ID generation per the normative contract in
+// actions/runner docs/otel-id-contract.md: leading bytes of SHA-256
+// (never MD5 — MD5 fails on FIPS-enabled hosts). See
+// TestIDContractGoldenVectors for the shared conformance vectors.
 
 func newTraceID(runID, runAttempt int64) trace.TraceID {
 	if runAttempt == 0 {
 		runAttempt = 1
 	}
-	return trace.TraceID(md5.Sum([]byte(fmt.Sprintf("%d-%d", runID, runAttempt))))
-}
-
-func newSpanID(id int64) trace.SpanID {
-	var sid trace.SpanID
-	binary.BigEndian.PutUint64(sid[:], uint64(id))
-	return sid
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%d-%d", runID, runAttempt)))
+	var tid trace.TraceID
+	copy(tid[:], sum[:16])
+	return tid
 }
 
 func newSpanIDFromString(s string) trace.SpanID {
-	sum := md5.Sum([]byte(s))
+	sum := sha256.Sum256([]byte(s))
 	var sid trace.SpanID
 	copy(sid[:], sum[:8])
 	return sid
 }
 
-func toSpanID(jobID string) trace.SpanID {
-	if id, err := strconv.ParseInt(jobID, 10, 64); err == nil {
-		return newSpanID(id)
+func newJobSpanID(runID, runAttempt int64, jobName string) trace.SpanID {
+	if runAttempt == 0 {
+		runAttempt = 1
 	}
-	return newSpanIDFromString(jobID)
+	return newSpanIDFromString(fmt.Sprintf("job-%d-%d-%s", runID, runAttempt, jobName))
 }
 
 func sliceClone(s []attribute.KeyValue) []attribute.KeyValue {
