@@ -516,7 +516,7 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 					},
 				},
 			}
-			err := k8sClient.Status().Update(ctx, updated)
+			err := k8sClient.Status().Patch(ctx, updated, client.MergeFrom(pod))
 			Expect(err).NotTo(HaveOccurred(), "failed to update test pod")
 
 			// Waiting for the new pod is created
@@ -785,7 +785,7 @@ var _ = Describe("Test AutoScalingListener customization", func() {
 					},
 				},
 			}
-			err := k8sClient.Status().Update(ctx, updated)
+			err := k8sClient.Status().Patch(ctx, updated, client.MergeFrom(pod))
 			Expect(err).NotTo(HaveOccurred(), "failed to update pod status")
 
 			pod = new(corev1.Pod)
@@ -831,7 +831,7 @@ var _ = Describe("Test AutoScalingListener customization", func() {
 			updated := pod.DeepCopy()
 			oldPodUID := string(pod.UID)
 			updated.Status.Reason = "Evicted"
-			err := k8sClient.Status().Update(ctx, updated)
+			err := k8sClient.Status().Patch(ctx, updated, client.MergeFrom(pod))
 			Expect(err).NotTo(HaveOccurred(), "failed to update pod status")
 
 			pod = new(corev1.Pod)
@@ -954,11 +954,11 @@ var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 
 		proxy := &v1alpha1.ProxyConfig{
 			HTTP: &v1alpha1.ProxyServerConfig{
-				Url:                 "http://localhost:8080",
+				URL:                 "http://localhost:8080",
 				CredentialSecretRef: "proxy-credentials",
 			},
 			HTTPS: &v1alpha1.ProxyServerConfig{
-				Url:                 "https://localhost:8443",
+				URL:                 "https://localhost:8443",
 				CredentialSecretRef: "proxy-credentials",
 			},
 			NoProxy: []string{

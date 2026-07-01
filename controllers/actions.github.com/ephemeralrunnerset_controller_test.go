@@ -151,7 +151,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			// Scaling up the EphemeralRunnerSet
 			updated := created.DeepCopy()
 			updated.Spec.Replicas = 5
-			err := k8sClient.Update(ctx, updated)
+			err := k8sClient.Patch(ctx, updated, client.MergeFrom(created))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunnerSet")
 
 			// Check if the number of ephemeral runners are created
@@ -213,7 +213,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			// Scale up the EphemeralRunnerSet
 			updated := created.DeepCopy()
 			updated.Spec.Replicas = 5
-			err = k8sClient.Update(ctx, updated)
+			err = k8sClient.Patch(ctx, updated, client.MergeFrom(created))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunnerSet")
 
 			// Wait for the EphemeralRunnerSet to be scaled up
@@ -1101,7 +1101,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			// Scale up the EphemeralRunnerSet
 			updated := created.DeepCopy()
 			updated.Spec.Replicas = 3
-			err := k8sClient.Update(ctx, updated)
+			err := k8sClient.Patch(ctx, updated, client.MergeFrom(created))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunnerSet replica count")
 
 			runnerList := new(v1alpha1.EphemeralRunnerList)
@@ -1327,11 +1327,11 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 					RunnerScaleSetID:   100,
 					Proxy: &v1alpha1.ProxyConfig{
 						HTTP: &v1alpha1.ProxyServerConfig{
-							Url:                 "http://proxy.example.com",
+							URL:                 "http://proxy.example.com",
 							CredentialSecretRef: secretCredentials.Name,
 						},
 						HTTPS: &v1alpha1.ProxyServerConfig{
-							Url:                 "https://proxy.example.com",
+							URL:                 "https://proxy.example.com",
 							CredentialSecretRef: secretCredentials.Name,
 						},
 						NoProxy: []string{"example.com", "example.org"},
@@ -1510,7 +1510,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 					RunnerScaleSetID:   100,
 					Proxy: &v1alpha1.ProxyConfig{
 						HTTP: &v1alpha1.ProxyServerConfig{
-							Url:                 proxy.URL,
+							URL:                 proxy.URL,
 							CredentialSecretRef: "proxy-credentials",
 						},
 					},

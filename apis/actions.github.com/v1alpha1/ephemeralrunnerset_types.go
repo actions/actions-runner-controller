@@ -23,10 +23,13 @@ import (
 // EphemeralRunnerSetSpec defines the desired state of EphemeralRunnerSet
 type EphemeralRunnerSetSpec struct {
 	// Replicas is the number of desired EphemeralRunner resources in the k8s namespace.
+	// +optional
 	Replicas int `json:"replicas,omitempty"`
 	// PatchID is the unique identifier for the patch issued by the listener app
+	// +optional
 	PatchID int `json:"patchID"`
 	// EphemeralRunnerSpec is the spec of the ephemeral runner
+	// +optional
 	EphemeralRunnerSpec EphemeralRunnerSpec `json:"ephemeralRunnerSpec,omitempty"`
 	// EphemeralRunnerMetadata is the metadata to be applied to all ephemeral runners created by this set.
 	// If the EphemeralRunnerMetadata is updated, the update applies to new ephemeral runners created after the update,
@@ -38,12 +41,17 @@ type EphemeralRunnerSetSpec struct {
 // EphemeralRunnerSetStatus defines the observed state of EphemeralRunnerSet
 type EphemeralRunnerSetStatus struct {
 	// CurrentReplicas is the number of currently running EphemeralRunner resources being managed by this EphemeralRunnerSet.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
 	CurrentReplicas int `json:"currentReplicas"`
 	// +optional
+	// +kubebuilder:validation:Minimum=0
 	PendingEphemeralRunners int `json:"pendingEphemeralRunners"`
 	// +optional
+	// +kubebuilder:validation:Minimum=0
 	RunningEphemeralRunners int `json:"runningEphemeralRunners"`
 	// +optional
+	// +kubebuilder:validation:Minimum=0
 	FailedEphemeralRunners int `json:"failedEphemeralRunners"`
 	// +optional
 	Phase EphemeralRunnerSetPhase `json:"phase"`
@@ -71,10 +79,13 @@ const (
 
 // EphemeralRunnerSet is the Schema for the ephemeralrunnersets API
 type EphemeralRunnerSet struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   EphemeralRunnerSetSpec   `json:"spec,omitempty"`
+	// +optional
+	Spec EphemeralRunnerSetSpec `json:"spec,omitempty"`
+	// +optional
 	Status EphemeralRunnerSetStatus `json:"status,omitempty"`
 }
 
