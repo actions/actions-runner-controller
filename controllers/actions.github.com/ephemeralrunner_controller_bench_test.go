@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	actionsv1alpha1 "github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient/fake"
@@ -47,10 +46,7 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunner_NoOp(b *testing.B) {
 
 	// Create minimal EphemeralRunner with finalizers already added
 	runner := NewMinimalEphemeralRunner("default", "test-runner")
-	runner.Finalizers = []string{
-		ephemeralRunnerFinalizerName,
-		ephemeralRunnerActionsFinalizerName,
-	}
+	runner.Finalizers = []string{ephemeralRunnerFinalizerName}
 	runner.Spec.GitHubConfigSecret = "config-secret"
 	runner.Status.RunnerID = 12345
 	runner.Status.RunnerName = "test-runner"
@@ -359,7 +355,7 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunner_Deletion(b *testing.B) {
 }
 
 // BenchmarkActionsGithub_Reconcile_EphemeralRunner_DeletionWithActionsCleanup benchmarks
-// the deletion path with actions finalizer requiring service cleanup
+// the deletion path requiring service cleanup
 func BenchmarkActionsGithub_Reconcile_EphemeralRunner_DeletionWithActionsCleanup(b *testing.B) {
 	ctx := context.Background()
 
@@ -381,10 +377,7 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunner_DeletionWithActionsCleanup
 	{
 		now := metav1.Now()
 		runner := NewMinimalEphemeralRunner("default", "warmup-runner")
-		runner.Finalizers = []string{
-			ephemeralRunnerFinalizerName,
-			ephemeralRunnerActionsFinalizerName,
-		}
+		runner.Finalizers = []string{ephemeralRunnerFinalizerName}
 		runner.DeletionTimestamp = &now
 		runner.Status.RunnerID = 12345
 		runner.Spec.GitHubConfigSecret = "config-secret"
@@ -429,13 +422,10 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunner_DeletionWithActionsCleanup
 	for b.Loop() {
 		b.StopTimer()
 
-		// Create EphemeralRunner marked for deletion with both finalizers
+		// Create EphemeralRunner marked for deletion with the finalizer
 		now := metav1.Now()
 		runner := NewMinimalEphemeralRunner("default", "test-runner")
-		runner.Finalizers = []string{
-			ephemeralRunnerFinalizerName,
-			ephemeralRunnerActionsFinalizerName,
-		}
+		runner.Finalizers = []string{ephemeralRunnerFinalizerName}
 		runner.DeletionTimestamp = &now
 		runner.Status.RunnerID = 12345
 		runner.Spec.GitHubConfigSecret = "config-secret"
@@ -482,7 +472,7 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunner_DeletionWithActionsCleanup
 }
 
 // BenchmarkActionsGithub_Reconcile_EphemeralRunner_RetryableError benchmarks the
-// path where a retryable error occurs during reconciliation
+// path where service cleanup fails during finalization
 func BenchmarkActionsGithub_Reconcile_EphemeralRunner_RetryableError(b *testing.B) {
 	ctx := context.Background()
 
@@ -505,10 +495,7 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunner_RetryableError(b *testing.
 	{
 		now := metav1.Now()
 		runner := NewMinimalEphemeralRunner("default", "warmup-runner")
-		runner.Finalizers = []string{
-			ephemeralRunnerFinalizerName,
-			ephemeralRunnerActionsFinalizerName,
-		}
+		runner.Finalizers = []string{ephemeralRunnerFinalizerName}
 		runner.DeletionTimestamp = &now
 		runner.Status.RunnerID = 12345
 		runner.Spec.GitHubConfigSecret = "config-secret"
@@ -553,13 +540,10 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunner_RetryableError(b *testing.
 	for b.Loop() {
 		b.StopTimer()
 
-		// Create EphemeralRunner that will trigger error during cleanup
+		// Create EphemeralRunner that will trigger best-effort service cleanup failure
 		now := metav1.Now()
 		runner := NewMinimalEphemeralRunner("default", "test-runner")
-		runner.Finalizers = []string{
-			ephemeralRunnerFinalizerName,
-			ephemeralRunnerActionsFinalizerName,
-		}
+		runner.Finalizers = []string{ephemeralRunnerFinalizerName}
 		runner.DeletionTimestamp = &now
 		runner.Status.RunnerID = 12345
 		runner.Spec.GitHubConfigSecret = "config-secret"
@@ -600,12 +584,12 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunner_RetryableError(b *testing.
 
 		result, err := reconciler.Reconcile(ctx, req)
 
-		// Verify error is returned (expected behavior for retryable errors)
-		if err == nil {
-			b.Fatalf("expected error, got nil")
+		// Service cleanup is best-effort during finalization so deletion can complete quickly.
+		if err != nil {
+			b.Fatalf("unexpected error: %v", err)
 		}
 		if result.RequeueAfter != 0 {
-			b.Fatalf("expected no requeue delay on error, got %v", result.RequeueAfter)
+			b.Fatalf("expected no requeue delay, got %v", result.RequeueAfter)
 		}
 	}
 }
@@ -625,10 +609,7 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunner_DonePhaseCleanup(b *testin
 	// Warmup iteration
 	{
 		runner := NewMinimalEphemeralRunner("default", "warmup-runner")
-		runner.Finalizers = []string{
-			ephemeralRunnerFinalizerName,
-			ephemeralRunnerActionsFinalizerName,
-		}
+		runner.Finalizers = []string{ephemeralRunnerFinalizerName}
 		runner.Status.Phase = "Succeeded"
 		runner.Spec.GitHubConfigSecret = "config-secret"
 
@@ -698,10 +679,7 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunner_DonePhaseCleanup(b *testin
 
 		// Create EphemeralRunner in Done phase (Succeeded)
 		runner := NewMinimalEphemeralRunner("default", "test-runner")
-		runner.Finalizers = []string{
-			ephemeralRunnerFinalizerName,
-			ephemeralRunnerActionsFinalizerName,
-		}
+		runner.Finalizers = []string{ephemeralRunnerFinalizerName}
 		runner.Status.Phase = "Succeeded"
 		runner.Spec.GitHubConfigSecret = "config-secret"
 
@@ -771,7 +749,7 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunner_DonePhaseCleanup(b *testin
 }
 
 // BenchmarkActionsGithub_Reconcile_EphemeralRunner_RequeueAfter benchmarks the
-// path where cleanup is not finished and a requeue is requested
+// path where service cleanup reports a runner is still busy during finalization
 func BenchmarkActionsGithub_Reconcile_EphemeralRunner_RequeueAfter(b *testing.B) {
 	ctx := context.Background()
 
@@ -792,10 +770,7 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunner_RequeueAfter(b *testing.B)
 	{
 		now := metav1.Now()
 		runner := NewMinimalEphemeralRunner("default", "warmup-runner")
-		runner.Finalizers = []string{
-			ephemeralRunnerFinalizerName,
-			ephemeralRunnerActionsFinalizerName,
-		}
+		runner.Finalizers = []string{ephemeralRunnerFinalizerName}
 		runner.DeletionTimestamp = &now
 		runner.Status.RunnerID = 12345
 		runner.Spec.GitHubConfigSecret = "config-secret"
@@ -842,10 +817,7 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunner_RequeueAfter(b *testing.B)
 
 		now := metav1.Now()
 		runner := NewMinimalEphemeralRunner("default", "test-runner")
-		runner.Finalizers = []string{
-			ephemeralRunnerFinalizerName,
-			ephemeralRunnerActionsFinalizerName,
-		}
+		runner.Finalizers = []string{ephemeralRunnerFinalizerName}
 		runner.DeletionTimestamp = &now
 		runner.Status.RunnerID = 12345
 		runner.Spec.GitHubConfigSecret = "config-secret"
@@ -889,8 +861,8 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunner_RequeueAfter(b *testing.B)
 			b.Fatalf("unexpected error: %v", err)
 		}
 
-		if result.RequeueAfter != 30*time.Second {
-			b.Fatalf("expected RequeueAfter=30s, got %v", result.RequeueAfter)
+		if result.RequeueAfter != 0 {
+			b.Fatalf("expected no requeue delay, got %v", result.RequeueAfter)
 		}
 	}
 }

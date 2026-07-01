@@ -604,7 +604,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunnerSet")
 
 			runnerList = new(v1alpha1.EphemeralRunnerList)
-			// We should have 3 runners, and have no Succeeded ones
+			// We should have 4 runners: 3 active runners and the retained Succeeded one.
 			Eventually(
 				func() error {
 					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
@@ -612,21 +612,25 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 						return err
 					}
 
-					if len(runnerList.Items) != 3 {
-						return fmt.Errorf("Expected 3 runners, got %d", len(runnerList.Items))
+					if len(runnerList.Items) != 4 {
+						return fmt.Errorf("Expected 4 runners, got %d", len(runnerList.Items))
 					}
 
+					succeeded := 0
 					for _, runner := range runnerList.Items {
 						if runner.Status.Phase == v1alpha1.EphemeralRunnerPhaseSucceeded {
-							return fmt.Errorf("Runner %s is in Succeeded phase", runner.Name)
+							succeeded++
 						}
+					}
+					if succeeded != 1 {
+						return fmt.Errorf("Expected 1 runner in Succeeded phase, got %d", succeeded)
 					}
 
 					return nil
 				},
 				ephemeralRunnerSetTestTimeout,
 				ephemeralRunnerSetTestInterval,
-			).Should(BeNil(), "3 EphemeralRunner should be created and none should be in Succeeded phase")
+			).Should(BeNil(), "3 active EphemeralRunners should be created and 1 Succeeded EphemeralRunner should be retained")
 		})
 
 		It("Should handle scale down without removing pending runners", func() {
@@ -963,21 +967,25 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 						return err
 					}
 
-					if len(runnerList.Items) != 2 {
-						return fmt.Errorf("Expected 2 runners, got %d", len(runnerList.Items))
+					if len(runnerList.Items) != 3 {
+						return fmt.Errorf("Expected 3 runners, got %d", len(runnerList.Items))
 					}
 
+					succeeded := 0
 					for _, runner := range runnerList.Items {
 						if runner.Status.Phase == v1alpha1.EphemeralRunnerPhaseSucceeded {
-							return fmt.Errorf("Expected no runners in Succeeded phase, got one")
+							succeeded++
 						}
+					}
+					if succeeded != 1 {
+						return fmt.Errorf("Expected 1 runner in Succeeded phase, got %d", succeeded)
 					}
 
 					return nil
 				},
 				ephemeralRunnerSetTestTimeout,
 				ephemeralRunnerSetTestInterval,
-			).Should(BeNil(), "2 EphemeralRunner should be created and none should be in Succeeded phase")
+			).Should(BeNil(), "2 active EphemeralRunners should be created and 1 Succeeded EphemeralRunner should be retained")
 		})
 
 		It("Should delete idle runners, keep busy runners, and create new runners when the spec changes", func() {

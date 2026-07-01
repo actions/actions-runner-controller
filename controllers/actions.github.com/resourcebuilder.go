@@ -975,10 +975,7 @@ func (b *ResourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.Epheme
 			Namespace:    ephemeralRunnerSet.Namespace,
 			Labels:       labels,
 			Annotations:  annotations,
-			Finalizers: []string{
-				ephemeralRunnerFinalizerName,
-				ephemeralRunnerActionsFinalizerName,
-			},
+			Finalizers:   []string{ephemeralRunnerFinalizerName},
 		},
 		Spec: ephemeralRunnerSet.Spec.EphemeralRunnerSpec,
 	}

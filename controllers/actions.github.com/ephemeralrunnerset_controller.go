@@ -340,14 +340,6 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 			return fullState
 		}
 
-		if runnerState.finishedCount > 0 {
-			defer func() {
-				if err := r.cleanupFinishedEphemeralRunners(ctx, &ephemeralRunnerSet, log); err != nil {
-					log.Error(err, "failed to cleanup finished ephemeral runners")
-				}
-			}()
-		}
-
 		log.Info("Scaling comparison", "current", total, "desired", ephemeralRunnerSet.Spec.Replicas)
 		switch {
 		case total < ephemeralRunnerSet.Spec.Replicas: // Handle scale up
@@ -459,22 +451,6 @@ func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemer
 		}
 		log.Info("Updated EphemeralRunnerSet status", "status", updated.Status)
 
-	}
-	return nil
-}
-
-func (r *EphemeralRunnerSetReconciler) cleanupFinishedEphemeralRunners(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) error {
-	log.Info("Deleting finished ephemeral runners")
-	if err := r.DeleteAllOf(
-		ctx,
-		&v1alpha1.EphemeralRunner{},
-		client.InNamespace(ephemeralRunnerSet.Namespace),
-		client.MatchingLabels{
-			LabelKeyEphemeralRunnerSetUID: string(ephemeralRunnerSet.UID),
-		},
-		client.MatchingFields{"status.phase": string(v1alpha1.EphemeralRunnerPhaseSucceeded)},
-	); err != nil {
-		return fmt.Errorf("failed to delete finished ephemeral runners: %w", err)
 	}
 	return nil
 }
