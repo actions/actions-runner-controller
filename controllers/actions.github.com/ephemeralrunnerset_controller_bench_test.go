@@ -22,6 +22,8 @@ import (
 	"testing"
 
 	actionsv1alpha1 "github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	scalefake "github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient/fake"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/secretresolver"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -192,6 +194,55 @@ func BenchmarkActionsGithub_Reconcile_EphemeralRunnerSet_ScaleUp(b *testing.B) {
 
 				b.StartTimer()
 				if _, err := reconciler.Reconcile(ctx, req); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkActionsGithub_Reconcile_EphemeralRunnerSet_ScaleDown(b *testing.B) {
+	testCases := []struct {
+		name    string
+		current int
+		desired int
+	}{
+		{name: "small_scale_3_to_0", current: 3, desired: 0},
+		{name: "medium_scale_15_to_5", current: 15, desired: 5},
+		{name: "large_scale_60_to_10", current: 60, desired: 10},
+	}
+
+	for _, tc := range testCases {
+		b.Run(tc.name, func(b *testing.B) {
+			scheme := runtime.NewScheme()
+			_ = actionsv1alpha1.AddToScheme(scheme)
+			_ = corev1.AddToScheme(scheme)
+
+			b.ResetTimer()
+			for b.Loop() {
+				b.StopTimer()
+				ers := newBenchmarkEphemeralRunnerSetForConvergence(tc.desired)
+				objects := newBenchmarkIdleEphemeralRunnerObjects(ers, tc.current)
+				fakeClient := fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithObjects(objects...).
+					WithStatusSubresource(&actionsv1alpha1.EphemeralRunnerSet{}, &actionsv1alpha1.EphemeralRunner{}).
+					WithIndex(&actionsv1alpha1.EphemeralRunner{}, resourceOwnerKey, newGroupVersionOwnerKindIndexer("EphemeralRunnerSet")).
+					Build()
+				reconciler := newBenchmarkEphemeralRunnerSetReconciler(fakeClient, scheme)
+				reconciler.ResourceBuilder.SecretResolver = secretresolver.New(
+					fakeClient,
+					scalefake.NewMultiClient(scalefake.WithClient(scalefake.NewClient(scalefake.WithRemoveRunner(nil)))),
+				)
+				req := ctrl.Request{
+					NamespacedName: types.NamespacedName{
+						Namespace: "default",
+						Name:      "test-ers",
+					},
+				}
+				b.StartTimer()
+
+				if _, err := reconciler.Reconcile(context.Background(), req); err != nil {
 					b.Fatal(err)
 				}
 			}

@@ -33,7 +33,6 @@ import (
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/scaleset"
 	"github.com/go-logr/logr"
-	"go.uber.org/multierr"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -529,32 +528,12 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 	)
 
 	log.Info("Cleanup terminated ephemeral runners")
-	var errs []error
-	for _, ephemeralRunner := range ephemeralRunnerState.finished {
-		log.Info("Deleting ephemeral runner", "name", ephemeralRunner.Name)
-		if err := r.Delete(ctx, ephemeralRunner); err != nil && !kerrors.IsNotFound(err) {
-			errs = append(errs, err)
-		}
-	}
-
-	for _, ephemeralRunner := range ephemeralRunnerState.failed {
-		log.Info("Deleting ephemeral runner", "name", ephemeralRunner.Name)
-		if err := r.Delete(ctx, ephemeralRunner); err != nil && !kerrors.IsNotFound(err) {
-			errs = append(errs, err)
-		}
-	}
-
-	for _, ephemeralRunner := range ephemeralRunnerState.outdated {
-		log.Info("Deleting ephemeral runner", "name", ephemeralRunner.Name)
-		if err := r.Delete(ctx, ephemeralRunner); err != nil && !kerrors.IsNotFound(err) {
-			errs = append(errs, err)
-		}
-	}
-
-	if len(errs) > 0 {
-		mergedErrs := multierr.Combine(errs...)
-		log.Error(mergedErrs, "Failed to delete ephemeral runners")
-		return false, mergedErrs
+	terminatedEphemeralRunners := append([]*v1alpha1.EphemeralRunner{}, ephemeralRunnerState.finished...)
+	terminatedEphemeralRunners = append(terminatedEphemeralRunners, ephemeralRunnerState.failed...)
+	terminatedEphemeralRunners = append(terminatedEphemeralRunners, ephemeralRunnerState.outdated...)
+	if err := r.deleteEphemeralRunners(ctx, terminatedEphemeralRunners, log); err != nil {
+		log.Error(err, "Failed to delete ephemeral runners")
+		return false, err
 	}
 
 	// avoid fetching the client if we have nothing left to do
@@ -568,15 +547,7 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 	}
 
 	log.Info("Cleanup pending or running ephemeral runners")
-	errs = errs[0:0]
-	for _, ephemeralRunner := range ephemeralRunnerState.pending {
-		log.Info("Removing the ephemeral runner from the service", "name", ephemeralRunner.Name)
-		_, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
-		if err != nil {
-			errs = append(errs, err)
-		}
-	}
-
+	candidates := append([]*v1alpha1.EphemeralRunner{}, ephemeralRunnerState.pending...)
 	for _, ephemeralRunner := range ephemeralRunnerState.running {
 		if ephemeralRunner.HasJob() {
 			log.Info(
@@ -587,18 +558,11 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 			)
 			continue
 		}
-
-		log.Info("Removing the idle ephemeral runner from the service", "name", ephemeralRunner.Name)
-		_, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
-		if err != nil {
-			errs = append(errs, err)
-		}
+		candidates = append(candidates, ephemeralRunner)
 	}
-
-	if len(errs) > 0 {
-		mergedErrs := multierr.Combine(errs...)
-		log.Error(mergedErrs, "Failed to remove ephemeral runners from the service")
-		return false, mergedErrs
+	if _, err := r.deleteEphemeralRunnersWithActionsClient(ctx, candidates, actionsClient, log); err != nil {
+		log.Error(err, "Failed to remove ephemeral runners from the service")
+		return false, err
 	}
 
 	return false, nil
@@ -644,14 +608,12 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunnerSetProxySecret(ctx 
 
 // createEphemeralRunners provisions `count` number of v1alpha1.EphemeralRunner resources in the cluster.
 func (r *EphemeralRunnerSetReconciler) createEphemeralRunners(ctx context.Context, runnerSet *v1alpha1.EphemeralRunnerSet, count int, log logr.Logger) error {
-	// Track multiple errors at once and return the bundle.
-	errs := make([]error, 0)
-	for i := range count {
+	r.setSchemeIfUnset(r.Scheme)
+	return runEphemeralRunnerSetBounded(ctx, count, ephemeralRunnerSetKubernetesWriteConcurrency, func(ctx context.Context, i int) error {
 		ephemeralRunner, err := r.newEphemeralRunner(runnerSet)
 		if err != nil {
 			log.Error(err, "failed to build ephemeral runner")
-			errs = append(errs, err)
-			continue
+			return err
 		}
 		if runnerSet.Spec.EphemeralRunnerSpec.Proxy != nil {
 			ephemeralRunner.Spec.ProxySecretRef = proxyEphemeralRunnerSetSecretName(runnerSet)
@@ -659,14 +621,12 @@ func (r *EphemeralRunnerSetReconciler) createEphemeralRunners(ctx context.Contex
 
 		if err := r.Create(ctx, ephemeralRunner); err != nil {
 			log.Error(err, "failed to make ephemeral runner")
-			errs = append(errs, err)
-			continue
+			return err
 		}
 
 		log.Info("Created new ephemeral runner", "progress", i+1, "total", count, "runner", ephemeralRunner.Name)
-	}
-
-	return multierr.Combine(errs...)
+		return nil
+	})
 }
 
 func (r *EphemeralRunnerSetReconciler) createProxySecret(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) error {
@@ -715,8 +675,7 @@ func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Co
 	if err != nil {
 		return fmt.Errorf("failed to create actions client for ephemeral runner replica set: %w", err)
 	}
-	var errs []error
-	deletedCount := 0
+	candidates := make([]*v1alpha1.EphemeralRunner, 0, runners.len())
 	for runners.next() {
 		ephemeralRunner := runners.object()
 		isDone := ephemeralRunner.IsDone()
@@ -735,22 +694,10 @@ func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Co
 			continue
 		}
 
-		log.Info("Removing the idle ephemeral runner", "name", ephemeralRunner.Name)
-		ok, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
-		if err != nil {
-			errs = append(errs, err)
-		}
-		if !ok {
-			continue
-		}
-
-		deletedCount++
-		if deletedCount == count {
-			break
-		}
+		candidates = append(candidates, ephemeralRunner)
 	}
 
-	return multierr.Combine(errs...)
+	return r.deleteUpToEphemeralRunnersWithActionsClient(ctx, candidates, count, actionsClient, log)
 }
 
 func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunnerWithActionsClient(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, actionsClient multiclient.Client, log logr.Logger) (bool, error) {

@@ -985,9 +985,6 @@ func (b *ResourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.Epheme
 	if err := b.setControllerReference(ephemeralRunnerSet, ephemeralRunner); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for ephemeral runner: %w", err)
 	}
-	if b.ResourceCache != nil {
-		b.ResourceCache.ephemeralRunner.Upsert(ephemeralRunnerSet, ephemeralRunner)
-	}
 
 	return ephemeralRunner, nil
 }
