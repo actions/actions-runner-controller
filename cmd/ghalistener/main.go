@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -16,6 +17,7 @@ import (
 	"github.com/actions/scaleset/listener"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -39,6 +41,29 @@ func main() {
 		log.Printf("Application returned an error: %v", err)
 		os.Exit(1)
 	}
+}
+
+// newOTLPTraceExporter builds the OTLP/HTTP span exporter. A non-empty
+// endpoint is a full base URL (the OTLP spec form of
+// OTEL_EXPORTER_OTLP_ENDPOINT, e.g. http://collector:4318); the
+// /v1/traces signal path is appended when the URL has no path. With an
+// empty endpoint the SDK's spec-compliant OTEL_EXPORTER_OTLP_* env
+// handling applies (endpoint, headers, TLS, ...).
+func newOTLPTraceExporter(ctx context.Context, endpoint string) (sdktrace.SpanExporter, error) {
+	if endpoint == "" {
+		return otlptracehttp.New(ctx)
+	}
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("invalid OTel endpoint %q: %w", endpoint, err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return nil, fmt.Errorf("invalid OTel endpoint %q: scheme must be http or https", endpoint)
+	}
+	if u.Path == "" || u.Path == "/" {
+		u.Path = "/v1/traces"
+	}
+	return otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(u.String()))
 }
 
 func run(ctx context.Context, config *config.Config) error {
@@ -67,16 +92,15 @@ func run(ctx context.Context, config *config.Config) error {
 		})
 	}
 
-	// OTel trace recorder (optional)
+	// OTel trace recorder (optional). Enabled by the listener config
+	// (otel_endpoint, wired from the controller) or by the standard
+	// OTEL_EXPORTER_OTLP_* environment variables.
 	var otelRecorder *metrics.OTelRecorder
-	if config.OTelEndpoint != "" {
-		opts := []otlptracehttp.Option{
-			otlptracehttp.WithEndpoint(config.OTelEndpoint),
-		}
-		if config.OTelInsecure {
-			opts = append(opts, otlptracehttp.WithInsecure())
-		}
-		otlpExporter, err := otlptracehttp.New(ctx, opts...)
+	otelEnabled := config.OTelEndpoint != "" ||
+		os.Getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") != "" ||
+		os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") != ""
+	if otelEnabled {
+		otlpExporter, err := newOTLPTraceExporter(ctx, config.OTelEndpoint)
 		if err != nil {
 			return fmt.Errorf("failed to create OTel exporter: %w", err)
 		}
@@ -97,7 +121,11 @@ func run(ctx context.Context, config *config.Config) error {
 				logger.Error("Failed to shut down OTel recorder", "error", err)
 			}
 		}()
-		logger.Info("OTel trace recorder enabled", "endpoint", config.OTelEndpoint)
+		endpointSource := config.OTelEndpoint
+		if endpointSource == "" {
+			endpointSource = "OTEL_EXPORTER_OTLP_* environment"
+		}
+		logger.Info("OTel trace recorder enabled", "endpoint", endpointSource)
 	}
 
 	hostname, err := os.Hostname()
