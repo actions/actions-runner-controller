@@ -284,29 +284,6 @@ func TestOTelRecorder_CommonAttributes(t *testing.T) {
 	assertAttr(t, s, "cicd.pipeline.task.run.result", "failure")
 }
 
-func TestOTelRecorder_SetRunAttempt(t *testing.T) {
-	exp := &captureExporter{}
-	rec := newTestRecorder(t, exp)
-	rec.SetRunAttempt(3)
-
-	now := time.Now()
-	msg := &scaleset.JobCompleted{
-		Result: "Succeeded",
-		JobMessageBase: scaleset.JobMessageBase{
-			WorkflowRunID:    77777,
-			JobID:            "1",
-			RunnerAssignTime: now,
-			FinishTime:       now.Add(time.Second),
-		},
-	}
-
-	rec.RecordJobCompleted(msg)
-
-	spans := exp.Spans()
-	require.Len(t, spans, 1)
-	assert.Equal(t, newTraceID(77777, 3), spans[0].SpanContext().TraceID())
-}
-
 func TestOTelRecorder_JobStartedIsNoOp(t *testing.T) {
 	exp := &captureExporter{}
 	rec := newTestRecorder(t, exp)

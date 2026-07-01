@@ -42,6 +42,19 @@ var _ listener.MetricsRecorder = &OTelRecorder{}
 // where job_name is the job's display name. The runner's native OTLP
 // exporter emits the job span with these exact IDs, so ARC spans merge
 // under it with zero correlation configuration.
+// defaultRunAttempt is the run attempt hashed into trace/span IDs. The
+// scale-set message protocol (github.com/actions/scaleset
+// JobMessageBase) does not carry github.run_attempt, so the listener
+// cannot know which attempt a completed job belongs to and assumes the
+// first.
+//
+// KNOWN LIMITATION: for workflow re-runs (attempt >= 2) these spans
+// join the FIRST attempt's trace — the runner hashes the real attempt
+// into its trace ID, so the re-run's own trace is missing queue and
+// startup data. Fixing this requires the scale-set message to carry
+// the run attempt (or a REST lookup per job).
+const defaultRunAttempt = 1
+
 type OTelRecorder struct {
 	mu        sync.Mutex
 	exporter  sdktrace.SpanExporter
@@ -49,10 +62,6 @@ type OTelRecorder struct {
 	serverURL string
 	res       *resource.Resource
 	scope     instrumentation.Scope
-
-	// runAttempt defaults to 1. ARC messages don't include
-	// run_attempt; override via SetRunAttempt if determinable.
-	runAttempt int64
 }
 
 // OTelRecorderConfig configures an OTelRecorder.
@@ -118,16 +127,7 @@ func NewOTelRecorder(cfg OTelRecorderConfig) *OTelRecorder {
 			Name:    otelScopeName,
 			Version: build.Version,
 		},
-		runAttempt: 1,
 	}
-}
-
-// SetRunAttempt overrides the default run attempt (1) used for trace
-// ID generation.
-func (r *OTelRecorder) SetRunAttempt(attempt int64) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.runAttempt = attempt
 }
 
 // Shutdown flushes pending spans and releases exporter resources.
@@ -138,11 +138,7 @@ func (r *OTelRecorder) Shutdown(ctx context.Context) error {
 func (r *OTelRecorder) RecordJobStarted(_ *scaleset.JobStarted) {}
 
 func (r *OTelRecorder) RecordJobCompleted(msg *scaleset.JobCompleted) {
-	r.mu.Lock()
-	attempt := r.runAttempt
-	r.mu.Unlock()
-
-	spans := r.buildJobSpans(msg, attempt)
+	spans := r.buildJobSpans(msg, defaultRunAttempt)
 	if len(spans) == 0 {
 		return
 	}
