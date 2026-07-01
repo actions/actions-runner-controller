@@ -3,6 +3,7 @@ package metrics
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -55,13 +56,26 @@ var _ listener.MetricsRecorder = &OTelRecorder{}
 // the run attempt (or a REST lookup per job).
 const defaultRunAttempt = 1
 
+// spanQueueSize bounds the export queue. Export runs on a background
+// goroutine so the listener's autoscaling message loop never waits on
+// the telemetry backend; when the queue is full (collector down or
+// slow), new job spans are dropped with a warning.
+const spanQueueSize = 64
+
+// exportTimeout bounds a single OTLP export attempt.
+const exportTimeout = 5 * time.Second
+
 type OTelRecorder struct {
-	mu        sync.Mutex
 	exporter  sdktrace.SpanExporter
 	logger    *slog.Logger
 	serverURL string
 	res       *resource.Resource
 	scope     instrumentation.Scope
+
+	mu         sync.Mutex
+	stopped    bool
+	queue      chan []sdktrace.ReadOnlySpan
+	workerDone chan struct{}
 }
 
 // OTelRecorderConfig configures an OTelRecorder.
@@ -118,7 +132,7 @@ func NewOTelRecorder(cfg OTelRecorderConfig) *OTelRecorder {
 		res = resource.Empty()
 	}
 
-	return &OTelRecorder{
+	r := &OTelRecorder{
 		exporter:  cfg.Exporter,
 		logger:    logger,
 		serverURL: serverURL,
@@ -127,12 +141,42 @@ func NewOTelRecorder(cfg OTelRecorderConfig) *OTelRecorder {
 			Name:    otelScopeName,
 			Version: build.Version,
 		},
+		queue:      make(chan []sdktrace.ReadOnlySpan, spanQueueSize),
+		workerDone: make(chan struct{}),
+	}
+	go r.exportLoop()
+	return r
+}
+
+// exportLoop drains the span queue on a background goroutine so
+// RecordJobCompleted never blocks the caller.
+func (r *OTelRecorder) exportLoop() {
+	defer close(r.workerDone)
+	for spans := range r.queue {
+		ctx, cancel := context.WithTimeout(context.Background(), exportTimeout)
+		if err := r.exporter.ExportSpans(ctx, spans); err != nil {
+			r.logger.Warn("failed to export OTel spans", "error", err)
+		}
+		cancel()
 	}
 }
 
-// Shutdown flushes pending spans and releases exporter resources.
+// Shutdown drains queued spans (bounded by ctx) and releases exporter
+// resources. It is idempotent; records arriving afterwards are dropped.
 func (r *OTelRecorder) Shutdown(ctx context.Context) error {
-	return r.exporter.Shutdown(ctx)
+	r.mu.Lock()
+	if !r.stopped {
+		r.stopped = true
+		close(r.queue)
+	}
+	r.mu.Unlock()
+
+	select {
+	case <-r.workerDone:
+		return r.exporter.Shutdown(ctx)
+	case <-ctx.Done():
+		return errors.Join(ctx.Err(), r.exporter.Shutdown(ctx))
+	}
 }
 
 func (r *OTelRecorder) RecordJobStarted(_ *scaleset.JobStarted) {}
@@ -143,10 +187,16 @@ func (r *OTelRecorder) RecordJobCompleted(msg *scaleset.JobCompleted) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := r.exporter.ExportSpans(ctx, spans); err != nil {
-		r.logger.Warn("failed to export OTel spans", "error", err)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.stopped {
+		return
+	}
+	select {
+	case r.queue <- spans:
+	default:
+		r.logger.Warn("OTel span queue full, dropping job spans",
+			"job", msg.JobDisplayName, "run_id", msg.WorkflowRunID)
 	}
 }
 

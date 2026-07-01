@@ -39,6 +39,13 @@ func newTestRecorder(t *testing.T, exp sdktrace.SpanExporter) *OTelRecorder {
 	return NewOTelRecorder(OTelRecorderConfig{Exporter: exp})
 }
 
+// flush drains the recorder's async export queue so tests can assert
+// on the exported spans deterministically.
+func flush(t *testing.T, rec *OTelRecorder) {
+	t.Helper()
+	require.NoError(t, rec.Shutdown(context.Background()))
+}
+
 func TestOTelRecorder_EmitsThreeSpans(t *testing.T) {
 	exp := &captureExporter{}
 	rec := newTestRecorder(t, exp)
@@ -64,6 +71,7 @@ func TestOTelRecorder_EmitsThreeSpans(t *testing.T) {
 	}
 
 	rec.RecordJobCompleted(msg)
+	flush(t, rec)
 
 	spans := exp.Spans()
 	require.Len(t, spans, 3)
@@ -151,6 +159,7 @@ func TestOTelRecorder_ServerURLIsConfigurable(t *testing.T) {
 	}
 
 	rec.RecordJobCompleted(msg)
+	flush(t, rec)
 
 	spans := exp.Spans()
 	require.Len(t, spans, 1)
@@ -178,6 +187,7 @@ func TestOTelRecorder_ResourceAndScope(t *testing.T) {
 	}
 
 	rec.RecordJobCompleted(msg)
+	flush(t, rec)
 
 	spans := exp.Spans()
 	require.Len(t, spans, 1)
@@ -216,6 +226,7 @@ func TestOTelRecorder_ResourceHonorsOTelEnv(t *testing.T) {
 	}
 
 	rec.RecordJobCompleted(msg)
+	flush(t, rec)
 
 	spans := exp.Spans()
 	require.Len(t, spans, 1)
@@ -244,6 +255,7 @@ func TestOTelRecorder_SkipsMissingTimestamps(t *testing.T) {
 	}
 
 	rec.RecordJobCompleted(msg)
+	flush(t, rec)
 
 	spans := exp.Spans()
 	require.Len(t, spans, 1, "only runner.execution when queue/startup timestamps are zero")
@@ -272,6 +284,7 @@ func TestOTelRecorder_CommonAttributes(t *testing.T) {
 	}
 
 	rec.RecordJobCompleted(msg)
+	flush(t, rec)
 
 	spans := exp.Spans()
 	require.Len(t, spans, 1)
@@ -282,6 +295,88 @@ func TestOTelRecorder_CommonAttributes(t *testing.T) {
 	assertAttr(t, s, "cicd.worker.name", "runner-3")
 	assertAttr(t, s, "github.conclusion", "failure")
 	assertAttr(t, s, "cicd.pipeline.task.run.result", "failure")
+}
+
+// blockingExporter blocks every ExportSpans call until released.
+type blockingExporter struct {
+	captureExporter
+	release chan struct{}
+}
+
+func (e *blockingExporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnlySpan) error {
+	<-e.release
+	return e.captureExporter.ExportSpans(ctx, spans)
+}
+
+func completedMsg(runID int64) *scaleset.JobCompleted {
+	now := time.Now()
+	return &scaleset.JobCompleted{
+		Result: "Succeeded",
+		JobMessageBase: scaleset.JobMessageBase{
+			WorkflowRunID:    runID,
+			JobID:            "1",
+			RunnerAssignTime: now,
+			FinishTime:       now.Add(time.Second),
+		},
+	}
+}
+
+// The autoscaling message loop calls RecordJobCompleted synchronously;
+// it must never wait on the telemetry backend.
+func TestOTelRecorder_RecordDoesNotBlockOnSlowExporter(t *testing.T) {
+	exp := &blockingExporter{release: make(chan struct{})}
+	defer close(exp.release)
+	rec := newTestRecorder(t, exp)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := range 100 {
+			rec.RecordJobCompleted(completedMsg(int64(i + 1)))
+		}
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("RecordJobCompleted blocked on a stalled exporter")
+	}
+}
+
+func TestOTelRecorder_ShutdownFlushesQueuedSpans(t *testing.T) {
+	exp := &captureExporter{}
+	rec := newTestRecorder(t, exp)
+
+	for i := range 10 {
+		rec.RecordJobCompleted(completedMsg(int64(i + 1)))
+	}
+
+	require.NoError(t, rec.Shutdown(context.Background()))
+	assert.Len(t, exp.Spans(), 10)
+}
+
+func TestOTelRecorder_RecordAfterShutdownIsNoOp(t *testing.T) {
+	exp := &captureExporter{}
+	rec := newTestRecorder(t, exp)
+	require.NoError(t, rec.Shutdown(context.Background()))
+
+	rec.RecordJobCompleted(completedMsg(1))
+
+	assert.Empty(t, exp.Spans())
+	require.NoError(t, rec.Shutdown(context.Background()), "Shutdown must be idempotent")
+}
+
+func TestOTelRecorder_ShutdownHonorsContext(t *testing.T) {
+	exp := &blockingExporter{release: make(chan struct{})}
+	defer close(exp.release)
+	rec := newTestRecorder(t, exp)
+
+	rec.RecordJobCompleted(completedMsg(1))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	err := rec.Shutdown(ctx)
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
 }
 
 func TestOTelRecorder_JobStartedIsNoOp(t *testing.T) {
@@ -316,6 +411,8 @@ func TestCompositeRecorder_DelegatesAll(t *testing.T) {
 		},
 	}
 	comp.RecordJobCompleted(msg)
+	flush(t, r1)
+	flush(t, r2)
 
 	assert.Len(t, exp1.Spans(), 1)
 	assert.Len(t, exp2.Spans(), 1)
