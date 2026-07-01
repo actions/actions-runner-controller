@@ -10,13 +10,18 @@ import (
 	"sync"
 	"time"
 
+	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/scaleset"
 	"github.com/actions/scaleset/listener"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/sdk/instrumentation"
+	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 )
+
+const otelScopeName = "github.com/actions/actions-runner-controller/cmd/ghalistener/metrics"
 
 var _ listener.MetricsRecorder = &OTelRecorder{}
 
@@ -38,24 +43,81 @@ var _ listener.MetricsRecorder = &OTelRecorder{}
 // exporter emits the job span with these exact IDs, so ARC spans merge
 // under it with zero correlation configuration.
 type OTelRecorder struct {
-	mu       sync.Mutex
-	exporter sdktrace.SpanExporter
-	logger   *slog.Logger
+	mu        sync.Mutex
+	exporter  sdktrace.SpanExporter
+	logger    *slog.Logger
+	serverURL string
+	res       *resource.Resource
+	scope     instrumentation.Scope
 
 	// runAttempt defaults to 1. ARC messages don't include
 	// run_attempt; override via SetRunAttempt if determinable.
 	runAttempt int64
 }
 
+// OTelRecorderConfig configures an OTelRecorder.
+type OTelRecorderConfig struct {
+	// Exporter receives the job lifecycle spans. Required.
+	Exporter sdktrace.SpanExporter
+	Logger   *slog.Logger
+	// ServerURL is the GitHub server base URL used for vcs.*/cicd.*
+	// URL attributes (GHES-safe). Defaults to https://github.com.
+	ServerURL string
+	// ScaleSetName and ScaleSetNamespace identify the scale set this
+	// listener serves; they are attached to the OTel resource.
+	ScaleSetName      string
+	ScaleSetNamespace string
+}
+
 // NewOTelRecorder creates a recorder that exports job lifecycle spans
 // via the given SpanExporter.
-func NewOTelRecorder(exporter sdktrace.SpanExporter, logger *slog.Logger) *OTelRecorder {
+func NewOTelRecorder(cfg OTelRecorderConfig) *OTelRecorder {
+	logger := cfg.Logger
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
+
+	serverURL := strings.TrimRight(cfg.ServerURL, "/")
+	if serverURL == "" {
+		serverURL = "https://github.com"
+	}
+
+	resAttrs := []attribute.KeyValue{
+		attribute.String("service.name", "gha-listener"),
+		attribute.String("service.version", build.Version),
+		// The listener is the scheduling side of the CI/CD system
+		// (semconv cicd.system.component); the runner reports "agent".
+		attribute.String("cicd.system.component", "controller"),
+	}
+	if cfg.ScaleSetNamespace != "" {
+		resAttrs = append(resAttrs, attribute.String("service.namespace", cfg.ScaleSetNamespace))
+	}
+	if cfg.ScaleSetName != "" {
+		resAttrs = append(resAttrs, attribute.String("github.scale_set.name", cfg.ScaleSetName))
+	}
+
+	// WithFromEnv comes last so the standard OTEL_SERVICE_NAME and
+	// OTEL_RESOURCE_ATTRIBUTES env vars override the defaults above.
+	res, err := resource.New(context.Background(),
+		resource.WithAttributes(resAttrs...),
+		resource.WithFromEnv(),
+	)
+	if err != nil {
+		logger.Warn("failed to build OTel resource", "error", err)
+	}
+	if res == nil {
+		res = resource.Empty()
+	}
+
 	return &OTelRecorder{
-		exporter:   exporter,
-		logger:     logger,
+		exporter:  cfg.Exporter,
+		logger:    logger,
+		serverURL: serverURL,
+		res:       res,
+		scope: instrumentation.Scope{
+			Name:    otelScopeName,
+			Version: build.Version,
+		},
 		runAttempt: 1,
 	}
 }
@@ -80,7 +142,7 @@ func (r *OTelRecorder) RecordJobCompleted(msg *scaleset.JobCompleted) {
 	attempt := r.runAttempt
 	r.mu.Unlock()
 
-	spans := buildJobSpans(msg, attempt)
+	spans := r.buildJobSpans(msg, attempt)
 	if len(spans) == 0 {
 		return
 	}
@@ -95,7 +157,7 @@ func (r *OTelRecorder) RecordJobCompleted(msg *scaleset.JobCompleted) {
 func (r *OTelRecorder) RecordStatistics(_ *scaleset.RunnerScaleSetStatistic) {}
 func (r *OTelRecorder) RecordDesiredRunners(_ int)                           {}
 
-func buildJobSpans(msg *scaleset.JobCompleted, attempt int64) []sdktrace.ReadOnlySpan {
+func (r *OTelRecorder) buildJobSpans(msg *scaleset.JobCompleted, attempt int64) []sdktrace.ReadOnlySpan {
 	traceID := newTraceID(msg.WorkflowRunID, attempt)
 	// Parent to the contract job span the runner emits. JobDisplayName
 	// is the job's display name (GitHub API job.name), the job_name the
@@ -109,30 +171,35 @@ func buildJobSpans(msg *scaleset.JobCompleted, attempt int64) []sdktrace.ReadOnl
 
 	conclusion := normalizeConclusion(msg.Result)
 	repo := msg.OwnerName + "/" + msg.RepositoryName
+	runID := strconv.FormatInt(msg.WorkflowRunID, 10)
+	runAttempt := strconv.FormatInt(attempt, 10)
+	runURL := fmt.Sprintf("%s/%s/actions/runs/%s/attempts/%s", r.serverURL, repo, runID, runAttempt)
 
+	// Attribute names, types, and values must match the runner's
+	// native OTLP exporter (Runner.Worker/OTelTraceExporter.cs) so a
+	// single query matches both span sets in the merged trace.
 	commonAttrs := []attribute.KeyValue{
-		// GitHub Actions attributes
-		attribute.Int64("github.run_id", msg.WorkflowRunID),
-		attribute.String("github.job_id", msg.JobID),
-		attribute.String("github.job_name", msg.JobDisplayName),
+		// GitHub Actions attributes (no semconv equivalent)
+		attribute.String("github.run_id", runID),
+		attribute.String("github.run_attempt", runAttempt),
 		attribute.String("github.repository", repo),
-		attribute.String("github.runner_name", msg.RunnerName),
-		attribute.Int("github.runner_id", msg.RunnerID),
 		attribute.String("github.workflow_ref", msg.JobWorkflowRef),
 		attribute.String("github.event_name", msg.EventName),
-		// OTel CI/CD semantic conventions (cicd.*)
-		attribute.String("cicd.pipeline.run.id", strconv.FormatInt(msg.WorkflowRunID, 10)),
+		// OTel CI/CD semantic conventions (cicd.*, vcs.*)
+		attribute.String("cicd.pipeline.run.id", runID),
+		attribute.String("cicd.pipeline.run.url.full", runURL),
 		attribute.String("cicd.pipeline.task.name", msg.JobDisplayName),
-		attribute.String("cicd.pipeline.task.run.id", msg.JobID),
+		attribute.String("cicd.pipeline.task.run.id", parentSpanID.String()),
 		attribute.String("cicd.worker.name", msg.RunnerName),
 		attribute.String("cicd.worker.id", strconv.Itoa(msg.RunnerID)),
-		attribute.String("vcs.repository.url.full", "https://github.com/"+repo),
+		attribute.String("vcs.repository.url.full", r.serverURL+"/"+repo),
+		attribute.String("vcs.provider.name", "github"),
 	}
 
 	var stubs tracetest.SpanStubs
 
 	if !msg.QueueTime.IsZero() && !msg.ScaleSetAssignTime.IsZero() {
-		stubs = append(stubs, newStub(
+		stubs = append(stubs, r.newStub(
 			traceID, parentSC, "runner.queue",
 			msg.QueueTime, msg.ScaleSetAssignTime,
 			append(sliceClone(commonAttrs), attribute.String("type", "runner.queue")),
@@ -140,7 +207,7 @@ func buildJobSpans(msg *scaleset.JobCompleted, attempt int64) []sdktrace.ReadOnl
 	}
 
 	if !msg.ScaleSetAssignTime.IsZero() && !msg.RunnerAssignTime.IsZero() {
-		stubs = append(stubs, newStub(
+		stubs = append(stubs, r.newStub(
 			traceID, parentSC, "runner.startup",
 			msg.ScaleSetAssignTime, msg.RunnerAssignTime,
 			append(sliceClone(commonAttrs), attribute.String("type", "runner.startup")),
@@ -148,7 +215,7 @@ func buildJobSpans(msg *scaleset.JobCompleted, attempt int64) []sdktrace.ReadOnl
 	}
 
 	if !msg.RunnerAssignTime.IsZero() && !msg.FinishTime.IsZero() {
-		stubs = append(stubs, newStub(
+		stubs = append(stubs, r.newStub(
 			traceID, parentSC, "runner.execution",
 			msg.RunnerAssignTime, msg.FinishTime,
 			append(sliceClone(commonAttrs),
@@ -200,7 +267,7 @@ func conclusionToSemconv(conclusion string) string {
 	}
 }
 
-func newStub(
+func (r *OTelRecorder) newStub(
 	traceID trace.TraceID,
 	parentSC trace.SpanContext,
 	name string,
@@ -215,10 +282,12 @@ func newStub(
 			SpanID:     spanID,
 			TraceFlags: trace.FlagsSampled,
 		}),
-		Parent:     parentSC,
-		StartTime:  start,
-		EndTime:    end,
-		Attributes: attrs,
+		Parent:               parentSC,
+		StartTime:            start,
+		EndTime:              end,
+		Attributes:           attrs,
+		Resource:             r.res,
+		InstrumentationScope: r.scope,
 	}
 }
 

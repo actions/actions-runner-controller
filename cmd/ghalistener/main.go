@@ -79,10 +79,13 @@ func run(ctx context.Context, config *config.Config) error {
 		if err != nil {
 			return fmt.Errorf("failed to create OTel exporter: %w", err)
 		}
-		otelRecorder = metrics.NewOTelRecorder(
-			otlpExporter,
-			logger.With("component", "otel recorder"),
-		)
+		otelRecorder = metrics.NewOTelRecorder(metrics.OTelRecorderConfig{
+			Exporter:          otlpExporter,
+			Logger:            logger.With("component", "otel recorder"),
+			ServerURL:         ghConfig.ConfigURL.Scheme + "://" + ghConfig.ConfigURL.Host,
+			ScaleSetName:      config.EphemeralRunnerSetName,
+			ScaleSetNamespace: config.EphemeralRunnerSetNamespace,
+		})
 		defer otelRecorder.Shutdown(ctx)
 		logger.Info("OTel trace recorder enabled", "endpoint", config.OTelEndpoint)
 	}

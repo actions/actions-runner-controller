@@ -34,9 +34,14 @@ func (e *captureExporter) Spans() []sdktrace.ReadOnlySpan {
 	return out
 }
 
+func newTestRecorder(t *testing.T, exp sdktrace.SpanExporter) *OTelRecorder {
+	t.Helper()
+	return NewOTelRecorder(OTelRecorderConfig{Exporter: exp})
+}
+
 func TestOTelRecorder_EmitsThreeSpans(t *testing.T) {
 	exp := &captureExporter{}
-	rec := NewOTelRecorder(exp, nil)
+	rec := newTestRecorder(t, exp)
 
 	now := time.Date(2026, 4, 21, 12, 0, 0, 0, time.UTC)
 	msg := &scaleset.JobCompleted{
@@ -101,20 +106,131 @@ func TestOTelRecorder_EmitsThreeSpans(t *testing.T) {
 	assertAttr(t, e, "github.conclusion", "success")
 	assertAttr(t, e, "cicd.pipeline.task.run.result", "success")
 
-	// Verify CI/CD semantic convention attributes on all spans
+	// Shared attributes must match the runner exporter's names, types,
+	// and values so a single TraceQL query matches both span sets.
 	for _, span := range byName {
+		assertAttr(t, span, "github.run_id", "99999")
+		assertAttr(t, span, "github.run_attempt", "1")
+		assertAttr(t, span, "github.repository", "acme/widgets")
 		assertAttr(t, span, "cicd.pipeline.run.id", "99999")
+		assertAttr(t, span, "cicd.pipeline.run.url.full", "https://github.com/acme/widgets/actions/runs/99999/attempts/1")
 		assertAttr(t, span, "cicd.pipeline.task.name", "build")
-		assertAttr(t, span, "cicd.pipeline.task.run.id", "42")
+		assertAttr(t, span, "cicd.pipeline.task.run.id", "81606d47848a59c0")
 		assertAttr(t, span, "cicd.worker.name", "runner-abc-xyz")
 		assertAttr(t, span, "cicd.worker.id", "7")
 		assertAttr(t, span, "vcs.repository.url.full", "https://github.com/acme/widgets")
+		assertAttr(t, span, "vcs.provider.name", "github")
+
+		// Keys the runner never emits must not be invented here.
+		assertNoAttr(t, span, "github.job_id")
+		assertNoAttr(t, span, "github.job_name")
+		assertNoAttr(t, span, "github.runner_name")
+		assertNoAttr(t, span, "github.runner_id")
 	}
+}
+
+func TestOTelRecorder_ServerURLIsConfigurable(t *testing.T) {
+	exp := &captureExporter{}
+	rec := NewOTelRecorder(OTelRecorderConfig{
+		Exporter:  exp,
+		ServerURL: "https://ghes.example.com/",
+	})
+
+	now := time.Now()
+	msg := &scaleset.JobCompleted{
+		Result: "Succeeded",
+		JobMessageBase: scaleset.JobMessageBase{
+			WorkflowRunID:    12345,
+			JobID:            "1",
+			JobDisplayName:   "build",
+			OwnerName:        "org",
+			RepositoryName:   "repo",
+			RunnerAssignTime: now,
+			FinishTime:       now.Add(time.Minute),
+		},
+	}
+
+	rec.RecordJobCompleted(msg)
+
+	spans := exp.Spans()
+	require.Len(t, spans, 1)
+	assertAttr(t, spans[0], "vcs.repository.url.full", "https://ghes.example.com/org/repo")
+	assertAttr(t, spans[0], "cicd.pipeline.run.url.full", "https://ghes.example.com/org/repo/actions/runs/12345/attempts/1")
+}
+
+func TestOTelRecorder_ResourceAndScope(t *testing.T) {
+	exp := &captureExporter{}
+	rec := NewOTelRecorder(OTelRecorderConfig{
+		Exporter:          exp,
+		ScaleSetName:      "my-scale-set",
+		ScaleSetNamespace: "arc-runners",
+	})
+
+	now := time.Now()
+	msg := &scaleset.JobCompleted{
+		Result: "Succeeded",
+		JobMessageBase: scaleset.JobMessageBase{
+			WorkflowRunID:    1,
+			JobID:            "1",
+			RunnerAssignTime: now,
+			FinishTime:       now.Add(time.Second),
+		},
+	}
+
+	rec.RecordJobCompleted(msg)
+
+	spans := exp.Spans()
+	require.Len(t, spans, 1)
+	s := spans[0]
+
+	res := s.Resource()
+	require.NotNil(t, res)
+	got := map[string]string{}
+	for _, kv := range res.Attributes() {
+		got[string(kv.Key)] = kv.Value.AsString()
+	}
+	assert.Equal(t, "gha-listener", got["service.name"])
+	assert.NotEmpty(t, got["service.version"])
+	assert.Equal(t, "arc-runners", got["service.namespace"])
+	assert.Equal(t, "my-scale-set", got["github.scale_set.name"])
+
+	scope := s.InstrumentationScope()
+	assert.Equal(t, "github.com/actions/actions-runner-controller/cmd/ghalistener/metrics", scope.Name)
+}
+
+func TestOTelRecorder_ResourceHonorsOTelEnv(t *testing.T) {
+	t.Setenv("OTEL_SERVICE_NAME", "my-custom-listener")
+
+	exp := &captureExporter{}
+	rec := newTestRecorder(t, exp)
+
+	now := time.Now()
+	msg := &scaleset.JobCompleted{
+		Result: "Succeeded",
+		JobMessageBase: scaleset.JobMessageBase{
+			WorkflowRunID:    1,
+			JobID:            "1",
+			RunnerAssignTime: now,
+			FinishTime:       now.Add(time.Second),
+		},
+	}
+
+	rec.RecordJobCompleted(msg)
+
+	spans := exp.Spans()
+	require.Len(t, spans, 1)
+	for _, kv := range spans[0].Resource().Attributes() {
+		if string(kv.Key) == "service.name" {
+			assert.Equal(t, "my-custom-listener", kv.Value.AsString())
+			return
+		}
+	}
+	t.Error("service.name not found on resource")
 }
 
 func TestOTelRecorder_SkipsMissingTimestamps(t *testing.T) {
 	exp := &captureExporter{}
-	rec := NewOTelRecorder(exp, nil)
+	rec := newTestRecorder(t, exp)
 
 	now := time.Now()
 	msg := &scaleset.JobCompleted{
@@ -136,7 +252,7 @@ func TestOTelRecorder_SkipsMissingTimestamps(t *testing.T) {
 
 func TestOTelRecorder_CommonAttributes(t *testing.T) {
 	exp := &captureExporter{}
-	rec := NewOTelRecorder(exp, nil)
+	rec := newTestRecorder(t, exp)
 
 	now := time.Now()
 	msg := &scaleset.JobCompleted{
@@ -161,16 +277,16 @@ func TestOTelRecorder_CommonAttributes(t *testing.T) {
 	require.Len(t, spans, 1)
 	s := spans[0]
 
-	assertAttr(t, s, "github.job_name", "test-suite")
+	assertAttr(t, s, "cicd.pipeline.task.name", "test-suite")
 	assertAttr(t, s, "github.repository", "org/repo")
-	assertAttr(t, s, "github.runner_name", "runner-3")
+	assertAttr(t, s, "cicd.worker.name", "runner-3")
 	assertAttr(t, s, "github.conclusion", "failure")
 	assertAttr(t, s, "cicd.pipeline.task.run.result", "failure")
 }
 
 func TestOTelRecorder_SetRunAttempt(t *testing.T) {
 	exp := &captureExporter{}
-	rec := NewOTelRecorder(exp, nil)
+	rec := newTestRecorder(t, exp)
 	rec.SetRunAttempt(3)
 
 	now := time.Now()
@@ -193,14 +309,14 @@ func TestOTelRecorder_SetRunAttempt(t *testing.T) {
 
 func TestOTelRecorder_JobStartedIsNoOp(t *testing.T) {
 	exp := &captureExporter{}
-	rec := NewOTelRecorder(exp, nil)
+	rec := newTestRecorder(t, exp)
 	rec.RecordJobStarted(&scaleset.JobStarted{})
 	assert.Empty(t, exp.Spans())
 }
 
 func TestOTelRecorder_StatisticsIsNoOp(t *testing.T) {
 	exp := &captureExporter{}
-	rec := NewOTelRecorder(exp, nil)
+	rec := newTestRecorder(t, exp)
 	rec.RecordStatistics(&scaleset.RunnerScaleSetStatistic{TotalRunningJobs: 5})
 	assert.Empty(t, exp.Spans())
 }
@@ -208,8 +324,8 @@ func TestOTelRecorder_StatisticsIsNoOp(t *testing.T) {
 func TestCompositeRecorder_DelegatesAll(t *testing.T) {
 	exp1 := &captureExporter{}
 	exp2 := &captureExporter{}
-	r1 := NewOTelRecorder(exp1, nil)
-	r2 := NewOTelRecorder(exp2, nil)
+	r1 := newTestRecorder(t, exp1)
+	r2 := newTestRecorder(t, exp2)
 	comp := NewComposite(r1, r2)
 
 	now := time.Now()
@@ -266,4 +382,13 @@ func assertAttr(t *testing.T, span sdktrace.ReadOnlySpan, key, expected string) 
 		}
 	}
 	t.Errorf("attribute %q not found on span %q", key, span.Name())
+}
+
+func assertNoAttr(t *testing.T, span sdktrace.ReadOnlySpan, key string) {
+	t.Helper()
+	for _, a := range span.Attributes() {
+		if string(a.Key) == key {
+			t.Errorf("attribute %q must not be set on span %q", key, span.Name())
+		}
+	}
 }
