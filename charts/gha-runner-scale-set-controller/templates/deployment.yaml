@@ -81,6 +81,11 @@ spec:
         - "--listener-metrics-endpoint="
         - "--metrics-addr=0"
         {{- end }}
+        {{- with .Values.otel }}
+        {{- with .listenerEndpoint }}
+        - "--listener-otel-endpoint={{ . }}"
+        {{- end }}
+        {{- end }}
         {{- if .Values.pprof.addr }}
         - "--pprof-addr={{ .Values.pprof.addr }}"
         {{- end }}

@@ -207,7 +207,7 @@ func (lm *listenerMetricsServerConfig) containerPort() (corev1.ContainerPort, er
 	}, nil
 }
 
-func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha1.AutoscalingListener, appConfig *appconfig.AppConfig, metricsConfig *listenerMetricsServerConfig, cert string) (*corev1.Secret, error) {
+func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha1.AutoscalingListener, appConfig *appconfig.AppConfig, metricsConfig *listenerMetricsServerConfig, cert string, otelEndpoint string) (*corev1.Secret, error) {
 	var (
 		metricsAddr     = ""
 		metricsEndpoint = ""
@@ -231,6 +231,7 @@ func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha
 		MetricsAddr:                 metricsAddr,
 		MetricsEndpoint:             metricsEndpoint,
 		Metrics:                     autoscalingListener.Spec.Metrics,
+		OTelEndpoint:                otelEndpoint,
 	}
 
 	vault := autoscalingListener.Spec.VaultConfig

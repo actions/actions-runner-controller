@@ -1,16 +1,19 @@
 package actionsgithubcom
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1/appconfig"
 	"github.com/actions/scaleset"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 )
 
 func TestMetadataPropagation(t *testing.T) {
@@ -540,5 +543,57 @@ func TestListenerPodNodeSelector(t *testing.T) {
 		assert.NotNil(t, pod.Spec.NodeSelector)
 		assert.Empty(t, pod.Spec.NodeSelector,
 			"explicitly empty nodeSelector should override the linux default")
+	})
+}
+
+func TestListenerConfigOTelEndpoint(t *testing.T) {
+	autoscalingRunnerSet := v1alpha1.AutoscalingRunnerSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-scale-set",
+			Namespace: "test-ns",
+			Labels: map[string]string{
+				LabelKeyKubernetesPartOf:  labelValueKubernetesPartOf,
+				LabelKeyKubernetesVersion: "0.2.0",
+			},
+			Annotations: map[string]string{
+				runnerScaleSetIDAnnotationKey:         "1",
+				AnnotationKeyGitHubRunnerGroupName:    "test-group",
+				AnnotationKeyGitHubRunnerScaleSetName: "test-scale-set",
+			},
+		},
+		Spec: v1alpha1.AutoscalingRunnerSetSpec{
+			GitHubConfigUrl: "https://github.com/org/repo",
+			MaxRunners:      ptr.To(5),
+		},
+	}
+
+	b := ResourceBuilder{}
+	ephemeralRunnerSet, err := b.newEphemeralRunnerSet(&autoscalingRunnerSet)
+	require.NoError(t, err)
+
+	listener, err := b.newAutoscalingListener(&autoscalingRunnerSet, ephemeralRunnerSet, autoscalingRunnerSet.Namespace, "test:latest", nil)
+	require.NoError(t, err)
+
+	appConfig := &appconfig.AppConfig{Token: "token"}
+
+	decodeConfig := func(t *testing.T, secret *corev1.Secret) map[string]any {
+		t.Helper()
+		var cfg map[string]any
+		require.NoError(t, json.Unmarshal(secret.Data["config.json"], &cfg))
+		return cfg
+	}
+
+	t.Run("otel endpoint flows into config.json", func(t *testing.T) {
+		secret, err := b.newScaleSetListenerConfig(listener, appConfig, nil, "", "http://otel-collector:4318")
+		require.NoError(t, err)
+		cfg := decodeConfig(t, secret)
+		assert.Equal(t, "http://otel-collector:4318", cfg["otel_endpoint"])
+	})
+
+	t.Run("empty endpoint leaves config empty", func(t *testing.T) {
+		secret, err := b.newScaleSetListenerConfig(listener, appConfig, nil, "", "")
+		require.NoError(t, err)
+		cfg := decodeConfig(t, secret)
+		assert.Equal(t, "", cfg["otel_endpoint"])
 	})
 }

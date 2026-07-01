@@ -98,6 +98,13 @@ priorityClassName: ""
 pprof: {}
 #   addr: ":6060"
 
+## To export OpenTelemetry traces of job lifecycle spans (queue,
+## startup, execution) from the listener pods, uncomment the following
+## lines and set the OTLP/HTTP collector base URL. TLS follows the URL
+## scheme.
+# otel:
+#   listenerEndpoint: "http://otel-collector:4318"
+
 flags:
   ## Log level can be set here with one of the following values: "debug", "info", "warn", "error".
   ## Defaults to "debug".

@@ -56,6 +56,11 @@ type AutoscalingListenerReconciler struct {
 	// If it is set to "0", the metrics server is not started.
 	ListenerMetricsAddr     string
 	ListenerMetricsEndpoint string
+	// ListenerOTelEndpoint is the OTLP/HTTP collector base URL for the
+	// listener's job lifecycle trace export. Empty disables the config
+	// wiring (the standard OTEL_EXPORTER_OTLP_* env vars still apply
+	// on the listener pod, e.g. via listenerTemplate).
+	ListenerOTelEndpoint string
 
 	ResourceBuilder
 }
@@ -389,7 +394,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 				return ctrl.Result{}, fmt.Errorf("failed to build GitHub server TLS certificate value for listener config: %w", err)
 			}
 		}
-		desiredSecret, err := r.newScaleSetListenerConfig(&autoscalingListener, cfg, metricsConfig, cert)
+		desiredSecret, err := r.newScaleSetListenerConfig(&autoscalingListener, cfg, metricsConfig, cert, r.ListenerOTelEndpoint)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to build listener config secret: %w", err)
 		}
@@ -426,7 +431,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 				return ctrl.Result{}, fmt.Errorf("failed to build GitHub server TLS certificate value for listener config: %w", err)
 			}
 		}
-		desiredSecret, err := r.newScaleSetListenerConfig(&autoscalingListener, cfg, metricsConfig, cert)
+		desiredSecret, err := r.newScaleSetListenerConfig(&autoscalingListener, cfg, metricsConfig, cert, r.ListenerOTelEndpoint)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to build listener config secret: %w", err)
 		}

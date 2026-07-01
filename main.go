@@ -84,6 +84,7 @@ func main() {
 		// metrics server configuration for AutoscalingListener
 		listenerMetricsAddr     string
 		listenerMetricsEndpoint string
+		listenerOTelEndpoint    string
 
 		metricsAddr              string
 		pprofAddr                string
@@ -126,6 +127,7 @@ func main() {
 
 	flag.StringVar(&listenerMetricsAddr, "listener-metrics-addr", ":8080", "The address applied to AutoscalingListener metrics server")
 	flag.StringVar(&listenerMetricsEndpoint, "listener-metrics-endpoint", "/metrics", "The AutoscalingListener metrics server endpoint from which the metrics are collected")
+	flag.StringVar(&listenerOTelEndpoint, "listener-otel-endpoint", "", "The OTLP/HTTP collector base URL (e.g. http://otel-collector:4318) for AutoscalingListener job lifecycle trace export. Empty disables it.")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&pprofAddr, "pprof-addr", "", "The address the pprof endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", "", "The address the health probe endpoint binds to. Disabled if empty.")
@@ -363,6 +365,7 @@ func main() {
 			Scheme:                  mgr.GetScheme(),
 			ListenerMetricsAddr:     listenerMetricsAddr,
 			ListenerMetricsEndpoint: listenerMetricsEndpoint,
+			ListenerOTelEndpoint:    listenerOTelEndpoint,
 			ResourceBuilder:         rb,
 		}).SetupWithManager(mgr, controllerOpts...); err != nil {
 			log.Error(err, "unable to create controller", "controller", "AutoscalingListener")
