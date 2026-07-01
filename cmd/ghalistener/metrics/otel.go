@@ -65,6 +65,38 @@ const spanQueueSize = 64
 // exportTimeout bounds a single OTLP export attempt.
 const exportTimeout = 5 * time.Second
 
+// maxPendingQueueEntries caps the in-memory map that holds
+// queue-phase timestamps from JobStarted messages. Sized well above
+// the realistic concurrent-job count on any single scale set; if the
+// cap is reached a warning is logged and the new entry is dropped
+// (the runner.queue span will be missing for that job).
+const maxPendingQueueEntries = 1000
+
+// pendingQueueTTL is the maximum age of an unmatched queue-time entry.
+// Entries older than this are silently discarded at lookup so that
+// jobs which never send a JobCompleted (e.g. abandoned mid-run) cannot
+// leak memory across a months-long listener lifetime.
+const pendingQueueTTL = 24 * time.Hour
+
+// pendingQueueEntry holds the queue-phase timestamps captured from a
+// JobStarted message. They are keyed by JobID and evicted when the
+// corresponding JobCompleted arrives.
+//
+// Background: the GitHub broker omits QueueTime from JobCompleted in
+// production (confirmed across multiple runs). JobStarted, which
+// arrives earlier, does carry the broker-set QueueTime and
+// ScaleSetAssignTime needed to reconstruct the runner.queue span.
+//
+// If the broker also omits QueueTime from JobStarted (i.e. both
+// fields are zero), no runner.queue span is emitted — using the
+// listener-observed wall-clock receipt time as the queue start would
+// produce a near-zero span anchored at the wrong end of the interval.
+type pendingQueueEntry struct {
+	queueTime          time.Time
+	scaleSetAssignTime time.Time
+	storedAt           time.Time // wall-clock receipt; used for TTL only
+}
+
 type OTelRecorder struct {
 	exporter  sdktrace.SpanExporter
 	logger    *slog.Logger
@@ -76,6 +108,10 @@ type OTelRecorder struct {
 	stopped    bool
 	queue      chan []sdktrace.ReadOnlySpan
 	workerDone chan struct{}
+
+	// pendingMu guards pendingQueue.
+	pendingMu    sync.Mutex
+	pendingQueue map[string]pendingQueueEntry
 }
 
 // OTelRecorderConfig configures an OTelRecorder.
@@ -141,8 +177,9 @@ func NewOTelRecorder(cfg OTelRecorderConfig) *OTelRecorder {
 			Name:    otelScopeName,
 			Version: build.Version,
 		},
-		queue:      make(chan []sdktrace.ReadOnlySpan, spanQueueSize),
-		workerDone: make(chan struct{}),
+		queue:        make(chan []sdktrace.ReadOnlySpan, spanQueueSize),
+		workerDone:   make(chan struct{}),
+		pendingQueue: make(map[string]pendingQueueEntry),
 	}
 	go r.exportLoop()
 	return r
@@ -179,10 +216,40 @@ func (r *OTelRecorder) Shutdown(ctx context.Context) error {
 	}
 }
 
-func (r *OTelRecorder) RecordJobStarted(_ *scaleset.JobStarted) {}
+// RecordJobStarted captures the queue-phase timestamps from the
+// JobStarted message so they are available when the corresponding
+// JobCompleted arrives. The GitHub broker sends QueueTime=0 on
+// JobCompleted in production; JobStarted carries the real value.
+func (r *OTelRecorder) RecordJobStarted(msg *scaleset.JobStarted) {
+	r.pendingMu.Lock()
+	defer r.pendingMu.Unlock()
+
+	if len(r.pendingQueue) >= maxPendingQueueEntries {
+		r.logger.Warn("OTel pending-queue map full, runner.queue span may be missing",
+			"job_id", msg.JobID, "run_id", msg.WorkflowRunID)
+		return
+	}
+	r.pendingQueue[msg.JobID] = pendingQueueEntry{
+		queueTime:          msg.QueueTime,
+		scaleSetAssignTime: msg.ScaleSetAssignTime,
+		storedAt:           time.Now(),
+	}
+}
 
 func (r *OTelRecorder) RecordJobCompleted(msg *scaleset.JobCompleted) {
-	spans := r.buildJobSpans(msg, defaultRunAttempt)
+	// Retrieve and evict the pending entry stored at JobStarted time.
+	r.pendingMu.Lock()
+	pending, found := r.pendingQueue[msg.JobID]
+	delete(r.pendingQueue, msg.JobID)
+	r.pendingMu.Unlock()
+
+	// Discard TTL-expired entries (abandoned jobs, listener restarts).
+	if found && time.Since(pending.storedAt) > pendingQueueTTL {
+		found = false
+		pending = pendingQueueEntry{}
+	}
+
+	spans := r.buildJobSpans(msg, defaultRunAttempt, pending)
 	if len(spans) == 0 {
 		return
 	}
@@ -203,7 +270,16 @@ func (r *OTelRecorder) RecordJobCompleted(msg *scaleset.JobCompleted) {
 func (r *OTelRecorder) RecordStatistics(_ *scaleset.RunnerScaleSetStatistic) {}
 func (r *OTelRecorder) RecordDesiredRunners(_ int)                           {}
 
-func (r *OTelRecorder) buildJobSpans(msg *scaleset.JobCompleted, attempt int64) []sdktrace.ReadOnlySpan {
+// buildJobSpans constructs the runner.queue / runner.startup /
+// runner.execution span stubs for the given completed job.
+//
+// pending holds the queue-phase timestamps captured from the earlier
+// JobStarted message (see RecordJobStarted). It is used as a fallback
+// when msg.QueueTime is zero, which is the observed production
+// behaviour of the GitHub broker: JobCompleted never carries QueueTime
+// while JobStarted does. The span timestamps therefore measure
+// broker-set queue time, not listener-observed wall-clock time.
+func (r *OTelRecorder) buildJobSpans(msg *scaleset.JobCompleted, attempt int64, pending pendingQueueEntry) []sdktrace.ReadOnlySpan {
 	traceID := newTraceID(msg.WorkflowRunID, attempt)
 	// Parent to the contract job span the runner emits. JobDisplayName
 	// is the job's display name (GitHub API job.name), the job_name the
@@ -249,10 +325,22 @@ func (r *OTelRecorder) buildJobSpans(msg *scaleset.JobCompleted, attempt int64) 
 
 	var stubs tracetest.SpanStubs
 
-	if !msg.QueueTime.IsZero() && !msg.ScaleSetAssignTime.IsZero() {
+	// Resolve queue-phase start/end. Prefer timestamps from JobCompleted;
+	// fall back to those stored from the earlier JobStarted when the
+	// broker sends QueueTime=0 on JobCompleted (production behaviour).
+	queueStart := msg.QueueTime
+	queueEnd := msg.ScaleSetAssignTime
+	if queueStart.IsZero() && !pending.queueTime.IsZero() {
+		queueStart = pending.queueTime
+		if queueEnd.IsZero() {
+			queueEnd = pending.scaleSetAssignTime
+		}
+	}
+
+	if !queueStart.IsZero() && !queueEnd.IsZero() {
 		stubs = append(stubs, r.newStub(
 			traceID, parentSC, "runner.queue",
-			msg.QueueTime, msg.ScaleSetAssignTime,
+			queueStart, queueEnd,
 			// github.record_type matches the runner's attribute key (OTelTraceExporter.cs:526,618,711)
 			append(sliceClone(commonAttrs), attribute.String("github.record_type", "runner.queue")),
 		))

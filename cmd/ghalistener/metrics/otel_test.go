@@ -558,6 +558,101 @@ func TestOTelRecorder_UnknownConclusion(t *testing.T) {
 	assertAttr(t, spans[0], "cicd.pipeline.task.run.result", "error")
 }
 
+// TestOTelRecorder_QueueSpanFromJobStarted verifies that runner.queue is
+// emitted even when JobCompleted.QueueTime is zero (the confirmed
+// production behaviour: the GitHub broker omits QueueTime from
+// JobCompleted). The recorder must fall back to the QueueTime and
+// ScaleSetAssignTime captured from the earlier JobStarted message,
+// keyed by JobID.
+func TestOTelRecorder_QueueSpanFromJobStarted(t *testing.T) {
+	exp := &captureExporter{}
+	rec := newTestRecorder(t, exp)
+
+	now := time.Date(2026, 4, 21, 12, 0, 0, 0, time.UTC)
+
+	// JobStarted arrives first and carries the real queue-phase timestamps.
+	rec.RecordJobStarted(&scaleset.JobStarted{
+		JobMessageBase: scaleset.JobMessageBase{
+			JobID:              "job-42",
+			WorkflowRunID:      99999,
+			JobDisplayName:     "build",
+			QueueTime:          now,
+			ScaleSetAssignTime: now.Add(10 * time.Second),
+			RunnerAssignTime:   now.Add(40 * time.Second),
+		},
+	})
+
+	// JobCompleted arrives with QueueTime=0 — the broker bug.
+	rec.RecordJobCompleted(&scaleset.JobCompleted{
+		Result: "Succeeded",
+		JobMessageBase: scaleset.JobMessageBase{
+			JobID:              "job-42",
+			WorkflowRunID:      99999,
+			JobDisplayName:     "build",
+			OwnerName:          "acme",
+			RepositoryName:     "widgets",
+			QueueTime:          time.Time{}, // zero — broker does not send it
+			ScaleSetAssignTime: now.Add(10 * time.Second),
+			RunnerAssignTime:   now.Add(40 * time.Second),
+			FinishTime:         now.Add(5 * time.Minute),
+		},
+	})
+	flush(t, rec)
+
+	spans := exp.Spans()
+	byName := map[string]sdktrace.ReadOnlySpan{}
+	for _, s := range spans {
+		byName[s.Name()] = s
+	}
+
+	q := byName["runner.queue"]
+	require.NotNil(t, q, "runner.queue must fire even when JobCompleted.QueueTime=0")
+	assert.Equal(t, now, q.StartTime(), "start must be QueueTime from JobStarted")
+	assert.Equal(t, now.Add(10*time.Second), q.EndTime(), "end must be ScaleSetAssignTime")
+}
+
+// TestOTelRecorder_QueueEntryEvictedOnCompleted verifies that the
+// pending-queue map is cleared after JobCompleted so a second
+// JobCompleted for the same JobID does not re-emit runner.queue.
+func TestOTelRecorder_QueueEntryEvictedOnCompleted(t *testing.T) {
+	exp := &captureExporter{}
+	rec := newTestRecorder(t, exp)
+
+	now := time.Now()
+
+	rec.RecordJobStarted(&scaleset.JobStarted{
+		JobMessageBase: scaleset.JobMessageBase{
+			JobID:              "job-99",
+			WorkflowRunID:      1,
+			QueueTime:          now,
+			ScaleSetAssignTime: now.Add(5 * time.Second),
+		},
+	})
+
+	first := &scaleset.JobCompleted{
+		Result: "Succeeded",
+		JobMessageBase: scaleset.JobMessageBase{
+			JobID:            "job-99",
+			WorkflowRunID:    1,
+			RunnerAssignTime: now.Add(10 * time.Second),
+			FinishTime:       now.Add(time.Minute),
+		},
+	}
+	rec.RecordJobCompleted(first)
+
+	// Simulate a duplicate/stale JobCompleted for the same job.
+	rec.RecordJobCompleted(first)
+	flush(t, rec)
+
+	queueCount := 0
+	for _, s := range exp.Spans() {
+		if s.Name() == "runner.queue" {
+			queueCount++
+		}
+	}
+	assert.Equal(t, 1, queueCount, "runner.queue must be emitted exactly once per job")
+}
+
 func assertAttr(t *testing.T, span sdktrace.ReadOnlySpan, key, expected string) {
 	t.Helper()
 	for _, a := range span.Attributes() {
