@@ -236,6 +236,11 @@ func (r *OTelRecorder) buildJobSpans(msg *scaleset.JobCompleted, attempt int64) 
 		attribute.String("cicd.pipeline.run.url.full", runURL),
 		attribute.String("cicd.pipeline.task.name", msg.JobDisplayName),
 		attribute.String("cicd.pipeline.task.run.id", parentSpanID.String()),
+		// cicd.worker.* are SPAN attrs here (not resource attrs) because one
+		// listener serves many runners; the runner itself emits them as
+		// resource attrs (one worker per process). Query both with TraceQL:
+		//   span.cicd.worker.name || resource.cicd.worker.name
+		// See runner docs/otel-id-contract.md § cicd.worker scope.
 		attribute.String("cicd.worker.name", msg.RunnerName),
 		attribute.String("cicd.worker.id", strconv.Itoa(msg.RunnerID)),
 		attribute.String("vcs.repository.url.full", r.serverURL+"/"+repo),
@@ -248,7 +253,8 @@ func (r *OTelRecorder) buildJobSpans(msg *scaleset.JobCompleted, attempt int64) 
 		stubs = append(stubs, r.newStub(
 			traceID, parentSC, "runner.queue",
 			msg.QueueTime, msg.ScaleSetAssignTime,
-			append(sliceClone(commonAttrs), attribute.String("type", "runner.queue")),
+			// github.record_type matches the runner's attribute key (OTelTraceExporter.cs:526,618,711)
+			append(sliceClone(commonAttrs), attribute.String("github.record_type", "runner.queue")),
 		))
 	}
 
@@ -256,7 +262,7 @@ func (r *OTelRecorder) buildJobSpans(msg *scaleset.JobCompleted, attempt int64) 
 		stubs = append(stubs, r.newStub(
 			traceID, parentSC, "runner.startup",
 			msg.ScaleSetAssignTime, msg.RunnerAssignTime,
-			append(sliceClone(commonAttrs), attribute.String("type", "runner.startup")),
+			append(sliceClone(commonAttrs), attribute.String("github.record_type", "runner.startup")),
 		))
 	}
 
@@ -265,7 +271,7 @@ func (r *OTelRecorder) buildJobSpans(msg *scaleset.JobCompleted, attempt int64) 
 			traceID, parentSC, "runner.execution",
 			msg.RunnerAssignTime, msg.FinishTime,
 			append(sliceClone(commonAttrs),
-				attribute.String("type", "runner.execution"),
+				attribute.String("github.record_type", "runner.execution"),
 				attribute.String("github.conclusion", conclusion),
 				attribute.String("cicd.pipeline.task.run.result", conclusionToSemconv(conclusion)),
 			),
@@ -276,10 +282,15 @@ func (r *OTelRecorder) buildJobSpans(msg *scaleset.JobCompleted, attempt int64) 
 }
 
 func normalizeConclusion(raw string) string {
+	// Mirrors the runner's NormalizeConclusion (OTelTraceExporter.cs:1008-1019).
+	// Abandoned maps to failure (TaskResult.Abandoned → "failure" in runner).
+	// Any unknown value maps to "error" rather than being lowercased through.
 	switch strings.ToLower(raw) {
 	case "success", "succeeded":
 		return "success"
 	case "failure", "failed":
+		return "failure"
+	case "abandoned":
 		return "failure"
 	case "cancelled", "canceled":
 		return "cancelled"
@@ -290,11 +301,13 @@ func normalizeConclusion(raw string) string {
 	case "startup_failure":
 		return "startup_failure"
 	default:
-		return strings.ToLower(raw)
+		return "error"
 	}
 }
 
 func conclusionToSemconv(conclusion string) string {
+	// semconv cicd.pipeline.task.run.result enum: success|failure|cancellation|skip|timeout|error
+	// Mirrors ToSemconvResult (OTelTraceExporter.cs:1022-1033): unknown → "error".
 	switch conclusion {
 	case "success":
 		return "success"
@@ -306,10 +319,8 @@ func conclusionToSemconv(conclusion string) string {
 		return "skip"
 	case "timed_out":
 		return "timeout"
-	case "startup_failure":
-		return "error"
 	default:
-		return conclusion
+		return "error"
 	}
 }
 

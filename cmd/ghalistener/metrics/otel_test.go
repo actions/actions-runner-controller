@@ -98,19 +98,20 @@ func TestOTelRecorder_EmitsThreeSpans(t *testing.T) {
 	require.NotNil(t, q)
 	assert.Equal(t, now, q.StartTime())
 	assert.Equal(t, now.Add(10*time.Second), q.EndTime())
-	assertAttr(t, q, "type", "runner.queue")
+	// M1: key must be github.record_type (matches runner's OTelTraceExporter.cs:526,618,711)
+	assertAttr(t, q, "github.record_type", "runner.queue")
 
 	s := byName["runner.startup"]
 	require.NotNil(t, s)
 	assert.Equal(t, now.Add(10*time.Second), s.StartTime())
 	assert.Equal(t, now.Add(40*time.Second), s.EndTime())
-	assertAttr(t, s, "type", "runner.startup")
+	assertAttr(t, s, "github.record_type", "runner.startup")
 
 	e := byName["runner.execution"]
 	require.NotNil(t, e)
 	assert.Equal(t, now.Add(40*time.Second), e.StartTime())
 	assert.Equal(t, now.Add(5*time.Minute), e.EndTime())
-	assertAttr(t, e, "type", "runner.execution")
+	assertAttr(t, e, "github.record_type", "runner.execution")
 	assertAttr(t, e, "github.conclusion", "success")
 	assertAttr(t, e, "cicd.pipeline.task.run.result", "success")
 
@@ -129,6 +130,8 @@ func TestOTelRecorder_EmitsThreeSpans(t *testing.T) {
 		assertAttr(t, span, "vcs.repository.url.full", "https://github.com/acme/widgets")
 		assertAttr(t, span, "vcs.provider.name", "github")
 
+		// Old key must not appear; runner uses github.record_type (M1).
+		assertNoAttr(t, span, "type")
 		// Keys the runner never emits must not be invented here.
 		assertNoAttr(t, span, "github.job_id")
 		assertNoAttr(t, span, "github.job_name")
@@ -445,6 +448,114 @@ func TestDeterministicIDs(t *testing.T) {
 	sid3 := newJobSpanID(42, 1, "deploy")
 	assert.Equal(t, sid1, sid2)
 	assert.NotEqual(t, sid1, sid3)
+}
+
+// TestNormalizeConclusion_Conformance verifies M3: ARC must mirror the runner's
+// NormalizeConclusion mapping (OTelTraceExporter.cs:1008-1019).
+// Abandoned → "failure"; any unknown raw value → "error" (not lowercased pass-through).
+func TestNormalizeConclusion_Conformance(t *testing.T) {
+	cases := []struct {
+		raw  string
+		want string
+	}{
+		// known set passes through
+		{"success", "success"},
+		{"Succeeded", "success"},
+		{"failure", "failure"},
+		{"Failed", "failure"},
+		{"cancelled", "cancelled"},
+		{"Canceled", "cancelled"},
+		{"skipped", "skipped"},
+		{"timed_out", "timed_out"},
+		{"startup_failure", "startup_failure"},
+		// abandoned maps to failure (mirrors TaskResult.Abandoned in runner)
+		{"abandoned", "failure"},
+		{"Abandoned", "failure"},
+		// unknown raw values → "error", not lowercased pass-through
+		{"totally_unknown", "error"},
+		{"", "error"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.raw, func(t *testing.T) {
+			assert.Equal(t, tc.want, normalizeConclusion(tc.raw))
+		})
+	}
+}
+
+// TestConclusionToSemconv_Conformance verifies M3: unknown conclusion must map to
+// "error" for cicd.pipeline.task.run.result (mirrors ToSemconvResult default in runner).
+func TestConclusionToSemconv_Conformance(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"success", "success"},
+		{"failure", "failure"},
+		{"cancelled", "cancellation"},
+		{"skipped", "skip"},
+		{"timed_out", "timeout"},
+		{"startup_failure", "error"},
+		// unknown → "error", not the raw value passed through
+		{"error", "error"},
+		{"unknown_value", "error"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			assert.Equal(t, tc.want, conclusionToSemconv(tc.in))
+		})
+	}
+}
+
+// TestOTelRecorder_AbandonedConclusion verifies M3 end-to-end:
+// a job with Result="Abandoned" must emit github.conclusion="failure"
+// and cicd.pipeline.task.run.result="failure".
+func TestOTelRecorder_AbandonedConclusion(t *testing.T) {
+	exp := &captureExporter{}
+	rec := newTestRecorder(t, exp)
+
+	now := time.Now()
+	msg := &scaleset.JobCompleted{
+		Result: "Abandoned",
+		JobMessageBase: scaleset.JobMessageBase{
+			WorkflowRunID:    1,
+			JobID:            "1",
+			RunnerAssignTime: now,
+			FinishTime:       now.Add(time.Second),
+		},
+	}
+	rec.RecordJobCompleted(msg)
+	flush(t, rec)
+
+	spans := exp.Spans()
+	require.Len(t, spans, 1)
+	assertAttr(t, spans[0], "github.conclusion", "failure")
+	assertAttr(t, spans[0], "cicd.pipeline.task.run.result", "failure")
+}
+
+// TestOTelRecorder_UnknownConclusion verifies M3 end-to-end:
+// an unrecognised Result must emit github.conclusion="error"
+// and cicd.pipeline.task.run.result="error" (not the raw lowercased value).
+func TestOTelRecorder_UnknownConclusion(t *testing.T) {
+	exp := &captureExporter{}
+	rec := newTestRecorder(t, exp)
+
+	now := time.Now()
+	msg := &scaleset.JobCompleted{
+		Result: "SomeNewFutureState",
+		JobMessageBase: scaleset.JobMessageBase{
+			WorkflowRunID:    1,
+			JobID:            "1",
+			RunnerAssignTime: now,
+			FinishTime:       now.Add(time.Second),
+		},
+	}
+	rec.RecordJobCompleted(msg)
+	flush(t, rec)
+
+	spans := exp.Spans()
+	require.Len(t, spans, 1)
+	assertAttr(t, spans[0], "github.conclusion", "error")
+	assertAttr(t, spans[0], "cicd.pipeline.task.run.result", "error")
 }
 
 func assertAttr(t *testing.T, span sdktrace.ReadOnlySpan, key, expected string) {
