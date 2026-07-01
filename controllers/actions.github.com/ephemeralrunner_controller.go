@@ -32,6 +32,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -46,8 +47,10 @@ const (
 // EphemeralRunnerReconciler reconciles a EphemeralRunner object
 type EphemeralRunnerReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Log             logr.Logger
+	Scheme          *runtime.Scheme
+	Recorder        events.EventRecorder
+	GitHubAnnotator GitHubAnnotator
 	ResourceBuilder
 }
 
@@ -232,6 +235,13 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	if len(ephemeralRunner.Status.Failures) > maxFailures {
 		log.Info(fmt.Sprintf("EphemeralRunner has failed more than %d times. Deleting ephemeral runner so it can be re-created", maxFailures))
+		msg := fmt.Sprintf("Runner pod failed %d times and will not be retried", maxFailures)
+		if ephemeralRunner.Status.Message != "" {
+			msg = fmt.Sprintf("%s. Last error: %s", msg, ephemeralRunner.Status.Message)
+		}
+		r.Recorder.Eventf(&ephemeralRunner, nil, corev1.EventTypeWarning, ReasonTooManyPodFailures, "MaxRetriesExceeded", msg)
+		annotateRunnerFailure(ctx, r.GitHubAnnotator, &ephemeralRunner, log)
+
 		if err := r.Delete(ctx, &ephemeralRunner); err != nil {
 			log.Error(fmt.Errorf("failed to delete ephemeral runner after %d failures: %w", maxFailures, err), "Failed to delete ephemeral runner")
 			return ctrl.Result{}, err
@@ -365,11 +375,28 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, r.deleteEphemeralRunnerOrPod(ctx, &ephemeralRunner, pod, log)
 
 	case cs == nil:
-		// starting, no container state yet
+		// Runner container status not yet available. Check if any container is in a
+		// terminal error state (e.g. ImagePullBackOff) that prevents the pod from progressing.
+		if containerErrors := extractPodContainerErrors(pod); len(containerErrors) > 0 {
+			errMsg := formatPodContainerErrors(containerErrors)
+			log.Info("Pod has container errors while waiting for runner container", "errors", errMsg)
+			r.Recorder.Eventf(&ephemeralRunner, nil, corev1.EventTypeWarning, "ContainerError", "PodStartupFailure", errMsg)
+			return ctrl.Result{}, r.deleteEphemeralRunnerOrPod(ctx, &ephemeralRunner, pod, log)
+		}
 		log.Info("Waiting for runner container status to be available")
 		return ctrl.Result{}, nil
 
-	case cs.State.Terminated == nil: // container is not terminated and pod phase is not failed, so runner is still running
+	case cs.State.Terminated == nil:
+		// Container is not terminated and pod phase is not failed. Check for waiting errors
+		// (e.g. CrashLoopBackOff on the runner container itself).
+		if cs.State.Waiting != nil {
+			if _, isTerminal := terminalContainerWaitingReasons[cs.State.Waiting.Reason]; isTerminal {
+				errMsg := fmt.Sprintf("container %q: %s: %s", cs.Name, cs.State.Waiting.Reason, cs.State.Waiting.Message)
+				log.Info("Runner container is in terminal waiting state", "reason", cs.State.Waiting.Reason)
+				r.Recorder.Eventf(&ephemeralRunner, nil, corev1.EventTypeWarning, "ContainerError", "RunnerContainerWaiting", errMsg)
+				return ctrl.Result{}, r.deleteEphemeralRunnerOrPod(ctx, &ephemeralRunner, pod, log)
+			}
+		}
 		log.Info("Runner container is still running; updating ephemeral runner status")
 		if err := r.updateRunStatusFromPod(ctx, &ephemeralRunner, pod, log); err != nil {
 			log.Info("Failed to update ephemeral runner status. Requeue to not miss this event")
@@ -634,6 +661,17 @@ func (r *EphemeralRunnerReconciler) deletePodAsFailed(ctx context.Context, ephem
 	ephemeralRunner.Status.Reason = pod.Status.Reason
 	ephemeralRunner.Status.Message = pod.Status.Message
 
+	// When pod-level reason/message are empty, extract details from container statuses.
+	// This surfaces errors like ImagePullBackOff that only appear at the container level.
+	if ephemeralRunner.Status.Message == "" {
+		if containerErrors := extractPodContainerErrors(pod); len(containerErrors) > 0 {
+			ephemeralRunner.Status.Message = formatPodContainerErrors(containerErrors)
+			if ephemeralRunner.Status.Reason == "" {
+				ephemeralRunner.Status.Reason = containerErrors[0].Category
+			}
+		}
+	}
+
 	if err := r.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
 		return fmt.Errorf("failed to update ephemeral runner status with failure count: %w", err)
 	}
@@ -859,6 +897,9 @@ func (r *EphemeralRunnerReconciler) deleteRunnerFromService(ctx context.Context,
 // SetupWithManager sets up the controller with the Manager.
 func (r *EphemeralRunnerReconciler) SetupWithManager(mgr ctrl.Manager, opts ...Option) error {
 	r.ResourceBuilder.setSchemeIfUnset(r.Scheme)
+	if r.Recorder == nil {
+		r.Recorder = mgr.GetEventRecorder("ephemeral-runner-controller")
+	}
 
 	return builderWithOptions(
 		ctrl.NewControllerManagedBy(mgr).
