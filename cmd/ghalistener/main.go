@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/config"
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/metrics"
@@ -86,7 +87,16 @@ func run(ctx context.Context, config *config.Config) error {
 			ScaleSetName:      config.EphemeralRunnerSetName,
 			ScaleSetNamespace: config.EphemeralRunnerSetNamespace,
 		})
-		defer otelRecorder.Shutdown(ctx)
+		// Shut down with a fresh bounded context: the signal ctx is
+		// already canceled on SIGINT/SIGTERM, which would abort the
+		// final flush of queued spans.
+		defer func() {
+			sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := otelRecorder.Shutdown(sctx); err != nil {
+				logger.Error("Failed to shut down OTel recorder", "error", err)
+			}
+		}()
 		logger.Info("OTel trace recorder enabled", "endpoint", config.OTelEndpoint)
 	}
 
