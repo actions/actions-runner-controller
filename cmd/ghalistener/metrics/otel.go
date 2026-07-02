@@ -82,10 +82,14 @@ const pendingQueueTTL = 24 * time.Hour
 // JobStarted message. They are keyed by JobID and evicted when the
 // corresponding JobCompleted arrives.
 //
-// Background: the GitHub broker omits QueueTime from JobCompleted in
-// production (confirmed across multiple runs). JobStarted, which
-// arrives earlier, does carry the broker-set QueueTime and
-// ScaleSetAssignTime needed to reconstruct the runner.queue span.
+// Background: the github.com broker omits QueueTime from JobCompleted
+// in production (confirmed across multiple runs). This fallback
+// captures it from the earlier JobStarted message instead — but note:
+// as of 2026-07-01, github.com sends QueueTime=0 on JobStarted too
+// (verified live; only ScaleSetAssignTime/RunnerAssignTime are
+// populated), so today no runner.queue span is emitted at all. The
+// path is kept because it is cheap, tested, and lights up the moment
+// the broker starts populating the field (e.g. GHES or a future fix).
 //
 // If the broker also omits QueueTime from JobStarted (i.e. both
 // fields are zero), no runner.queue span is emitted — using the
