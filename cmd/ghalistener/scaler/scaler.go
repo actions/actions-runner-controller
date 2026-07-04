@@ -58,6 +58,9 @@ func New(config Config, options ...Option) (*Scaler, error) {
 		return nil, err
 	}
 
+	conf.QPS = 50
+	conf.Burst = 100
+
 	clientset, err := kubernetes.NewForConfig(conf)
 	if err != nil {
 		return nil, err
@@ -216,7 +219,8 @@ func (w *Scaler) HandleDesiredRunnerCount(ctx context.Context, count int) (int, 
 		return 0, fmt.Errorf("could not patch ephemeral runner set , patch JSON: %s, error: %w", string(mergePatch), err)
 	}
 
-	w.logger.Info("Ephemeral runner set scaled.",
+	w.logger.Info(
+		"Ephemeral runner set scaled.",
 		"namespace", w.config.EphemeralRunnerSetNamespace,
 		"name", w.config.EphemeralRunnerSetName,
 		"replicas", patchedEphemeralRunnerSet.Spec.Replicas,
