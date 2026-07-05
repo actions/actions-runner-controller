@@ -342,7 +342,7 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 	assert.Equal(t, int64(35), *deployment.Spec.Template.Spec.TerminationGracePeriodSeconds)
 	assert.Len(t, deployment.Spec.Template.Spec.Volumes, 1)
 	assert.Equal(t, "tmp", deployment.Spec.Template.Spec.Volumes[0].Name)
-	assert.NotNil(t, 10, deployment.Spec.Template.Spec.Volumes[0].EmptyDir)
+	assert.NotNil(t, deployment.Spec.Template.Spec.Volumes[0].EmptyDir)
 
 	assert.Len(t, deployment.Spec.Template.Spec.NodeSelector, 0)
 	assert.Nil(t, deployment.Spec.Template.Spec.Affinity)
@@ -752,7 +752,7 @@ func TestTemplate_ControllerDeployment_WatchSingleNamespace(t *testing.T) {
 	assert.Equal(t, int64(35), *deployment.Spec.Template.Spec.TerminationGracePeriodSeconds)
 	assert.Len(t, deployment.Spec.Template.Spec.Volumes, 1)
 	assert.Equal(t, "tmp", deployment.Spec.Template.Spec.Volumes[0].Name)
-	assert.NotNil(t, 10, deployment.Spec.Template.Spec.Volumes[0].EmptyDir)
+	assert.NotNil(t, deployment.Spec.Template.Spec.Volumes[0].EmptyDir)
 
 	assert.Len(t, deployment.Spec.Template.Spec.NodeSelector, 0)
 	assert.Nil(t, deployment.Spec.Template.Spec.Affinity)
