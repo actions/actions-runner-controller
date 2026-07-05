@@ -66,6 +66,10 @@ resources: {}
 #   cpu: 100m
 #   memory: 128Mi
 
+## This must stay above the manager's graceful shutdown timeout (30s, controller-runtime's
+## default) so in-flight reconciles have a chance to finish before the kubelet sends SIGKILL.
+terminationGracePeriodSeconds: 35
+
 nodeSelector: {}
 
 tolerations: []
