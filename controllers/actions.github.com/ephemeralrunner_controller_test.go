@@ -223,9 +223,8 @@ var _ = Describe("EphemeralRunner", func() {
 			).Should(Succeed(), "failed to get ephemeral runner")
 
 			// update job id to simulate job assigned
-			updatedER := er.DeepCopy()
-			updatedER.Status.JobID = "1"
-			err := k8sClient.Status().Patch(ctx, updatedER, client.MergeFrom(er))
+			er.Status.JobID = "1"
+			err := k8sClient.Status().Update(ctx, er)
 			Expect(err).To(BeNil(), "failed to update ephemeral runner status")
 
 			er = new(v1alpha1.EphemeralRunner)
@@ -250,8 +249,7 @@ var _ = Describe("EphemeralRunner", func() {
 			}).Should(BeEquivalentTo(true))
 
 			// delete pod to simulate failure
-			updatedPod := pod.DeepCopy()
-			updatedPod.Status.ContainerStatuses = append(updatedPod.Status.ContainerStatuses, corev1.ContainerStatus{
+			pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
 				Name: v1alpha1.EphemeralRunnerContainerName,
 				State: corev1.ContainerState{
 					Terminated: &corev1.ContainerStateTerminated{
@@ -259,7 +257,7 @@ var _ = Describe("EphemeralRunner", func() {
 					},
 				},
 			})
-			err = k8sClient.Status().Patch(ctx, updatedPod, client.MergeFrom(pod))
+			err = k8sClient.Status().Update(ctx, pod)
 			Expect(err).To(BeNil(), "Failed to update pod status")
 
 			er = new(v1alpha1.EphemeralRunner)
@@ -279,9 +277,8 @@ var _ = Describe("EphemeralRunner", func() {
 				return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, er)
 			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to get ephemeral runner")
 
-			updatedER := er.DeepCopy()
-			updatedER.Status.JobID = "1"
-			err := k8sClient.Status().Patch(ctx, updatedER, client.MergeFrom(er))
+			er.Status.JobID = "1"
+			err := k8sClient.Status().Update(ctx, er)
 			Expect(err).To(BeNil(), "failed to update ephemeral runner status")
 
 			Eventually(func() (string, error) {
@@ -300,10 +297,9 @@ var _ = Describe("EphemeralRunner", func() {
 				return true, nil
 			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeEquivalentTo(true))
 
-			updatedPod := pod.DeepCopy()
-			updatedPod.Status.Phase = corev1.PodFailed
-			updatedPod.Status.ContainerStatuses = nil
-			err = k8sClient.Status().Patch(ctx, updatedPod, client.MergeFrom(pod))
+			pod.Status.Phase = corev1.PodFailed
+			pod.Status.ContainerStatuses = nil
+			err = k8sClient.Status().Update(ctx, pod)
 			Expect(err).To(BeNil(), "Failed to update pod status")
 
 			Eventually(func() bool {
@@ -324,10 +320,9 @@ var _ = Describe("EphemeralRunner", func() {
 
 			oldPodUID := pod.UID
 
-			updatedPod := pod.DeepCopy()
-			updatedPod.Status.Phase = corev1.PodFailed
-			updatedPod.Status.ContainerStatuses = nil
-			err := k8sClient.Status().Patch(ctx, updatedPod, client.MergeFrom(pod))
+			pod.Status.Phase = corev1.PodFailed
+			pod.Status.ContainerStatuses = nil
+			err := k8sClient.Status().Update(ctx, pod)
 			Expect(err).To(BeNil(), "Failed to update pod status")
 
 			Eventually(
@@ -374,9 +369,8 @@ var _ = Describe("EphemeralRunner", func() {
 
 			// Simulate init container failure without PodFailed phase.
 			// This can happen when the kubelet has not yet transitioned the pod phase.
-			updatedPod := pod.DeepCopy()
-			updatedPod.Status.Phase = corev1.PodPending
-			updatedPod.Status.InitContainerStatuses = []corev1.ContainerStatus{
+			pod.Status.Phase = corev1.PodPending
+			pod.Status.InitContainerStatuses = []corev1.ContainerStatus{
 				{
 					Name: "setup",
 					State: corev1.ContainerState{
@@ -388,7 +382,7 @@ var _ = Describe("EphemeralRunner", func() {
 					},
 				},
 			}
-			err := k8sClient.Status().Patch(ctx, updatedPod, client.MergeFrom(pod))
+			err := k8sClient.Status().Update(ctx, pod)
 			Expect(err).To(BeNil(), "Failed to update pod status")
 
 			Eventually(
@@ -428,9 +422,8 @@ var _ = Describe("EphemeralRunner", func() {
 				return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, er)
 			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to get ephemeral runner")
 
-			updatedER := er.DeepCopy()
-			updatedER.Status.JobID = "1"
-			err := k8sClient.Status().Patch(ctx, updatedER, client.MergeFrom(er))
+			er.Status.JobID = "1"
+			err := k8sClient.Status().Update(ctx, er)
 			Expect(err).To(BeNil(), "failed to update ephemeral runner status")
 
 			Eventually(func() (string, error) {
@@ -450,9 +443,8 @@ var _ = Describe("EphemeralRunner", func() {
 			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeEquivalentTo(true))
 
 			// Simulate init container failure with job assigned
-			updatedPod := pod.DeepCopy()
-			updatedPod.Status.Phase = corev1.PodPending
-			updatedPod.Status.InitContainerStatuses = []corev1.ContainerStatus{
+			pod.Status.Phase = corev1.PodPending
+			pod.Status.InitContainerStatuses = []corev1.ContainerStatus{
 				{
 					Name: "setup",
 					State: corev1.ContainerState{
@@ -463,7 +455,7 @@ var _ = Describe("EphemeralRunner", func() {
 					},
 				},
 			}
-			err = k8sClient.Status().Patch(ctx, updatedPod, client.MergeFrom(pod))
+			err = k8sClient.Status().Update(ctx, pod)
 			Expect(err).To(BeNil(), "Failed to update pod status")
 
 			Eventually(func() bool {
@@ -479,9 +471,8 @@ var _ = Describe("EphemeralRunner", func() {
 				return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, er)
 			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to get ephemeral runner")
 
-			updatedER := er.DeepCopy()
-			updatedER.Status.JobID = "1"
-			err := k8sClient.Status().Patch(ctx, updatedER, client.MergeFrom(er))
+			er.Status.JobID = "1"
+			err := k8sClient.Status().Update(ctx, er)
 			Expect(err).To(BeNil(), "failed to update ephemeral runner status")
 
 			pod := new(corev1.Pod)
@@ -496,9 +487,8 @@ var _ = Describe("EphemeralRunner", func() {
 				ephemeralRunnerInterval,
 			).Should(Succeed(), "failed to get pod")
 
-			updatedPod := pod.DeepCopy()
-			updatedPod.Status.Phase = corev1.PodFailed
-			updatedPod.Status.ContainerStatuses = append(updatedPod.Status.ContainerStatuses, corev1.ContainerStatus{
+			pod.Status.Phase = corev1.PodFailed
+			pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
 				Name: v1alpha1.EphemeralRunnerContainerName,
 				State: corev1.ContainerState{
 					Terminated: &corev1.ContainerStateTerminated{
@@ -506,7 +496,7 @@ var _ = Describe("EphemeralRunner", func() {
 					},
 				},
 			})
-			err = k8sClient.Status().Patch(ctx, updatedPod, client.MergeFrom(pod))
+			err = k8sClient.Status().Update(ctx, pod)
 			Expect(err).To(BeNil(), "Failed to update pod status")
 
 			Eventually(
@@ -533,9 +523,8 @@ var _ = Describe("EphemeralRunner", func() {
 				ephemeralRunnerInterval,
 			).Should(Succeed(), "failed to get pod")
 
-			updatedPod := pod.DeepCopy()
-			updatedPod.Status.Phase = corev1.PodFailed
-			updatedPod.Status.ContainerStatuses = append(updatedPod.Status.ContainerStatuses, corev1.ContainerStatus{
+			pod.Status.Phase = corev1.PodFailed
+			pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
 				Name: v1alpha1.EphemeralRunnerContainerName,
 				State: corev1.ContainerState{
 					Terminated: &corev1.ContainerStateTerminated{
@@ -543,7 +532,7 @@ var _ = Describe("EphemeralRunner", func() {
 					},
 				},
 			})
-			err := k8sClient.Status().Patch(ctx, updatedPod, client.MergeFrom(pod))
+			err := k8sClient.Status().Update(ctx, pod)
 			Expect(err).To(BeNil(), "Failed to update pod status")
 
 			Eventually(
@@ -579,10 +568,9 @@ var _ = Describe("EphemeralRunner", func() {
 				ephemeralRunnerInterval,
 			).Should(Succeed(), "failed to get pod")
 
-			updatedPod := pod.DeepCopy()
-			updatedPod.Status.Phase = corev1.PodFailed
+			pod.Status.Phase = corev1.PodFailed
 			oldPodUID := pod.UID
-			updatedPod.Status.ContainerStatuses = append(updatedPod.Status.ContainerStatuses, corev1.ContainerStatus{
+			pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
 				Name: v1alpha1.EphemeralRunnerContainerName,
 				State: corev1.ContainerState{
 					Terminated: &corev1.ContainerStateTerminated{
@@ -591,7 +579,7 @@ var _ = Describe("EphemeralRunner", func() {
 				},
 			})
 
-			err := k8sClient.Status().Patch(ctx, updatedPod, client.MergeFrom(pod))
+			err := k8sClient.Status().Update(ctx, pod)
 			Expect(err).To(BeNil(), "Failed to update pod status")
 
 			Eventually(
@@ -951,9 +939,8 @@ var _ = Describe("EphemeralRunner", func() {
 				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(true))
 
-			updatedPod := pod.DeepCopy()
-			updatedPod.Status.Phase = corev1.PodRunning
-			err := k8sClient.Status().Patch(ctx, updatedPod, client.MergeFrom(pod))
+			pod.Status.Phase = corev1.PodRunning
+			err := k8sClient.Status().Update(ctx, pod)
 			Expect(err).To(BeNil(), "failed to patch pod status")
 
 			Consistently(
@@ -988,8 +975,7 @@ var _ = Describe("EphemeralRunner", func() {
 					ephemeralRunnerInterval,
 				).Should(Succeed(), "failed to get ephemeral runner pod")
 
-				updatedPod := pod.DeepCopy()
-				updatedPod.Status.ContainerStatuses = append(updatedPod.Status.ContainerStatuses, corev1.ContainerStatus{
+				pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
 					Name: v1alpha1.EphemeralRunnerContainerName,
 					State: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
@@ -997,10 +983,10 @@ var _ = Describe("EphemeralRunner", func() {
 						},
 					},
 				})
-				err := k8sClient.Status().Patch(ctx, updatedPod, client.MergeFrom(pod))
+				err := k8sClient.Status().Update(ctx, pod)
 				Expect(err).To(BeNil(), "Failed to update pod status")
 
-				return updatedPod
+				return pod
 			}
 
 			for i := range 5 {
@@ -1079,14 +1065,13 @@ var _ = Describe("EphemeralRunner", func() {
 				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(true))
 
-			updatedPod := pod.DeepCopy()
-			updatedPod.Status.Phase = corev1.PodFailed
-			updatedPod.Status.Reason = "Evicted"
-			updatedPod.Status.ContainerStatuses = append(updatedPod.Status.ContainerStatuses, corev1.ContainerStatus{
+			pod.Status.Phase = corev1.PodFailed
+			pod.Status.Reason = "Evicted"
+			pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
 				Name:  v1alpha1.EphemeralRunnerContainerName,
 				State: corev1.ContainerState{},
 			})
-			err := k8sClient.Status().Patch(ctx, updatedPod, client.MergeFrom(pod))
+			err := k8sClient.Status().Update(ctx, pod)
 			Expect(err).To(BeNil(), "failed to patch pod status")
 
 			updated := new(v1alpha1.EphemeralRunner)
@@ -1126,14 +1111,13 @@ var _ = Describe("EphemeralRunner", func() {
 				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(true))
 
-			updatedPod := pod.DeepCopy()
-			updatedPod.Status.Phase = corev1.PodFailed
-			updatedPod.Status.Reason = "OutOfpods"
-			updatedPod.Status.ContainerStatuses = append(updatedPod.Status.ContainerStatuses, corev1.ContainerStatus{
+			pod.Status.Phase = corev1.PodFailed
+			pod.Status.Reason = "OutOfpods"
+			pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
 				Name:  v1alpha1.EphemeralRunnerContainerName,
 				State: corev1.ContainerState{},
 			})
-			err := k8sClient.Status().Patch(ctx, updatedPod, client.MergeFrom(pod))
+			err := k8sClient.Status().Update(ctx, pod)
 			Expect(err).To(BeNil(), "failed to patch pod status")
 
 			updated := new(v1alpha1.EphemeralRunner)
@@ -1173,8 +1157,7 @@ var _ = Describe("EphemeralRunner", func() {
 			).Should(BeEquivalentTo(true))
 
 			// first set phase to running
-			updatedPod := pod.DeepCopy()
-			updatedPod.Status.ContainerStatuses = append(updatedPod.Status.ContainerStatuses, corev1.ContainerStatus{
+			pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
 				Name: v1alpha1.EphemeralRunnerContainerName,
 				State: corev1.ContainerState{
 					Running: &corev1.ContainerStateRunning{
@@ -1182,8 +1165,8 @@ var _ = Describe("EphemeralRunner", func() {
 					},
 				},
 			})
-			updatedPod.Status.Phase = corev1.PodRunning
-			err := k8sClient.Status().Patch(ctx, updatedPod, client.MergeFrom(pod))
+			pod.Status.Phase = corev1.PodRunning
+			err := k8sClient.Status().Update(ctx, pod)
 			Expect(err).To(BeNil())
 
 			Eventually(
@@ -1199,9 +1182,8 @@ var _ = Describe("EphemeralRunner", func() {
 			).Should(BeEquivalentTo(v1alpha1.EphemeralRunnerPhaseRunning))
 
 			// set phase to succeeded
-			nextPod := updatedPod.DeepCopy()
-			nextPod.Status.Phase = corev1.PodSucceeded
-			err = k8sClient.Status().Patch(ctx, nextPod, client.MergeFrom(updatedPod))
+			pod.Status.Phase = corev1.PodSucceeded
+			err = k8sClient.Status().Update(ctx, pod)
 			Expect(err).To(BeNil())
 
 			Consistently(
@@ -1276,8 +1258,7 @@ var _ = Describe("EphemeralRunner", func() {
 				return true, nil
 			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeEquivalentTo(true))
 
-			updatedPod := pod.DeepCopy()
-			updatedPod.Status.ContainerStatuses = append(updatedPod.Status.ContainerStatuses, corev1.ContainerStatus{
+			pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
 				Name: v1alpha1.EphemeralRunnerContainerName,
 				State: corev1.ContainerState{
 					Terminated: &corev1.ContainerStateTerminated{
@@ -1285,7 +1266,7 @@ var _ = Describe("EphemeralRunner", func() {
 					},
 				},
 			})
-			err = k8sClient.Status().Patch(ctx, updatedPod, client.MergeFrom(pod))
+			err = k8sClient.Status().Update(ctx, pod)
 			Expect(err).To(BeNil(), "failed to update pod status")
 
 			updated := new(v1alpha1.EphemeralRunner)
@@ -1386,7 +1367,7 @@ var _ = Describe("EphemeralRunner", func() {
 			ephemeralRunner.Spec.GitHubConfigURL = "http://example.com/org/repo"
 			ephemeralRunner.Spec.Proxy = &v1alpha1.ProxyConfig{
 				HTTP: &v1alpha1.ProxyServerConfig{
-					URL:                 proxy.URL,
+					Url:                 proxy.URL,
 					CredentialSecretRef: "proxy-credentials",
 				},
 			}
@@ -1407,10 +1388,10 @@ var _ = Describe("EphemeralRunner", func() {
 			ephemeralRunner := newExampleRunner("test-runner", autoScalingNS.Name, configSecret.Name)
 			ephemeralRunner.Spec.Proxy = &v1alpha1.ProxyConfig{
 				HTTP: &v1alpha1.ProxyServerConfig{
-					URL: "http://proxy.example.com:8080",
+					Url: "http://proxy.example.com:8080",
 				},
 				HTTPS: &v1alpha1.ProxyServerConfig{
-					URL: "http://proxy.example.com:8080",
+					Url: "http://proxy.example.com:8080",
 				},
 				NoProxy: []string{"example.com"},
 			}

@@ -51,8 +51,10 @@ spec:
             description: AutoscalingListenerSpec defines the desired state of AutoscalingListener
             properties:
               autoscalingRunnerSetName:
+                description: Required
                 type: string
               autoscalingRunnerSetNamespace:
+                description: Required
                 type: string
               configSecretMetadata:
                 description: ResourceMeta carries metadata common to all internal
@@ -68,17 +70,21 @@ spec:
                     type: object
                 type: object
               ephemeralRunnerSetName:
+                description: Required
                 type: string
               githubConfigSecret:
+                description: Required
                 type: string
               githubConfigUrl:
+                description: Required
                 type: string
               githubServerTLS:
                 properties:
                   certificateFrom:
+                    description: Required
                     properties:
                       configMapKeyRef:
-                        description: Selects a key from a ConfigMap.
+                        description: Required
                         properties:
                           key:
                             description: The key to select.
@@ -100,15 +106,13 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
-                    required:
-                    - configMapKeyRef
                     type: object
-                required:
-                - certificateFrom
                 type: object
               image:
+                description: Required
                 type: string
               imagePullSecrets:
+                description: Required
                 items:
                   description: |-
                     LocalObjectReference contains enough information to let you locate the
@@ -127,6 +131,7 @@ spec:
                   x-kubernetes-map-type: atomic
                 type: array
               maxRunners:
+                description: Required
                 minimum: 0
                 type: integer
               metrics:
@@ -178,6 +183,7 @@ spec:
                     type: object
                 type: object
               minRunners:
+                description: Required
                 minimum: 0
                 type: integer
               proxy:
@@ -187,18 +193,16 @@ spec:
                       credentialSecretRef:
                         type: string
                       url:
+                        description: Required
                         type: string
-                    required:
-                    - url
                     type: object
                   https:
                     properties:
                       credentialSecretRef:
                         type: string
                       url:
+                        description: Required
                         type: string
-                    required:
-                    - url
                     type: object
                   noProxy:
                     items:
@@ -232,7 +236,7 @@ spec:
                     type: object
                 type: object
               runnerScaleSetId:
-                minimum: 1
+                description: Required
                 type: integer
               serviceAccountMetadata:
                 description: ResourceMeta carries metadata common to all internal
@@ -8778,18 +8782,16 @@ spec:
                           credentialSecretRef:
                             type: string
                           url:
+                            description: Required
                             type: string
-                        required:
-                        - url
                         type: object
                       https:
                         properties:
                           credentialSecretRef:
                             type: string
                           url:
+                            description: Required
                             type: string
-                        required:
-                        - url
                         type: object
                       noProxy:
                         items:

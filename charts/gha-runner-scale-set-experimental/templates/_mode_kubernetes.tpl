@@ -82,10 +82,7 @@ volumeMounts:
     subPath: extension
     readOnly: true
   {{- end }}
-  {{- with .Values.runner.container.volumeMounts }}
-    {{- toYaml . | nindent 2 }}
-  {{- end }}
-  {{ include "githubServerTLS.volumeMountItem" (dict "root" $ "existingVolumeMounts" (.Values.runner.container.volumeMounts | default (list))) | nindent 2 }}
+  {{ include "githubServerTLS.volumeMountItem" (dict "root" $ "existingVolumeMounts" (list)) | nindent 2 }}
 {{- end }}
 
 {{- define "runner-mode-kubernetes.pod-volumes" -}}
