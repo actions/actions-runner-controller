@@ -339,10 +339,10 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 	assert.Equal(t, "test-arc-gha-rs-controller", deployment.Spec.Template.Spec.ServiceAccountName)
 	assert.Nil(t, deployment.Spec.Template.Spec.SecurityContext)
 	assert.Empty(t, deployment.Spec.Template.Spec.PriorityClassName)
-	assert.Equal(t, int64(10), *deployment.Spec.Template.Spec.TerminationGracePeriodSeconds)
+	assert.Equal(t, int64(35), *deployment.Spec.Template.Spec.TerminationGracePeriodSeconds)
 	assert.Len(t, deployment.Spec.Template.Spec.Volumes, 1)
 	assert.Equal(t, "tmp", deployment.Spec.Template.Spec.Volumes[0].Name)
-	assert.NotNil(t, 10, deployment.Spec.Template.Spec.Volumes[0].EmptyDir)
+	assert.NotNil(t, deployment.Spec.Template.Spec.Volumes[0].EmptyDir)
 
 	assert.Len(t, deployment.Spec.Template.Spec.NodeSelector, 0)
 	assert.Nil(t, deployment.Spec.Template.Spec.Affinity)
@@ -429,13 +429,14 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 			"topologySpreadConstraints[0].labelSelector.matchLabels.foo":                                                             "bar",
 			"topologySpreadConstraints[0].maxSkew":                                                                                   "1",
 			"topologySpreadConstraints[0].topologyKey":                                                                               "foo",
-			"priorityClassName":         "test-priority-class",
-			"flags.logLevel":            "info",
-			"flags.logFormat":           "json",
-			"volumes[0].name":           "customMount",
-			"volumes[0].configMap.name": "my-configmap",
-			"volumeMounts[0].name":      "customMount",
-			"volumeMounts[0].mountPath": "/my/mount/path",
+			"priorityClassName":             "test-priority-class",
+			"terminationGracePeriodSeconds": "60",
+			"flags.logLevel":                "info",
+			"flags.logFormat":               "json",
+			"volumes[0].name":               "customMount",
+			"volumes[0].configMap.name":     "my-configmap",
+			"volumeMounts[0].name":          "customMount",
+			"volumeMounts[0].mountPath":     "/my/mount/path",
 		},
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
@@ -477,7 +478,7 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 	assert.Equal(t, "gha-rs-controller-sa", deployment.Spec.Template.Spec.ServiceAccountName)
 	assert.Equal(t, int64(1000), *deployment.Spec.Template.Spec.SecurityContext.FSGroup)
 	assert.Equal(t, "test-priority-class", deployment.Spec.Template.Spec.PriorityClassName)
-	assert.Equal(t, int64(10), *deployment.Spec.Template.Spec.TerminationGracePeriodSeconds)
+	assert.Equal(t, int64(60), *deployment.Spec.Template.Spec.TerminationGracePeriodSeconds)
 	assert.Len(t, deployment.Spec.Template.Spec.Volumes, 2)
 	assert.Equal(t, "tmp", deployment.Spec.Template.Spec.Volumes[0].Name)
 	assert.NotNil(t, deployment.Spec.Template.Spec.Volumes[0].EmptyDir)
@@ -748,10 +749,10 @@ func TestTemplate_ControllerDeployment_WatchSingleNamespace(t *testing.T) {
 	assert.Equal(t, "test-arc-gha-rs-controller", deployment.Spec.Template.Spec.ServiceAccountName)
 	assert.Nil(t, deployment.Spec.Template.Spec.SecurityContext)
 	assert.Empty(t, deployment.Spec.Template.Spec.PriorityClassName)
-	assert.Equal(t, int64(10), *deployment.Spec.Template.Spec.TerminationGracePeriodSeconds)
+	assert.Equal(t, int64(35), *deployment.Spec.Template.Spec.TerminationGracePeriodSeconds)
 	assert.Len(t, deployment.Spec.Template.Spec.Volumes, 1)
 	assert.Equal(t, "tmp", deployment.Spec.Template.Spec.Volumes[0].Name)
-	assert.NotNil(t, 10, deployment.Spec.Template.Spec.Volumes[0].EmptyDir)
+	assert.NotNil(t, deployment.Spec.Template.Spec.Volumes[0].EmptyDir)
 
 	assert.Len(t, deployment.Spec.Template.Spec.NodeSelector, 0)
 	assert.Nil(t, deployment.Spec.Template.Spec.Affinity)
