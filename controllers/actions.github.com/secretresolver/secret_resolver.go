@@ -85,9 +85,9 @@ func (sr *SecretResolver) GetActionsService(ctx context.Context, obj object.Acti
 		}
 
 		if proxy.HTTP != nil {
-			u, err := url.Parse(proxy.HTTP.URL)
+			u, err := url.Parse(proxy.HTTP.Url)
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse proxy http url %q: %w", proxy.HTTP.URL, err)
+				return nil, fmt.Errorf("failed to parse proxy http url %q: %w", proxy.HTTP.Url, err)
 			}
 
 			if ref := proxy.HTTP.CredentialSecretRef; ref != "" {
@@ -101,9 +101,9 @@ func (sr *SecretResolver) GetActionsService(ctx context.Context, obj object.Acti
 		}
 
 		if proxy.HTTPS != nil {
-			u, err := url.Parse(proxy.HTTPS.URL)
+			u, err := url.Parse(proxy.HTTPS.Url)
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse proxy https url %q: %w", proxy.HTTPS.URL, err)
+				return nil, fmt.Errorf("failed to parse proxy https url %q: %w", proxy.HTTPS.Url, err)
 			}
 
 			if ref := proxy.HTTPS.CredentialSecretRef; ref != "" {

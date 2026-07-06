@@ -62,10 +62,10 @@ type AutoscalingListenerReconciler struct {
 
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=pods/status,verbs=get
-// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;patch
-// +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create;patch
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=create;delete;get;list;watch;patch
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=create;delete;get;list;watch;patch
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update
+// +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create;update
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=create;delete;get;list;watch;update
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=create;delete;get;list;watch;update
 // +kubebuilder:rbac:groups=actions.github.com,resources=autoscalinglisteners,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=actions.github.com,resources=autoscalinglisteners/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=actions.github.com,resources=autoscalinglisteners/finalizers,verbs=update
@@ -163,19 +163,18 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			return ctrl.Result{}, err
 		}
 
-		updatedServiceAccount := serviceAccount.DeepCopy()
-		var shouldUpdate bool
 		desiredLabels := r.filterAndMergeLabels(serviceAccount.Labels, desiredServiceAccount.Labels)
-		if !maps.Equal(serviceAccount.Labels, desiredLabels) {
-			updatedServiceAccount.Labels = desiredLabels
-			shouldUpdate = true
-		}
-		desiredAnnotations := r.filterAndMergeAnnotations(serviceAccount.Annotations, desiredServiceAccount.Annotations)
-		if !r.annotationsEqual(serviceAccount.Annotations, desiredAnnotations) {
-			updatedServiceAccount.Annotations = desiredAnnotations
-			shouldUpdate = true
-		}
-		if shouldUpdate {
+		labelsModified := !maps.Equal(serviceAccount.Labels, desiredLabels)
+		desiredAnnotations := r.mergeAnnotations(serviceAccount.Annotations, desiredServiceAccount.Annotations)
+		annotationsModified := !maps.Equal(serviceAccount.Annotations, desiredAnnotations)
+		if labelsModified || annotationsModified {
+			updatedServiceAccount := serviceAccount.DeepCopy()
+			if labelsModified {
+				updatedServiceAccount.Labels = desiredLabels
+			}
+			if annotationsModified {
+				updatedServiceAccount.Annotations = desiredAnnotations
+			}
 			log.Info("Updating listener service account")
 
 			if err := r.Patch(ctx, updatedServiceAccount, client.MergeFrom(&serviceAccount)); err != nil {
@@ -207,23 +206,22 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 	switch {
 	case err == nil:
 		desiredRole := r.newScaleSetListenerRole(&autoscalingListener)
-		updatedRole := listenerRole.DeepCopy()
-		var shouldUpdate bool
 		desiredLabels := r.filterAndMergeLabels(listenerRole.Labels, desiredRole.Labels)
-		if !maps.Equal(listenerRole.Labels, desiredLabels) {
-			updatedRole.Labels = desiredLabels
-			shouldUpdate = true
-		}
-		desiredAnnotations := r.filterAndMergeAnnotations(listenerRole.Annotations, desiredRole.Annotations)
-		if !r.annotationsEqual(listenerRole.Annotations, desiredAnnotations) {
-			updatedRole.Annotations = desiredAnnotations
-			shouldUpdate = true
-		}
-		if !reflect.DeepEqual(listenerRole.Rules, desiredRole.Rules) {
-			updatedRole.Rules = desiredRole.Rules
-			shouldUpdate = true
-		}
-		if shouldUpdate {
+		labelsModified := !maps.Equal(listenerRole.Labels, desiredLabels)
+		desiredAnnotations := r.mergeAnnotations(listenerRole.Annotations, desiredRole.Annotations)
+		annotationsModified := !maps.Equal(listenerRole.Annotations, desiredAnnotations)
+		rulesModified := !reflect.DeepEqual(listenerRole.Rules, desiredRole.Rules)
+		if labelsModified || annotationsModified || rulesModified {
+			updatedRole := listenerRole.DeepCopy()
+			if labelsModified {
+				updatedRole.Labels = desiredLabels
+			}
+			if annotationsModified {
+				updatedRole.Annotations = desiredAnnotations
+			}
+			if rulesModified {
+				updatedRole.Rules = desiredRole.Rules
+			}
 			log.Info("Updating listener role")
 			if err := r.Patch(ctx, updatedRole, client.MergeFrom(&listenerRole)); err != nil {
 				log.Error(err, "Failed to update listener role")
@@ -250,19 +248,18 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			&listenerRole,
 			&serviceAccount,
 		)
-		updatedRoleBinding := listenerRoleBinding.DeepCopy()
-		var shouldUpdate bool
 		desiredLabels := r.filterAndMergeLabels(listenerRoleBinding.Labels, desiredRoleBinding.Labels)
-		if !maps.Equal(listenerRoleBinding.Labels, desiredLabels) {
-			updatedRoleBinding.Labels = desiredLabels
-			shouldUpdate = true
-		}
-		desiredAnnotations := r.filterAndMergeAnnotations(listenerRoleBinding.Annotations, desiredRoleBinding.Annotations)
-		if !r.annotationsEqual(listenerRoleBinding.Annotations, desiredAnnotations) {
-			updatedRoleBinding.Annotations = desiredAnnotations
-			shouldUpdate = true
-		}
-		if shouldUpdate {
+		labelsModified := !maps.Equal(listenerRoleBinding.Labels, desiredLabels)
+		desiredAnnotations := r.mergeAnnotations(listenerRoleBinding.Annotations, desiredRoleBinding.Annotations)
+		annotationsModified := !maps.Equal(listenerRoleBinding.Annotations, desiredAnnotations)
+		if labelsModified || annotationsModified {
+			updatedRoleBinding := listenerRoleBinding.DeepCopy()
+			if labelsModified {
+				updatedRoleBinding.Labels = desiredLabels
+			}
+			if annotationsModified {
+				updatedRoleBinding.Annotations = desiredAnnotations
+			}
 			log.Info("Updating listener role binding")
 			if err := r.Patch(ctx, updatedRoleBinding, client.MergeFrom(&listenerRoleBinding)); err != nil {
 				log.Error(err, "Failed to update listener role binding")
@@ -306,19 +303,18 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 				log.Error(err, "Failed to build desired listener proxy secret")
 				return ctrl.Result{}, err
 			}
-			updatedProxySecret := proxySecret.DeepCopy()
-			var shouldUpdate bool
 			desiredLabels := r.filterAndMergeLabels(proxySecret.Labels, desiredListenerProxy.Labels)
-			if !maps.Equal(proxySecret.Labels, desiredLabels) {
-				updatedProxySecret.Labels = desiredLabels
-				shouldUpdate = true
-			}
-			desiredAnnotations := r.filterAndMergeAnnotations(proxySecret.Annotations, desiredListenerProxy.Annotations)
-			if !r.annotationsEqual(proxySecret.Annotations, desiredAnnotations) {
-				updatedProxySecret.Annotations = desiredAnnotations
-				shouldUpdate = true
-			}
-			if shouldUpdate {
+			labelsModified := !maps.Equal(proxySecret.Labels, desiredLabels)
+			desiredAnnotations := r.mergeAnnotations(proxySecret.Annotations, desiredListenerProxy.Annotations)
+			annotationsModified := !maps.Equal(proxySecret.Annotations, desiredAnnotations)
+			if labelsModified || annotationsModified {
+				updatedProxySecret := proxySecret.DeepCopy()
+				if labelsModified {
+					updatedProxySecret.Labels = desiredLabels
+				}
+				if annotationsModified {
+					updatedProxySecret.Annotations = desiredAnnotations
+				}
 				log.Info("Updating listener proxy secret")
 				if err := r.Patch(ctx, updatedProxySecret, client.MergeFrom(&proxySecret)); err != nil {
 					log.Error(err, "Failed to update listener proxy secret")
@@ -393,20 +389,19 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to build listener config secret: %w", err)
 		}
-		updatedSecret := listenerConfigSecret.DeepCopy()
-		var shouldUpdate bool
 		desiredLabels := r.filterAndMergeLabels(listenerConfigSecret.Labels, desiredSecret.Labels)
-		if !maps.Equal(listenerConfigSecret.Labels, desiredLabels) {
-			updatedSecret.Labels = desiredLabels
-			shouldUpdate = true
-		}
-		desiredAnnotations := r.filterAndMergeAnnotations(listenerConfigSecret.Annotations, desiredSecret.Annotations)
-		if !r.annotationsEqual(listenerConfigSecret.Annotations, desiredAnnotations) {
-			updatedSecret.Annotations = desiredAnnotations
-			shouldUpdate = true
-		}
+		labelsModified := !maps.Equal(listenerConfigSecret.Labels, desiredLabels)
+		desiredAnnotations := r.mergeAnnotations(listenerConfigSecret.Annotations, desiredSecret.Annotations)
+		annotationsModified := !maps.Equal(listenerConfigSecret.Annotations, desiredAnnotations)
 
-		if shouldUpdate {
+		if labelsModified || annotationsModified {
+			updatedSecret := listenerConfigSecret.DeepCopy()
+			if labelsModified {
+				updatedSecret.Labels = desiredLabels
+			}
+			if annotationsModified {
+				updatedSecret.Annotations = desiredAnnotations
+			}
 			log.Info("Updating listener config secret", "namespace", updatedSecret.Namespace, "name", updatedSecret.Name)
 			if err := r.Patch(ctx, updatedSecret, client.MergeFrom(&listenerConfigSecret)); err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to update listener config secret: %w", err)
@@ -467,17 +462,9 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			return ctrl.Result{}, err
 		}
 
-		if desiredPod.Annotations[AnnotationKeyIntegrityHash] != listenerPod.Annotations[AnnotationKeyIntegrityHash] {
-			// Since the pod is controlled by a pod controller, we tag the pod with integrity hash.
-			// If the integrity hash is changed, that means the new spec is different. Keep in mind, the tagged hash
-			// is created by hashing only the fields this controller sets.
-			log.Info(
-				"Listener pod dependency changed, recreating listener pod",
-				"desiredSpec",
-				mustJSON(desiredPod.Spec),
-				"currentSpec",
-				mustJSON(listenerPod.Spec),
-			)
+		shouldReCreate := desiredPod.Annotations[annotationKeyIntegrityHash] != listenerPod.Annotations[annotationKeyIntegrityHash]
+		if shouldReCreate {
+			log.Info("Listener pod dependency changed, recreating listener pod")
 			if err := r.deleteListenerPod(ctx, &autoscalingListener, &listenerPod, log); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -486,20 +473,19 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			return ctrl.Result{}, nil
 		}
 
-		updatedPod := listenerPod.DeepCopy()
-		var shouldUpdate bool
 		desiredLabels := r.filterAndMergeLabels(listenerPod.Labels, desiredPod.Labels)
-		if !maps.Equal(listenerPod.Labels, desiredLabels) {
-			updatedPod.Labels = desiredLabels
-			shouldUpdate = true
-		}
-		desiredAnnotations := r.filterAndMergeAnnotations(listenerPod.Annotations, desiredPod.Annotations)
-		if !r.annotationsEqual(listenerPod.Annotations, desiredAnnotations) {
-			updatedPod.Annotations = desiredAnnotations
-			shouldUpdate = true
-		}
+		labelsModified := !maps.Equal(listenerPod.Labels, desiredLabels)
+		desiredAnnotations := r.mergeAnnotations(listenerPod.Annotations, desiredPod.Annotations)
+		annotationsModified := !maps.Equal(listenerPod.Annotations, desiredAnnotations)
 
-		if shouldUpdate {
+		if labelsModified || annotationsModified {
+			updatedPod := listenerPod.DeepCopy()
+			if labelsModified {
+				updatedPod.Labels = desiredLabels
+			}
+			if annotationsModified {
+				updatedPod.Annotations = desiredAnnotations
+			}
 			log.Info("Updating listener pod", "namespace", updatedPod.Namespace, "name", updatedPod.Name)
 			if err := r.Patch(ctx, updatedPod, client.MergeFrom(&listenerPod)); err != nil {
 				log.Error(err, "Unable to update listener pod", "namespace", updatedPod.Namespace, "name", updatedPod.Name)
@@ -527,11 +513,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			return ctrl.Result{}, err
 		}
 
-		log.Info(
-			"Creating listener pod",
-			"namespace", desiredPod.Namespace,
-			"name", desiredPod.Name,
-		)
+		log.Info("Creating listener pod", "namespace", desiredPod.Namespace, "name", desiredPod.Name)
 		if err := r.Create(ctx, desiredPod); err != nil {
 			log.Error(err, "Unable to create listener pod", "namespace", desiredPod.Namespace, "name", desiredPod.Name)
 			return ctrl.Result{}, err

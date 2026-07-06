@@ -14,11 +14,11 @@ import (
 func TestProxyConfig_ToSecret(t *testing.T) {
 	config := &v1alpha1.ProxyConfig{
 		HTTP: &v1alpha1.ProxyServerConfig{
-			URL:                 "http://proxy.example.com:8080",
+			Url:                 "http://proxy.example.com:8080",
 			CredentialSecretRef: "my-secret",
 		},
 		HTTPS: &v1alpha1.ProxyServerConfig{
-			URL:                 "https://proxy.example.com:8080",
+			Url:                 "https://proxy.example.com:8080",
 			CredentialSecretRef: "my-secret",
 		},
 		NoProxy: []string{
@@ -48,11 +48,11 @@ func TestProxyConfig_ToSecret(t *testing.T) {
 func TestProxyConfig_ProxyFunc(t *testing.T) {
 	config := &v1alpha1.ProxyConfig{
 		HTTP: &v1alpha1.ProxyServerConfig{
-			URL:                 "http://proxy.example.com:8080",
+			Url:                 "http://proxy.example.com:8080",
 			CredentialSecretRef: "my-secret",
 		},
 		HTTPS: &v1alpha1.ProxyServerConfig{
-			URL:                 "https://proxy.example.com:8080",
+			Url:                 "https://proxy.example.com:8080",
 			CredentialSecretRef: "my-secret",
 		},
 		NoProxy: []string{

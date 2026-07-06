@@ -89,9 +89,10 @@ spec:
                 githubServerTLS:
                   properties:
                     certificateFrom:
+                      description: Required
                       properties:
                         configMapKeyRef:
-                          description: Selects a key from a ConfigMap.
+                          description: Required
                           properties:
                             key:
                               description: The key to select.
@@ -112,11 +113,7 @@ spec:
                             - key
                           type: object
                           x-kubernetes-map-type: atomic
-                      required:
-                        - configMapKeyRef
                       type: object
-                  required:
-                    - certificateFrom
                   type: object
                 metadata:
                   description: |-
@@ -147,18 +144,16 @@ spec:
                         credentialSecretRef:
                           type: string
                         url:
+                          description: Required
                           type: string
-                      required:
-                        - url
                       type: object
                     https:
                       properties:
                         credentialSecretRef:
                           type: string
                         url:
+                          description: Required
                           type: string
-                      required:
-                        - url
                       type: object
                     noProxy:
                       items:
@@ -8273,18 +8268,16 @@ spec:
                             credentialSecretRef:
                               type: string
                             url:
+                              description: Required
                               type: string
-                          required:
-                            - url
                           type: object
                         https:
                           properties:
                             credentialSecretRef:
                               type: string
                             url:
+                              description: Required
                               type: string
-                          required:
-                            - url
                           type: object
                         noProxy:
                           items:
@@ -8297,6 +8290,10 @@ spec:
                         It is used to identify which vault integration should be used to resolve secrets.
                       type: string
                   type: object
+              required:
+                - githubConfigSecret
+                - githubConfigUrl
+                - runnerScaleSetId
               type: object
             status:
               description: EphemeralRunnerStatus defines the observed state of EphemeralRunner

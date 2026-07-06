@@ -222,25 +222,10 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 				ephemeralRunnerSetTestInterval,
 			).Should(BeEquivalentTo(0), "No EphemeralRunner should be created")
 
-			// Check if the status is initialized
-			Consistently(
-				func() (v1alpha1.EphemeralRunnerSetPhase, error) {
-					runnerSet := new(v1alpha1.EphemeralRunnerSet)
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunnerSet.Name, Namespace: ephemeralRunnerSet.Namespace}, runnerSet)
-					if err != nil {
-						return "", err
-					}
-
-					return runnerSet.Status.Phase, nil
-				},
-				ephemeralRunnerSetTestTimeout,
-				ephemeralRunnerSetTestInterval,
-			).Should(BeEquivalentTo(v1alpha1.EphemeralRunnerSetPhaseRunning), "EphemeralRunnerSet status should be running")
-
 			// Scaling up the EphemeralRunnerSet
 			updated := created.DeepCopy()
 			updated.Spec.Replicas = 5
-			err := k8sClient.Patch(ctx, updated, client.MergeFrom(created))
+			err := k8sClient.Update(ctx, updated)
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunnerSet")
 
 			// Check if the number of ephemeral runners are created
@@ -275,21 +260,6 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 				ephemeralRunnerSetTestTimeout,
 				ephemeralRunnerSetTestInterval,
 			).Should(BeEquivalentTo(5), "5 EphemeralRunner should be created")
-
-			// Check if the status stays running
-			Eventually(
-				func() (v1alpha1.EphemeralRunnerSetPhase, error) {
-					runnerSet := new(v1alpha1.EphemeralRunnerSet)
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunnerSet.Name, Namespace: ephemeralRunnerSet.Namespace}, runnerSet)
-					if err != nil {
-						return "", err
-					}
-
-					return runnerSet.Status.Phase, nil
-				},
-				ephemeralRunnerSetTestTimeout,
-				ephemeralRunnerSetTestInterval,
-			).Should(BeEquivalentTo(v1alpha1.EphemeralRunnerSetPhaseRunning), "EphemeralRunnerSet status should be running")
 		})
 	})
 
@@ -302,7 +272,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			// Scale up the EphemeralRunnerSet
 			updated := created.DeepCopy()
 			updated.Spec.Replicas = 5
-			err = k8sClient.Patch(ctx, updated, client.MergeFrom(created))
+			err = k8sClient.Update(ctx, updated)
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunnerSet")
 
 			// Wait for the EphemeralRunnerSet to be scaled up
@@ -1190,7 +1160,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			// Scale up the EphemeralRunnerSet
 			updated := created.DeepCopy()
 			updated.Spec.Replicas = 3
-			err := k8sClient.Patch(ctx, updated, client.MergeFrom(created))
+			err := k8sClient.Update(ctx, updated)
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunnerSet replica count")
 
 			runnerList := new(v1alpha1.EphemeralRunnerList)
@@ -1546,11 +1516,11 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 					RunnerScaleSetID:   100,
 					Proxy: &v1alpha1.ProxyConfig{
 						HTTP: &v1alpha1.ProxyServerConfig{
-							URL:                 "http://proxy.example.com",
+							Url:                 "http://proxy.example.com",
 							CredentialSecretRef: secretCredentials.Name,
 						},
 						HTTPS: &v1alpha1.ProxyServerConfig{
-							URL:                 "https://proxy.example.com",
+							Url:                 "https://proxy.example.com",
 							CredentialSecretRef: secretCredentials.Name,
 						},
 						NoProxy: []string{"example.com", "example.org"},
@@ -1729,7 +1699,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 					RunnerScaleSetID:   100,
 					Proxy: &v1alpha1.ProxyConfig{
 						HTTP: &v1alpha1.ProxyServerConfig{
-							URL:                 proxy.URL,
+							Url:                 proxy.URL,
 							CredentialSecretRef: "proxy-credentials",
 						},
 					},
