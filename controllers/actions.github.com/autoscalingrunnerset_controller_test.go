@@ -836,7 +836,6 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			).Should(BeEquivalentTo("testgroup2"), "AutoScalingRunnerSet should have the runner group in its annotation")
 		})
 	})
-
 	It("Should update Status on EphemeralRunnerSet status Update", func() {
 		ars := new(v1alpha1.AutoscalingRunnerSet)
 		Eventually(
