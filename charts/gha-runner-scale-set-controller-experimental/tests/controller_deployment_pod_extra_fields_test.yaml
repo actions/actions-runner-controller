@@ -36,6 +36,20 @@ tests:
           path: spec.template.spec.dnsPolicy
           value: "ClusterFirstWithHostNet"
 
+  - it: should allow overriding terminationGracePeriodSeconds via controller.pod
+    set:
+      controller:
+        pod:
+          spec:
+            terminationGracePeriodSeconds: 60
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 60
+
   - it: should not allow overriding serviceAccountName via controller.pod
     set:
       controller:

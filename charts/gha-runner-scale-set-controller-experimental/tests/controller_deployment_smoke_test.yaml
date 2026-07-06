@@ -25,3 +25,6 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].command
           content: "/manager"
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 35
