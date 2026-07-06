@@ -871,17 +871,10 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			// Emulate running and pending jobs
 			runnerSet := runnerSetList.Items[0]
 			activeRunnerSet := runnerSet.DeepCopy()
-			activeRunnerSet.Status.CurrentReplicas = 6
-			activeRunnerSet.Status.FailedEphemeralRunners = 1
-			activeRunnerSet.Status.RunningEphemeralRunners = 2
-			activeRunnerSet.Status.PendingEphemeralRunners = 3
+			activeRunnerSet.Status.Phase = v1alpha1.EphemeralRunnerSetPhaseRunning
 
 			desiredStatus := v1alpha1.AutoscalingRunnerSetStatus{
-				CurrentRunners:          activeRunnerSet.Status.CurrentReplicas,
-				Phase:                   v1alpha1.AutoscalingRunnerSetPhaseRunning,
-				PendingEphemeralRunners: activeRunnerSet.Status.PendingEphemeralRunners,
-				RunningEphemeralRunners: activeRunnerSet.Status.RunningEphemeralRunners,
-				FailedEphemeralRunners:  activeRunnerSet.Status.FailedEphemeralRunners,
+				Phase: v1alpha1.AutoscalingRunnerSetPhaseRunning,
 			}
 
 			err = k8sClient.Status().Patch(ctx, activeRunnerSet, client.MergeFrom(&runnerSet))
@@ -978,17 +971,10 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 
 		runnerSet := runnerSetList.Items[0]
 		statusUpdate := runnerSet.DeepCopy()
-		statusUpdate.Status.CurrentReplicas = 6
-		statusUpdate.Status.FailedEphemeralRunners = 1
-		statusUpdate.Status.RunningEphemeralRunners = 2
-		statusUpdate.Status.PendingEphemeralRunners = 3
+		statusUpdate.Status.Phase = v1alpha1.EphemeralRunnerSetPhaseRunning
 
 		desiredStatus := v1alpha1.AutoscalingRunnerSetStatus{
-			CurrentRunners:          statusUpdate.Status.CurrentReplicas,
-			Phase:                   v1alpha1.AutoscalingRunnerSetPhaseRunning,
-			PendingEphemeralRunners: statusUpdate.Status.PendingEphemeralRunners,
-			RunningEphemeralRunners: statusUpdate.Status.RunningEphemeralRunners,
-			FailedEphemeralRunners:  statusUpdate.Status.FailedEphemeralRunners,
+			Phase: v1alpha1.AutoscalingRunnerSetPhaseRunning,
 		}
 
 		err := k8sClient.Status().Patch(ctx, statusUpdate, client.MergeFrom(&runnerSet))

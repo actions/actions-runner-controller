@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/metrics"
 	"github.com/actions/scaleset"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -46,8 +47,9 @@ const (
 // EphemeralRunnerReconciler reconciles a EphemeralRunner object
 type EphemeralRunnerReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Log            logr.Logger
+	Scheme         *runtime.Scheme
+	PublishMetrics bool
 	ResourceBuilder
 }
 
@@ -86,6 +88,8 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	original := ephemeralRunner.DeepCopy()
 
 	if !ephemeralRunner.DeletionTimestamp.IsZero() {
+		r.emitLifecycleMetrics(ctx, &ephemeralRunner, log)
+
 		if !controllerutil.ContainsFinalizer(&ephemeralRunner, ephemeralRunnerFinalizerName) {
 			return ctrl.Result{}, nil
 		}
@@ -584,6 +588,8 @@ func (r *EphemeralRunnerReconciler) markAsFailed(ctx context.Context, ephemeralR
 		return fmt.Errorf("failed to update ephemeral runner status Phase/Message: %w", err)
 	}
 
+	r.emitLifecycleMetrics(ctx, ephemeralRunner, log)
+
 	log.Info("Removing the runner from the service")
 	if err := r.deleteRunnerFromService(ctx, ephemeralRunner, log); err != nil {
 		return fmt.Errorf("failed to remove the runner from service: %w", err)
@@ -604,6 +610,8 @@ func (r *EphemeralRunnerReconciler) markAsOutdated(ctx context.Context, ephemera
 	if err := r.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
 		return fmt.Errorf("failed to update ephemeral runner status Phase/Message: %w", err)
 	}
+
+	r.emitLifecycleMetrics(ctx, ephemeralRunner, log)
 
 	log.Info("Removing the runner from the service")
 	if err := r.deleteRunnerFromService(ctx, ephemeralRunner, log); err != nil {
@@ -637,6 +645,8 @@ func (r *EphemeralRunnerReconciler) deletePodAsFailed(ctx context.Context, ephem
 	if err := r.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
 		return fmt.Errorf("failed to update ephemeral runner status with failure count: %w", err)
 	}
+
+	r.emitLifecycleMetrics(ctx, ephemeralRunner, log)
 
 	log.Info("EphemeralRunner pod is deleted and status is updated with failure count")
 	return nil
@@ -836,6 +846,8 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 		return fmt.Errorf("failed to update runner status for Phase/Reason/Message/Ready: %w", err)
 	}
 
+	r.emitLifecycleMetrics(ctx, ephemeralRunner, log)
+
 	log.Info("Updated ephemeral runner status")
 	return nil
 }
@@ -887,4 +899,78 @@ func initContainerFailed(pod *corev1.Pod) bool {
 		}
 	}
 	return false
+}
+
+// emitLifecycleMetrics recomputes and emits lifecycle metrics for all EphemeralRunners
+// owned by the same EphemeralRunnerSet as the given runner. This ensures metrics reflect
+// the current lifecycle state of all sibling runners under the same AutoscalingRunnerSet.
+//
+// Label values are derived from the runner's labels (LabelKeyGitHubScaleSetName, etc.).
+// If required labels are missing, logs a warning and skips metric emission.
+func (r *EphemeralRunnerReconciler) emitLifecycleMetrics(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) {
+	if !r.PublishMetrics {
+		return
+	}
+
+	// Extract owner EphemeralRunnerSet from controller owner reference
+	ownerRef := metav1.GetControllerOfNoCopy(ephemeralRunner)
+	if ownerRef == nil || ownerRef.Kind != "EphemeralRunnerSet" {
+		log.V(1).Info("EphemeralRunner has no EphemeralRunnerSet owner, skipping metric emission")
+		return
+	}
+
+	// List all sibling EphemeralRunners owned by the same EphemeralRunnerSet
+	var runnerList v1alpha1.EphemeralRunnerList
+	if err := r.List(ctx, &runnerList,
+		client.InNamespace(ephemeralRunner.Namespace),
+		client.MatchingFields{resourceOwnerKey: ownerRef.Name},
+	); err != nil {
+		log.Error(err, "Failed to list sibling EphemeralRunners for metric emission")
+		return
+	}
+
+	// Aggregate lifecycle counts using the helper from Task 3
+	buckets := AggregateEphemeralRunnerLifecycle(runnerList.Items)
+
+	// Extract label values from the runner (all siblings share the same labels)
+	name := ephemeralRunner.Labels[LabelKeyGitHubScaleSetName]
+	namespace := ephemeralRunner.Labels[LabelKeyGitHubScaleSetNamespace]
+	repository := ephemeralRunner.Labels[LabelKeyGitHubRepository]
+	organization := ephemeralRunner.Labels[LabelKeyGitHubOrganization]
+	enterprise := ephemeralRunner.Labels[LabelKeyGitHubEnterprise]
+
+	// Gracefully handle missing labels: log warning and skip if name/namespace empty
+	if name == "" || namespace == "" {
+		log.Info("Missing required labels (name/namespace) for metric emission, skipping",
+			"name", name,
+			"namespace", namespace,
+		)
+		return
+	}
+
+	// Emit all six lifecycle metrics
+	metrics.SetEphemeralRunnerCountsByLifecycle(
+		metrics.CommonLabels{
+			Name:         name,
+			Namespace:    namespace,
+			Repository:   repository,
+			Organization: organization,
+			Enterprise:   enterprise,
+		},
+		buckets.Pending,
+		buckets.Running,
+		buckets.Succeeded,
+		buckets.Failed,
+		buckets.Outdated,
+		buckets.Deleting,
+	)
+
+	log.V(1).Info("Emitted lifecycle metrics",
+		"pending", buckets.Pending,
+		"running", buckets.Running,
+		"succeeded", buckets.Succeeded,
+		"failed", buckets.Failed,
+		"outdated", buckets.Outdated,
+		"deleting", buckets.Deleting,
+	)
 }

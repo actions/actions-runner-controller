@@ -136,17 +136,16 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			// Check if the status stay 0
 			Consistently(
 				func() (int, error) {
-					runnerSet := new(v1alpha1.EphemeralRunnerSet)
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunnerSet.Name, Namespace: ephemeralRunnerSet.Namespace}, runnerSet)
+					var runnerList v1alpha1.EphemeralRunnerList
+					err := k8sClient.List(ctx, &runnerList, client.InNamespace(ephemeralRunnerSet.Namespace), client.MatchingFields{resourceOwnerKey: ephemeralRunnerSet.Name})
 					if err != nil {
 						return -1, err
 					}
-
-					return int(runnerSet.Status.CurrentReplicas), nil
+					return len(runnerList.Items), nil
 				},
 				ephemeralRunnerSetTestTimeout,
 				ephemeralRunnerSetTestInterval,
-			).Should(BeEquivalentTo(0), "EphemeralRunnerSet status should be 0")
+			).Should(BeEquivalentTo(0), "EphemeralRunnerSet should have 0 runners")
 
 			// Scaling up the EphemeralRunnerSet
 			updated := created.DeepCopy()
@@ -190,17 +189,16 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			// Check if the status is updated
 			Eventually(
 				func() (int, error) {
-					runnerSet := new(v1alpha1.EphemeralRunnerSet)
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunnerSet.Name, Namespace: ephemeralRunnerSet.Namespace}, runnerSet)
+					var runnerList v1alpha1.EphemeralRunnerList
+					err := k8sClient.List(ctx, &runnerList, client.InNamespace(ephemeralRunnerSet.Namespace), client.MatchingFields{resourceOwnerKey: ephemeralRunnerSet.Name})
 					if err != nil {
 						return -1, err
 					}
-
-					return int(runnerSet.Status.CurrentReplicas), nil
+					return len(runnerList.Items), nil
 				},
 				ephemeralRunnerSetTestTimeout,
 				ephemeralRunnerSetTestInterval,
-			).Should(BeEquivalentTo(5), "EphemeralRunnerSet status should be 5")
+			).Should(BeEquivalentTo(5), "EphemeralRunnerSet should have 5 runners")
 		})
 	})
 
@@ -1184,11 +1182,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			).Should(BeTrue(), "Failed to eventually update to one pending, one running and one failed")
 
 			desiredStatus := v1alpha1.EphemeralRunnerSetStatus{
-				Phase:                   v1alpha1.EphemeralRunnerSetPhaseRunning,
-				CurrentReplicas:         3,
-				PendingEphemeralRunners: 1,
-				RunningEphemeralRunners: 1,
-				FailedEphemeralRunners:  1,
+				Phase: v1alpha1.EphemeralRunnerSetPhaseRunning,
 			}
 			Eventually(
 				func() (v1alpha1.EphemeralRunnerSetStatus, error) {
@@ -1227,11 +1221,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			).Should(BeEquivalentTo(1), "Failed to eventually scale down")
 
 			desiredStatus = v1alpha1.EphemeralRunnerSetStatus{
-				CurrentReplicas:         1,
-				PendingEphemeralRunners: 0,
-				RunningEphemeralRunners: 0,
-				FailedEphemeralRunners:  1,
-				Phase:                   v1alpha1.EphemeralRunnerSetPhaseRunning,
+				Phase: v1alpha1.EphemeralRunnerSetPhaseRunning,
 			}
 
 			Eventually(
@@ -1251,11 +1241,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			Expect(err).To(BeNil(), "Failed to delete failed ephemeral runner")
 
 			desiredStatus = v1alpha1.EphemeralRunnerSetStatus{
-				CurrentReplicas:         0,
-				PendingEphemeralRunners: 0,
-				RunningEphemeralRunners: 0,
-				FailedEphemeralRunners:  0,
-				Phase:                   v1alpha1.EphemeralRunnerSetPhaseRunning,
+				Phase: v1alpha1.EphemeralRunnerSetPhaseRunning,
 			}
 			Eventually(
 				func() (v1alpha1.EphemeralRunnerSetStatus, error) {

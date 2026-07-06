@@ -27,9 +27,7 @@ import (
 	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
-	"github.com/actions/actions-runner-controller/controllers/actions.github.com/metrics"
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient"
-	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/scaleset"
 	"github.com/go-logr/logr"
 	"go.uber.org/multierr"
@@ -205,29 +203,6 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		"deleting", len(ephemeralRunnersByState.deleting),
 	)
 
-	if r.PublishMetrics {
-		githubConfigURL := ephemeralRunnerSet.Spec.EphemeralRunnerSpec.GitHubConfigURL
-		parsedURL, err := actions.ParseGitHubConfigFromURL(githubConfigURL)
-		if err != nil {
-			log.Error(err, "Github Config URL is invalid", "URL", githubConfigURL)
-			// stop reconciling on this object
-			return ctrl.Result{}, nil
-		}
-
-		metrics.SetEphemeralRunnerCountsByStatus(
-			metrics.CommonLabels{
-				Name:         ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName],
-				Namespace:    ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace],
-				Repository:   parsedURL.Repository,
-				Organization: parsedURL.Organization,
-				Enterprise:   parsedURL.Enterprise,
-			},
-			len(ephemeralRunnersByState.pending),
-			len(ephemeralRunnersByState.running),
-			len(ephemeralRunnersByState.failed),
-		)
-	}
-
 	total := ephemeralRunnersByState.scaleTotal()
 	if ephemeralRunnerSet.Spec.PatchID == 0 || ephemeralRunnerSet.Spec.PatchID != ephemeralRunnersByState.latestPatchID {
 		defer func() {
@@ -272,7 +247,6 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, state *ephemeralRunnersByState, log logr.Logger) error {
 	original := ephemeralRunnerSet.DeepCopy()
-	total := state.scaleTotal()
 	var phase v1alpha1.EphemeralRunnerSetPhase
 	switch {
 	case len(state.outdated) > 0:
@@ -283,11 +257,7 @@ func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemer
 		phase = ephemeralRunnerSet.Status.Phase
 	}
 	desiredStatus := v1alpha1.EphemeralRunnerSetStatus{
-		CurrentReplicas:         total,
-		Phase:                   phase,
-		PendingEphemeralRunners: len(state.pending),
-		RunningEphemeralRunners: len(state.running),
-		FailedEphemeralRunners:  len(state.failed),
+		Phase: phase,
 	}
 
 	// Update the status if needed.

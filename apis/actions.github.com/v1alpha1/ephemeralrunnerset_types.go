@@ -37,14 +37,6 @@ type EphemeralRunnerSetSpec struct {
 
 // EphemeralRunnerSetStatus defines the observed state of EphemeralRunnerSet
 type EphemeralRunnerSetStatus struct {
-	// CurrentReplicas is the number of currently running EphemeralRunner resources being managed by this EphemeralRunnerSet.
-	CurrentReplicas int `json:"currentReplicas"`
-	// +optional
-	PendingEphemeralRunners int `json:"pendingEphemeralRunners"`
-	// +optional
-	RunningEphemeralRunners int `json:"runningEphemeralRunners"`
-	// +optional
-	FailedEphemeralRunners int `json:"failedEphemeralRunners"`
 	// +optional
 	Phase EphemeralRunnerSetPhase `json:"phase"`
 }
@@ -62,11 +54,6 @@ const (
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=".spec.replicas",name="DesiredReplicas",type="integer"
-// +kubebuilder:printcolumn:JSONPath=".status.currentReplicas", name="CurrentReplicas",type="integer"
-// +kubebuilder:printcolumn:JSONPath=".status.pendingEphemeralRunners",name=Pending Runners,type=integer
-// +kubebuilder:printcolumn:JSONPath=".status.runningEphemeralRunners",name=Running Runners,type=integer
-// +kubebuilder:printcolumn:JSONPath=".status.finishedEphemeralRunners",name=Finished Runners,type=integer
-// +kubebuilder:printcolumn:JSONPath=".status.deletingEphemeralRunners",name=Deleting Runners,type=integer
 // +kubebuilder:printcolumn:JSONPath=".status.phase",name=Phase,type=string
 
 // EphemeralRunnerSet is the Schema for the ephemeralrunnersets API

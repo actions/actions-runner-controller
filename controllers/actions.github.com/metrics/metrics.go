@@ -58,6 +58,30 @@ var (
 		},
 		labels,
 	)
+	succeededEphemeralRunners = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: githubScaleSetControllerSubsystem,
+			Name:      "succeeded_ephemeral_runners",
+			Help:      "Number of ephemeral runners in a succeeded state.",
+		},
+		labels,
+	)
+	outdatedEphemeralRunners = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: githubScaleSetControllerSubsystem,
+			Name:      "outdated_ephemeral_runners",
+			Help:      "Number of ephemeral runners in an outdated state.",
+		},
+		labels,
+	)
+	deletingEphemeralRunners = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: githubScaleSetControllerSubsystem,
+			Name:      "deleting_ephemeral_runners",
+			Help:      "Number of ephemeral runners in a deleting state.",
+		},
+		labels,
+	)
 	runningListeners = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Subsystem: githubScaleSetControllerSubsystem,
@@ -72,15 +96,31 @@ func RegisterMetrics() {
 	metrics.Registry.MustRegister(
 		pendingEphemeralRunners,
 		runningEphemeralRunners,
+		succeededEphemeralRunners,
 		failedEphemeralRunners,
+		outdatedEphemeralRunners,
+		deletingEphemeralRunners,
 		runningListeners,
 	)
 }
 
-func SetEphemeralRunnerCountsByStatus(commonLabels CommonLabels, pending, running, failed int) {
-	pendingEphemeralRunners.With(commonLabels.labels()).Set(float64(pending))
-	runningEphemeralRunners.With(commonLabels.labels()).Set(float64(running))
-	failedEphemeralRunners.With(commonLabels.labels()).Set(float64(failed))
+// SetEphemeralRunnerCountsByLifecycle sets ephemeral runner counts across all six lifecycle states
+// using deterministic bucket assignment with explicit precedence:
+//
+// Lifecycle Precedence Contract:
+//  1. deleting: if runner has DeletionTimestamp set
+//  2. explicit phase buckets: if runner.Status.Phase is one of (Running/Succeeded/Failed/Outdated)
+//  3. pending (fallback): for empty/unset/other phase values
+//
+// This ensures each runner maps to exactly one metric bucket (no double-counting).
+func SetEphemeralRunnerCountsByLifecycle(commonLabels CommonLabels, pending, running, succeeded, failed, outdated, deleting int) {
+	labels := commonLabels.labels()
+	pendingEphemeralRunners.With(labels).Set(float64(pending))
+	runningEphemeralRunners.With(labels).Set(float64(running))
+	succeededEphemeralRunners.With(labels).Set(float64(succeeded))
+	failedEphemeralRunners.With(labels).Set(float64(failed))
+	outdatedEphemeralRunners.With(labels).Set(float64(outdated))
+	deletingEphemeralRunners.With(labels).Set(float64(deleting))
 }
 
 func AddRunningListener(commonLabels CommonLabels) {
