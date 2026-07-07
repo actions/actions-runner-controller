@@ -129,7 +129,7 @@ func TestSetDesiredWorkerState_MinSet(t *testing.T) {
 		assert.Equal(t, 1, w.patchSeq)
 	})
 
-	t.Run("desired patch is 0 but sequence continues on empty batch and min runners", func(t *testing.T) {
+	t.Run("desired patch repeats without advancing sequence on empty batch and min runners", func(t *testing.T) {
 		w := newEmptyWorker()
 		patchID := w.setDesiredWorkerState(3)
 		assert.False(t, w.dirty)
@@ -147,9 +147,9 @@ func TestSetDesiredWorkerState_MinSet(t *testing.T) {
 		// Empty batch on min runners
 		patchID = w.setDesiredWorkerState(0)
 		assert.False(t, w.dirty)
-		assert.Equal(t, 0, patchID) // forcing the state
+		assert.Equal(t, 2, patchID)
 		assert.Equal(t, 1, w.targetRunners)
-		assert.Equal(t, 2, w.patchSeq)
+		assert.Equal(t, 1, w.patchSeq)
 	})
 }
 
@@ -234,7 +234,7 @@ func TestSetDesiredWorkerState_MaxSet(t *testing.T) {
 		assert.Equal(t, 1, w.patchSeq)
 	})
 
-	t.Run("force 0 on empty batch and last patch == min runners", func(t *testing.T) {
+	t.Run("desired patch repeats without advancing sequence on empty batch and min runners", func(t *testing.T) {
 		w := newEmptyWorker()
 		patchID := w.setDesiredWorkerState(3)
 		assert.Equal(t, 0, patchID)
@@ -249,9 +249,9 @@ func TestSetDesiredWorkerState_MaxSet(t *testing.T) {
 
 		// Empty batch on min runners
 		patchID = w.setDesiredWorkerState(0)
-		assert.Equal(t, 0, patchID) // forcing the state
+		assert.Equal(t, 2, patchID)
 		assert.Equal(t, 0, w.targetRunners)
-		assert.Equal(t, 2, w.patchSeq)
+		assert.Equal(t, 1, w.patchSeq)
 	})
 }
 
@@ -309,7 +309,7 @@ func TestSetDesiredWorkerState_MinMaxSet(t *testing.T) {
 		assert.Equal(t, 0, w.patchSeq)
 	})
 
-	t.Run("force 0 on empty batch and last patch == min runners", func(t *testing.T) {
+	t.Run("desired patch repeats without advancing sequence on empty batch and min runners", func(t *testing.T) {
 		w := newEmptyWorker()
 		patchID := w.setDesiredWorkerState(3)
 		assert.False(t, w.dirty)
@@ -327,8 +327,8 @@ func TestSetDesiredWorkerState_MinMaxSet(t *testing.T) {
 		// Empty batch on min runners
 		patchID = w.setDesiredWorkerState(0)
 		assert.False(t, w.dirty)
-		assert.Equal(t, 0, patchID) // forcing the state
+		assert.Equal(t, 2, patchID)
 		assert.Equal(t, 1, w.targetRunners)
-		assert.Equal(t, 2, w.patchSeq)
+		assert.Equal(t, 1, w.patchSeq)
 	})
 }

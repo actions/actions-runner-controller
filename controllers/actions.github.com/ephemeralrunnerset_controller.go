@@ -24,20 +24,24 @@ import (
 	"maps"
 	"sort"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/metrics"
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient"
+	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/scaleset"
 	"github.com/go-logr/logr"
-	"go.uber.org/multierr"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
@@ -52,14 +56,29 @@ type EphemeralRunnerSetReconciler struct {
 	Log            logr.Logger
 	Scheme         *runtime.Scheme
 	PublishMetrics bool
-	ResourceBuilder
+	*ResourceBuilder
+	specHashCache   sync.Map
+	scaleStateCache sync.Map
+}
+
+type specHashCacheEntry struct {
+	uid        types.UID
+	generation int64
+	hash       string
+}
+
+type scaleStateCacheEntry struct {
+	uid      types.UID
+	patchID  int
+	replicas int
 }
 
 // +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunnersets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunnersets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunnersets/finalizers,verbs=update;patch
-// +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunners,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunners,verbs=get;list;watch;create;update;patch;delete;deletecollection
 // +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunners/status,verbs=get
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=create;delete;get;list;patch;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -78,9 +97,12 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	var ephemeralRunnerSet v1alpha1.EphemeralRunnerSet
 	if err := r.Get(ctx, req.NamespacedName, &ephemeralRunnerSet); err != nil {
+		if kerrors.IsNotFound(err) {
+			r.clearSpecHashCache(req.NamespacedName)
+			r.clearScaleStateCache(req.NamespacedName)
+		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	original := ephemeralRunnerSet.DeepCopy()
 
 	// Requested deletion does not need reconciled.
 	if !ephemeralRunnerSet.DeletionTimestamp.IsZero() {
@@ -110,7 +132,9 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 
 		log.Info("Removing finalizer")
-		if controllerutil.RemoveFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName) {
+		if controllerutil.ContainsFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName) {
+			original := ephemeralRunnerSet.DeepCopy()
+			controllerutil.RemoveFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName)
 			if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
 				log.Error(err, "Failed to update ephemeral runner set with removed finalizer")
 				return ctrl.Result{}, err
@@ -118,12 +142,16 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 
 		log.Info("Successfully removed finalizer after cleanup")
+		r.clearSpecHashCache(req.NamespacedName)
+		r.clearScaleStateCache(req.NamespacedName)
 		return ctrl.Result{}, nil
 	}
 
 	// Add finalizer if not present
-	if controllerutil.AddFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName) {
+	if !controllerutil.ContainsFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName) {
 		log.Info("Adding finalizer")
+		original := ephemeralRunnerSet.DeepCopy()
+		controllerutil.AddFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName)
 		if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
 			log.Error(err, "Failed to update ephemeral runner set with new finalizer")
 			return ctrl.Result{}, err
@@ -133,34 +161,96 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, nil
 	}
 
+	patchEphemeralRunnerSetProxySecretData := func(proxySecret *corev1.Secret) (bool, error) {
+		proxySecretData, err := ephemeralRunnerSet.Spec.EphemeralRunnerSpec.Proxy.ToSecretData(func(s string) (*corev1.Secret, error) {
+			secret := new(corev1.Secret)
+			err := r.Get(ctx, types.NamespacedName{Namespace: ephemeralRunnerSet.Namespace, Name: s}, secret)
+			return secret, err
+		})
+		if err != nil {
+			return false, fmt.Errorf("failed to convert proxy config to secret data: %w", err)
+		}
+
+		if maps.EqualFunc(proxySecret.Data, proxySecretData, bytes.Equal) {
+			return false, nil
+		}
+
+		desiredProxySecret, err := r.newEphemeralRunnerSetProxySecret(&ephemeralRunnerSet, proxySecretData)
+		if err != nil {
+			return false, fmt.Errorf("failed to build ephemeralRunnerSet proxy secret: %w", err)
+		}
+
+		updatedProxySecret := proxySecret.DeepCopy()
+		updatedProxySecret.Data = proxySecretData
+		updatedProxySecret.Labels = r.filterAndMergeLabels(proxySecret.Labels, desiredProxySecret.Labels)
+		updatedProxySecret.Annotations = r.filterAndMergeAnnotations(proxySecret.Annotations, desiredProxySecret.Annotations)
+
+		log.Info("Updating ephemeralRunnerSet proxy secret")
+		if err := r.Patch(ctx, updatedProxySecret, client.MergeFrom(proxySecret)); err != nil {
+			return false, fmt.Errorf("failed to update ephemeralRunnerSet proxy secret: %w", err)
+		}
+		return true, nil
+	}
+
 	// If hash spec has changed, delete idle ephemeral runners
 	// in order to apply the change to the runners that did not yet receive a job.
-	ephemeralRunnerIntegrityHash := ephemeralRunnerSetIntegrityHash(&ephemeralRunnerSet)
-	if ephemeralRunnerSet.Annotations[annotationKeyIntegrityHash] != ephemeralRunnerIntegrityHash {
-		log.Info("EphemeralRunnerSpec has changed, deleting idle ephemeral runners to apply the new spec")
-		if _, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log); err != nil {
-			log.Error(err, "Failed to clean up EphemeralRunners")
-			return ctrl.Result{}, err
+	storedIntegrityHash := ephemeralRunnerSet.Annotations[AnnotationKeyIntegrityHash]
+	if !r.hasSpecHashCache(req.NamespacedName, ephemeralRunnerSet.UID, ephemeralRunnerSet.Generation, storedIntegrityHash) {
+		ephemeralRunnerIntegrityHash := ephemeralRunnerSetIntegrityHash(&ephemeralRunnerSet)
+		if storedIntegrityHash != ephemeralRunnerIntegrityHash {
+			log.Info("EphemeralRunnerSpec has changed, deleting idle ephemeral runners to apply the new spec")
+			if _, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log); err != nil {
+				log.Error(err, "Failed to clean up EphemeralRunners")
+				return ctrl.Result{}, err
+			}
+
+			if ephemeralRunnerSet.Spec.EphemeralRunnerSpec.Proxy != nil {
+				var proxySecret corev1.Secret
+				err := r.Get(
+					ctx,
+					types.NamespacedName{
+						Namespace: ephemeralRunnerSet.Namespace,
+						Name:      proxyEphemeralRunnerSetSecretName(&ephemeralRunnerSet),
+					},
+					&proxySecret,
+				)
+				switch {
+				case err == nil:
+					updated, err := patchEphemeralRunnerSetProxySecretData(&proxySecret)
+					if err != nil {
+						return ctrl.Result{}, err
+					}
+					if updated {
+						return ctrl.Result{RequeueAfter: 1}, nil
+					}
+				case kerrors.IsNotFound(err):
+					log.Info("Creating a ephemeralRunnerSet proxy secret for the runner pods")
+					if err := r.createProxySecret(ctx, &ephemeralRunnerSet, log); err != nil {
+						return ctrl.Result{}, fmt.Errorf("failed to create ephemeralRunnerSet proxy secret: %w", err)
+					}
+				default:
+					log.Error(err, "Unable to get ephemeralRunnerSet proxy secret", "namespace", ephemeralRunnerSet.Namespace, "name", proxyEphemeralRunnerSetSecretName(&ephemeralRunnerSet))
+					return ctrl.Result{}, err
+				}
+			}
+
+			log.Info("Updating EphemeralRunnerSet with new spec hash")
+			original := ephemeralRunnerSet.DeepCopy()
+			if ephemeralRunnerSet.Annotations == nil {
+				ephemeralRunnerSet.Annotations = make(map[string]string)
+			}
+			ephemeralRunnerSet.Annotations[AnnotationKeyIntegrityHash] = ephemeralRunnerIntegrityHash
+			if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
+				log.Error(err, "Failed to update ephemeral runner set with new spec hash")
+				return ctrl.Result{}, err
+			}
+			r.setSpecHashCache(req.NamespacedName, ephemeralRunnerSet.UID, ephemeralRunnerSet.Generation, ephemeralRunnerIntegrityHash)
+
+			log.Info("Updated ephemeral runner set with new spec hash")
+			return ctrl.Result{}, nil
 		}
 
-		if _, _, err := r.reconcileEphemeralRunnerSetProxySecret(ctx, &ephemeralRunnerSet, log); err != nil {
-			log.Error(err, "Failed to update EphemeralRunnerSet proxy secret")
-			return ctrl.Result{}, err
-		}
-
-		log.Info("Updating EphemeralRunnerSet with new spec hash")
-		original := ephemeralRunnerSet.DeepCopy()
-		if ephemeralRunnerSet.Annotations == nil {
-			ephemeralRunnerSet.Annotations = make(map[string]string)
-		}
-		ephemeralRunnerSet.Annotations[annotationKeyIntegrityHash] = ephemeralRunnerIntegrityHash
-		if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
-			log.Error(err, "Failed to update ephemeral runner set with new spec hash")
-			return ctrl.Result{}, err
-		}
-
-		log.Info("Updated ephemeral runner set with new spec hash")
-		return ctrl.Result{}, nil
+		r.setSpecHashCache(req.NamespacedName, ephemeralRunnerSet.UID, ephemeralRunnerSet.Generation, ephemeralRunnerIntegrityHash)
 	}
 
 	if ephemeralRunnerSet.Status.Phase == v1alpha1.EphemeralRunnerSetPhaseOutdated {
@@ -171,12 +261,38 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, nil
 	}
 
-	// Create or update proxy secret if needed
-	if _, updated, err := r.reconcileEphemeralRunnerSetProxySecret(ctx, &ephemeralRunnerSet, log); err != nil {
-		log.Error(err, "Unable to reconcile ephemeralRunnerSet proxy secret", "namespace", ephemeralRunnerSet.Namespace, "name", proxyEphemeralRunnerSetSecretName(&ephemeralRunnerSet))
-		return ctrl.Result{}, err
-	} else if updated {
-		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+	var proxySecret *corev1.Secret
+	if ephemeralRunnerSet.Spec.EphemeralRunnerSpec.Proxy != nil {
+		var secret corev1.Secret
+		err := r.Get(
+			ctx,
+			types.NamespacedName{
+				Namespace: ephemeralRunnerSet.Namespace,
+				Name:      proxyEphemeralRunnerSetSecretName(&ephemeralRunnerSet),
+			},
+			&secret,
+		)
+		proxySecret = &secret
+		switch {
+		case err == nil:
+			updated, err := patchEphemeralRunnerSetProxySecretData(proxySecret)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			if updated {
+				return ctrl.Result{RequeueAfter: 1}, nil
+			}
+		case kerrors.IsNotFound(err):
+			// Create a compiled secret for the runner pods in the runnerset namespace
+			log.Info("Creating a ephemeralRunnerSet proxy secret for the runner pods")
+			if err := r.createProxySecret(ctx, &ephemeralRunnerSet, log); err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to create ephemeralRunnerSet proxy secret: %w", err)
+			}
+			return ctrl.Result{}, nil
+		default:
+			log.Error(err, "Unable to get ephemeralRunnerSet proxy secret", "namespace", ephemeralRunnerSet.Namespace, "name", proxyEphemeralRunnerSetSecretName(&ephemeralRunnerSet))
+			return ctrl.Result{}, err
+		}
 	}
 
 	// Find all EphemeralRunner with matching namespace and own by this EphemeralRunnerSet.
@@ -191,33 +307,71 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, err
 	}
 
-	ephemeralRunnersByState := newEphemeralRunnersByStates(&ephemeralRunnerList)
+	runnerState := newEphemeralRunnersByStates(&ephemeralRunnerList, false, ephemeralRunnerSet.Spec.PatchID != 0)
 
 	log.Info(
 		"Ephemeral runner counts",
-		"outdated", len(ephemeralRunnersByState.outdated),
-		"pending", len(ephemeralRunnersByState.pending),
-		"running", len(ephemeralRunnersByState.running),
-		"finished", len(ephemeralRunnersByState.finished),
-		"failed", len(ephemeralRunnersByState.failed),
-		"deleting", len(ephemeralRunnersByState.deleting),
+		"outdated", runnerState.outdatedCount,
+		"pending", runnerState.pendingCount,
+		"running", runnerState.runningCount,
+		"finished", runnerState.finishedCount,
+		"failed", runnerState.failedCount,
+		"deleting", runnerState.deletingCount,
 	)
 
-	total := ephemeralRunnersByState.scaleTotal()
-	if ephemeralRunnerSet.Spec.PatchID == 0 || ephemeralRunnerSet.Spec.PatchID != ephemeralRunnersByState.latestPatchID {
-		defer func() {
-			if err := r.cleanupFinishedEphemeralRunners(ctx, ephemeralRunnersByState.finished, log); err != nil {
-				log.Error(err, "failed to cleanup finished ephemeral runners")
+	if r.PublishMetrics {
+		githubConfigURL := ephemeralRunnerSet.Spec.EphemeralRunnerSpec.GitHubConfigURL
+		parsedURL, err := actions.ParseGitHubConfigFromURL(githubConfigURL)
+		if err != nil {
+			log.Error(err, "Github Config URL is invalid", "URL", githubConfigURL)
+			// stop reconciling on this object
+			return ctrl.Result{}, nil
+		}
+
+		metrics.SetEphemeralRunnerCountsByLifecycle(
+			metrics.CommonLabels{
+				Name:         ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName],
+				Namespace:    ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace],
+				Repository:   parsedURL.Repository,
+				Organization: parsedURL.Organization,
+				Enterprise:   parsedURL.Enterprise,
+			},
+			runnerState.pendingCount,
+			runnerState.runningCount,
+			runnerState.finishedCount,
+			runnerState.failedCount,
+			runnerState.outdatedCount,
+			runnerState.deletingCount,
+		)
+	}
+
+	total := runnerState.scaleTotal()
+	scaleState := r.getScaleState(req.NamespacedName, &ephemeralRunnerSet, total)
+	scalingTotal := total
+	if ephemeralRunnerSet.Spec.PatchID > 0 {
+		scalingTotal = scaleState.replicas
+	}
+	if ephemeralRunnerSet.Spec.PatchID == 0 || ephemeralRunnerSet.Spec.PatchID != runnerState.latestPatchID {
+		var fullState *ephemeralRunnersByState
+		getFullState := func() *ephemeralRunnersByState {
+			if fullState == nil {
+				fullState = newEphemeralRunnersByStates(&ephemeralRunnerList, true, ephemeralRunnerSet.Spec.PatchID != 0)
 			}
-		}()
-		log.Info("Scaling comparison", "current", total, "desired", ephemeralRunnerSet.Spec.Replicas)
+			return fullState
+		}
+
+		log.Info("Scaling comparison", "current", scalingTotal, "clusterCurrent", total, "desired", ephemeralRunnerSet.Spec.Replicas)
 		switch {
-		case total < ephemeralRunnerSet.Spec.Replicas: // Handle scale up
-			count := ephemeralRunnerSet.Spec.Replicas - total
+		case scalingTotal < ephemeralRunnerSet.Spec.Replicas: // Handle scale up
+			count := ephemeralRunnerSet.Spec.Replicas - scalingTotal
 			log.Info("Creating new ephemeral runners (scale up)", "count", count)
 			if err := r.createEphemeralRunners(ctx, &ephemeralRunnerSet, count, log); err != nil {
 				log.Error(err, "failed to make ephemeral runner")
 				return ctrl.Result{}, err
+			}
+			if ephemeralRunnerSet.Spec.PatchID > 0 {
+				scaleState.replicas += count
+				r.setScaleStateCache(req.NamespacedName, scaleState)
 			}
 
 		case ephemeralRunnerSet.Spec.PatchID > 0 && total >= ephemeralRunnerSet.Spec.Replicas: // Handle scale down scenario.
@@ -226,13 +380,14 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 			// Eventually, the ephemeral runner will be cleaned up on the next patch request, which happens
 			// on the next batch
 		case ephemeralRunnerSet.Spec.PatchID == 0 && total > ephemeralRunnerSet.Spec.Replicas:
+			stateWithSlices := getFullState()
 			count := total - ephemeralRunnerSet.Spec.Replicas
 			log.Info("Deleting ephemeral runners (scale down)", "count", count)
 			if err := r.deleteIdleEphemeralRunners(
 				ctx,
 				&ephemeralRunnerSet,
-				ephemeralRunnersByState.pending,
-				ephemeralRunnersByState.running,
+				stateWithSlices.pending,
+				stateWithSlices.running,
 				count,
 				log,
 			); err != nil {
@@ -242,14 +397,98 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 	}
 
-	return ctrl.Result{}, r.updateStatus(ctx, &ephemeralRunnerSet, ephemeralRunnersByState, log)
+	if err := r.updateStatus(ctx, &ephemeralRunnerSet, runnerState, scaleState, log); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if proxySecret != nil {
+		expectedScaleSetName := ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName]
+		expectedScaleSetNamespace := ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace]
+		labelsChanged := proxySecret.Labels[LabelKeyGitHubScaleSetName] != expectedScaleSetName || proxySecret.Labels[LabelKeyGitHubScaleSetNamespace] != expectedScaleSetNamespace
+
+		if labelsChanged {
+			updatedProxySecret := proxySecret.DeepCopy()
+			updatedProxySecret.Labels = r.filterAndMergeLabels(proxySecret.Labels, map[string]string{
+				LabelKeyGitHubScaleSetName:      expectedScaleSetName,
+				LabelKeyGitHubScaleSetNamespace: expectedScaleSetNamespace,
+			})
+
+			log.Info("Updating ephemeralRunnerSet proxy secret metadata")
+			if err := r.Patch(ctx, updatedProxySecret, client.MergeFrom(proxySecret)); err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to update ephemeralRunnerSet proxy secret metadata: %w", err)
+			}
+			return ctrl.Result{RequeueAfter: 1}, nil
+		}
+	}
+
+	return ctrl.Result{}, nil
 }
 
-func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, state *ephemeralRunnersByState, log logr.Logger) error {
-	original := ephemeralRunnerSet.DeepCopy()
+func (r *EphemeralRunnerSetReconciler) setSpecHashCache(namespacedName types.NamespacedName, uid types.UID, generation int64, hash string) {
+	r.specHashCache.Store(namespacedName, specHashCacheEntry{uid: uid, generation: generation, hash: hash})
+}
+
+func (r *EphemeralRunnerSetReconciler) hasSpecHashCache(namespacedName types.NamespacedName, uid types.UID, generation int64, hash string) bool {
+	entry, ok := r.specHashCache.Load(namespacedName)
+	if !ok {
+		return false
+	}
+
+	specHashEntry, ok := entry.(specHashCacheEntry)
+	if !ok {
+		return false
+	}
+
+	return specHashEntry.uid == uid && specHashEntry.generation == generation && specHashEntry.hash == hash
+}
+
+func (r *EphemeralRunnerSetReconciler) clearSpecHashCache(namespacedName types.NamespacedName) {
+	r.specHashCache.Delete(namespacedName)
+}
+
+func (r *EphemeralRunnerSetReconciler) setScaleStateCache(namespacedName types.NamespacedName, entry scaleStateCacheEntry) {
+	r.scaleStateCache.Store(namespacedName, entry)
+}
+
+func (r *EphemeralRunnerSetReconciler) getScaleState(namespacedName types.NamespacedName, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, clusterReplicas int) scaleStateCacheEntry {
+	if ephemeralRunnerSet.Spec.PatchID == 0 {
+		return scaleStateCacheEntry{uid: ephemeralRunnerSet.UID, patchID: 0, replicas: clusterReplicas}
+	}
+
+	entry, ok := r.scaleStateCache.Load(namespacedName)
+	if ok {
+		stateEntry, ok := entry.(scaleStateCacheEntry)
+		if ok && stateEntry.uid == ephemeralRunnerSet.UID && stateEntry.patchID == ephemeralRunnerSet.Spec.PatchID {
+			if stateEntry.replicas < clusterReplicas {
+				stateEntry.replicas = clusterReplicas
+				r.setScaleStateCache(namespacedName, stateEntry)
+			}
+			return stateEntry
+		}
+	}
+
+	replicas := clusterReplicas
+	if ephemeralRunnerSet.Status.ReservedPatchID == ephemeralRunnerSet.Spec.PatchID && ephemeralRunnerSet.Status.ReservedReplicas > replicas {
+		replicas = ephemeralRunnerSet.Status.ReservedReplicas
+	}
+	if replicas > ephemeralRunnerSet.Spec.Replicas {
+		replicas = ephemeralRunnerSet.Spec.Replicas
+	}
+
+	stateEntry := scaleStateCacheEntry{uid: ephemeralRunnerSet.UID, patchID: ephemeralRunnerSet.Spec.PatchID, replicas: replicas}
+	r.setScaleStateCache(namespacedName, stateEntry)
+	return stateEntry
+}
+
+func (r *EphemeralRunnerSetReconciler) clearScaleStateCache(namespacedName types.NamespacedName) {
+	r.scaleStateCache.Delete(namespacedName)
+}
+
+func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, state *ephemeralRunnersByState, scaleState scaleStateCacheEntry, log logr.Logger) error {
+	total := state.scaleTotal()
 	var phase v1alpha1.EphemeralRunnerSetPhase
 	switch {
-	case len(state.outdated) > 0:
+	case state.outdatedCount > 0:
 		phase = v1alpha1.EphemeralRunnerSetPhaseOutdated
 	case ephemeralRunnerSet.Status.Phase == "":
 		phase = v1alpha1.EphemeralRunnerSetPhaseRunning
@@ -257,35 +496,29 @@ func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemer
 		phase = ephemeralRunnerSet.Status.Phase
 	}
 	desiredStatus := v1alpha1.EphemeralRunnerSetStatus{
-		Phase: phase,
+		CurrentReplicas:         total,
+		Phase:                   phase,
+		PendingEphemeralRunners: state.pendingCount,
+		RunningEphemeralRunners: state.runningCount,
+		FailedEphemeralRunners:  state.failedCount,
+	}
+	if ephemeralRunnerSet.Spec.PatchID > 0 {
+		desiredStatus.ReservedReplicas = scaleState.replicas
+		desiredStatus.ReservedPatchID = scaleState.patchID
 	}
 
 	// Update the status if needed.
 	if ephemeralRunnerSet.Status != desiredStatus {
-		ephemeralRunnerSet.Status = desiredStatus
-		if err := r.Status().Patch(ctx, ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
+		updated := ephemeralRunnerSet.DeepCopy()
+		updated.Status = desiredStatus
+		if err := r.Status().Patch(ctx, updated, client.MergeFrom(ephemeralRunnerSet)); err != nil {
 			log.Error(err, "Failed to update EphemeralRunnerSet status")
 			return err
 		}
-		log.Info("Updated EphemeralRunnerSet status", "status", ephemeralRunnerSet.Status)
+		log.Info("Updated EphemeralRunnerSet status", "status", updated.Status)
 
 	}
 	return nil
-}
-
-func (r *EphemeralRunnerSetReconciler) cleanupFinishedEphemeralRunners(ctx context.Context, finishedEphemeralRunners []*v1alpha1.EphemeralRunner, log logr.Logger) error {
-	// cleanup finished runners and proceed
-	var errs []error
-	for i := range finishedEphemeralRunners {
-		log.Info("Deleting finished ephemeral runner", "name", finishedEphemeralRunners[i].Name)
-		if err := r.Delete(ctx, finishedEphemeralRunners[i]); err != nil {
-			if !kerrors.IsNotFound(err) {
-				errs = append(errs, err)
-			}
-		}
-	}
-
-	return multierr.Combine(errs...)
 }
 
 func (r *EphemeralRunnerSetReconciler) cleanUpProxySecret(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) error {
@@ -324,53 +557,47 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 		return true, nil
 	}
 
-	ephemeralRunnerState := newEphemeralRunnersByStates(ephemeralRunnerList)
+	ephemeralRunnerState := newEphemeralRunnersByStates(ephemeralRunnerList, true, false)
 
 	log.Info(
 		"Clean up runner counts",
-		"pending", len(ephemeralRunnerState.pending),
-		"running", len(ephemeralRunnerState.running),
-		"finished", len(ephemeralRunnerState.finished),
-		"failed", len(ephemeralRunnerState.failed),
-		"deleting", len(ephemeralRunnerState.deleting),
-		"outdated", len(ephemeralRunnerState.outdated),
+		"pending", ephemeralRunnerState.pendingCount,
+		"running", ephemeralRunnerState.runningCount,
+		"finished", ephemeralRunnerState.finishedCount,
+		"failed", ephemeralRunnerState.failedCount,
+		"deleting", ephemeralRunnerState.deletingCount,
+		"outdated", ephemeralRunnerState.outdatedCount,
 	)
-
-	log.Info("Cleanup terminated ephemeral runners")
-	var errs []error
-	for _, ephemeralRunner := range ephemeralRunnerState.terminated() {
-		log.Info("Deleting ephemeral runner", "name", ephemeralRunner.Name)
-		if err := r.Delete(ctx, ephemeralRunner); err != nil && !kerrors.IsNotFound(err) {
-			errs = append(errs, err)
-		}
-	}
-
-	if len(errs) > 0 {
-		mergedErrs := multierr.Combine(errs...)
-		log.Error(mergedErrs, "Failed to delete ephemeral runners")
-		return false, mergedErrs
-	}
 
 	// avoid fetching the client if we have nothing left to do
 	if len(ephemeralRunnerState.running) == 0 && len(ephemeralRunnerState.pending) == 0 {
+		if ephemeralRunnerState.finishedCount+ephemeralRunnerState.failedCount+ephemeralRunnerState.outdatedCount > 0 {
+			log.Info("Cleanup terminated ephemeral runners")
+			if err := r.deleteAllEphemeralRunnersForSet(ctx, ephemeralRunnerSet, log); err != nil {
+				log.Error(err, "Failed to delete terminated ephemeral runners")
+				return false, err
+			}
+		}
+
 		return false, nil
 	}
 
-	actionsClient, err := r.GetActionsService(ctx, ephemeralRunnerSet)
-	if err != nil {
+	log.Info("Cleanup terminated ephemeral runners")
+	if err := r.deleteEphemeralRunners(ctx, ephemeralRunnerState.finished, log); err != nil {
+		log.Error(err, "Failed to delete finished ephemeral runners")
+		return false, err
+	}
+	if err := r.deleteEphemeralRunners(ctx, ephemeralRunnerState.failed, log); err != nil {
+		log.Error(err, "Failed to delete failed ephemeral runners")
+		return false, err
+	}
+	if err := r.deleteEphemeralRunners(ctx, ephemeralRunnerState.outdated, log); err != nil {
+		log.Error(err, "Failed to delete outdated ephemeral runners")
 		return false, err
 	}
 
 	log.Info("Cleanup pending or running ephemeral runners")
-	errs = errs[0:0]
-	for _, ephemeralRunner := range ephemeralRunnerState.pending {
-		log.Info("Removing the ephemeral runner from the service", "name", ephemeralRunner.Name)
-		_, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
-		if err != nil {
-			errs = append(errs, err)
-		}
-	}
-
+	candidates := append([]*v1alpha1.EphemeralRunner{}, ephemeralRunnerState.pending...)
 	for _, ephemeralRunner := range ephemeralRunnerState.running {
 		if ephemeralRunner.HasJob() {
 			log.Info(
@@ -381,18 +608,20 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 			)
 			continue
 		}
-
-		log.Info("Removing the idle ephemeral runner from the service", "name", ephemeralRunner.Name)
-		_, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
-		if err != nil {
-			errs = append(errs, err)
-		}
+		candidates = append(candidates, ephemeralRunner)
+	}
+	if len(candidates) == 0 {
+		return false, nil
 	}
 
-	if len(errs) > 0 {
-		mergedErrs := multierr.Combine(errs...)
-		log.Error(mergedErrs, "Failed to remove ephemeral runners from the service")
-		return false, mergedErrs
+	actionsClient, err := r.GetActionsService(ctx, ephemeralRunnerSet)
+	if err != nil {
+		return false, err
+	}
+
+	if _, err := r.deleteEphemeralRunnersWithActionsClient(ctx, candidates, actionsClient, log); err != nil {
+		log.Error(err, "Failed to remove ephemeral runners from the service")
+		return false, err
 	}
 
 	return false, nil
@@ -436,98 +665,28 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunnerSetProxySecret(ctx 
 	}
 }
 
-func (r *EphemeralRunnerSetReconciler) reconcileEphemeralRunnerSetProxySecret(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) (secret *corev1.Secret, updated bool, err error) {
-	if ephemeralRunnerSet.Spec.EphemeralRunnerSpec.Proxy == nil {
-		return nil, false, nil
-	}
-
-	var proxySecret corev1.Secret
-	err = r.Get(
-		ctx,
-		types.NamespacedName{
-			Namespace: ephemeralRunnerSet.Namespace,
-			Name:      proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet),
-		},
-		&proxySecret,
-	)
-	switch {
-	case err == nil:
-		proxySecretData, err := ephemeralRunnerSet.Spec.EphemeralRunnerSpec.Proxy.ToSecretData(func(s string) (*corev1.Secret, error) {
-			secret := new(corev1.Secret)
-			err := r.Get(ctx, types.NamespacedName{Namespace: ephemeralRunnerSet.Namespace, Name: s}, secret)
-			return secret, err
-		})
-		if err != nil {
-			return nil, false, fmt.Errorf("failed to convert proxy config to secret data: %w", err)
-		}
-
-		desiredRunnerSetProxy, err := r.newEphemeralRunnerSetProxySecret(ephemeralRunnerSet, proxySecretData)
-		if err != nil {
-			return nil, false, fmt.Errorf("failed to build desired ephemeralRunnerSet proxy secret: %w", err)
-		}
-
-		updatedProxySecret := proxySecret.DeepCopy()
-		var shouldUpdate bool
-		if !maps.EqualFunc(proxySecret.Data, desiredRunnerSetProxy.Data, bytes.Equal) {
-			updatedProxySecret.Data = desiredRunnerSetProxy.Data
-			shouldUpdate = true
-		}
-		desiredLabels := r.filterAndMergeLabels(proxySecret.Labels, desiredRunnerSetProxy.Labels)
-		if !maps.Equal(proxySecret.Labels, desiredLabels) {
-			updatedProxySecret.Labels = desiredLabels
-			shouldUpdate = true
-		}
-		desiredAnnotations := r.mergeAnnotations(proxySecret.Annotations, desiredRunnerSetProxy.Annotations)
-		if !maps.Equal(proxySecret.Annotations, desiredAnnotations) {
-			updatedProxySecret.Annotations = desiredAnnotations
-			shouldUpdate = true
-		}
-		if shouldUpdate {
-			log.Info("Updating ephemeralRunnerSet proxy secret")
-			if err := r.Update(ctx, updatedProxySecret); err != nil {
-				return nil, false, fmt.Errorf("failed to update ephemeralRunnerSet proxy secret: %w", err)
-			}
-			return updatedProxySecret, true, nil
-		}
-		return &proxySecret, false, nil
-	case kerrors.IsNotFound(err):
-		// Create a compiled secret for the runner pods in the runnerset namespace
-		log.Info("Creating a ephemeralRunnerSet proxy secret for the runner pods")
-		if err := r.createProxySecret(ctx, ephemeralRunnerSet, log); err != nil {
-			return nil, false, fmt.Errorf("failed to create ephemeralRunnerSet proxy secret: %w", err)
-		}
-		return nil, false, nil
-	default:
-		return nil, false, err
-	}
-}
-
 // createEphemeralRunners provisions `count` number of v1alpha1.EphemeralRunner resources in the cluster.
 func (r *EphemeralRunnerSetReconciler) createEphemeralRunners(ctx context.Context, runnerSet *v1alpha1.EphemeralRunnerSet, count int, log logr.Logger) error {
-	// Track multiple errors at once and return the bundle.
-	errs := make([]error, 0)
-	for i := range count {
+	r.setSchemeIfUnset(r.Scheme)
+	for i := 0; i < count; i++ {
 		ephemeralRunner, err := r.newEphemeralRunner(runnerSet)
 		if err != nil {
 			log.Error(err, "failed to build ephemeral runner")
-			errs = append(errs, err)
-			continue
+			return err
 		}
 		if runnerSet.Spec.EphemeralRunnerSpec.Proxy != nil {
 			ephemeralRunner.Spec.ProxySecretRef = proxyEphemeralRunnerSetSecretName(runnerSet)
 		}
 
-		log.Info("Creating new ephemeral runner", "progress", i+1, "total", count)
 		if err := r.Create(ctx, ephemeralRunner); err != nil {
 			log.Error(err, "failed to make ephemeral runner")
-			errs = append(errs, err)
-			continue
+			return err
 		}
 
-		log.Info("Created new ephemeral runner", "runner", ephemeralRunner.Name)
+		log.Info("Created new ephemeral runner", "progress", i+1, "total", count, "runner", ephemeralRunner.Name)
 	}
 
-	return multierr.Combine(errs...)
+	return nil
 }
 
 func (r *EphemeralRunnerSetReconciler) createProxySecret(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) error {
@@ -572,12 +731,7 @@ func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Co
 		log.Info("No pending or running ephemeral runners running at this time for scale down")
 		return nil
 	}
-	actionsClient, err := r.GetActionsService(ctx, ephemeralRunnerSet)
-	if err != nil {
-		return fmt.Errorf("failed to create actions client for ephemeral runner replica set: %w", err)
-	}
-	var errs []error
-	deletedCount := 0
+	candidates := make([]*v1alpha1.EphemeralRunner, 0, runners.len())
 	for runners.next() {
 		ephemeralRunner := runners.object()
 		isDone := ephemeralRunner.IsDone()
@@ -596,22 +750,75 @@ func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Co
 			continue
 		}
 
-		log.Info("Removing the idle ephemeral runner", "name", ephemeralRunner.Name)
-		ok, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
-		if err != nil {
-			errs = append(errs, err)
-		}
-		if !ok {
-			continue
+		candidates = append(candidates, ephemeralRunner)
+	}
+	if len(candidates) == 0 {
+		return nil
+	}
+
+	actionsClient, err := r.GetActionsService(ctx, ephemeralRunnerSet)
+	if err != nil {
+		return fmt.Errorf("failed to create actions client for ephemeral runner replica set: %w", err)
+	}
+	remaining := count
+	for _, ephemeralRunner := range candidates {
+		if remaining <= 0 {
+			return nil
 		}
 
-		deletedCount++
-		if deletedCount == count {
-			break
+		log.Info("Removing the ephemeral runner from the service", "name", ephemeralRunner.Name)
+		deleted, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
+		if err != nil {
+			return err
+		}
+		if deleted {
+			remaining--
 		}
 	}
 
-	return multierr.Combine(errs...)
+	return nil
+}
+
+func (r *EphemeralRunnerSetReconciler) deleteAllEphemeralRunnersForSet(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) error {
+	log.Info("Deleting all ephemeral runners", "ephemeralRunnerSetUID", ephemeralRunnerSet.UID)
+	if err := r.DeleteAllOf(
+		ctx,
+		&v1alpha1.EphemeralRunner{},
+		client.InNamespace(ephemeralRunnerSet.Namespace),
+		client.MatchingLabels{LabelKeyEphemeralRunnerSetUID: string(ephemeralRunnerSet.UID)},
+	); err != nil {
+		return err
+	}
+
+	log.Info("Deleted all ephemeral runners", "ephemeralRunnerSetUID", ephemeralRunnerSet.UID)
+	return nil
+}
+
+func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunners(ctx context.Context, ephemeralRunners []*v1alpha1.EphemeralRunner, log logr.Logger) error {
+	for _, ephemeralRunner := range ephemeralRunners {
+		log.Info("Deleting ephemeral runner", "name", ephemeralRunner.Name)
+		if err := r.Delete(ctx, ephemeralRunner); err != nil && !kerrors.IsNotFound(err) {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunnersWithActionsClient(ctx context.Context, ephemeralRunners []*v1alpha1.EphemeralRunner, actionsClient multiclient.Client, log logr.Logger) (int, error) {
+	deletedCount := 0
+	for _, ephemeralRunner := range ephemeralRunners {
+		log.Info("Removing the ephemeral runner from the service", "name", ephemeralRunner.Name)
+		ok, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
+		if err != nil {
+			return deletedCount, err
+		}
+		if ok {
+			deletedCount++
+		}
+	}
+
+	return deletedCount, nil
 }
 
 func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunnerWithActionsClient(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, actionsClient multiclient.Client, log logr.Logger) (bool, error) {
@@ -640,54 +847,134 @@ func (r *EphemeralRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager, opts .
 	return builderWithOptions(
 		ctrl.NewControllerManagedBy(mgr).
 			For(&v1alpha1.EphemeralRunnerSet{}).
-			Owns(&v1alpha1.EphemeralRunner{}).
+			Owns(&v1alpha1.EphemeralRunner{}, builder.WithPredicates(ephemeralRunnerSetChildPredicate())).
 			WithEventFilter(predicate.ResourceVersionChangedPredicate{}),
 		opts,
 	).Complete(r)
 }
 
+func ephemeralRunnerSetChildPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc: func(event.CreateEvent) bool {
+			return true
+		},
+		DeleteFunc: func(event.DeleteEvent) bool {
+			return true
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			return ephemeralRunnerUpdateAffectsScale(e.ObjectOld, e.ObjectNew)
+		},
+		GenericFunc: func(event.GenericEvent) bool {
+			return false
+		},
+	}
+}
+
+func ephemeralRunnerUpdateAffectsScale(oldObj, newObj client.Object) bool {
+	newRunner, ok := newObj.(*v1alpha1.EphemeralRunner)
+	if !ok || newRunner == nil {
+		return false
+	}
+
+	oldRunner, ok := oldObj.(*v1alpha1.EphemeralRunner)
+	if !ok || oldRunner == nil {
+		return true
+	}
+
+	if oldRunner.Annotations[AnnotationKeyPatchID] != newRunner.Annotations[AnnotationKeyPatchID] {
+		return true
+	}
+
+	if oldRunner.Status.Phase != newRunner.Status.Phase {
+		return true
+	}
+
+	if oldRunner.Status.RunnerID != newRunner.Status.RunnerID {
+		return true
+	}
+
+	if ephemeralRunnerIsDeleting(oldRunner) != ephemeralRunnerIsDeleting(newRunner) {
+		return true
+	}
+
+	return ephemeralRunnerCountsTowardScale(oldRunner) != ephemeralRunnerCountsTowardScale(newRunner)
+}
+
+func ephemeralRunnerIsDeleting(ephemeralRunner *v1alpha1.EphemeralRunner) bool {
+	deletionTimestamp := ephemeralRunner.GetDeletionTimestamp()
+	return deletionTimestamp != nil && !deletionTimestamp.IsZero()
+}
+
+func ephemeralRunnerCountsTowardScale(ephemeralRunner *v1alpha1.EphemeralRunner) bool {
+	if ephemeralRunnerIsDeleting(ephemeralRunner) {
+		return false
+	}
+
+	switch ephemeralRunner.Status.Phase {
+	case v1alpha1.EphemeralRunnerPhaseSucceeded, v1alpha1.EphemeralRunnerPhaseOutdated:
+		return false
+	default:
+		return true
+	}
+}
+
 type ephemeralRunnerStepper struct {
-	items []*v1alpha1.EphemeralRunner
-	index int
+	buckets     [][]*v1alpha1.EphemeralRunner
+	bucketIndex int
+	itemIndex   int
 }
 
 func newEphemeralRunnerStepper(primary []*v1alpha1.EphemeralRunner, othersOrdered ...[]*v1alpha1.EphemeralRunner) *ephemeralRunnerStepper {
 	sort.Slice(primary, func(i, j int) bool {
 		return primary[i].GetCreationTimestamp().Time.Before(primary[j].GetCreationTimestamp().Time)
 	})
+
+	buckets := make([][]*v1alpha1.EphemeralRunner, 0, len(othersOrdered)+1)
+	buckets = append(buckets, primary)
+
 	for _, bucket := range othersOrdered {
 		sort.Slice(bucket, func(i, j int) bool {
 			return bucket[i].GetCreationTimestamp().Time.Before(bucket[j].GetCreationTimestamp().Time)
 		})
-	}
-
-	for _, bucket := range othersOrdered {
-		primary = append(primary, bucket...)
+		buckets = append(buckets, bucket)
 	}
 
 	return &ephemeralRunnerStepper{
-		items: primary,
-		index: -1,
+		buckets:     buckets,
+		bucketIndex: 0,
+		itemIndex:   -1,
 	}
 }
 
 func (s *ephemeralRunnerStepper) next() bool {
-	if s.index+1 < len(s.items) {
-		s.index++
-		return true
+	for s.bucketIndex < len(s.buckets) {
+		if s.itemIndex+1 < len(s.buckets[s.bucketIndex]) {
+			s.itemIndex++
+			return true
+		}
+
+		s.bucketIndex++
+		s.itemIndex = -1
 	}
+
 	return false
 }
 
 func (s *ephemeralRunnerStepper) object() *v1alpha1.EphemeralRunner {
-	if s.index >= 0 && s.index < len(s.items) {
-		return s.items[s.index]
+	if s.bucketIndex >= 0 && s.bucketIndex < len(s.buckets) && s.itemIndex >= 0 && s.itemIndex < len(s.buckets[s.bucketIndex]) {
+		return s.buckets[s.bucketIndex][s.itemIndex]
 	}
+
 	return nil
 }
 
 func (s *ephemeralRunnerStepper) len() int {
-	return len(s.items)
+	var total int
+	for i := range s.buckets {
+		total += len(s.buckets[i])
+	}
+
+	return total
 }
 
 type ephemeralRunnersByState struct {
@@ -698,18 +985,61 @@ type ephemeralRunnersByState struct {
 	deleting []*v1alpha1.EphemeralRunner
 	outdated []*v1alpha1.EphemeralRunner
 
+	pendingCount  int
+	runningCount  int
+	finishedCount int
+	failedCount   int
+	deletingCount int
+	outdatedCount int
+
 	latestPatchID int
 }
 
-func newEphemeralRunnersByStates(ephemeralRunnerList *v1alpha1.EphemeralRunnerList) *ephemeralRunnersByState {
+func newEphemeralRunnersByStates(ephemeralRunnerList *v1alpha1.EphemeralRunnerList, includeSlices bool, trackLatestPatchID bool) *ephemeralRunnersByState {
 	var ephemeralRunnerState ephemeralRunnersByState
+	latestPatchIDValue := ""
 
 	for i := range ephemeralRunnerList.Items {
 		r := &ephemeralRunnerList.Items[i]
-		patchID, err := strconv.Atoi(r.Annotations[AnnotationKeyPatchID])
-		if err == nil && patchID > ephemeralRunnerState.latestPatchID {
-			ephemeralRunnerState.latestPatchID = patchID
+		if trackLatestPatchID {
+			latestPatchIDValue = trackLatestPatchIDValue(r.Annotations[AnnotationKeyPatchID], latestPatchIDValue, &ephemeralRunnerState.latestPatchID)
 		}
+		if !r.DeletionTimestamp.IsZero() {
+			ephemeralRunnerState.deletingCount++
+			continue
+		}
+
+		switch r.Status.Phase {
+		case v1alpha1.EphemeralRunnerPhaseRunning:
+			ephemeralRunnerState.runningCount++
+		case v1alpha1.EphemeralRunnerPhaseSucceeded:
+			ephemeralRunnerState.finishedCount++
+		case v1alpha1.EphemeralRunnerPhaseFailed:
+			ephemeralRunnerState.failedCount++
+		case v1alpha1.EphemeralRunnerPhaseOutdated:
+			ephemeralRunnerState.outdatedCount++
+		default:
+			// Pending or no phase should be considered as pending.
+			//
+			// If field is not set, that means that the EphemeralRunner
+			// did not yet have chance to update the Status.Phase field.
+			ephemeralRunnerState.pendingCount++
+		}
+	}
+
+	if !includeSlices {
+		return &ephemeralRunnerState
+	}
+
+	ephemeralRunnerState.pending = make([]*v1alpha1.EphemeralRunner, 0, ephemeralRunnerState.pendingCount)
+	ephemeralRunnerState.running = make([]*v1alpha1.EphemeralRunner, 0, ephemeralRunnerState.runningCount)
+	ephemeralRunnerState.finished = make([]*v1alpha1.EphemeralRunner, 0, ephemeralRunnerState.finishedCount)
+	ephemeralRunnerState.failed = make([]*v1alpha1.EphemeralRunner, 0, ephemeralRunnerState.failedCount)
+	ephemeralRunnerState.deleting = make([]*v1alpha1.EphemeralRunner, 0, ephemeralRunnerState.deletingCount)
+	ephemeralRunnerState.outdated = make([]*v1alpha1.EphemeralRunner, 0, ephemeralRunnerState.outdatedCount)
+
+	for i := range ephemeralRunnerList.Items {
+		r := &ephemeralRunnerList.Items[i]
 		if !r.DeletionTimestamp.IsZero() {
 			ephemeralRunnerState.deleting = append(ephemeralRunnerState.deleting, r)
 			continue
@@ -725,20 +1055,27 @@ func newEphemeralRunnersByStates(ephemeralRunnerList *v1alpha1.EphemeralRunnerLi
 		case v1alpha1.EphemeralRunnerPhaseOutdated:
 			ephemeralRunnerState.outdated = append(ephemeralRunnerState.outdated, r)
 		default:
-			// Pending or no phase should be considered as pending.
-			//
-			// If field is not set, that means that the EphemeralRunner
-			// did not yet have chance to update the Status.Phase field.
 			ephemeralRunnerState.pending = append(ephemeralRunnerState.pending, r)
 		}
 	}
+
 	return &ephemeralRunnerState
 }
 
-func (s *ephemeralRunnersByState) terminated() []*v1alpha1.EphemeralRunner {
-	return append(s.finished, append(s.failed, s.outdated...)...)
+func trackLatestPatchIDValue(value, latestValue string, latestPatchID *int) string {
+	if value == "" || len(value) < len(latestValue) || (len(value) == len(latestValue) && value <= latestValue) {
+		return latestValue
+	}
+
+	patchID, err := strconv.Atoi(value)
+	if err != nil || patchID <= *latestPatchID {
+		return latestValue
+	}
+
+	*latestPatchID = patchID
+	return value
 }
 
 func (s *ephemeralRunnersByState) scaleTotal() int {
-	return len(s.pending) + len(s.running) + len(s.failed)
+	return s.pendingCount + s.runningCount + s.failedCount
 }

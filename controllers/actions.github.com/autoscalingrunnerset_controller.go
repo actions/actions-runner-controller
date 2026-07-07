@@ -55,7 +55,7 @@ type AutoscalingRunnerSetReconciler struct {
 	ControllerNamespace                           string
 	DefaultRunnerScaleSetListenerImage            string
 	DefaultRunnerScaleSetListenerImagePullSecrets []string
-	ResourceBuilder
+	*ResourceBuilder
 }
 
 // +kubebuilder:rbac:groups=actions.github.com,resources=autoscalingrunnersets,verbs=get;list;watch;create;update;patch;delete
@@ -74,7 +74,6 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	if err := r.Get(ctx, req.NamespacedName, &autoscalingRunnerSet); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	original := autoscalingRunnerSet.DeepCopy()
 
 	if !autoscalingRunnerSet.DeletionTimestamp.IsZero() {
 		if !controllerutil.ContainsFinalizer(&autoscalingRunnerSet, autoscalingRunnerSetFinalizerName) {
@@ -99,7 +98,9 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			return ctrl.Result{}, err
 		}
 
-		if controllerutil.RemoveFinalizer(&autoscalingRunnerSet, autoscalingRunnerSetFinalizerName) {
+		if controllerutil.ContainsFinalizer(&autoscalingRunnerSet, autoscalingRunnerSetFinalizerName) {
+			original := autoscalingRunnerSet.DeepCopy()
+			controllerutil.RemoveFinalizer(&autoscalingRunnerSet, autoscalingRunnerSetFinalizerName)
 			log.Info("Removing finalizer")
 			if err := r.Patch(ctx, &autoscalingRunnerSet, client.MergeFrom(original)); err != nil && !kerrors.IsNotFound(err) {
 				log.Error(err, "Failed to update autoscaling runner set without finalizer")
@@ -129,7 +130,9 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, nil
 	}
 
-	if controllerutil.AddFinalizer(&autoscalingRunnerSet, autoscalingRunnerSetFinalizerName) {
+	if !controllerutil.ContainsFinalizer(&autoscalingRunnerSet, autoscalingRunnerSetFinalizerName) {
+		original := autoscalingRunnerSet.DeepCopy()
+		controllerutil.AddFinalizer(&autoscalingRunnerSet, autoscalingRunnerSetFinalizerName)
 		log.Info("Adding finalizer")
 
 		if err := r.Patch(ctx, &autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
@@ -142,13 +145,12 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	// Something has changed, we need to re-apply the pending phase and change hash annotation to trigger the update of runner scale set and listener.
-	if targetHash := autoscalingRunnerSet.Hash(); autoscalingRunnerSet.Annotations[annotationKeyIntegrityHash] != targetHash {
-		// TODO: apply the version label
+	if targetHash := autoscalingRunnerSetIntegrityHash(&autoscalingRunnerSet); autoscalingRunnerSet.Annotations[AnnotationKeyIntegrityHash] != targetHash {
 		original := autoscalingRunnerSet.DeepCopy()
 		if autoscalingRunnerSet.Annotations == nil {
 			autoscalingRunnerSet.Annotations = map[string]string{}
 		}
-		autoscalingRunnerSet.Annotations[annotationKeyIntegrityHash] = targetHash
+		autoscalingRunnerSet.Annotations[AnnotationKeyIntegrityHash] = targetHash
 		if err := r.Patch(ctx, &autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
 			log.Error(err, "Failed to update autoscaling runner set with new change hash and pending phase")
 			return ctrl.Result{}, err
@@ -204,12 +206,14 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 				return ctrl.Result{}, nil
 			}
 
-			original := ephemeralRunnerSet.DeepCopy()
-			ephemeralRunnerSet.Spec.Replicas = 0
-			ephemeralRunnerSet.Spec.PatchID = 0
-			if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
-				log.Error(err, "Failed to patch ephemeral runner set with 0 replicas and reset patch ID for the outdated runner set")
-				return ctrl.Result{}, err
+			if ephemeralRunnerSet.Spec.Replicas > 0 || ephemeralRunnerSet.Spec.PatchID > 0 {
+				original := ephemeralRunnerSet.DeepCopy()
+				ephemeralRunnerSet.Spec.Replicas = 0
+				ephemeralRunnerSet.Spec.PatchID = 0
+				if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
+					log.Error(err, "Failed to patch ephemeral runner set with 0 replicas and reset patch ID for the outdated runner set")
+					return ctrl.Result{}, err
+				}
 			}
 
 			return ctrl.Result{}, nil
@@ -236,6 +240,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	var ephemeralRunnerSet v1alpha1.EphemeralRunnerSet
+	var desiredEphemeralRunnerSet *v1alpha1.EphemeralRunnerSet
 	err := r.Get(
 		ctx,
 		types.NamespacedName{
@@ -285,42 +290,18 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, nil
 
 	default:
-		desired, err := r.newEphemeralRunnerSet(&autoscalingRunnerSet)
+		desiredEphemeralRunnerSet, err = r.newEphemeralRunnerSet(&autoscalingRunnerSet)
 		if err != nil {
 			log.Error(err, "Failed to generate ephemeral runner set spec")
 			return ctrl.Result{}, nil
 		}
 
-		if ephemeralRunnerSet.Annotations[annotationKeyIntegrityHash] != desired.Annotations[annotationKeyIntegrityHash] {
-			// When runners are actively processing jobs, defer the spec update:
-			// delete the listener to stop accepting new jobs, but leave the ERS
-			// (and its running pods) untouched until all jobs have drained.
-			var ephemeralRunnerList v1alpha1.EphemeralRunnerList
-			if err := r.List(ctx, &ephemeralRunnerList,
-				client.InNamespace(ephemeralRunnerSet.Namespace),
-				client.MatchingFields{resourceOwnerKey: ephemeralRunnerSet.Name},
-			); err != nil {
-				log.Error(err, "Failed to list ephemeral runners")
-				return ctrl.Result{}, err
-			}
-
-			buckets := AggregateEphemeralRunnerLifecycle(ephemeralRunnerList.Items)
-			activeRunners := buckets.Pending + buckets.Running
-
-			if activeRunners > 0 {
-				log.Info("Ephemeral runner set spec changed but runners are still active; deleting listener to stop new jobs")
-				if _, err := r.cleanupListener(ctx, &autoscalingRunnerSet, log); err != nil {
-					log.Error(err, "Failed to clean up listener while waiting for runners to drain")
-					return ctrl.Result{}, err
-				}
-				return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
-			}
-
+		if !cmp.Equal(desiredEphemeralRunnerSet.Spec.EphemeralRunnerSpec, ephemeralRunnerSet.Spec.EphemeralRunnerSpec) {
 			original := ephemeralRunnerSet.DeepCopy()
-			ephemeralRunnerSet.Spec.EphemeralRunnerMetadata = desired.Spec.EphemeralRunnerMetadata
-			ephemeralRunnerSet.Spec.EphemeralRunnerSpec = desired.Spec.EphemeralRunnerSpec
-			ephemeralRunnerSet.Labels = r.filterAndMergeLabels(ephemeralRunnerSet.Labels, desired.Labels)
-			ephemeralRunnerSet.Annotations = r.mergeAnnotations(ephemeralRunnerSet.Annotations, desired.Annotations)
+			ephemeralRunnerSet.Spec.EphemeralRunnerSpec = desiredEphemeralRunnerSet.Spec.EphemeralRunnerSpec
+			ephemeralRunnerSet.Spec.EphemeralRunnerMetadata = desiredEphemeralRunnerSet.Spec.EphemeralRunnerMetadata
+			ephemeralRunnerSet.Labels = r.filterAndMergeLabels(ephemeralRunnerSet.Labels, desiredEphemeralRunnerSet.Labels)
+			ephemeralRunnerSet.Annotations = r.filterAndMergeAnnotations(ephemeralRunnerSet.Annotations, desiredEphemeralRunnerSet.Annotations)
 
 			log.Info("Updating ephemeral runner set spec to match the desired spec")
 			if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
@@ -329,18 +310,17 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			}
 
 			log.Info("Successfully patched ephemeral runner set spec")
-			return ctrl.Result{}, nil
 		}
 
-		ephemeralRunnerMetadataModified := !cmp.Equal(ephemeralRunnerSet.Spec.EphemeralRunnerMetadata, desired.Spec.EphemeralRunnerMetadata)
-		ephemeralRunnerLabelsModified := !maps.Equal(ephemeralRunnerSet.Labels, desired.Labels)
-		ephemeralRunnerAnnotationsModified := !maps.Equal(ephemeralRunnerSet.Annotations, desired.Annotations)
+		ephemeralRunnerMetadataModified := !cmp.Equal(ephemeralRunnerSet.Spec.EphemeralRunnerMetadata, desiredEphemeralRunnerSet.Spec.EphemeralRunnerMetadata)
+		ephemeralRunnerLabelsModified := !maps.Equal(ephemeralRunnerSet.Labels, desiredEphemeralRunnerSet.Labels)
+		ephemeralRunnerAnnotationsModified := !r.annotationsEqual(ephemeralRunnerSet.Annotations, desiredEphemeralRunnerSet.Annotations)
 
 		if ephemeralRunnerLabelsModified || ephemeralRunnerAnnotationsModified || ephemeralRunnerMetadataModified {
 			original := ephemeralRunnerSet.DeepCopy()
-			ephemeralRunnerSet.Labels = r.filterAndMergeLabels(ephemeralRunnerSet.Labels, desired.Labels)
-			ephemeralRunnerSet.Annotations = r.mergeAnnotations(ephemeralRunnerSet.Annotations, desired.Annotations)
-			ephemeralRunnerSet.Spec.EphemeralRunnerMetadata = desired.Spec.EphemeralRunnerMetadata
+			ephemeralRunnerSet.Labels = r.filterAndMergeLabels(ephemeralRunnerSet.Labels, desiredEphemeralRunnerSet.Labels)
+			ephemeralRunnerSet.Annotations = r.filterAndMergeAnnotations(ephemeralRunnerSet.Annotations, desiredEphemeralRunnerSet.Annotations)
+			ephemeralRunnerSet.Spec.EphemeralRunnerMetadata = desiredEphemeralRunnerSet.Spec.EphemeralRunnerMetadata
 			log.Info("Updating ephemeral runner set metadata to match desired labels and annotations")
 			if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
 				log.Error(err, "Failed to patch ephemeral runner set metadata to match desired labels and annotations")
@@ -348,11 +328,13 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			}
 
 			log.Info("Successfully patched ephemeral runner set metadata")
-			return ctrl.Result{}, nil
 		}
 	}
 
+	activeRunners := ephemeralRunnerSet.Status.PendingEphemeralRunners + ephemeralRunnerSet.Status.RunningEphemeralRunners
+
 	var listener v1alpha1.AutoscalingListener
+	var desiredListener *v1alpha1.AutoscalingListener
 	err = r.Get(
 		ctx,
 		types.NamespacedName{
@@ -363,13 +345,18 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	)
 	switch {
 	case kerrors.IsNotFound(err):
+		if activeRunners > 0 {
+			log.Info("AutoscalingListener does not exist but runners are still active; waiting for runners to drain")
+			return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+		}
+
 		log.Info("AutoscalingListener does not exist, creating autoscaling listener")
 		return r.createAutoScalingListenerForRunnerSet(ctx, &autoscalingRunnerSet, &ephemeralRunnerSet, log)
 	case err != nil:
 		log.Error(err, "Failed to get AutoscalingListener resource")
 		return ctrl.Result{}, err
 	default:
-		desired, err := r.newAutoscalingListener(
+		desiredListener, err = r.newAutoscalingListener(
 			&autoscalingRunnerSet,
 			&ephemeralRunnerSet,
 			r.ControllerNamespace,
@@ -381,15 +368,26 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			return ctrl.Result{}, nil
 		}
 
-		if !cmp.Equal(listener.Spec, desired.Spec) ||
-			!cmp.Equal(listener.Labels, desired.Labels) ||
-			!cmp.Equal(listener.Annotations, desired.Annotations) {
-			log.Info("Deleting AutoscalingListener to re-create with updated spec")
-			if err := r.Delete(ctx, &listener); err != nil {
-				log.Error(err, "Failed to delete AutoscalingListener for re-creation")
+		if !cmp.Equal(listener.Spec, desiredListener.Spec) {
+			if activeRunners > 0 {
+				log.Info("Listener spec changed but runners are still active; deleting listener to stop new jobs")
+				if _, err := r.cleanupListener(ctx, &autoscalingRunnerSet, log); err != nil {
+					log.Error(err, "Failed to clean up listener while waiting for runners to drain")
+					return ctrl.Result{}, err
+				}
+				return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+			}
+
+			log.Info("Updating listener")
+			original := listener.DeepCopy()
+			listener.Spec = desiredListener.Spec
+			listener.Labels = r.filterAndMergeLabels(listener.Labels, desiredListener.Labels)
+			listener.Annotations = r.filterAndMergeAnnotations(listener.Annotations, desiredListener.Annotations)
+			if err := r.Patch(ctx, &listener, client.MergeFrom(original)); err != nil {
+				log.Error(err, "Failed to update AutoscalingListener with new spec")
 				return ctrl.Result{}, err
 			}
-			log.Info("Deleted AutoscalingListener, will re-create on next reconcile")
+			log.Info("Successfully updated AutoscalingListener with new spec")
 			return ctrl.Result{}, nil
 		}
 	}
@@ -404,6 +402,48 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	); err != nil {
 		log.Error(err, "Failed to update autoscaling runner set status to running")
 		return ctrl.Result{}, err
+	}
+
+	if desiredEphemeralRunnerSet != nil {
+		ephemeralRunnerMetadataModified := !cmp.Equal(ephemeralRunnerSet.Spec.EphemeralRunnerMetadata, desiredEphemeralRunnerSet.Spec.EphemeralRunnerMetadata)
+		ephemeralRunnerLabelsModified := !maps.Equal(ephemeralRunnerSet.Labels, desiredEphemeralRunnerSet.Labels)
+		ephemeralRunnerAnnotationsModified := !r.annotationsEqual(ephemeralRunnerSet.Annotations, desiredEphemeralRunnerSet.Annotations)
+
+		if ephemeralRunnerLabelsModified || ephemeralRunnerAnnotationsModified || ephemeralRunnerMetadataModified {
+			original := ephemeralRunnerSet.DeepCopy()
+			ephemeralRunnerSet.Labels = r.filterAndMergeLabels(ephemeralRunnerSet.Labels, desiredEphemeralRunnerSet.Labels)
+			ephemeralRunnerSet.Annotations = r.filterAndMergeAnnotations(ephemeralRunnerSet.Annotations, desiredEphemeralRunnerSet.Annotations)
+			ephemeralRunnerSet.Spec.EphemeralRunnerMetadata = desiredEphemeralRunnerSet.Spec.EphemeralRunnerMetadata
+			log.Info("Updating ephemeral runner set metadata to match desired labels and annotations")
+			if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
+				log.Error(err, "Failed to patch ephemeral runner set metadata to match desired labels and annotations")
+				return ctrl.Result{}, err
+			}
+
+			log.Info("Successfully patched ephemeral runner set metadata")
+			return ctrl.Result{}, nil
+		}
+	}
+
+	if desiredListener != nil {
+		listenerLabelsModified := !maps.Equal(listener.Labels, desiredListener.Labels)
+		listenerAnnotationsModified := !r.annotationsEqual(listener.Annotations, desiredListener.Annotations)
+		if listenerLabelsModified || listenerAnnotationsModified {
+			log.Info("Updating listener metadata")
+			original := listener.DeepCopy()
+			if listenerLabelsModified {
+				listener.Labels = r.filterAndMergeLabels(listener.Labels, desiredListener.Labels)
+			}
+			if listenerAnnotationsModified {
+				listener.Annotations = r.filterAndMergeAnnotations(listener.Annotations, desiredListener.Annotations)
+			}
+			if err := r.Patch(ctx, &listener, client.MergeFrom(original)); err != nil {
+				log.Error(err, "Failed to update AutoscalingListener metadata")
+				return ctrl.Result{}, err
+			}
+			log.Info("Successfully updated AutoscalingListener metadata")
+			return ctrl.Result{}, nil
+		}
 	}
 
 	return ctrl.Result{}, nil
@@ -445,13 +485,21 @@ func (r *AutoscalingRunnerSetReconciler) cleanUpResources(ctx context.Context, a
 
 // Update the status of autoscaling runner set if necessary
 func (r *AutoscalingRunnerSetReconciler) updateStatus(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, phase v1alpha1.AutoscalingRunnerSetPhase, log logr.Logger) error {
-	phaseDiff := phase != autoscalingRunnerSet.Status.Phase
-	if !phaseDiff {
+	desiredStatus := autoscalingRunnerSet.Status
+	desiredStatus.Phase = phase
+	if ephemeralRunnerSet != nil {
+		desiredStatus.CurrentRunners = ephemeralRunnerSet.Status.CurrentReplicas
+		desiredStatus.PendingEphemeralRunners = ephemeralRunnerSet.Status.PendingEphemeralRunners
+		desiredStatus.RunningEphemeralRunners = ephemeralRunnerSet.Status.RunningEphemeralRunners
+		desiredStatus.FailedEphemeralRunners = ephemeralRunnerSet.Status.FailedEphemeralRunners
+	}
+
+	if autoscalingRunnerSet.Status == desiredStatus {
 		return nil
 	}
 
 	original := autoscalingRunnerSet.DeepCopy()
-	autoscalingRunnerSet.Status.Phase = phase
+	autoscalingRunnerSet.Status = desiredStatus
 
 	if err := r.Status().Patch(ctx, autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
 		log.Error(err, "Failed to patch autoscaling runner set status")
@@ -711,6 +759,9 @@ func (r *AutoscalingRunnerSetReconciler) updateRunnerScaleSetName(ctx context.Co
 
 	logger.Info("Updating runner scale set name as an annotation")
 	original := autoscalingRunnerSet.DeepCopy()
+	if autoscalingRunnerSet.Annotations == nil {
+		autoscalingRunnerSet.Annotations = make(map[string]string, 1)
+	}
 	autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName] = updatedRunnerScaleSet.Name
 	if err := r.Patch(ctx, autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
 		logger.Error(err, "Failed to update runner scale set name annotation")

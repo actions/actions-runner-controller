@@ -21,9 +21,7 @@ const defaultGitHubToken = "gh_token"
 
 func startManagers(t ginkgo.GinkgoTInterface, first manager.Manager, others ...manager.Manager) {
 	for _, mgr := range append([]manager.Manager{first}, others...) {
-		if err := SetupIndexers(mgr); err != nil {
-			t.Fatalf("failed to setup indexers: %v", err)
-		}
+		require.NoError(t, SetupIndexers(mgr))
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g, ctx := errgroup.WithContext(ctx)

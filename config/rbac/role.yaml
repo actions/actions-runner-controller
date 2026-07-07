@@ -46,20 +46,30 @@ rules:
   - ""
   resources:
   - secrets
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - watch
+- apiGroups:
+  - ""
+  resources:
   - serviceaccounts
   verbs:
   - create
   - delete
   - get
   - list
-  - update
+  - patch
   - watch
 - apiGroups:
   - actions.github.com
   resources:
   - autoscalinglisteners
   - autoscalingrunnersets
-  - ephemeralrunners
   - ephemeralrunners/finalizers
   - ephemeralrunnersets
   verbs:
@@ -88,6 +98,19 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - actions.github.com
+  resources:
+  - ephemeralrunners
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
 - apiGroups:
   - actions.github.com
   resources:
@@ -167,5 +190,5 @@ rules:
   - delete
   - get
   - list
-  - update
+  - patch
   - watch

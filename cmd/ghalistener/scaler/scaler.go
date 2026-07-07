@@ -229,22 +229,18 @@ func (w *Scaler) setDesiredWorkerState(count int) int {
 	dirty := w.dirty
 	w.dirty = false
 
-	if w.patchSeq == math.MaxInt32 {
+	if w.patchSeq == math.MaxInt64 {
 		w.patchSeq = 0
 	}
-	w.patchSeq++
 
 	targetRunnerCount := min(w.config.MinRunners+count, w.config.MaxRunners)
 	oldTargetRunners := w.targetRunners
 	w.targetRunners = targetRunnerCount
 
-	desiredPatchID := w.patchSeq
-	if !dirty && targetRunnerCount == oldTargetRunners && targetRunnerCount == w.config.MinRunners {
-		// If there were no events sent, and the target runner count
-		// is the same as the last patched count, we can force the state.
-		//
-		// TODO: see to remove w.config.MinRunenrs from the equation, as it is not relevant to the decision of whether to patch or not.
-		desiredPatchID = 0
+	desiredPatchID := w.patchSeq + 1
+	if dirty || targetRunnerCount != oldTargetRunners || targetRunnerCount != w.config.MinRunners {
+		w.patchSeq++
+		desiredPatchID = w.patchSeq
 	}
 
 	w.logger.Info(

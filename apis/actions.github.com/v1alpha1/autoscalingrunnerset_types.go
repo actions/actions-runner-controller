@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/actions/actions-runner-controller/hash"
 	"github.com/actions/actions-runner-controller/vault"
@@ -37,22 +38,28 @@ import (
 // +kubebuilder:printcolumn:JSONPath=".spec.minRunners",name=Minimum Runners,type=integer
 // +kubebuilder:printcolumn:JSONPath=".spec.maxRunners",name=Maximum Runners,type=integer
 // +kubebuilder:printcolumn:JSONPath=".status.phase",name=Phase,type=string
+// +kubebuilder:printcolumn:JSONPath=".status.pendingEphemeralRunners",name=Pending Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.runningEphemeralRunners",name=Running Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.failedEphemeralRunners",name=Failed Runners,type=integer
 
 // AutoscalingRunnerSet is the Schema for the autoscalingrunnersets API
 type AutoscalingRunnerSet struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   AutoscalingRunnerSetSpec   `json:"spec,omitempty"`
+	// +optional
+	Spec AutoscalingRunnerSetSpec `json:"spec,omitempty"`
+	// +optional
 	Status AutoscalingRunnerSetStatus `json:"status,omitempty"`
 }
 
 // AutoscalingRunnerSetSpec defines the desired state of AutoscalingRunnerSet
 type AutoscalingRunnerSetSpec struct {
-	// Required
+	// +optional
 	GitHubConfigUrl string `json:"githubConfigUrl,omitempty"`
 
-	// Required
+	// +optional
 	GitHubConfigSecret string `json:"githubConfigSecret,omitempty"`
 
 	// +optional
@@ -73,7 +80,7 @@ type AutoscalingRunnerSetSpec struct {
 	// +optional
 	VaultConfig *VaultConfig `json:"vaultConfig,omitempty"`
 
-	// Required
+	// +optional
 	Template corev1.PodTemplateSpec `json:"template,omitempty"`
 
 	// +optional
@@ -107,16 +114,16 @@ type AutoscalingRunnerSetSpec struct {
 	EphemeralRunnerConfigSecretMetadata *ResourceMeta `json:"ephemeralRunnerConfigSecretMetadata,omitempty"`
 
 	// +optional
-	// +kubebuilder:validation:Minimum:=0
+	// +kubebuilder:validation:Minimum=0
 	MaxRunners *int `json:"maxRunners,omitempty"`
 
 	// +optional
-	// +kubebuilder:validation:Minimum:=0
+	// +kubebuilder:validation:Minimum=0
 	MinRunners *int `json:"minRunners,omitempty"`
 }
 
 type TLSConfig struct {
-	// Required
+	// +required
 	CertificateFrom *TLSCertificateSource `json:"certificateFrom,omitempty"`
 }
 
@@ -153,7 +160,7 @@ func (c *TLSConfig) ToCertPool(keyFetcher func(name, key string) ([]byte, error)
 }
 
 type TLSCertificateSource struct {
-	// Required
+	// +required
 	ConfigMapKeyRef *corev1.ConfigMapKeySelector `json:"configMapKeyRef,omitempty"`
 }
 
@@ -168,15 +175,33 @@ type ProxyConfig struct {
 	NoProxy []string `json:"noProxy,omitempty"`
 }
 
+var parsedProxyURLCache sync.Map
+
+func parseProxyURLCached(rawURL string) (url.URL, error) {
+	if cached, ok := parsedProxyURLCache.Load(rawURL); ok {
+		if parsed, ok := cached.(url.URL); ok {
+			return parsed, nil
+		}
+	}
+
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return url.URL{}, err
+	}
+
+	parsedProxyURLCache.Store(rawURL, *parsed)
+	return *parsed, nil
+}
+
 func (c *ProxyConfig) ToHTTPProxyConfig(secretFetcher func(string) (*corev1.Secret, error)) (*httpproxy.Config, error) {
 	config := &httpproxy.Config{
 		NoProxy: strings.Join(c.NoProxy, ","),
 	}
 
 	if c.HTTP != nil {
-		u, err := url.Parse(c.HTTP.Url)
+		u, err := parseProxyURLCached(c.HTTP.URL)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse proxy http url %q: %w", c.HTTP.Url, err)
+			return nil, fmt.Errorf("failed to parse proxy http url %q: %w", c.HTTP.URL, err)
 		}
 
 		if c.HTTP.CredentialSecretRef != "" {
@@ -199,9 +224,9 @@ func (c *ProxyConfig) ToHTTPProxyConfig(secretFetcher func(string) (*corev1.Secr
 	}
 
 	if c.HTTPS != nil {
-		u, err := url.Parse(c.HTTPS.Url)
+		u, err := parseProxyURLCached(c.HTTPS.URL)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse proxy https url %q: %w", c.HTTPS.Url, err)
+			return nil, fmt.Errorf("failed to parse proxy https url %q: %w", c.HTTPS.URL, err)
 		}
 
 		if c.HTTPS.CredentialSecretRef != "" {
@@ -254,8 +279,8 @@ func (c *ProxyConfig) ProxyFunc(secretFetcher func(string) (*corev1.Secret, erro
 }
 
 type ProxyServerConfig struct {
-	// Required
-	Url string `json:"url,omitempty"`
+	// +required
+	URL string `json:"url,omitempty"`
 
 	// +optional
 	CredentialSecretRef string `json:"credentialSecretRef,omitempty"`
@@ -310,7 +335,23 @@ type HistogramMetric struct {
 // AutoscalingRunnerSetStatus defines the observed state of AutoscalingRunnerSet
 type AutoscalingRunnerSetStatus struct {
 	// +optional
+	// +kubebuilder:validation:Minimum=0
+	CurrentRunners int `json:"currentRunners"`
+
+	// +optional
 	Phase AutoscalingRunnerSetPhase `json:"phase"`
+
+	// EphemeralRunner counts separated by the stage ephemeral runners are in, taken from the EphemeralRunnerSet
+
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	PendingEphemeralRunners int `json:"pendingEphemeralRunners"`
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	RunningEphemeralRunners int `json:"runningEphemeralRunners"`
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	FailedEphemeralRunners int `json:"failedEphemeralRunners"`
 }
 
 type AutoscalingRunnerSetPhase string
@@ -322,20 +363,6 @@ const (
 	AutoscalingRunnerSetPhaseRunning  AutoscalingRunnerSetPhase = "Running"
 	AutoscalingRunnerSetPhaseOutdated AutoscalingRunnerSetPhase = "Outdated"
 )
-
-func (ars *AutoscalingRunnerSet) Hash() string {
-	type data struct {
-		Spec   *AutoscalingRunnerSetSpec
-		Labels map[string]string
-	}
-
-	d := &data{
-		Spec:   ars.Spec.DeepCopy(),
-		Labels: ars.Labels,
-	}
-
-	return hash.ComputeTemplateHash(d)
-}
 
 func (ars *AutoscalingRunnerSet) ListenerSpecHash() string {
 	arsSpec := ars.Spec.DeepCopy()

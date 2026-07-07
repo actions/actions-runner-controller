@@ -51,7 +51,8 @@ endif
 ifeq (${IMG_RESULT}, load)
 	export PUSH_ARG="--load"
 	# if load is specified, image will be built only for the build machine architecture.
-	export PLATFORMS="local"
+	# export PLATFORMS="local"
+	export PLATFORMS="linux/amd64"
 else ifeq (${IMG_RESULT}, cache)
 	# if cache is specified, image will only be available in the build cache, it won't be pushed or loaded
 	# therefore no PUSH_ARG will be specified
@@ -77,7 +78,6 @@ test: generate fmt vet manifests shellcheck setup-envtest
 test-with-deps: setup-envtest
 	KUBEBUILDER_ASSETS="$$($(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(GOBIN) -p path)" \
 	  make test
-
 
 # Build manager binary
 manager: generate fmt vet
@@ -365,7 +365,6 @@ SHELLCHECK=$(TOOLS_PATH)/shellcheck
 
 # find or download envtest
 envtest:
-ifeq (, $(shell which setup-envtest))
 ifeq (, $(wildcard $(GOBIN)/setup-envtest))
 	@{ \
 	set -e ;\
@@ -377,9 +376,6 @@ ifeq (, $(wildcard $(GOBIN)/setup-envtest))
 	}
 endif
 ENVTEST=$(GOBIN)/setup-envtest
-else
-ENVTEST=$(shell which setup-envtest)
-endif
 
 .PHONY: setup-envtest
 setup-envtest: envtest

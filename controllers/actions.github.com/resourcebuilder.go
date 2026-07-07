@@ -46,14 +46,14 @@ var commonLabelKeys = [...]string{
 	LabelKeyGitHubRepository,
 }
 
-// annotationKeyIntegrityHash is used as a hash of the important fields
+// AnnotationKeyIntegrityHash is used as a hash of the important fields
 // of each resource to determine if more drastic action should be taken.
 //
 // For example, annotations/labels are not something that should modify
 // the behavior of a resource, while the change in spec is. Therefore,
 // the spec hash should contain the spec fields in order to determine
 // modifications.
-const annotationKeyIntegrityHash = "actions.github.com/integrity-hash"
+const AnnotationKeyIntegrityHash = "actions.github.com/integrity-hash"
 
 const labelValueKubernetesPartOf = "gha-runner-scale-set"
 
@@ -95,7 +95,8 @@ type SecretResolver interface {
 type ResourceBuilder struct {
 	ExcludeLabelPropagationPrefixes []string
 	SecretResolver
-	Scheme *runtime.Scheme
+	Scheme        *runtime.Scheme
+	ResourceCache *ResourceCache
 }
 
 func (b *ResourceBuilder) setSchemeIfUnset(scheme *runtime.Scheme) {
@@ -115,19 +116,45 @@ func (b *ResourceBuilder) setControllerReference(owner client.Object, object cli
 	return ctrl.SetControllerReference(owner, object, b.Scheme)
 }
 
+func autoscalingRunnerSetIntegrityHash(ars *v1alpha1.AutoscalingRunnerSet) string {
+	return hash.ComputeTemplateHash(&ars.Spec)
+}
+
 func (b *ResourceBuilder) newAutoscalingListener(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, namespace, image string, imagePullSecrets []corev1.LocalObjectReference) (*v1alpha1.AutoscalingListener, error) {
 	runnerScaleSetID, err := strconv.Atoi(autoscalingRunnerSet.Annotations[runnerScaleSetIDAnnotationKey])
 	if err != nil {
 		return nil, err
 	}
 
+	cacheKeyObject := &v1alpha1.AutoscalingListener{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      scaleSetListenerName(autoscalingRunnerSet),
+			Namespace: namespace,
+		},
+	}
+	inputDependency := resourceCacheInputObject("autoscaling-listener-inputs", struct {
+		Namespace        string
+		Image            string
+		ImagePullSecrets []corev1.LocalObjectReference
+	}{
+		Namespace:        namespace,
+		Image:            image,
+		ImagePullSecrets: imagePullSecrets,
+	})
+	if b.ResourceCache != nil {
+		if cached, ok := b.ResourceCache.autoscalingListener.Get(autoscalingRunnerSet, cacheKeyObject, ephemeralRunnerSet, inputDependency); ok {
+			return cached, nil
+		}
+	}
+
 	effectiveMinRunners := 0
+	if autoscalingRunnerSet.Spec.MinRunners != nil {
+		effectiveMinRunners = *autoscalingRunnerSet.Spec.MinRunners
+	}
+
 	effectiveMaxRunners := math.MaxInt32
 	if autoscalingRunnerSet.Spec.MaxRunners != nil {
 		effectiveMaxRunners = *autoscalingRunnerSet.Spec.MaxRunners
-	}
-	if autoscalingRunnerSet.Spec.MinRunners != nil {
-		effectiveMinRunners = *autoscalingRunnerSet.Spec.MinRunners
 	}
 
 	spec := v1alpha1.AutoscalingListenerSpec{
@@ -165,12 +192,12 @@ func (b *ResourceBuilder) newAutoscalingListener(autoscalingRunnerSet *v1alpha1.
 	}
 
 	annotations := map[string]string{
-		annotationKeyIntegrityHash: spec.Hash(),
+		AnnotationKeyIntegrityHash: spec.Hash(),
 	}
 
 	if autoscalingRunnerSet.Spec.AutoscalingListenerMetadata != nil {
 		labels = b.filterAndMergeLabels(autoscalingRunnerSet.Spec.AutoscalingListenerMetadata.Labels, labels)
-		annotations = b.mergeAnnotations(autoscalingRunnerSet.Spec.AutoscalingListenerMetadata.Annotations, annotations)
+		annotations = b.filterAndMergeAnnotations(autoscalingRunnerSet.Spec.AutoscalingListenerMetadata.Annotations, annotations)
 	}
 
 	autoscalingListener := &v1alpha1.AutoscalingListener{
@@ -182,8 +209,20 @@ func (b *ResourceBuilder) newAutoscalingListener(autoscalingRunnerSet *v1alpha1.
 		},
 		Spec: spec,
 	}
+	if b.ResourceCache != nil {
+		b.ResourceCache.autoscalingListener.Upsert(autoscalingRunnerSet, autoscalingListener, ephemeralRunnerSet, inputDependency)
+	}
 
 	return autoscalingListener, nil
+}
+
+func resourceCacheInputObject(name string, value any) client.Object {
+	return &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            name,
+			ResourceVersion: hash.ComputeTemplateHash(value),
+		},
+	}
 }
 
 type listenerMetricsServerConfig struct {
@@ -278,7 +317,7 @@ func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha
 		},
 	}
 
-	desiredSecret.Annotations[annotationKeyIntegrityHash] = scaleSetListenerConfigIntegrityHash(desiredSecret)
+	desiredSecret.Annotations[AnnotationKeyIntegrityHash] = scaleSetListenerConfigIntegrityHash(desiredSecret)
 
 	if err := b.setControllerReference(autoscalingListener, desiredSecret); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for listener config secret: %w", err)
@@ -307,6 +346,18 @@ func (b *ResourceBuilder) newScaleSetListenerPod(
 	roleBinding *rbacv1.RoleBinding,
 	metricsConfig *listenerMetricsServerConfig,
 ) (*corev1.Pod, error) {
+	cacheKeyObject := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      autoscalingListener.Name,
+			Namespace: autoscalingListener.Namespace,
+		},
+	}
+	if b.ResourceCache != nil {
+		if cached, ok := b.ResourceCache.listenerPod.Get(autoscalingListener, cacheKeyObject, podConfig, serviceAccount, role, roleBinding); ok {
+			return cached, nil
+		}
+	}
+
 	envs := []corev1.EnvVar{
 		{
 			Name:  "LISTENER_CONFIG_PATH",
@@ -426,7 +477,7 @@ func (b *ResourceBuilder) newScaleSetListenerPod(
 		Spec: podSpec,
 	}
 
-	newRunnerScaleSetListenerPod.Annotations[annotationKeyIntegrityHash] = scaleSetListenerPodIntegrity(
+	newRunnerScaleSetListenerPod.Annotations[AnnotationKeyIntegrityHash] = scaleSetListenerPodIntegrity(
 		newRunnerScaleSetListenerPod,
 		autoscalingListener,
 		podConfig,
@@ -442,6 +493,9 @@ func (b *ResourceBuilder) newScaleSetListenerPod(
 
 	if autoscalingListener.Spec.Template != nil {
 		mergeListenerPodWithTemplate(newRunnerScaleSetListenerPod, autoscalingListener.Spec.Template)
+	}
+	if b.ResourceCache != nil {
+		b.ResourceCache.listenerPod.Upsert(autoscalingListener, newRunnerScaleSetListenerPod, podConfig, serviceAccount, role, roleBinding)
 	}
 
 	return newRunnerScaleSetListenerPod, nil
@@ -468,11 +522,11 @@ func scaleSetListenerPodIntegrity(
 
 	d := data{
 		ListenerPodSpec:                  &pod.Spec,
-		AutoscalingListenerIntegrityHash: autoscalingListener.Annotations[annotationKeyIntegrityHash],
-		ConfigSecretIntegrityHash:        podConfig.Annotations[annotationKeyIntegrityHash],
-		ServiceAccountIntegrityHash:      serviceAccount.Annotations[annotationKeyIntegrityHash],
-		RoleIntegrityHash:                role.Annotations[annotationKeyIntegrityHash],
-		RoleBindingIntegrityHash:         roleBinding.Annotations[annotationKeyIntegrityHash],
+		AutoscalingListenerIntegrityHash: autoscalingListener.Annotations[AnnotationKeyIntegrityHash],
+		ConfigSecretIntegrityHash:        podConfig.Annotations[AnnotationKeyIntegrityHash],
+		ServiceAccountIntegrityHash:      serviceAccount.Annotations[AnnotationKeyIntegrityHash],
+		RoleIntegrityHash:                role.Annotations[AnnotationKeyIntegrityHash],
+		RoleBindingIntegrityHash:         roleBinding.Annotations[AnnotationKeyIntegrityHash],
 		MetricsConfig:                    metricsConfig,
 	}
 
@@ -597,6 +651,18 @@ func mergeListenerContainer(base, from *corev1.Container) {
 }
 
 func (b *ResourceBuilder) newScaleSetListenerServiceAccount(autoscalingListener *v1alpha1.AutoscalingListener) (*corev1.ServiceAccount, error) {
+	cacheKeyObject := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      autoscalingListener.Name,
+			Namespace: autoscalingListener.Namespace,
+		},
+	}
+	if b.ResourceCache != nil {
+		if cached, ok := b.ResourceCache.listenerServiceAccount.Get(autoscalingListener, cacheKeyObject); ok {
+			return cached, nil
+		}
+	}
+
 	base := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      autoscalingListener.Name,
@@ -611,13 +677,16 @@ func (b *ResourceBuilder) newScaleSetListenerServiceAccount(autoscalingListener 
 
 	if autoscalingListener.Spec.ServiceAccountMetadata != nil {
 		base.Labels = b.filterAndMergeLabels(autoscalingListener.Spec.ServiceAccountMetadata.Labels, base.Labels)
-		base.Annotations = b.mergeAnnotations(autoscalingListener.Spec.ServiceAccountMetadata.Annotations, base.Annotations)
+		base.Annotations = b.filterAndMergeAnnotations(autoscalingListener.Spec.ServiceAccountMetadata.Annotations, base.Annotations)
 	}
 
-	base.Annotations[annotationKeyIntegrityHash] = scaleSetListenerServiceAccountIntegrityHash(base)
+	base.Annotations[AnnotationKeyIntegrityHash] = scaleSetListenerServiceAccountIntegrityHash(base)
 
 	if err := b.setControllerReference(autoscalingListener, base); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for listener service account: %w", err)
+	}
+	if b.ResourceCache != nil {
+		b.ResourceCache.listenerServiceAccount.Upsert(autoscalingListener, base)
 	}
 
 	return base, nil
@@ -640,6 +709,18 @@ func scaleSetListenerServiceAccountIntegrityHash(sa *corev1.ServiceAccount) stri
 }
 
 func (b *ResourceBuilder) newScaleSetListenerRole(autoscalingListener *v1alpha1.AutoscalingListener) *rbacv1.Role {
+	cacheKeyObject := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      autoscalingListener.Name,
+			Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
+		},
+	}
+	if b.ResourceCache != nil {
+		if cached, ok := b.ResourceCache.listenerRole.Get(autoscalingListener, cacheKeyObject); ok {
+			return cached
+		}
+	}
+
 	labels := b.filterAndMergeLabels(autoscalingListener.Labels, map[string]string{
 		LabelKeyGitHubScaleSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
 		LabelKeyGitHubScaleSetName:      autoscalingListener.Spec.AutoscalingRunnerSetName,
@@ -650,7 +731,7 @@ func (b *ResourceBuilder) newScaleSetListenerRole(autoscalingListener *v1alpha1.
 	annotations := make(map[string]string)
 	if autoscalingListener.Spec.RoleMetadata != nil {
 		labels = b.filterAndMergeLabels(autoscalingListener.Spec.RoleMetadata.Labels, labels)
-		annotations = b.mergeAnnotations(autoscalingListener.Spec.RoleMetadata.Annotations, nil)
+		annotations = b.filterAndMergeAnnotations(autoscalingListener.Spec.RoleMetadata.Annotations, nil)
 	}
 
 	newRole := &rbacv1.Role{
@@ -663,7 +744,10 @@ func (b *ResourceBuilder) newScaleSetListenerRole(autoscalingListener *v1alpha1.
 		Rules: rulesForListenerRole([]string{autoscalingListener.Spec.EphemeralRunnerSetName}),
 	}
 
-	newRole.Annotations[annotationKeyIntegrityHash] = scaleSetRoleIntegrityHash(newRole)
+	newRole.Annotations[AnnotationKeyIntegrityHash] = scaleSetRoleIntegrityHash(newRole)
+	if b.ResourceCache != nil {
+		b.ResourceCache.listenerRole.Upsert(autoscalingListener, newRole)
+	}
 
 	return newRole
 }
@@ -681,6 +765,18 @@ func scaleSetRoleIntegrityHash(role *rbacv1.Role) string {
 }
 
 func (b *ResourceBuilder) newScaleSetListenerRoleBinding(autoscalingListener *v1alpha1.AutoscalingListener, listenerRole *rbacv1.Role, serviceAccount *corev1.ServiceAccount) *rbacv1.RoleBinding {
+	cacheKeyObject := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      autoscalingListener.Name,
+			Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
+		},
+	}
+	if b.ResourceCache != nil {
+		if cached, ok := b.ResourceCache.listenerRoleBinding.Get(autoscalingListener, cacheKeyObject, listenerRole, serviceAccount); ok {
+			return cached
+		}
+	}
+
 	roleRef := rbacv1.RoleRef{
 		Kind: "Role",
 		Name: listenerRole.Name,
@@ -718,7 +814,10 @@ func (b *ResourceBuilder) newScaleSetListenerRoleBinding(autoscalingListener *v1
 		Subjects: subjects,
 	}
 
-	newRoleBinding.Annotations[annotationKeyIntegrityHash] = scaleSetListenerRoleBindingIntegrityHash(newRoleBinding)
+	newRoleBinding.Annotations[AnnotationKeyIntegrityHash] = scaleSetListenerRoleBindingIntegrityHash(newRoleBinding)
+	if b.ResourceCache != nil {
+		b.ResourceCache.listenerRoleBinding.Upsert(autoscalingListener, newRoleBinding, listenerRole, serviceAccount)
+	}
 
 	return newRoleBinding
 }
@@ -741,6 +840,18 @@ func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 	runnerScaleSetID, err := strconv.Atoi(autoscalingRunnerSet.Annotations[runnerScaleSetIDAnnotationKey])
 	if err != nil {
 		return nil, err
+	}
+
+	cacheKeyObject := &v1alpha1.EphemeralRunnerSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      autoscalingRunnerSet.Name,
+			Namespace: autoscalingRunnerSet.Namespace,
+		},
+	}
+	if b.ResourceCache != nil {
+		if cached, ok := b.ResourceCache.ephemeralRunnerSet.Get(autoscalingRunnerSet, cacheKeyObject); ok {
+			return cached, nil
+		}
 	}
 
 	spec := v1alpha1.EphemeralRunnerSetSpec{
@@ -777,7 +888,7 @@ func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 
 	if autoscalingRunnerSet.Spec.EphemeralRunnerSetMetadata != nil {
 		labels = b.filterAndMergeLabels(autoscalingRunnerSet.Spec.EphemeralRunnerSetMetadata.Labels, labels)
-		annotations = b.mergeAnnotations(autoscalingRunnerSet.Spec.EphemeralRunnerSetMetadata.Annotations, annotations)
+		annotations = b.filterAndMergeAnnotations(autoscalingRunnerSet.Spec.EphemeralRunnerSetMetadata.Annotations, annotations)
 	}
 
 	newEphemeralRunnerSet := &v1alpha1.EphemeralRunnerSet{
@@ -791,10 +902,13 @@ func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 		Spec: spec,
 	}
 
-	newEphemeralRunnerSet.Annotations[annotationKeyIntegrityHash] = ephemeralRunnerSetIntegrityHash(newEphemeralRunnerSet)
+	newEphemeralRunnerSet.Annotations[AnnotationKeyIntegrityHash] = ephemeralRunnerSetIntegrityHash(newEphemeralRunnerSet)
 
 	if err := b.setControllerReference(autoscalingRunnerSet, newEphemeralRunnerSet); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for ephemeral runner set: %w", err)
+	}
+	if b.ResourceCache != nil {
+		b.ResourceCache.ephemeralRunnerSet.Upsert(autoscalingRunnerSet, newEphemeralRunnerSet)
 	}
 
 	return newEphemeralRunnerSet, nil
@@ -825,7 +939,7 @@ func (b *ResourceBuilder) newAutoscalingListenerProxySecret(autoscalingListener 
 		Data: data,
 	}
 
-	newProxySecret.Annotations[annotationKeyIntegrityHash] = autoscalingListenerProxySecretIntegrityHash(newProxySecret)
+	newProxySecret.Annotations[AnnotationKeyIntegrityHash] = autoscalingListenerProxySecretIntegrityHash(newProxySecret)
 
 	if err := b.setControllerReference(autoscalingListener, newProxySecret); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for listener proxy secret: %w", err)
@@ -857,8 +971,9 @@ func (b *ResourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.Epheme
 
 	if ephemeralRunnerSet.Spec.EphemeralRunnerMetadata != nil {
 		labels = b.filterAndMergeLabels(ephemeralRunnerSet.Spec.EphemeralRunnerMetadata.Labels, labels)
-		annotations = b.mergeAnnotations(ephemeralRunnerSet.Spec.EphemeralRunnerMetadata.Annotations, annotations)
+		annotations = b.filterAndMergeAnnotations(ephemeralRunnerSet.Spec.EphemeralRunnerMetadata.Annotations, annotations)
 	}
+	labels[LabelKeyEphemeralRunnerSetUID] = string(ephemeralRunnerSet.UID)
 
 	ephemeralRunner := &v1alpha1.EphemeralRunner{
 		ObjectMeta: metav1.ObjectMeta{
@@ -866,10 +981,7 @@ func (b *ResourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.Epheme
 			Namespace:    ephemeralRunnerSet.Namespace,
 			Labels:       labels,
 			Annotations:  annotations,
-			Finalizers: []string{
-				ephemeralRunnerFinalizerName,
-				ephemeralRunnerActionsFinalizerName,
-			},
+			Finalizers:   []string{ephemeralRunnerFinalizerName},
 		},
 		Spec: ephemeralRunnerSet.Spec.EphemeralRunnerSpec,
 	}
@@ -992,7 +1104,7 @@ func (b *ResourceBuilder) newEphemeralRunnerSetProxySecret(ephemeralRunnerSet *v
 		Data: data,
 	}
 
-	runnerPodProxySecret.Annotations[annotationKeyIntegrityHash] = ephemeralRunnerSetProxySecretZIdentityHash(runnerPodProxySecret)
+	runnerPodProxySecret.Annotations[AnnotationKeyIntegrityHash] = ephemeralRunnerSetProxySecretIdentityHash(runnerPodProxySecret)
 
 	if err := b.setControllerReference(ephemeralRunnerSet, runnerPodProxySecret); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for ephemeral runner set proxy secret: %w", err)
@@ -1001,7 +1113,7 @@ func (b *ResourceBuilder) newEphemeralRunnerSetProxySecret(ephemeralRunnerSet *v
 	return runnerPodProxySecret, nil
 }
 
-func ephemeralRunnerSetProxySecretZIdentityHash(secret *corev1.Secret) string {
+func ephemeralRunnerSetProxySecretIdentityHash(secret *corev1.Secret) string {
 	type data struct {
 		Data map[string][]byte `json:"data"`
 	}
@@ -1093,40 +1205,78 @@ func trimLabelValue(val string) string {
 	return strings.Trim(val, "-_.")
 }
 
-func (b *ResourceBuilder) filterAndMergeLabels(base, overwrite map[string]string) map[string]string {
-	if base == nil && overwrite == nil {
-		return nil
-	}
-
-	mergedLabels := make(map[string]string, len(base))
-base:
-	for k, v := range base {
-		for _, prefix := range b.ExcludeLabelPropagationPrefixes {
-			if strings.HasPrefix(k, prefix) {
-				continue base
-			}
+func (b *ResourceBuilder) filterLabels(k, v string) bool {
+	for _, prefix := range b.ExcludeLabelPropagationPrefixes {
+		if strings.HasPrefix(k, prefix) {
+			return true
 		}
-		mergedLabels[k] = v
 	}
-
-overwrite:
-	for k, v := range overwrite {
-		for _, prefix := range b.ExcludeLabelPropagationPrefixes {
-			if strings.HasPrefix(k, prefix) {
-				continue overwrite
-			}
-		}
-		mergedLabels[k] = v
-	}
-
-	return mergedLabels
+	return false
 }
 
-func (b *ResourceBuilder) mergeAnnotations(base, overwrite map[string]string) map[string]string {
+func (b *ResourceBuilder) filterAndMergeLabels(base, overwrite map[string]string) map[string]string {
+	return filterAndMergeMaps(base, overwrite, b.filterLabels)
+}
+
+func filterAndMergeMaps(base, overwrite map[string]string, filter func(k, v string) bool) map[string]string {
 	if base == nil && overwrite == nil {
 		return nil
 	}
-	base = maps.Clone(base)
-	maps.Copy(base, overwrite)
-	return base
+	var result map[string]string
+	if len(base) == 0 {
+		result = make(map[string]string)
+	} else {
+		result = maps.Clone(base)
+	}
+	if len(overwrite) > 0 {
+		maps.Copy(result, overwrite)
+	}
+	maps.DeleteFunc(result, filter)
+	return result
+}
+
+func (b *ResourceBuilder) filterAndMergeAnnotations(base, overwrite map[string]string) map[string]string {
+	if base == nil && overwrite == nil {
+		return nil
+	}
+	var result map[string]string
+	if len(base) == 0 {
+		result = make(map[string]string)
+	} else {
+		result = maps.Clone(base)
+	}
+
+	for k, v := range overwrite {
+		if k == AnnotationKeyIntegrityHash {
+			continue
+		}
+		result[k] = v
+	}
+
+	return result
+}
+
+// compareAnnotations compares two maps of annotations, ignoring the integrity hash annotation.
+func (b *ResourceBuilder) annotationsEqual(m1, m2 map[string]string) bool {
+	l1 := len(m1)
+	if _, ok := m1[AnnotationKeyIntegrityHash]; !ok {
+		l1++
+	}
+	l2 := len(m2)
+	if _, ok := m2[AnnotationKeyIntegrityHash]; !ok {
+		l2++
+	}
+	if l1 != l2 {
+		return false
+	}
+
+	for k, v1 := range m1 {
+		if k == AnnotationKeyIntegrityHash {
+			continue
+		}
+		if v2, ok := m2[k]; !ok || v1 != v2 {
+			return false
+		}
+	}
+	return true
 }

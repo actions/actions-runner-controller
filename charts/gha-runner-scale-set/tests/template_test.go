@@ -1364,11 +1364,11 @@ func TestTemplateRenderedWithProxy(t *testing.T) {
 
 	require.NotNil(t, ars.Spec.Proxy)
 	require.NotNil(t, ars.Spec.Proxy.HTTP)
-	assert.Equal(t, "http://proxy.example.com", ars.Spec.Proxy.HTTP.Url)
+	assert.Equal(t, "http://proxy.example.com", ars.Spec.Proxy.HTTP.URL)
 	assert.Equal(t, "http-secret", ars.Spec.Proxy.HTTP.CredentialSecretRef)
 
 	require.NotNil(t, ars.Spec.Proxy.HTTPS)
-	assert.Equal(t, "https://proxy.example.com", ars.Spec.Proxy.HTTPS.Url)
+	assert.Equal(t, "https://proxy.example.com", ars.Spec.Proxy.HTTPS.URL)
 	assert.Equal(t, "https-secret", ars.Spec.Proxy.HTTPS.CredentialSecretRef)
 
 	require.NotNil(t, ars.Spec.Proxy.NoProxy)

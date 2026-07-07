@@ -24,6 +24,15 @@ spec:
         - jsonPath: .status.phase
           name: Phase
           type: string
+        - jsonPath: .status.pendingEphemeralRunners
+          name: Pending Runners
+          type: integer
+        - jsonPath: .status.runningEphemeralRunners
+          name: Running Runners
+          type: integer
+        - jsonPath: .status.failedEphemeralRunners
+          name: Failed Runners
+          type: integer
       name: v1alpha1
       schema:
         openAPIV3Schema:
@@ -98,18 +107,15 @@ spec:
                       type: object
                   type: object
                 githubConfigSecret:
-                  description: Required
                   type: string
                 githubConfigUrl:
-                  description: Required
                   type: string
                 githubServerTLS:
                   properties:
                     certificateFrom:
-                      description: Required
                       properties:
                         configMapKeyRef:
-                          description: Required
+                          description: Selects a key from a ConfigMap.
                           properties:
                             key:
                               description: The key to select.
@@ -130,7 +136,11 @@ spec:
                             - key
                           type: object
                           x-kubernetes-map-type: atomic
+                      required:
+                        - configMapKeyRef
                       type: object
+                  required:
+                    - certificateFrom
                   type: object
                 listenerConfigSecretMetadata:
                   description: ResourceMeta carries metadata common to all internal resources
@@ -8351,16 +8361,18 @@ spec:
                         credentialSecretRef:
                           type: string
                         url:
-                          description: Required
                           type: string
+                      required:
+                        - url
                       type: object
                     https:
                       properties:
                         credentialSecretRef:
                           type: string
                         url:
-                          description: Required
                           type: string
+                      required:
+                        - url
                       type: object
                     noProxy:
                       items:
@@ -8376,7 +8388,7 @@ spec:
                 runnerScaleSetName:
                   type: string
                 template:
-                  description: Required
+                  description: PodTemplateSpec describes the data a pod should have when created from a template
                   properties:
                     metadata:
                       description: |-
@@ -16502,16 +16514,18 @@ spec:
                             credentialSecretRef:
                               type: string
                             url:
-                              description: Required
                               type: string
+                          required:
+                            - url
                           type: object
                         https:
                           properties:
                             credentialSecretRef:
                               type: string
                             url:
-                              description: Required
                               type: string
+                          required:
+                            - url
                           type: object
                         noProxy:
                           items:
@@ -16528,8 +16542,20 @@ spec:
             status:
               description: AutoscalingRunnerSetStatus defines the observed state of AutoscalingRunnerSet
               properties:
+                currentRunners:
+                  minimum: 0
+                  type: integer
+                failedEphemeralRunners:
+                  minimum: 0
+                  type: integer
+                pendingEphemeralRunners:
+                  minimum: 0
+                  type: integer
                 phase:
                   type: string
+                runningEphemeralRunners:
+                  minimum: 0
+                  type: integer
               type: object
           type: object
       served: true

@@ -40,6 +40,7 @@ const (
 	LabelKeyGitHubEnterprise        = "actions.github.com/enterprise"
 	LabelKeyGitHubOrganization      = "actions.github.com/organization"
 	LabelKeyGitHubRepository        = "actions.github.com/repository"
+	LabelKeyEphemeralRunnerSetUID   = "actions.github.com/ephemeral-runner-set-uid"
 )
 
 // AutoscalingRunnerSetCleanupFinalizerName is a finalizer used to protect resources
