@@ -1,0 +1,26 @@
+{{- $runner := (.Values.runner | default dict) -}}
+{{- $runnerMode := (index $runner "mode" | default "") -}}
+{{- $kubeMode := (index $runner "kubernetesMode" | default dict) -}}
+{{- $kubeDefaults := (index $kubeMode "default" | default true) -}}
+{{- $kubeServiceAccountName := (index $kubeMode "serviceAccountName" | default "") -}}
+{{- if and (eq $runnerMode "kubernetes") $kubeDefaults (empty $kubeServiceAccountName) }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "kube-mode-role-binding.name" . | quote }}
+  namespace: {{ include "autoscaling-runner-set.namespace" . | quote }}
+  labels:
+    {{- include "kube-mode-role-binding.labels" . | nindent 4 }}
+  annotations:
+    {{- include "kube-mode-role-binding.annotations" . | nindent 4 }}
+  finalizers:
+    - actions.github.com/cleanup-protection
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "kube-mode-role.name" . | quote }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "kube-mode-serviceaccount.name" . | quote }}
+    namespace: {{ include "autoscaling-runner-set.namespace" . | quote }}
+{{- end }}

@@ -66,6 +66,10 @@ resources: {}
 #   cpu: 100m
 #   memory: 128Mi
 
+## This must stay above the manager's graceful shutdown timeout (30s, controller-runtime's
+## default) so in-flight reconciles have a chance to finish before the kubelet sends SIGKILL.
+terminationGracePeriodSeconds: 35
+
 nodeSelector: {}
 
 tolerations: []
@@ -94,6 +98,10 @@ priorityClassName: ""
 #   listenerAddr: ":8080"
 #   listenerEndpoint: "/metrics"
 
+## To enable pprof, uncomment the addr field below.
+pprof: {}
+#   addr: ":6060"
+
 flags:
   ## Log level can be set here with one of the following values: "debug", "info", "warn", "error".
   ## Defaults to "debug".
@@ -111,22 +119,6 @@ flags:
   # It may also increase the load on the API server and the external service (e.g. GitHub API).
   runnerMaxConcurrentReconciles: 2
 
-  ## Defines how the controller should handle upgrades while having running jobs.
-  ##
-  ## The strategies available are:
-  ## - "immediate": (default) The controller will immediately apply the change causing the
-  ##   recreation of the listener and ephemeral runner set. This can lead to an
-  ##   overprovisioning of runners, if there are pending / running jobs. This should not
-  ##   be a problem at a small scale, but it could lead to a significant increase of
-  ##   resources if you have a lot of jobs running concurrently.
-  ##
-  ## - "eventual": The controller will remove the listener and ephemeral runner set
-  ##   immediately, but will not recreate them (to apply changes) until all
-  ##   pending / running jobs have completed.
-  ##   This can lead to a longer time to apply the change but it will ensure
-  ##   that you don't have any overprovisioning of runners.
-  updateStrategy: "immediate"
-
   ## Defines a list of prefixes that should not be propagated to internal resources.
   ## This is useful when you have labels that are used for internal purposes and should not be propagated to internal resources.
   ## See https://github.com/actions/actions-runner-controller/issues/3533 for more information.
@@ -136,8 +128,19 @@ flags:
   # excludeLabelPropagationPrefixes:
   #   - "argocd.argoproj.io/instance"
 
+  ## Workqueue rate limiter configuration.
+  ## By default, controller-runtime uses a combined rate limiter with both a per-item
+  ## exponential backoff and an overall token bucket (10 QPS, 100 bucket size).
+  ## Valid names: "bucket_rate_limiter" (default), "typed_rate_limiter" (per-item only, no global token bucket).
+  # rateLimiter:
+  #   name: "bucket_rate_limiter"
+
 # Overrides the default `.Release.Namespace` for all resources in this chart.
 namespaceOverride: ""
+
+  ## The address the health probe endpoint binds to. Disabled if empty.
+  ## When set, liveness and readiness probes are added to the controller pod.
+  # healthProbeBindAddress: ":8081"
 
 ## Defines the K8s client rate limiter parameters.
   # k8sClientRateLimiterQPS: 20

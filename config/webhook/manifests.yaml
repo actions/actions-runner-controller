@@ -10,6 +10,25 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
+      path: /mutate-runner-set-pod
+  failurePolicy: Ignore
+  name: mutate-runner-pod.webhook.actions.summerwind.dev
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    resources:
+    - pods
+  sideEffects: None
+- admissionReviewVersions:
+  - v1beta1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
       path: /mutate-actions-summerwind-dev-v1alpha1-runner
   failurePolicy: Fail
   name: mutate.runner.actions.summerwind.dev
@@ -63,25 +82,6 @@ webhooks:
     - UPDATE
     resources:
     - runnerreplicasets
-  sideEffects: None
-- admissionReviewVersions:
-  - v1beta1
-  clientConfig:
-    service:
-      name: webhook-service
-      namespace: system
-      path: /mutate-runner-set-pod
-  failurePolicy: Ignore
-  name: mutate-runner-pod.webhook.actions.summerwind.dev
-  rules:
-  - apiGroups:
-    - ""
-    apiVersions:
-    - v1
-    operations:
-    - CREATE
-    resources:
-    - pods
   sideEffects: None
 ---
 apiVersion: admissionregistration.k8s.io/v1

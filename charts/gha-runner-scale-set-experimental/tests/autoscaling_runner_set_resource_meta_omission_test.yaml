@@ -1,0 +1,432 @@
+suite: "Test AutoscalingRunnerSet ResourceMeta Omission"
+templates:
+  - autoscalingrunnserset.yaml
+tests:
+  - it: should omit all ResourceMeta fields when metadata is empty
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - notExists:
+          path: spec.autoscalingListener
+      - notExists:
+          path: spec.listenerServiceAccountMetadata
+      - notExists:
+          path: spec.listenerRoleMetadata
+      - notExists:
+          path: spec.listenerRoleBindingMetadata
+      - notExists:
+          path: spec.listenerConfigSecretMetadata
+      - notExists:
+          path: spec.ephemeralRunnerSetMetadata
+      - notExists:
+          path: spec.ephemeralRunnerMetadata
+      - notExists:
+          path: spec.ephemeralRunnerConfigSecretMetadata
+
+  - it: should render autoscalingListener when labels are populated
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        autoscalingListener:
+          metadata:
+            labels:
+              listener-key: "listener-value"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.autoscalingListener.labels.listener-key
+          value: "listener-value"
+      - notExists:
+          path: spec.listenerServiceAccountMetadata
+
+  - it: should render autoscalingListener when annotations are populated
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        autoscalingListener:
+          metadata:
+            annotations:
+              listener-ann: "ann-value"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.autoscalingListener.annotations.listener-ann
+          value: "ann-value"
+      - notExists:
+          path: spec.listenerServiceAccountMetadata
+
+  - it: should render listenerServiceAccountMetadata when labels are populated
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        listenerServiceAccount:
+          metadata:
+            labels:
+              sa-key: "sa-value"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.listenerServiceAccountMetadata.labels.sa-key
+          value: "sa-value"
+      - notExists:
+          path: spec.autoscalingListener
+      - notExists:
+          path: spec.listenerRoleMetadata
+
+  - it: should render listenerServiceAccountMetadata when annotations are populated
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        listenerServiceAccount:
+          metadata:
+            annotations:
+              sa-ann: "ann-value"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.listenerServiceAccountMetadata.annotations.sa-ann
+          value: "ann-value"
+      - notExists:
+          path: spec.autoscalingListener
+
+  - it: should render listenerRoleMetadata when labels are populated
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        listenerRole:
+          metadata:
+            labels:
+              role-key: "role-value"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.listenerRoleMetadata.labels.role-key
+          value: "role-value"
+      - notExists:
+          path: spec.autoscalingListener
+
+  - it: should render listenerRoleMetadata when annotations are populated
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        listenerRole:
+          metadata:
+            annotations:
+              role-ann: "ann-value"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.listenerRoleMetadata.annotations.role-ann
+          value: "ann-value"
+
+  - it: should render listenerRoleBindingMetadata when labels are populated
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        listenerRoleBinding:
+          metadata:
+            labels:
+              rolebinding-key: "rolebinding-value"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.listenerRoleBindingMetadata.labels.rolebinding-key
+          value: "rolebinding-value"
+
+  - it: should render listenerRoleBindingMetadata when annotations are populated
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        listenerRoleBinding:
+          metadata:
+            annotations:
+              rolebinding-ann: "ann-value"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.listenerRoleBindingMetadata.annotations.rolebinding-ann
+          value: "ann-value"
+
+  - it: should render listenerConfigSecretMetadata when labels are populated
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        listenerConfigSecret:
+          metadata:
+            labels:
+              secret-key: "secret-value"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.listenerConfigSecretMetadata.labels.secret-key
+          value: "secret-value"
+
+  - it: should render listenerConfigSecretMetadata when annotations are populated
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        listenerConfigSecret:
+          metadata:
+            annotations:
+              secret-ann: "ann-value"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.listenerConfigSecretMetadata.annotations.secret-ann
+          value: "ann-value"
+
+  - it: should render ephemeralRunnerSetMetadata when labels are populated
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        ephemeralRunnerSet:
+          metadata:
+            labels:
+              runner-set-key: "runner-set-value"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.ephemeralRunnerSetMetadata.labels.runner-set-key
+          value: "runner-set-value"
+
+  - it: should render ephemeralRunnerSetMetadata when annotations are populated
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        ephemeralRunnerSet:
+          metadata:
+            annotations:
+              runner-set-ann: "ann-value"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.ephemeralRunnerSetMetadata.annotations.runner-set-ann
+          value: "ann-value"
+
+  - it: should render ephemeralRunnerMetadata when labels are populated
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        ephemeralRunner:
+          metadata:
+            labels:
+              runner-key: "runner-value"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.ephemeralRunnerMetadata.labels.runner-key
+          value: "runner-value"
+
+  - it: should render ephemeralRunnerMetadata when annotations are populated
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        ephemeralRunner:
+          metadata:
+            annotations:
+              runner-ann: "ann-value"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.ephemeralRunnerMetadata.annotations.runner-ann
+          value: "ann-value"
+
+  - it: should render ephemeralRunnerConfigSecretMetadata when labels are populated
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        ephemeralRunnerConfigSecret:
+          metadata:
+            labels:
+              runner-config-key: "runner-config-value"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.ephemeralRunnerConfigSecretMetadata.labels.runner-config-key
+          value: "runner-config-value"
+
+  - it: should render ephemeralRunnerConfigSecretMetadata when annotations are populated
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        ephemeralRunnerConfigSecret:
+          metadata:
+            annotations:
+              runner-config-ann: "ann-value"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.ephemeralRunnerConfigSecretMetadata.annotations.runner-config-ann
+          value: "ann-value"
+
+  - it: should render mixed populated and empty ResourceMeta fields correctly
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        autoscalingListener:
+          metadata:
+            labels:
+              listener: "true"
+        listenerServiceAccount:
+          metadata:
+            annotations:
+              sa-ann: "true"
+        ephemeralRunner:
+          metadata:
+            labels:
+              runner: "true"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.autoscalingListener.labels.listener
+          value: "true"
+      - equal:
+          path: spec.listenerServiceAccountMetadata.annotations.sa-ann
+          value: "true"
+      - equal:
+          path: spec.ephemeralRunnerMetadata.labels.runner
+          value: "true"
+      - notExists:
+          path: spec.listenerRoleMetadata
+      - notExists:
+          path: spec.listenerRoleBindingMetadata
+      - notExists:
+          path: spec.listenerConfigSecretMetadata
+      - notExists:
+          path: spec.ephemeralRunnerSetMetadata
+      - notExists:
+          path: spec.ephemeralRunnerConfigSecretMetadata
+
+  - it: should render both labels and annotations when both are populated
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        listenerServiceAccount:
+          metadata:
+            labels:
+              team: "platform"
+            annotations:
+              owner: "devops"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.listenerServiceAccountMetadata.labels.team
+          value: "platform"
+      - equal:
+          path: spec.listenerServiceAccountMetadata.annotations.owner
+          value: "devops"

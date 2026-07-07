@@ -34,5 +34,5 @@ bin
 # OS
 .DS_STORE
 
-/test-assets
+
 /.tools

@@ -22,7 +22,7 @@ import (
 	"github.com/go-logr/logr"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -33,7 +33,7 @@ import (
 type RunnerPersistentVolumeClaimReconciler struct {
 	client.Client
 	Log      logr.Logger
-	Recorder record.EventRecorder
+	Recorder events.EventRecorder
 	Scheme   *runtime.Scheme
 	Name     string
 }
@@ -65,7 +65,7 @@ func (r *RunnerPersistentVolumeClaimReconciler) SetupWithManager(mgr ctrl.Manage
 		name = r.Name
 	}
 
-	r.Recorder = mgr.GetEventRecorderFor(name)
+	r.Recorder = mgr.GetEventRecorder(name)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.PersistentVolumeClaim{}).

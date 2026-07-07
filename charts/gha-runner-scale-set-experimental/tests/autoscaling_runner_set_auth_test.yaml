@@ -1,0 +1,245 @@
+suite: "Test AutoscalingRunnerSet Authentication & Configuration"
+templates:
+  - autoscalingrunnserset.yaml
+tests:
+  - it: should require githubConfigUrl
+    set:
+      scaleset.name: "test"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: ".Values.auth.url is required"
+
+  - it: should render githubConfigUrl from auth.url
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.githubConfigUrl
+          value: "https://github.com/org"
+
+  - it: should trim trailing slash from githubConfigUrl
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org/"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.githubConfigUrl
+          value: "https://github.com/org"
+
+  - it: should render default githubConfigSecret from release name
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.githubConfigSecret
+          value: "test-name-github-secret"
+
+  - it: should render custom githubConfigSecret when auth.secretName is provided
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      auth.secretName: "custom-github-secret"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.githubConfigSecret
+          value: "custom-github-secret"
+
+  - it: should render default runnerGroup when not configured
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.runnerGroup
+          value: "default"
+
+  - it: should render custom runnerGroup when configured
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      scaleset.runnerGroup: "custom-group"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.runnerGroup
+          value: "custom-group"
+
+  - it: should render runnerGroup with special characters
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      scaleset.runnerGroup: "my-custom-runner-group-123"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.runnerGroup
+          value: "my-custom-runner-group-123"
+
+  - it: should render runnerScaleSetName from scaleset.name
+    set:
+      scaleset.name: "my-runner-set"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.runnerScaleSetName
+          value: "my-runner-set"
+
+  - it: should use release name as metadata name when runnerScaleSetName not provided
+    set:
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "release-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: metadata.name
+          value: "release-name"
+
+  - it: should use scaleset.name for spec.runnerScaleSetName when provided
+    set:
+      scaleset.name: "spec-runner-name"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "release-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.runnerScaleSetName
+          value: "spec-runner-name"
+
+  - it: should not normalize underscores in runnerScaleSetName (underscores are preserved)
+    set:
+      scaleset.name: "my_runner_set"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.runnerScaleSetName
+          value: "my_runner_set"
+
+  - it: should reject metadata name exceeding 45 characters
+    set:
+      runnerScaleSetName: "this-is-a-very-long-name-that-exceeds-forty-five-characters-long"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: "Autoscaling runner set name must have up to 45 characters"
+
+  - it: should handle githubConfigUrl with enterprise GitHub instance
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.enterprise.com/api/v3"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.githubConfigUrl
+          value: "https://github.enterprise.com/api/v3"
+
+  - it: should render all configuration together
+    set:
+      runnerScaleSetName: "prod-runners"
+      scaleset.name: "prod-spec-name"
+      auth.url: "https://github.com/myorg"
+      auth.githubToken: "gh_token12345"
+      auth.secretName: "gh-token-secret"
+      scaleset.runnerGroup: "prod-group"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "prod-scale-set"
+      namespace: "arc"
+    asserts:
+      - equal:
+          path: spec.githubConfigUrl
+          value: "https://github.com/myorg"
+      - equal:
+          path: spec.githubConfigSecret
+          value: "gh-token-secret"
+      - equal:
+          path: spec.runnerGroup
+          value: "prod-group"
+      - equal:
+          path: spec.runnerScaleSetName
+          value: "prod-spec-name"
+      - equal:
+          path: metadata.name
+          value: "prod-runners"
+      - equal:
+          path: metadata.namespace
+          value: "arc"

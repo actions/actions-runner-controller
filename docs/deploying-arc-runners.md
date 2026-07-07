@@ -70,7 +70,7 @@ Fields like `volumeClaimTemplates` that originates from `StatefulSet` should als
 
 Pod-related fields like security contexts and volumes are written under `spec.template.spec` like `StatefulSet`.
 
-Similarly, container-related fields like resource requests and limits, container image names and tags, security context, and so on are written under `spec.template.spec.containers`. There are two reserved container `name`, `runner` and `docker`. The former is for the container that runs [actions runner](https://github.com/actions/runner) and the latter is for the container that runs a `dockerd`.
+Similarly, container-related fields like resource requests and limits, container image names and tags, security context, and so on are written under `spec.template.spec.containers`. There are two reserved container names, `runner` and `docker`. The former is for the container that runs [actions runner](https://github.com/actions/runner) and the latter is for the container that runs a `dockerd`.
 
 For a more complex example, see the below:
 

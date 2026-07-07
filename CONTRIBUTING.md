@@ -102,22 +102,19 @@ A set of example pipelines (./acceptance/pipelines) are provided in this reposit
 When raising a PR please run the relevant suites to prove your change hasn't broken anything.
 
 #### Running Ginkgo Tests
-
 You can run the integration test suite that is written in Ginkgo with:
 
 ```shell
 make test-with-deps
 ```
 
-This will firstly install a few binaries required to setup the integration test environment and then runs `go test` to start the Ginkgo test.
+This will install `setup-envtest`, download the required envtest binaries (etcd, kube-apiserver, kubectl), and then run `go test`.
 
-If you don't want to use `make`, like when you're running tests from your IDE, install required binaries to `/usr/local/kubebuilder/bin`.
-That's the directory in which controller-runtime's `envtest` framework locates the binaries.
+If you don't want to use `make`, install the envtest binaries using `setup-envtest`:
 
 ```shell
-sudo mkdir -p /usr/local/kubebuilder/bin
-make kube-apiserver etcd
-sudo mv test-assets/{etcd,kube-apiserver} /usr/local/kubebuilder/bin/
+go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+export KUBEBUILDER_ASSETS=$(setup-envtest use -p path)
 go test -v -run TestAPIs github.com/actions/actions-runner-controller/controllers/actions.summerwind.net
 ```
 

@@ -1,0 +1,84 @@
+suite: "AutoscalingRunnerSet initContainers"
+templates:
+  - autoscalingrunnserset.yaml
+tests:
+  - it: should render initContainers when runner.pod.spec.initContainers configured in non-dind mode
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        pod:
+          spec:
+            initContainers:
+              - name: "extra-init-1"
+                image: "busybox:1.36"
+                imagePullPolicy: IfNotPresent
+                command:
+                  - "sh"
+                  - "-c"
+                args:
+                  - "echo non-dind extra init"
+                env:
+                  - name: FOO
+                    value: BAR
+                securityContext:
+                  runAsNonRoot: true
+                  runAsUser: 1000
+                resources:
+                  requests:
+                    cpu: 10m
+                    memory: 16Mi
+                  limits:
+                    cpu: 100m
+                    memory: 64Mi
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: extra-init-1
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: busybox:1.36
+      - equal:
+          path: spec.template.spec.initContainers[0].imagePullPolicy
+          value: IfNotPresent
+      - equal:
+          path: spec.template.spec.initContainers[0].command[0]
+          value: sh
+      - equal:
+          path: spec.template.spec.initContainers[0].args[0]
+          value: echo non-dind extra init
+      - equal:
+          path: spec.template.spec.initContainers[0].env[0].name
+          value: FOO
+      - equal:
+          path: spec.template.spec.initContainers[0].env[0].value
+          value: BAR
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsUser
+          value: 1000
+      - equal:
+          path: spec.template.spec.initContainers[0].resources.requests.cpu
+          value: 10m
+      - equal:
+          path: spec.template.spec.initContainers[0].resources.requests.memory
+          value: 16Mi
+      - equal:
+          path: spec.template.spec.initContainers[0].resources.limits.cpu
+          value: 100m
+      - equal:
+          path: spec.template.spec.initContainers[0].resources.limits.memory
+          value: 64Mi
+      - notExists:
+          path: spec.template.spec.initContainers[1]
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: runner

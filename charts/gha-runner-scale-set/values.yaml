@@ -2,6 +2,8 @@
 ## ex: https://github.com/myorg/myrepo or https://github.com/myorg or https://github.com/enterprises/myenterprise
 githubConfigUrl: ""
 
+scaleSetLabels: []
+
 ## githubConfigSecret is the k8s secret information to use when authenticating via the GitHub API.
 ## You can choose to supply:
 ##   A) a PAT token,
@@ -124,6 +126,7 @@ githubConfigSecret:
 #     resources:
 #       requests:
 #         storage: 1Gi
+#   kubernetesModeAdditionalRoleRules: []
 #
 
 ## listenerTemplate is the PodSpec for each listener Pod
@@ -483,6 +486,46 @@ namespaceOverride: ""
 #     annotations:
 #       key: value
 #   noPermissionServiceAccount:
+#     labels:
+#       key: value
+#     annotations:
+#       key: value
+#   autoscalingListener:
+#     labels:
+#       key: value
+#     annotations:
+#       key: value
+#   listenerServiceAccount:
+#     labels:
+#       key: value
+#     annotations:
+#       key: value
+#   listenerRole:
+#     labels:
+#       key: value
+#     annotations:
+#       key: value
+#   listenerRoleBinding:
+#     labels:
+#       key: value
+#     annotations:
+#       key: value
+#   listenerConfigSecret:
+#     labels:
+#       key: value
+#     annotations:
+#       key: value
+#   ephemeralRunnerSet:
+#     labels:
+#       key: value
+#     annotations:
+#       key: value
+#   ephemeralRunner:
+#     labels:
+#       key: value
+#     annotations:
+#       key: value
+#   ephemeralRunnerConfigSecret:
 #     labels:
 #       key: value
 #     annotations:

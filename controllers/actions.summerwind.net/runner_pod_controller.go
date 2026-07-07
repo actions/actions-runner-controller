@@ -28,7 +28,7 @@ import (
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -41,7 +41,7 @@ import (
 type RunnerPodReconciler struct {
 	client.Client
 	Log                         logr.Logger
-	Recorder                    record.EventRecorder
+	Recorder                    events.EventRecorder
 	Scheme                      *runtime.Scheme
 	GitHubClient                *MultiGitHubClient
 	Name                        string
@@ -216,7 +216,14 @@ func (r *RunnerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				return ctrl.Result{Requeue: true}, nil
 			}
 
-			r.Recorder.Event(&runnerPod, corev1.EventTypeNormal, "PodDeleted", fmt.Sprintf("Forcefully deleted pod '%s'", runnerPod.Name))
+			r.Recorder.Eventf(
+				&runnerPod,
+				nil,
+				corev1.EventTypeNormal,
+				"PodDeleted",
+				"",
+				fmt.Sprintf("Forcefully deleted pod '%s'", runnerPod.Name),
+			)
 			log.Info("Forcefully deleted runner pod", "repository", repo)
 			// give kube manager a little time to forcefully delete the stuck pod
 			return ctrl.Result{RequeueAfter: 3 * time.Second}, nil
@@ -272,7 +279,7 @@ func (r *RunnerPodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		name = r.Name
 	}
 
-	r.Recorder = mgr.GetEventRecorderFor(name)
+	r.Recorder = mgr.GetEventRecorder(name)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Pod{}).

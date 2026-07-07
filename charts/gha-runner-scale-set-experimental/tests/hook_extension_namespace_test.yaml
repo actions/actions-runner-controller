@@ -1,0 +1,61 @@
+suite: "Hook extension namespace alignment"
+templates:
+  - autoscalingrunnserset.yaml
+  - hook_extension.yaml
+tests:
+  - it: should render hook extension ConfigMap in the same namespace as AutoscalingRunnerSet (Release namespace)
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "kubernetes"
+        kubernetesMode:
+          extension:
+            metadata:
+              name: "my-hook-extension"
+              namespace: "wrong-ns"
+            yaml: "foo: bar"
+    release:
+      name: "test-name"
+      namespace: "release-ns"
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: "release-ns"
+        template: autoscalingrunnserset.yaml
+      - equal:
+          path: metadata.namespace
+          value: "release-ns"
+        template: hook_extension.yaml
+
+  - it: should render hook extension ConfigMap in the same namespace as AutoscalingRunnerSet (namespaceOverride)
+    set:
+      namespaceOverride: "override-ns"
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "kubernetes"
+        kubernetesMode:
+          extension:
+            metadata:
+              name: "my-hook-extension"
+              namespace: "wrong-ns"
+            yaml: "foo: bar"
+    release:
+      name: "test-name"
+      namespace: "release-ns"
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: "override-ns"
+        template: autoscalingrunnserset.yaml
+      - equal:
+          path: metadata.namespace
+          value: "override-ns"
+        template: hook_extension.yaml

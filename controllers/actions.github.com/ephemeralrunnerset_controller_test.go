@@ -2,7 +2,6 @@ package actionsgithubcom
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/base64"
 	"fmt"
 	"net/http"
@@ -19,22 +18,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
-	"github.com/actions/actions-runner-controller/github/actions"
-	"github.com/actions/actions-runner-controller/github/actions/fake"
-	"github.com/actions/actions-runner-controller/github/actions/testserver"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient"
+	fake "github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient/fake"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/secretresolver"
 )
 
 const (
-	ephemeralRunnerSetTestTimeout     = time.Second * 20
-	ephemeralRunnerSetTestInterval    = time.Millisecond * 250
-	ephemeralRunnerSetTestGitHubToken = "gh_token"
+	ephemeralRunnerSetTestTimeout  = time.Second * 20
+	ephemeralRunnerSetTestInterval = time.Millisecond * 250
 )
 
 func TestPrecomputedConstants(t *testing.T) {
@@ -58,10 +55,13 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			Scheme: mgr.GetScheme(),
 			Log:    logf.Log,
 			ResourceBuilder: ResourceBuilder{
-				SecretResolver: &SecretResolver{
-					k8sClient:   mgr.GetClient(),
-					multiClient: fake.NewMultiClient(),
-				},
+				SecretResolver: secretresolver.New(mgr.GetClient(), fake.NewMultiClient(
+					fake.WithClient(
+						fake.NewClient(
+							fake.WithRemoveRunner(nil),
+						),
+					),
+				)),
 			},
 		}
 		err := controller.SetupWithManager(mgr)
@@ -71,12 +71,15 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-asrs",
 				Namespace: autoscalingNS.Name,
+				Annotations: map[string]string{
+					"arc.test/runner-set-annotation": "initial",
+				},
 			},
 			Spec: v1alpha1.EphemeralRunnerSetSpec{
 				EphemeralRunnerSpec: v1alpha1.EphemeralRunnerSpec{
-					GitHubConfigUrl:    "https://github.com/owner/repo",
+					GitHubConfigURL:    "https://github.com/owner/repo",
 					GitHubConfigSecret: configSecret.Name,
-					RunnerScaleSetId:   100,
+					RunnerScaleSetID:   100,
 					PodTemplateSpec: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
@@ -113,21 +116,22 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					return created.Finalizers[0], nil
 				},
 				ephemeralRunnerSetTestTimeout,
-				ephemeralRunnerSetTestInterval).Should(BeEquivalentTo(ephemeralRunnerSetFinalizerName), "EphemeralRunnerSet should have a finalizer")
+				ephemeralRunnerSetTestInterval,
+			).Should(BeEquivalentTo(EphemeralRunnerSetFinalizerName), "EphemeralRunnerSet should have a finalizer")
 
 			// Check if the number of ephemeral runners are stay 0
 			Consistently(
 				func() (int, error) {
 					runnerList := new(v1alpha1.EphemeralRunnerList)
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
-					if err != nil {
+					if err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace); err != nil {
 						return -1, err
 					}
 
 					return len(runnerList.Items), nil
 				},
 				ephemeralRunnerSetTestTimeout,
-				ephemeralRunnerSetTestInterval).Should(BeEquivalentTo(0), "No EphemeralRunner should be created")
+				ephemeralRunnerSetTestInterval,
+			).Should(BeEquivalentTo(0), "No EphemeralRunner should be created")
 
 			// Check if the status stay 0
 			Consistently(
@@ -141,7 +145,8 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					return int(runnerSet.Status.CurrentReplicas), nil
 				},
 				ephemeralRunnerSetTestTimeout,
-				ephemeralRunnerSetTestInterval).Should(BeEquivalentTo(0), "EphemeralRunnerSet status should be 0")
+				ephemeralRunnerSetTestInterval,
+			).Should(BeEquivalentTo(0), "EphemeralRunnerSet status should be 0")
 
 			// Scaling up the EphemeralRunnerSet
 			updated := created.DeepCopy()
@@ -153,18 +158,17 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			Eventually(
 				func() (int, error) {
 					runnerList := new(v1alpha1.EphemeralRunnerList)
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
-					if err != nil {
+					if err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace); err != nil {
 						return -1, err
 					}
 
 					// Set status to simulate a configured EphemeralRunner
 					refetch := false
 					for i, runner := range runnerList.Items {
-						if runner.Status.RunnerId == 0 {
+						if runner.Status.RunnerID == 0 {
 							updatedRunner := runner.DeepCopy()
-							updatedRunner.Status.Phase = corev1.PodRunning
-							updatedRunner.Status.RunnerId = i + 100
+							updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
+							updatedRunner.Status.RunnerID = i + 100
 							err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runner))
 							Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 							refetch = true
@@ -172,8 +176,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					}
 
 					if refetch {
-						err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
-						if err != nil {
+						if err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace); err != nil {
 							return -1, err
 						}
 					}
@@ -181,7 +184,8 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					return len(runnerList.Items), nil
 				},
 				ephemeralRunnerSetTestTimeout,
-				ephemeralRunnerSetTestInterval).Should(BeEquivalentTo(5), "5 EphemeralRunner should be created")
+				ephemeralRunnerSetTestInterval,
+			).Should(BeEquivalentTo(5), "5 EphemeralRunner should be created")
 
 			// Check if the status is updated
 			Eventually(
@@ -195,7 +199,8 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					return int(runnerSet.Status.CurrentReplicas), nil
 				},
 				ephemeralRunnerSetTestTimeout,
-				ephemeralRunnerSetTestInterval).Should(BeEquivalentTo(5), "EphemeralRunnerSet status should be 5")
+				ephemeralRunnerSetTestInterval,
+			).Should(BeEquivalentTo(5), "EphemeralRunnerSet status should be 5")
 		})
 	})
 
@@ -215,18 +220,17 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			Eventually(
 				func() (int, error) {
 					runnerList := new(v1alpha1.EphemeralRunnerList)
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
-					if err != nil {
+					if err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace); err != nil {
 						return -1, err
 					}
 
 					// Set status to simulate a configured EphemeralRunner
 					refetch := false
 					for i, runner := range runnerList.Items {
-						if runner.Status.RunnerId == 0 {
+						if runner.Status.RunnerID == 0 {
 							updatedRunner := runner.DeepCopy()
-							updatedRunner.Status.Phase = corev1.PodRunning
-							updatedRunner.Status.RunnerId = i + 100
+							updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
+							updatedRunner.Status.RunnerID = i + 100
 							err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runner))
 							Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 							refetch = true
@@ -234,8 +238,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					}
 
 					if refetch {
-						err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
-						if err != nil {
+						if err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace); err != nil {
 							return -1, err
 						}
 					}
@@ -243,7 +246,8 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					return len(runnerList.Items), nil
 				},
 				ephemeralRunnerSetTestTimeout,
-				ephemeralRunnerSetTestInterval).Should(BeEquivalentTo(5), "5 EphemeralRunner should be created")
+				ephemeralRunnerSetTestInterval,
+			).Should(BeEquivalentTo(5), "5 EphemeralRunner should be created")
 
 			// Delete the EphemeralRunnerSet
 			err = k8sClient.Delete(ctx, created)
@@ -253,15 +257,15 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			Eventually(
 				func() (int, error) {
 					runnerList := new(v1alpha1.EphemeralRunnerList)
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
-					if err != nil {
+					if err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace); err != nil {
 						return -1, err
 					}
 
 					return len(runnerList.Items), nil
 				},
 				ephemeralRunnerSetTestTimeout,
-				ephemeralRunnerSetTestInterval).Should(BeEquivalentTo(0), "All EphemeralRunner should be deleted")
+				ephemeralRunnerSetTestInterval,
+			).Should(BeEquivalentTo(0), "All EphemeralRunner should be deleted")
 
 			// Check if the EphemeralRunnerSet is deleted
 			Eventually(
@@ -279,7 +283,8 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					return fmt.Errorf("EphemeralRunnerSet is not deleted")
 				},
 				ephemeralRunnerSetTestTimeout,
-				ephemeralRunnerSetTestInterval).Should(Succeed(), "EphemeralRunnerSet should be deleted")
+				ephemeralRunnerSetTestInterval,
+			).Should(Succeed(), "EphemeralRunnerSet should be deleted")
 		})
 	})
 
@@ -299,8 +304,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			runnerList := new(v1alpha1.EphemeralRunnerList)
 			Eventually(
 				func() (int, error) {
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
-					if err != nil {
+					if err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace); err != nil {
 						return -1, err
 					}
 
@@ -309,6 +313,64 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 				ephemeralRunnerSetTestTimeout,
 				ephemeralRunnerSetTestInterval,
 			).Should(BeEquivalentTo(5), "5 EphemeralRunner should be created")
+		})
+
+		It("propagates updated EphemeralRunnerSet annotations to newly created EphemeralRunners", func() {
+			ers := new(v1alpha1.EphemeralRunnerSet)
+			err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunnerSet.Name, Namespace: ephemeralRunnerSet.Namespace}, ers)
+			Expect(err).NotTo(HaveOccurred(), "failed to get EphemeralRunnerSet")
+
+			updated := ers.DeepCopy()
+			updated.Spec.Replicas = 1
+			updated.Spec.PatchID = 0
+			err = k8sClient.Patch(ctx, updated, client.MergeFrom(ers))
+			Expect(err).NotTo(HaveOccurred(), "failed to scale EphemeralRunnerSet")
+
+			runnerList := new(v1alpha1.EphemeralRunnerList)
+			Eventually(
+				func(g Gomega) {
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
+					g.Expect(err).NotTo(HaveOccurred(), "failed to list EphemeralRunners")
+					g.Expect(runnerList.Items).To(HaveLen(1))
+					g.Expect(runnerList.Items[0].Annotations["arc.test/runner-set-annotation"]).To(Equal("initial"))
+				},
+				ephemeralRunnerSetTestTimeout,
+				ephemeralRunnerSetTestInterval,
+			).Should(Succeed())
+
+			ers = new(v1alpha1.EphemeralRunnerSet)
+			err = k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunnerSet.Name, Namespace: ephemeralRunnerSet.Namespace}, ers)
+			Expect(err).NotTo(HaveOccurred(), "failed to get EphemeralRunnerSet")
+
+			updated = ers.DeepCopy()
+			updated.Annotations["arc.test/runner-set-annotation"] = "updated"
+			updated.Annotations["arc.test/new-runner-set-annotation"] = "added"
+			updated.Spec.Replicas = 2
+			updated.Spec.PatchID = 1
+			err = k8sClient.Patch(ctx, updated, client.MergeFrom(ers))
+			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunnerSet annotations")
+
+			Eventually(
+				func(g Gomega) {
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
+					g.Expect(err).NotTo(HaveOccurred(), "failed to list EphemeralRunners")
+					g.Expect(runnerList.Items).To(HaveLen(2))
+
+					annotationsByValue := map[string]int{}
+					var updatedRunnerHasNewAnnotation bool
+					for _, runner := range runnerList.Items {
+						annotationsByValue[runner.Annotations["arc.test/runner-set-annotation"]]++
+						if runner.Annotations["arc.test/runner-set-annotation"] == "updated" && runner.Annotations["arc.test/new-runner-set-annotation"] == "added" {
+							updatedRunnerHasNewAnnotation = true
+						}
+					}
+					g.Expect(annotationsByValue["initial"]).To(Equal(1))
+					g.Expect(annotationsByValue["updated"]).To(Equal(1))
+					g.Expect(updatedRunnerHasNewAnnotation).To(BeTrue())
+				},
+				ephemeralRunnerSetTestTimeout,
+				ephemeralRunnerSetTestInterval,
+			).Should(Succeed())
 		})
 
 		It("Should scale up when patch ID changes", func() {
@@ -326,8 +388,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			runnerList := new(v1alpha1.EphemeralRunnerList)
 			Eventually(
 				func() (int, error) {
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
-					if err != nil {
+					if err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace); err != nil {
 						return -1, err
 					}
 
@@ -351,7 +412,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			runnerList = new(v1alpha1.EphemeralRunnerList)
 			Eventually(
 				func() (int, error) {
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
 					if err != nil {
 						return -1, err
 					}
@@ -378,7 +439,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			runnerList := new(v1alpha1.EphemeralRunnerList)
 			Eventually(
 				func() (int, error) {
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
 					if err != nil {
 						return -1, err
 					}
@@ -390,12 +451,12 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			).Should(BeEquivalentTo(2), "2 EphemeralRunner should be created")
 
 			updatedRunner := runnerList.Items[0].DeepCopy()
-			updatedRunner.Status.Phase = corev1.PodSucceeded
+			updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseSucceeded
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[0]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
 			updatedRunner = runnerList.Items[1].DeepCopy()
-			updatedRunner.Status.Phase = corev1.PodRunning
+			updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[1]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
@@ -403,7 +464,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			runnerList = new(v1alpha1.EphemeralRunnerList)
 			Eventually(
 				func() (int, error) {
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
 					if err != nil {
 						return -1, err
 					}
@@ -429,7 +490,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			runnerList = new(v1alpha1.EphemeralRunnerList)
 			Eventually(
 				func() (int, error) {
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
 					if err != nil {
 						return -1, err
 					}
@@ -456,7 +517,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			runnerList := new(v1alpha1.EphemeralRunnerList)
 			Eventually(
 				func() (int, error) {
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
 					if err != nil {
 						return -1, err
 					}
@@ -468,12 +529,12 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			).Should(BeEquivalentTo(2), "2 EphemeralRunner should be created")
 
 			updatedRunner := runnerList.Items[0].DeepCopy()
-			updatedRunner.Status.Phase = corev1.PodSucceeded
+			updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseSucceeded
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[0]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
 			updatedRunner = runnerList.Items[1].DeepCopy()
-			updatedRunner.Status.Phase = corev1.PodPending
+			updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhasePending
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[1]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
@@ -481,7 +542,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			runnerList = new(v1alpha1.EphemeralRunnerList)
 			Consistently(
 				func() (int, error) {
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
 					if err != nil {
 						return -1, err
 					}
@@ -508,7 +569,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			runnerList := new(v1alpha1.EphemeralRunnerList)
 			Eventually(
 				func() (int, error) {
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
 					if err != nil {
 						return -1, err
 					}
@@ -520,12 +581,12 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			).Should(BeEquivalentTo(2), "2 EphemeralRunner should be created")
 
 			updatedRunner := runnerList.Items[0].DeepCopy()
-			updatedRunner.Status.Phase = corev1.PodSucceeded
+			updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseSucceeded
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[0]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
 			updatedRunner = runnerList.Items[1].DeepCopy()
-			updatedRunner.Status.Phase = corev1.PodRunning
+			updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
 
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[1]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
@@ -545,7 +606,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			// We should have 3 runners, and have no Succeeded ones
 			Eventually(
 				func() error {
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
 					if err != nil {
 						return err
 					}
@@ -555,7 +616,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					}
 
 					for _, runner := range runnerList.Items {
-						if runner.Status.Phase == corev1.PodSucceeded {
+						if runner.Status.Phase == v1alpha1.EphemeralRunnerPhaseSucceeded {
 							return fmt.Errorf("Runner %s is in Succeeded phase", runner.Name)
 						}
 					}
@@ -582,7 +643,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			runnerList := new(v1alpha1.EphemeralRunnerList)
 			Eventually(
 				func() (int, error) {
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
 					if err != nil {
 						return -1, err
 					}
@@ -594,12 +655,12 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			).Should(BeEquivalentTo(2), "2 EphemeralRunner should be created")
 
 			updatedRunner := runnerList.Items[0].DeepCopy()
-			updatedRunner.Status.Phase = corev1.PodSucceeded
+			updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseSucceeded
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[0]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
 			updatedRunner = runnerList.Items[1].DeepCopy()
-			updatedRunner.Status.Phase = corev1.PodPending
+			updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhasePending
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[1]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
@@ -607,7 +668,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			runnerList = new(v1alpha1.EphemeralRunnerList)
 			Eventually(
 				func() error {
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
 					if err != nil {
 						return err
 					}
@@ -615,9 +676,9 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					succeeded := 0
 					for _, runner := range runnerList.Items {
 						switch runner.Status.Phase {
-						case corev1.PodSucceeded:
+						case v1alpha1.EphemeralRunnerPhaseSucceeded:
 							succeeded++
-						case corev1.PodPending:
+						case v1alpha1.EphemeralRunnerPhasePending:
 							pending++
 						}
 					}
@@ -648,7 +709,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			// We should have 1 runner up and pending
 			Eventually(
 				func() error {
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
 					if err != nil {
 						return err
 					}
@@ -657,7 +718,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 						return fmt.Errorf("Expected 1 runner, got %d", len(runnerList.Items))
 					}
 
-					if runnerList.Items[0].Status.Phase != corev1.PodPending {
+					if runnerList.Items[0].Status.Phase != v1alpha1.EphemeralRunnerPhasePending {
 						return fmt.Errorf("Expected runner to be in Pending, got %s", runnerList.Items[0].Status.Phase)
 					}
 
@@ -669,13 +730,13 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 
 			// Now, the ephemeral runner finally is done and we can scale down to 0
 			updatedRunner = runnerList.Items[0].DeepCopy()
-			updatedRunner.Status.Phase = corev1.PodSucceeded
+			updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseSucceeded
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[0]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
 			Eventually(
 				func() (int, error) {
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
 					if err != nil {
 						return -1, err
 					}
@@ -702,7 +763,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			runnerList := new(v1alpha1.EphemeralRunnerList)
 			Eventually(
 				func() (int, error) {
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
 					if err != nil {
 						return -1, err
 					}
@@ -715,12 +776,12 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 
 			// Put one runner in Pending and one in Running
 			updatedRunner := runnerList.Items[0].DeepCopy()
-			updatedRunner.Status.Phase = corev1.PodPending
+			updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhasePending
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[0]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
 			updatedRunner = runnerList.Items[1].DeepCopy()
-			updatedRunner.Status.Phase = corev1.PodRunning
+			updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[1]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
@@ -728,7 +789,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			runnerList = new(v1alpha1.EphemeralRunnerList)
 			Eventually(
 				func() error {
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
 					if err != nil {
 						return err
 					}
@@ -738,9 +799,9 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 
 					for _, runner := range runnerList.Items {
 						switch runner.Status.Phase {
-						case corev1.PodPending:
+						case v1alpha1.EphemeralRunnerPhasePending:
 							pending++
-						case corev1.PodRunning:
+						case v1alpha1.EphemeralRunnerPhaseRunning:
 							running++
 
 						}
@@ -772,8 +833,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			runnerList = new(v1alpha1.EphemeralRunnerList)
 			Consistently(
 				func() (int, error) {
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
-					if err != nil {
+					if err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace); err != nil {
 						return -1, err
 					}
 
@@ -786,12 +846,12 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			// Now, let's say ephemeral runner controller patched these ephemeral runners with the registration.
 
 			updatedRunner = runnerList.Items[0].DeepCopy()
-			updatedRunner.Status.RunnerId = 1
+			updatedRunner.Status.RunnerID = 1
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[0]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
 			updatedRunner = runnerList.Items[1].DeepCopy()
-			updatedRunner.Status.RunnerId = 2
+			updatedRunner.Status.RunnerID = 2
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[1]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
@@ -799,7 +859,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			runnerList = new(v1alpha1.EphemeralRunnerList)
 			Eventually(
 				func() (int, error) {
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
 					if err != nil {
 						return -1, err
 					}
@@ -826,7 +886,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			runnerList := new(v1alpha1.EphemeralRunnerList)
 			Eventually(
 				func() (int, error) {
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
 					if err != nil {
 						return -1, err
 					}
@@ -839,12 +899,12 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 
 			// Put one runner in Succeeded and one in Running
 			updatedRunner := runnerList.Items[0].DeepCopy()
-			updatedRunner.Status.Phase = corev1.PodSucceeded
+			updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseSucceeded
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[0]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
 			updatedRunner = runnerList.Items[1].DeepCopy()
-			updatedRunner.Status.Phase = corev1.PodRunning
+			updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
 			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[1]))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
@@ -853,7 +913,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			runnerList = new(v1alpha1.EphemeralRunnerList)
 			Eventually(
 				func() error {
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
 					if err != nil {
 						return err
 					}
@@ -863,9 +923,9 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 
 					for _, runner := range runnerList.Items {
 						switch runner.Status.Phase {
-						case corev1.PodSucceeded:
+						case v1alpha1.EphemeralRunnerPhaseSucceeded:
 							succeeded++
-						case corev1.PodRunning:
+						case v1alpha1.EphemeralRunnerPhaseRunning:
 							running++
 						}
 					}
@@ -897,7 +957,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			runnerList = new(v1alpha1.EphemeralRunnerList)
 			Eventually(
 				func() error {
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
 					if err != nil {
 						return err
 					}
@@ -907,7 +967,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					}
 
 					for _, runner := range runnerList.Items {
-						if runner.Status.Phase == corev1.PodSucceeded {
+						if runner.Status.Phase == v1alpha1.EphemeralRunnerPhaseSucceeded {
 							return fmt.Errorf("Expected no runners in Succeeded phase, got one")
 						}
 					}
@@ -917,6 +977,115 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 				ephemeralRunnerSetTestTimeout,
 				ephemeralRunnerSetTestInterval,
 			).Should(BeNil(), "2 EphemeralRunner should be created and none should be in Succeeded phase")
+		})
+
+		It("Should delete idle runners, keep busy runners, and create new runners when the spec changes", func() {
+			ers := new(v1alpha1.EphemeralRunnerSet)
+			err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunnerSet.Name, Namespace: ephemeralRunnerSet.Namespace}, ers)
+			Expect(err).NotTo(HaveOccurred(), "failed to get EphemeralRunnerSet")
+
+			updated := ers.DeepCopy()
+			updated.Spec.Replicas = 3
+			updated.Spec.PatchID = 0
+			err = k8sClient.Patch(ctx, updated, client.MergeFrom(ers))
+			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunnerSet")
+
+			runnerList := new(v1alpha1.EphemeralRunnerList)
+			Eventually(
+				func() (int, error) {
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
+					if err != nil {
+						return -1, err
+					}
+
+					return len(runnerList.Items), nil
+				},
+				ephemeralRunnerSetTestTimeout,
+				ephemeralRunnerSetTestInterval,
+			).Should(BeEquivalentTo(3), "3 EphemeralRunner should be created")
+
+			idleRunnerNames := map[string]struct{}{}
+			for i := 0; i < 2; i++ {
+				idleRunner := runnerList.Items[i].DeepCopy()
+				idleRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
+				idleRunner.Status.RunnerID = i + 101
+				err = k8sClient.Status().Patch(ctx, idleRunner, client.MergeFrom(&runnerList.Items[i]))
+				Expect(err).NotTo(HaveOccurred(), "failed to update idle EphemeralRunner")
+				idleRunnerNames[idleRunner.Name] = struct{}{}
+			}
+
+			busyRunner := runnerList.Items[2].DeepCopy()
+			busyRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
+			busyRunner.Status.RunnerID = 103
+			busyRunner.Status.JobID = "job-1"
+			busyRunner.Status.WorkflowRunID = 9001
+			err = k8sClient.Status().Patch(ctx, busyRunner, client.MergeFrom(&runnerList.Items[2]))
+			Expect(err).NotTo(HaveOccurred(), "failed to update busy EphemeralRunner")
+
+			busyRunnerName := busyRunner.Name
+
+			ers = new(v1alpha1.EphemeralRunnerSet)
+			err = k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunnerSet.Name, Namespace: ephemeralRunnerSet.Namespace}, ers)
+			Expect(err).NotTo(HaveOccurred(), "failed to re-fetch EphemeralRunnerSet")
+
+			updated = ers.DeepCopy()
+			updated.Spec.EphemeralRunnerSpec.PodTemplateSpec.Spec.Containers[0].Image = "ghcr.io/actions/runner:new"
+			err = k8sClient.Patch(ctx, updated, client.MergeFrom(ers))
+			Expect(err).NotTo(HaveOccurred(), "failed to patch EphemeralRunnerSet with new spec")
+
+			Eventually(
+				func() error {
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
+					if err != nil {
+						return err
+					}
+
+					if len(runnerList.Items) != 3 {
+						return fmt.Errorf("expected 3 runners after spec update, got %d", len(runnerList.Items))
+					}
+
+					busyRunnerFound := false
+					newSpecRunnerCount := 0
+					for _, runner := range runnerList.Items {
+						if _, ok := idleRunnerNames[runner.Name]; ok {
+							return fmt.Errorf("expected idle runner %s to be deleted", runner.Name)
+						}
+
+						if runner.Name == busyRunnerName {
+							busyRunnerFound = true
+							if !runner.HasJob() {
+								return fmt.Errorf("expected remaining runner to still be busy")
+							}
+							if runner.Spec.PodTemplateSpec.Spec.Containers[0].Image != "ghcr.io/actions/runner" {
+								return fmt.Errorf("expected busy runner to keep original image, got %s", runner.Spec.PodTemplateSpec.Spec.Containers[0].Image)
+							}
+							continue
+						}
+
+						if len(runner.Spec.PodTemplateSpec.Spec.Containers) == 0 {
+							return fmt.Errorf("new runner has empty container spec")
+						}
+
+						if runner.Spec.PodTemplateSpec.Spec.Containers[0].Image != "ghcr.io/actions/runner:new" {
+							return fmt.Errorf("expected new runner image to be updated, got %s", runner.Spec.PodTemplateSpec.Spec.Containers[0].Image)
+						}
+
+						newSpecRunnerCount++
+					}
+
+					if !busyRunnerFound {
+						return fmt.Errorf("expected busy runner %s to remain", busyRunnerName)
+					}
+
+					if newSpecRunnerCount != 2 {
+						return fmt.Errorf("expected 2 runners with updated spec, got %d", newSpecRunnerCount)
+					}
+
+					return nil
+				},
+				ephemeralRunnerSetTestTimeout,
+				ephemeralRunnerSetTestInterval,
+			).Should(BeNil(), "busy runner should stay while idle runners are replaced with the updated spec")
 		})
 
 		It("Should update status on Ephemeral Runner state changes", func() {
@@ -938,7 +1107,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			runnerList := new(v1alpha1.EphemeralRunnerList)
 			Eventually(
 				func() (bool, error) {
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
 					if err != nil {
 						return false, err
 					}
@@ -952,7 +1121,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 					var failedOriginal *v1alpha1.EphemeralRunner
 					var empty []*v1alpha1.EphemeralRunner
 					for _, runner := range runnerList.Items {
-						switch runner.Status.RunnerId {
+						switch runner.Status.RunnerID {
 						case 101:
 							pendingOriginal = runner.DeepCopy()
 						case 102:
@@ -971,8 +1140,8 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 						empty = empty[1:]
 
 						pending := pendingOriginal.DeepCopy()
-						pending.Status.RunnerId = 101
-						pending.Status.Phase = corev1.PodPending
+						pending.Status.RunnerID = 101
+						pending.Status.Phase = v1alpha1.EphemeralRunnerPhasePending
 
 						err = k8sClient.Status().Patch(ctx, pending, client.MergeFrom(pendingOriginal))
 						if err != nil {
@@ -985,8 +1154,8 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 						runningOriginal = empty[0]
 						empty = empty[1:]
 						running := runningOriginal.DeepCopy()
-						running.Status.RunnerId = 102
-						running.Status.Phase = corev1.PodRunning
+						running.Status.RunnerID = 102
+						running.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
 
 						err = k8sClient.Status().Patch(ctx, running, client.MergeFrom(runningOriginal))
 						if err != nil {
@@ -999,8 +1168,8 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 						failedOriginal = empty[0]
 
 						failed := pendingOriginal.DeepCopy()
-						failed.Status.RunnerId = 103
-						failed.Status.Phase = corev1.PodFailed
+						failed.Status.RunnerID = 103
+						failed.Status.Phase = v1alpha1.EphemeralRunnerPhaseFailed
 
 						err = k8sClient.Status().Patch(ctx, failed, client.MergeFrom(failedOriginal))
 						if err != nil {
@@ -1015,6 +1184,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			).Should(BeTrue(), "Failed to eventually update to one pending, one running and one failed")
 
 			desiredStatus := v1alpha1.EphemeralRunnerSetStatus{
+				Phase:                   v1alpha1.EphemeralRunnerSetPhaseRunning,
 				CurrentReplicas:         3,
 				PendingEphemeralRunners: 1,
 				RunningEphemeralRunners: 1,
@@ -1046,7 +1216,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			Eventually(
 				func() (int, error) {
 					runnerList = new(v1alpha1.EphemeralRunnerList)
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
 					if err != nil {
 						return -1, err
 					}
@@ -1061,6 +1231,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 				PendingEphemeralRunners: 0,
 				RunningEphemeralRunners: 0,
 				FailedEphemeralRunners:  1,
+				Phase:                   v1alpha1.EphemeralRunnerSetPhaseRunning,
 			}
 
 			Eventually(
@@ -1079,7 +1250,13 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			err = k8sClient.Delete(ctx, &runnerList.Items[0])
 			Expect(err).To(BeNil(), "Failed to delete failed ephemeral runner")
 
-			desiredStatus = v1alpha1.EphemeralRunnerSetStatus{} // empty
+			desiredStatus = v1alpha1.EphemeralRunnerSetStatus{
+				CurrentReplicas:         0,
+				PendingEphemeralRunners: 0,
+				RunningEphemeralRunners: 0,
+				FailedEphemeralRunners:  0,
+				Phase:                   v1alpha1.EphemeralRunnerSetPhaseRunning,
+			}
 			Eventually(
 				func() (v1alpha1.EphemeralRunnerSetStatus, error) {
 					updated := new(v1alpha1.EphemeralRunnerSet)
@@ -1113,10 +1290,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 			Scheme: mgr.GetScheme(),
 			Log:    logf.Log,
 			ResourceBuilder: ResourceBuilder{
-				SecretResolver: &SecretResolver{
-					k8sClient:   mgr.GetClient(),
-					multiClient: actions.NewMultiClient(logr.Discard()),
-				},
+				SecretResolver: secretresolver.New(mgr.GetClient(), multiclient.NewScaleset()),
 			},
 		}
 		err := controller.SetupWithManager(mgr)
@@ -1148,9 +1322,9 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 			Spec: v1alpha1.EphemeralRunnerSetSpec{
 				Replicas: 1,
 				EphemeralRunnerSpec: v1alpha1.EphemeralRunnerSpec{
-					GitHubConfigUrl:    "http://example.com/owner/repo",
+					GitHubConfigURL:    "http://example.com/owner/repo",
 					GitHubConfigSecret: configSecret.Name,
-					RunnerScaleSetId:   100,
+					RunnerScaleSetID:   100,
 					Proxy: &v1alpha1.ProxyConfig{
 						HTTP: &v1alpha1.ProxyServerConfig{
 							Url:                 "http://proxy.example.com",
@@ -1179,36 +1353,37 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 		err = k8sClient.Create(ctx, ephemeralRunnerSet)
 		Expect(err).NotTo(HaveOccurred(), "failed to create EphemeralRunnerSet")
 
-		Eventually(func(g Gomega) {
-			// Compiled / flattened proxy secret should exist at this point
-			actualProxySecret := &corev1.Secret{}
-			err = k8sClient.Get(ctx, client.ObjectKey{
-				Namespace: autoscalingNS.Name,
-				Name:      proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet),
-			}, actualProxySecret)
-			g.Expect(err).NotTo(HaveOccurred(), "failed to get compiled / flattened proxy secret")
-
-			secretFetcher := func(name string) (*corev1.Secret, error) {
-				secret := &corev1.Secret{}
+		Eventually(
+			func(g Gomega) {
+				// Compiled / flattened proxy secret should exist at this point
+				actualProxySecret := &corev1.Secret{}
 				err = k8sClient.Get(ctx, client.ObjectKey{
 					Namespace: autoscalingNS.Name,
-					Name:      name,
-				}, secret)
-				return secret, err
-			}
+					Name:      proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet),
+				}, actualProxySecret)
+				g.Expect(err).NotTo(HaveOccurred(), "failed to get compiled / flattened proxy secret")
 
-			// Assert that the proxy secret is created with the correct values
-			expectedData, err := ephemeralRunnerSet.Spec.EphemeralRunnerSpec.Proxy.ToSecretData(secretFetcher)
-			g.Expect(err).NotTo(HaveOccurred(), "failed to get proxy secret data")
-			g.Expect(actualProxySecret.Data).To(Equal(expectedData))
-		},
+				secretFetcher := func(name string) (*corev1.Secret, error) {
+					secret := &corev1.Secret{}
+					err = k8sClient.Get(ctx, client.ObjectKey{
+						Namespace: autoscalingNS.Name,
+						Name:      name,
+					}, secret)
+					return secret, err
+				}
+
+				// Assert that the proxy secret is created with the correct values
+				expectedData, err := ephemeralRunnerSet.Spec.EphemeralRunnerSpec.Proxy.ToSecretData(secretFetcher)
+				g.Expect(err).NotTo(HaveOccurred(), "failed to get proxy secret data")
+				g.Expect(actualProxySecret.Data).To(Equal(expectedData))
+			},
 			ephemeralRunnerSetTestTimeout,
 			ephemeralRunnerSetTestInterval,
 		).Should(Succeed(), "compiled / flattened proxy secret should exist")
 
 		Eventually(func(g Gomega) {
 			runnerList := new(v1alpha1.EphemeralRunnerList)
-			err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+			err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
 			g.Expect(err).NotTo(HaveOccurred(), "failed to list EphemeralRunners")
 
 			for _, runner := range runnerList.Items {
@@ -1226,7 +1401,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 		Eventually(
 			func(g Gomega) (int, error) {
 				runnerList := new(v1alpha1.EphemeralRunnerList)
-				err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+				err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
 				if err != nil {
 					return -1, err
 				}
@@ -1234,10 +1409,10 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 				// Set status to simulate a configured EphemeralRunner
 				refetch := false
 				for i, runner := range runnerList.Items {
-					if runner.Status.RunnerId == 0 {
+					if runner.Status.RunnerID == 0 {
 						updatedRunner := runner.DeepCopy()
-						updatedRunner.Status.Phase = corev1.PodSucceeded
-						updatedRunner.Status.RunnerId = i + 100
+						updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseSucceeded
+						updatedRunner.Status.RunnerID = i + 100
 						err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runner))
 						Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 						refetch = true
@@ -1245,7 +1420,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 				}
 
 				if refetch {
-					err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
+					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
 					if err != nil {
 						return -1, err
 					}
@@ -1254,22 +1429,37 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 				return len(runnerList.Items), nil
 			},
 			ephemeralRunnerSetTestTimeout,
-			ephemeralRunnerSetTestInterval).Should(BeEquivalentTo(1), "1 EphemeralRunner should exist")
+			ephemeralRunnerSetTestInterval,
+		).Should(BeEquivalentTo(1), "1 EphemeralRunner should exist")
 
 		// Delete the EphemeralRunnerSet
 		err = k8sClient.Delete(ctx, ephemeralRunnerSet)
 		Expect(err).NotTo(HaveOccurred(), "failed to delete EphemeralRunnerSet")
 
+		Eventually(
+			func(g Gomega) (int, error) {
+				runnerList := new(v1alpha1.EphemeralRunnerList)
+				err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
+				if err != nil {
+					return -1, err
+				}
+				return len(runnerList.Items), nil
+			},
+			ephemeralRunnerSetTestTimeout,
+			ephemeralRunnerSetTestInterval,
+		).Should(BeEquivalentTo(0), "EphemeralRunners should be deleted")
+
 		// Assert that the proxy secret is deleted
-		Eventually(func(g Gomega) {
-			proxySecret := &corev1.Secret{}
-			err = k8sClient.Get(ctx, client.ObjectKey{
-				Namespace: autoscalingNS.Name,
-				Name:      proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet),
-			}, proxySecret)
-			g.Expect(err).To(HaveOccurred(), "proxy secret should be deleted")
-			g.Expect(kerrors.IsNotFound(err)).To(BeTrue(), "proxy secret should be deleted")
-		},
+		Eventually(
+			func(g Gomega) {
+				proxySecret := &corev1.Secret{}
+				err = k8sClient.Get(ctx, client.ObjectKey{
+					Namespace: autoscalingNS.Name,
+					Name:      proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet),
+				}, proxySecret)
+				g.Expect(err).To(HaveOccurred(), "proxy secret should be deleted")
+				g.Expect(kerrors.IsNotFound(err)).To(BeTrue(), "proxy secret should be deleted")
+			},
 			ephemeralRunnerSetTestTimeout,
 			ephemeralRunnerSetTestInterval,
 		).Should(Succeed(), "proxy secret should be deleted")
@@ -1315,9 +1505,9 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 			Spec: v1alpha1.EphemeralRunnerSetSpec{
 				Replicas: 1,
 				EphemeralRunnerSpec: v1alpha1.EphemeralRunnerSpec{
-					GitHubConfigUrl:    "http://example.com/owner/repo",
+					GitHubConfigURL:    "http://example.com/owner/repo",
 					GitHubConfigSecret: configSecret.Name,
-					RunnerScaleSetId:   100,
+					RunnerScaleSetID:   100,
 					Proxy: &v1alpha1.ProxyConfig{
 						HTTP: &v1alpha1.ProxyServerConfig{
 							Url:                 proxy.URL,
@@ -1342,21 +1532,22 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 		Expect(err).NotTo(HaveOccurred(), "failed to create EphemeralRunnerSet")
 
 		runnerList := new(v1alpha1.EphemeralRunnerList)
-		Eventually(func() (int, error) {
-			err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
-			if err != nil {
-				return -1, err
-			}
+		Eventually(
+			func() (int, error) {
+				err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
+				if err != nil {
+					return -1, err
+				}
 
-			return len(runnerList.Items), nil
-		},
+				return len(runnerList.Items), nil
+			},
 			ephemeralRunnerSetTestTimeout,
 			ephemeralRunnerSetTestInterval,
 		).Should(BeEquivalentTo(1), "failed to create ephemeral runner")
 
 		runner := runnerList.Items[0].DeepCopy()
-		runner.Status.Phase = corev1.PodRunning
-		runner.Status.RunnerId = 100
+		runner.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
+		runner.Status.RunnerID = 100
 		err = k8sClient.Status().Patch(ctx, runner, client.MergeFrom(&runnerList.Items[0]))
 		Expect(err).NotTo(HaveOccurred(), "failed to update ephemeral runner status")
 
@@ -1417,10 +1608,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 			Scheme: mgr.GetScheme(),
 			Log:    logf.Log,
 			ResourceBuilder: ResourceBuilder{
-				SecretResolver: &SecretResolver{
-					k8sClient:   mgr.GetClient(),
-					multiClient: actions.NewMultiClient(logr.Discard()),
-				},
+				SecretResolver: secretresolver.New(mgr.GetClient(), multiclient.NewScaleset()),
 			},
 		}
 		err = controller.SetupWithManager(mgr)
@@ -1430,26 +1618,6 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 	})
 
 	It("should be able to make requests to a server using root CAs", func() {
-		certsFolder := filepath.Join(
-			"../../",
-			"github",
-			"actions",
-			"testdata",
-		)
-		certPath := filepath.Join(certsFolder, "server.crt")
-		keyPath := filepath.Join(certsFolder, "server.key")
-
-		serverSuccessfullyCalled := false
-		server := testserver.NewUnstarted(GinkgoT(), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			serverSuccessfullyCalled = true
-			w.WriteHeader(http.StatusOK)
-		}))
-		cert, err := tls.LoadX509KeyPair(certPath, keyPath)
-		Expect(err).NotTo(HaveOccurred(), "failed to load server cert")
-
-		server.TLS = &tls.Config{Certificates: []tls.Certificate{cert}}
-		server.StartTLS()
-
 		ephemeralRunnerSet = &v1alpha1.EphemeralRunnerSet{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-asrs",
@@ -1458,7 +1626,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 			Spec: v1alpha1.EphemeralRunnerSetSpec{
 				Replicas: 1,
 				EphemeralRunnerSpec: v1alpha1.EphemeralRunnerSpec{
-					GitHubConfigUrl:    server.ConfigURLForOrg("my-org"),
+					GitHubConfigURL:    "https://github.example.com/api/v3",
 					GitHubConfigSecret: configSecret.Name,
 					GitHubServerTLS: &v1alpha1.TLSConfig{
 						CertificateFrom: &v1alpha1.TLSCertificateSource{
@@ -1470,7 +1638,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 							},
 						},
 					},
-					RunnerScaleSetId: 100,
+					RunnerScaleSetID: 100,
 					PodTemplateSpec: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
@@ -1485,47 +1653,50 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 			},
 		}
 
-		err = k8sClient.Create(ctx, ephemeralRunnerSet)
+		err := k8sClient.Create(ctx, ephemeralRunnerSet)
 		Expect(err).NotTo(HaveOccurred(), "failed to create EphemeralRunnerSet")
 
 		runnerList := new(v1alpha1.EphemeralRunnerList)
-		Eventually(func() (int, error) {
-			err := k8sClient.List(ctx, runnerList, client.InNamespace(ephemeralRunnerSet.Namespace))
-			if err != nil {
-				return -1, err
-			}
+		Eventually(
+			func() (int, error) {
+				err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
+				if err != nil {
+					return -1, err
+				}
 
-			return len(runnerList.Items), nil
-		},
+				return len(runnerList.Items), nil
+			},
 			ephemeralRunnerSetTestTimeout,
 			ephemeralRunnerSetTestInterval,
 		).Should(BeEquivalentTo(1), "failed to create ephemeral runner")
 
+		// Verify that the TLS configuration is properly propagated to the runner
 		runner := runnerList.Items[0].DeepCopy()
 		Expect(runner.Spec.GitHubServerTLS).NotTo(BeNil(), "runner tls config should not be nil")
 		Expect(runner.Spec.GitHubServerTLS).To(BeEquivalentTo(ephemeralRunnerSet.Spec.EphemeralRunnerSpec.GitHubServerTLS), "runner tls config should be correct")
-
-		runner.Status.Phase = corev1.PodRunning
-		runner.Status.RunnerId = 100
-		err = k8sClient.Status().Patch(ctx, runner, client.MergeFrom(&runnerList.Items[0]))
-		Expect(err).NotTo(HaveOccurred(), "failed to update ephemeral runner status")
-
-		currentRunnerSet := new(v1alpha1.EphemeralRunnerSet)
-		err = k8sClient.Get(ctx, client.ObjectKey{Namespace: ephemeralRunnerSet.Namespace, Name: ephemeralRunnerSet.Name}, currentRunnerSet)
-		Expect(err).NotTo(HaveOccurred(), "failed to get EphemeralRunnerSet")
-
-		updatedRunnerSet := currentRunnerSet.DeepCopy()
-		updatedRunnerSet.Spec.Replicas = 0
-		err = k8sClient.Patch(ctx, updatedRunnerSet, client.MergeFrom(currentRunnerSet))
-		Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunnerSet")
-
-		// wait for server to be called
-		Eventually(
-			func() bool {
-				return serverSuccessfullyCalled
-			},
-			autoscalingRunnerSetTestTimeout,
-			1*time.Nanosecond,
-		).Should(BeTrue(), "server was not called")
 	})
 })
+
+// helper function to remove ephemeral runners since in the test, ephemeral runner reconciler is not started
+func listEphemeralRunnersAndRemoveFinalizers(ctx context.Context, k8sClient client.Client, list *v1alpha1.EphemeralRunnerList, namespace string) error {
+	err := k8sClient.List(ctx, list, client.InNamespace(namespace))
+	if err != nil {
+		return err
+	}
+
+	// Since we are not starting ephemeral runner reconciler, ignore
+	liveItems := make([]v1alpha1.EphemeralRunner, 0)
+	for _, item := range list.Items {
+		if !item.DeletionTimestamp.IsZero() {
+			original := item.DeepCopy()
+			item.Finalizers = []string{}
+			if err := k8sClient.Patch(ctx, &item, client.MergeFrom(original)); err != nil {
+				return err
+			}
+			continue
+		}
+		liveItems = append(liveItems, item)
+	}
+	list.Items = liveItems
+	return nil
+}

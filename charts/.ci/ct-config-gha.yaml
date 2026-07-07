@@ -8,4 +8,6 @@ check-version-increment: false # Disable checking that the chart version has bee
 charts:
   - charts/gha-runner-scale-set-controller
   - charts/gha-runner-scale-set
+  - charts/gha-runner-scale-set-controller-experimental
+  - charts/gha-runner-scale-set-experimental
 skip-clean-up: true

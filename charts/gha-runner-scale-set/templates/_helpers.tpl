@@ -54,6 +54,20 @@ app.kubernetes.io/name: {{ include "gha-runner-scale-set.scale-set-name" . }}
 app.kubernetes.io/instance: {{ include "gha-runner-scale-set.scale-set-name" . }}
 {{- end }}
 
+{{/*
+Render a ResourceMeta block for AutoscalingRunnerSet spec fields.
+*/}}
+{{- define "gha-runner-scale-set.resourceMetaSpec" -}}
+{{- with .labels }}
+labels:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- with .annotations }}
+annotations:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end }}
+
 {{- define "gha-runner-scale-set.githubsecret" -}}
   {{- if kindIs "string" .Values.githubConfigSecret }}
     {{- if not (empty .Values.githubConfigSecret) }}
@@ -454,6 +468,7 @@ env:
     {{- if $tlsConfig.runnerMountPath }}
       {{- $mountGitHubServerTLS = 1 }}
     {{- end }}
+    {{- if or $container.volumeMounts $mountGitHubServerTLS }}
 volumeMounts:
     {{- with $container.volumeMounts }}
       {{- range $i, $volMount := . }}
@@ -467,6 +482,9 @@ volumeMounts:
   - name: github-server-tls-cert
     mountPath: {{ clean (print $tlsConfig.runnerMountPath "/" $tlsConfig.certificateFrom.configMapKeyRef.key) }}
     subPath: {{ $tlsConfig.certificateFrom.configMapKeyRef.key }}
+    {{- end }}
+    {{- else }}
+volumeMounts: []
     {{- end }}
   {{- end }}
 {{- end }}

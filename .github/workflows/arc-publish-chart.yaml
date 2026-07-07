@@ -40,12 +40,12 @@ jobs:
       publish-chart: ${{ steps.publish-chart-step.outputs.publish }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Set up Helm
-        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2
         with:
           version: ${{ env.HELM_VERSION }}
 
@@ -63,7 +63,7 @@ jobs:
           python-version: "3.11"
 
       - name: Set up chart-testing
-        uses: helm/chart-testing-action@0d28d3144d3a25ea2cc349d6e59901c4ff469b3b
+        uses: helm/chart-testing-action@6ec842c01de15ebb84c8627d2744a0c2f2755c9f
 
       - name: Run chart-testing (list-changed)
         id: list-changed
@@ -79,7 +79,7 @@ jobs:
 
       - name: Create kind cluster
         if: steps.list-changed.outputs.changed == 'true'
-        uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc
 
       # We need cert-manager already installed in the cluster because we assume the CRDs exist
       - name: Install cert-manager
@@ -134,7 +134,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -145,7 +145,7 @@ jobs:
 
       - name: Get Token
         id: get_workflow_token
-        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
+        uses: peter-murray/workflow-application-token-action@cb731e00cb6754f584507134ff389dfb3dc42bbc
         with:
           application_id: ${{ secrets.ACTIONS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.ACTIONS_ACCESS_PK }}
@@ -184,7 +184,7 @@ jobs:
       # this workaround is intended to move the index.yaml to the target repo
       # where the github pages are hosted
       - name: Checkout target repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.CHART_TARGET_ORG }}/${{ env.CHART_TARGET_REPO }}
           path: ${{ env.CHART_TARGET_REPO }}

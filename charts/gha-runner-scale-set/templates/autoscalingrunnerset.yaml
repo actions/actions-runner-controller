@@ -1,3 +1,4 @@
+{{- $resourceMeta := default (dict) .Values.resourceMeta }}
 {{- $hasCustomResourceMeta := (and .Values.resourceMeta .Values.resourceMeta.autoscalingRunnerSet) }}
 apiVersion: actions.github.com/v1alpha1
 kind: AutoscalingRunnerSet
@@ -73,6 +74,18 @@ spec:
   {{- end }}
   {{- with .Values.runnerScaleSetName }}
   runnerScaleSetName: {{ . }}
+  {{- end }}
+  {{- if and .Values.scaleSetLabels (kindIs "slice" .Values.scaleSetLabels) }}
+  {{- range .Values.scaleSetLabels }}
+  {{- if empty . }}
+  {{- fail "scaleSetLabels contains an empty string, each label must be a non-empty string of less than 256 characters" }}
+  {{- end }}
+  {{- if ge (len .) 256 }}
+  {{- fail "scaleSetLabels contains a label that is 256 characters or more, each label must be a non-empty string of less than 256 characters" }}
+  {{- end }}
+  {{- end }}
+  runnerScaleSetLabels:
+    {{- toYaml .Values.scaleSetLabels | nindent 4 }}
   {{- end }}
 
   {{- if .Values.githubServerTLS }}
@@ -154,6 +167,46 @@ spec:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 
+  {{- with (index $resourceMeta "autoscalingListener") }}
+  autoscalingListener:
+    {{- include "gha-runner-scale-set.resourceMetaSpec" . | nindent 4 }}
+  {{- end }}
+
+  {{- with (index $resourceMeta "listenerServiceAccount") }}
+  listenerServiceAccountMetadata:
+    {{- include "gha-runner-scale-set.resourceMetaSpec" . | nindent 4 }}
+  {{- end }}
+
+  {{- with (index $resourceMeta "listenerRole") }}
+  listenerRoleMetadata:
+    {{- include "gha-runner-scale-set.resourceMetaSpec" . | nindent 4 }}
+  {{- end }}
+
+  {{- with (index $resourceMeta "listenerRoleBinding") }}
+  listenerRoleBindingMetadata:
+    {{- include "gha-runner-scale-set.resourceMetaSpec" . | nindent 4 }}
+  {{- end }}
+
+  {{- with (index $resourceMeta "listenerConfigSecret") }}
+  listenerConfigSecretMetadata:
+    {{- include "gha-runner-scale-set.resourceMetaSpec" . | nindent 4 }}
+  {{- end }}
+
+  {{- with (index $resourceMeta "ephemeralRunnerSet") }}
+  ephemeralRunnerSetMetadata:
+    {{- include "gha-runner-scale-set.resourceMetaSpec" . | nindent 4 }}
+  {{- end }}
+
+  {{- with (index $resourceMeta "ephemeralRunner") }}
+  ephemeralRunnerMetadata:
+    {{- include "gha-runner-scale-set.resourceMetaSpec" . | nindent 4 }}
+  {{- end }}
+
+  {{- with (index $resourceMeta "ephemeralRunnerConfigSecret") }}
+  ephemeralRunnerConfigSecretMetadata:
+    {{- include "gha-runner-scale-set.resourceMetaSpec" . | nindent 4 }}
+  {{- end }}
+
   template:
     {{- with .Values.template.metadata }}
     metadata:
@@ -216,7 +269,7 @@ spec:
       {{- include "gha-runner-scale-set.default-mode-runner-containers" . | nindent 6 }}
       {{- end }}
       {{- $tlsConfig := (default (dict) .Values.githubServerTLS) }}
-      {{- if or .Values.template.spec.volumes (eq $containerMode.type "dind") (eq $containerMode.type "kubernetes") (eq $containerMode.type "kubernetes-novolume") $tlsConfig.runnerMountPath }}
+      {{- if or .Values.template.spec.volumes (eq $containerMode.type "dind") (eq $containerMode.type "kubernetes") $tlsConfig.runnerMountPath }}
       volumes:
         {{- if $tlsConfig.runnerMountPath }}
           {{- include "gha-runner-scale-set.tls-volume" $tlsConfig | nindent 6 }}
@@ -233,4 +286,6 @@ spec:
         {{- toYaml . | nindent 6 }}
           {{- end }}
         {{- end }}
+      {{- else if eq $containerMode.type "kubernetes-novolume" }}
+      volumes: []
       {{- end }}

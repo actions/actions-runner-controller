@@ -111,7 +111,7 @@ func SetupIntegrationTest(ctx2 context.Context) *testEnvironment {
 			Client:                      mgr.GetClient(),
 			Scheme:                      scheme.Scheme,
 			Log:                         logf.Log,
-			Recorder:                    mgr.GetEventRecorderFor("runnerreplicaset-controller"),
+			Recorder:                    mgr.GetEventRecorder("runnerreplicaset-controller"),
 			GitHubClient:                multiClient,
 			Name:                        controllerName("runner"),
 			RegistrationRecheckInterval: time.Millisecond * 100,
@@ -129,7 +129,7 @@ func SetupIntegrationTest(ctx2 context.Context) *testEnvironment {
 			Client:   mgr.GetClient(),
 			Scheme:   scheme.Scheme,
 			Log:      logf.Log,
-			Recorder: mgr.GetEventRecorderFor("runnerreplicaset-controller"),
+			Recorder: mgr.GetEventRecorder("runnerreplicaset-controller"),
 			Name:     controllerName("runnerreplicaset"),
 		}
 		err = replicasetController.SetupWithManager(mgr)
@@ -139,7 +139,7 @@ func SetupIntegrationTest(ctx2 context.Context) *testEnvironment {
 			Client:   mgr.GetClient(),
 			Scheme:   scheme.Scheme,
 			Log:      logf.Log,
-			Recorder: mgr.GetEventRecorderFor("runnerdeployment-controller"),
+			Recorder: mgr.GetEventRecorder("runnerdeployment-controller"),
 			Name:     controllerName("runnnerdeployment"),
 		}
 		err = deploymentsController.SetupWithManager(mgr)
@@ -150,7 +150,7 @@ func SetupIntegrationTest(ctx2 context.Context) *testEnvironment {
 			Scheme:       scheme.Scheme,
 			Log:          logf.Log,
 			GitHubClient: multiClient,
-			Recorder:     mgr.GetEventRecorderFor("horizontalrunnerautoscaler-controller"),
+			Recorder:     mgr.GetEventRecorder("horizontalrunnerautoscaler-controller"),
 			Name:         controllerName("horizontalrunnerautoscaler"),
 		}
 		err = autoscalerController.SetupWithManager(mgr)
@@ -160,7 +160,7 @@ func SetupIntegrationTest(ctx2 context.Context) *testEnvironment {
 			Client:    mgr.GetClient(),
 			Scheme:    scheme.Scheme,
 			Log:       logf.Log,
-			Recorder:  mgr.GetEventRecorderFor("horizontalrunnerautoscaler-controller"),
+			Recorder:  mgr.GetEventRecorder("horizontalrunnerautoscaler-controller"),
 			Name:      controllerName("horizontalrunnerautoscalergithubwebhook"),
 			Namespace: ns.Name,
 		}

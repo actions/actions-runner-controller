@@ -1,0 +1,48 @@
+suite: "Test Manager RoleBinding Annotations"
+templates:
+  - manager_role_binding.yaml
+tests:
+  - it: should merge global and resource annotations (resource wins)
+    set:
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        all:
+          metadata:
+            annotations:
+              owner: "platform"
+              environment: "production"
+        managerRoleBinding:
+          metadata:
+            annotations:
+              environment: "staging"
+              team: "backend"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: metadata.annotations["owner"]
+          value: "platform"
+      - equal:
+          path: metadata.annotations["team"]
+          value: "backend"
+      - equal:
+          path: metadata.annotations["environment"]
+          value: "staging"
+
+  - it: should not allow actions.github.com/* annotations from user input
+    set:
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        managerRoleBinding:
+          metadata:
+            annotations:
+              actions.github.com/something: "overridden"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - notExists:
+          path: metadata.annotations["actions.github.com/something"]

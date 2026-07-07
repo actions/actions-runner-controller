@@ -1,0 +1,66 @@
+suite: "Controller Deployment rate limiter"
+templates:
+  - deployment.yaml
+tests:
+  - it: should omit workqueue-rate-limiter flag by default
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: "--workqueue-rate-limiter=bucket_rate_limiter"
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: "--workqueue-rate-limiter=typed_rate_limiter"
+
+  - it: should include workqueue-rate-limiter flag when bucket_rate_limiter is configured
+    set:
+      controller:
+        manager:
+          config:
+            rateLimiter:
+              name: "bucket_rate_limiter"
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--workqueue-rate-limiter=bucket_rate_limiter"
+
+  - it: should include workqueue-rate-limiter flag when typed_rate_limiter is configured
+    set:
+      controller:
+        manager:
+          config:
+            rateLimiter:
+              name: "typed_rate_limiter"
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--workqueue-rate-limiter=typed_rate_limiter"
+
+  - it: should render both config and extraArgs in deterministic order
+    set:
+      controller:
+        manager:
+          config:
+            rateLimiter:
+              name: "bucket_rate_limiter"
+          container:
+            extraArgs:
+              - "--workqueue-rate-limiter=typed_rate_limiter"
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--workqueue-rate-limiter=bucket_rate_limiter"
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--workqueue-rate-limiter=typed_rate_limiter"

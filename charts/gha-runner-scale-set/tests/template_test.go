@@ -335,6 +335,46 @@ func TestTemplateRenderedSetServiceAccountToKubeNoVolumeMode(t *testing.T) {
 	assert.Equal(t, expectedServiceAccountName, ars.Annotations[actionsgithubcom.AnnotationKeyKubernetesModeServiceAccountName])
 }
 
+func TestTemplateRenderedNoPermissionServiceAccountNotRenderedInKubernetesModes(t *testing.T) {
+	t.Parallel()
+
+	for _, mode := range []string{"kubernetes", "kubernetes-novolume"} {
+		t.Run("containerMode "+mode, func(t *testing.T) {
+			helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+			require.NoError(t, err)
+
+			releaseName := "test-runners"
+			namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+			options := &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"githubConfigUrl":                    "https://github.com/actions",
+					"githubConfigSecret.github_token":    "gh_token12345",
+					"controllerServiceAccount.name":      "arc",
+					"controllerServiceAccount.namespace": "arc-system",
+					"containerMode.type":                 mode,
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+			}
+
+			_, err = helm.RenderTemplateE(
+				t,
+				options,
+				helmChartPath,
+				releaseName,
+				[]string{"templates/no_permission_serviceaccount.yaml"},
+			)
+			assert.ErrorContains(
+				t,
+				err,
+				"could not find template templates/no_permission_serviceaccount.yaml in chart",
+				"no permission service account should not be rendered in "+mode+" mode",
+			)
+		})
+	}
+}
+
 func TestTemplateRenderedUserProvideSetServiceAccount(t *testing.T) {
 	t.Parallel()
 
@@ -472,6 +512,37 @@ func TestTemplateRenderedAutoScalingRunnerSet_RunnerScaleSetName(t *testing.T) {
 	assert.Len(t, ars.Spec.Template.Spec.Containers, 1, "Template.Spec should have 1 container")
 	assert.Equal(t, "runner", ars.Spec.Template.Spec.Containers[0].Name)
 	assert.Equal(t, "ghcr.io/actions/actions-runner:latest", ars.Spec.Template.Spec.Containers[0].Image)
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_ScaleSetLabels(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"githubConfigUrl":                    "https://github.com/actions",
+			"githubConfigSecret.github_token":    "gh_token12345",
+			"scaleSetLabels[0]":                  "linux",
+			"scaleSetLabels[1]":                  "x64",
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	assert.Equal(t, []string{"linux", "x64"}, ars.Spec.RunnerScaleSetLabels)
 }
 
 func TestTemplateRenderedAutoScalingRunnerSet_ProvideMetadata(t *testing.T) {
@@ -1083,6 +1154,75 @@ func TestTemplateRenderedAutoScalingRunnerSet_EnableKubernetesModeNoVolume(t *te
 	assert.Equal(t, ars.Spec.Template.Spec.Containers[0].Image, ars.Spec.Template.Spec.Containers[0].Env[3].Value)
 
 	assert.Len(t, ars.Spec.Template.Spec.Volumes, 0, "Template.Spec should have 0 volumes")
+	assert.NotNil(t, ars.Spec.Template.Spec.Volumes, "Template.Spec.Volumes should be non-nil empty slice, not null")
+
+	// Regression check: ensure volumeMounts is also non-nil empty slice for kubernetes-novolume
+	runnerContainer := ars.Spec.Template.Spec.Containers[0]
+	assert.NotNil(t, runnerContainer.VolumeMounts, "runner container VolumeMounts should be non-nil empty slice, not null")
+	assert.Len(t, runnerContainer.VolumeMounts, 0, "runner container should have 0 volumeMounts in kubernetes-novolume mode")
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_EnableKubernetesModeNoVolume_WithCustomVolumes(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values_k8s_novolume_custom_volumes.yaml")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	// Test that user-provided volumes are preserved even in kubernetes-novolume mode
+	options := &helm.Options{
+		Logger:         logger.Discard,
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	// Override preservation: user-provided volume should be present, not replaced by empty array
+	assert.Len(t, ars.Spec.Template.Spec.Volumes, 1, "Template.Spec should have 1 volume (user-provided override)")
+	assert.Equal(t, "custom-volume", ars.Spec.Template.Spec.Volumes[0].Name, "Volume name should be preserved as custom-volume")
+	assert.NotNil(t, ars.Spec.Template.Spec.Volumes[0].EmptyDir, "Volume should have EmptyDir configured")
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_EnableKubernetesModeNoVolume_WithCustomVolumeMounts(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values_k8s_novolume_custom_volume_mounts.yaml")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	// Test that user-provided volumeMounts are preserved in kubernetes-novolume runner container
+	options := &helm.Options{
+		Logger:         logger.Discard,
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	runnerContainer := ars.Spec.Template.Spec.Containers[0]
+	// Override preservation: user-provided volumeMounts should be present, not replaced by empty array
+	assert.Len(t, runnerContainer.VolumeMounts, 1, "runner container should have 1 volumeMount (user-provided override)")
+	assert.Equal(t, "custom-volume", runnerContainer.VolumeMounts[0].Name, "VolumeMount name should be preserved as custom-volume")
+	assert.Equal(t, "/mnt/custom", runnerContainer.VolumeMounts[0].MountPath, "VolumeMount path should be preserved as /mnt/custom")
 }
 
 func TestTemplateRenderedAutoscalingRunnerSet_ListenerPodTemplate(t *testing.T) {
@@ -2386,6 +2526,14 @@ func TestCustomLabels(t *testing.T) {
 			"resourceMeta.kubernetesModeServiceAccount.labels.kmsa-custom": "kmsa-custom-value",
 			"resourceMeta.managerRole.labels.mr-custom":                    "mr-custom-value",
 			"resourceMeta.managerRoleBinding.labels.mrb-custom":            "mrb-custom-value",
+			"resourceMeta.autoscalingListener.labels.al-custom":            "al-custom-value",
+			"resourceMeta.listenerServiceAccount.labels.lsa-custom":        "lsa-custom-value",
+			"resourceMeta.listenerRole.labels.lr-custom":                   "lr-custom-value",
+			"resourceMeta.listenerRoleBinding.labels.lrb-custom":           "lrb-custom-value",
+			"resourceMeta.listenerConfigSecret.labels.lcs-custom":          "lcs-custom-value",
+			"resourceMeta.ephemeralRunnerSet.labels.ers-custom":            "ers-custom-value",
+			"resourceMeta.ephemeralRunner.labels.er-custom":                "er-custom-value",
+			"resourceMeta.ephemeralRunnerConfigSecret.labels.ercs-custom":  "ercs-custom-value",
 		},
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
@@ -2423,6 +2571,22 @@ func TestCustomLabels(t *testing.T) {
 	assert.Equal(t, wantCustomValue, ars.Labels[targetLabel])
 	assert.Equal(t, wantReservedValue, ars.Labels[reservedLabel])
 	assert.Equal(t, "ars-custom-value", ars.Labels["ars-custom"])
+	require.NotNil(t, ars.Spec.AutoscalingListenerMetadata)
+	assert.Equal(t, "al-custom-value", ars.Spec.AutoscalingListenerMetadata.Labels["al-custom"])
+	require.NotNil(t, ars.Spec.ListenerServiceAccountMetadata)
+	assert.Equal(t, "lsa-custom-value", ars.Spec.ListenerServiceAccountMetadata.Labels["lsa-custom"])
+	require.NotNil(t, ars.Spec.ListenerRoleMetadata)
+	assert.Equal(t, "lr-custom-value", ars.Spec.ListenerRoleMetadata.Labels["lr-custom"])
+	require.NotNil(t, ars.Spec.ListenerRoleBindingMetadata)
+	assert.Equal(t, "lrb-custom-value", ars.Spec.ListenerRoleBindingMetadata.Labels["lrb-custom"])
+	require.NotNil(t, ars.Spec.ListenerConfigSecretMetadata)
+	assert.Equal(t, "lcs-custom-value", ars.Spec.ListenerConfigSecretMetadata.Labels["lcs-custom"])
+	require.NotNil(t, ars.Spec.EphemeralRunnerSetMetadata)
+	assert.Equal(t, "ers-custom-value", ars.Spec.EphemeralRunnerSetMetadata.Labels["ers-custom"])
+	require.NotNil(t, ars.Spec.EphemeralRunnerMetadata)
+	assert.Equal(t, "er-custom-value", ars.Spec.EphemeralRunnerMetadata.Labels["er-custom"])
+	require.NotNil(t, ars.Spec.EphemeralRunnerConfigSecretMetadata)
+	assert.Equal(t, "ercs-custom-value", ars.Spec.EphemeralRunnerConfigSecretMetadata.Labels["ercs-custom"])
 
 	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/kube_mode_serviceaccount.yaml"})
 	var serviceAccount corev1.ServiceAccount
@@ -2492,6 +2656,14 @@ func TestCustomAnnotations(t *testing.T) {
 			"resourceMeta.kubernetesModeServiceAccount.annotations.kmsa-custom": "kmsa-custom-value",
 			"resourceMeta.managerRole.annotations.mr-custom":                    "mr-custom-value",
 			"resourceMeta.managerRoleBinding.annotations.mrb-custom":            "mrb-custom-value",
+			"resourceMeta.autoscalingListener.annotations.al-custom":            "al-custom-value",
+			"resourceMeta.listenerServiceAccount.annotations.lsa-custom":        "lsa-custom-value",
+			"resourceMeta.listenerRole.annotations.lr-custom":                   "lr-custom-value",
+			"resourceMeta.listenerRoleBinding.annotations.lrb-custom":           "lrb-custom-value",
+			"resourceMeta.listenerConfigSecret.annotations.lcs-custom":          "lcs-custom-value",
+			"resourceMeta.ephemeralRunnerSet.annotations.ers-custom":            "ers-custom-value",
+			"resourceMeta.ephemeralRunner.annotations.er-custom":                "er-custom-value",
+			"resourceMeta.ephemeralRunnerConfigSecret.annotations.ercs-custom":  "ercs-custom-value",
 		},
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
@@ -2523,6 +2695,22 @@ func TestCustomAnnotations(t *testing.T) {
 	helm.UnmarshalK8SYaml(t, output, &ars)
 	assert.Equal(t, wantCustomValue, ars.Annotations[targetAnnotations])
 	assert.Equal(t, "ars-custom-value", ars.Annotations["ars-custom"])
+	require.NotNil(t, ars.Spec.AutoscalingListenerMetadata)
+	assert.Equal(t, "al-custom-value", ars.Spec.AutoscalingListenerMetadata.Annotations["al-custom"])
+	require.NotNil(t, ars.Spec.ListenerServiceAccountMetadata)
+	assert.Equal(t, "lsa-custom-value", ars.Spec.ListenerServiceAccountMetadata.Annotations["lsa-custom"])
+	require.NotNil(t, ars.Spec.ListenerRoleMetadata)
+	assert.Equal(t, "lr-custom-value", ars.Spec.ListenerRoleMetadata.Annotations["lr-custom"])
+	require.NotNil(t, ars.Spec.ListenerRoleBindingMetadata)
+	assert.Equal(t, "lrb-custom-value", ars.Spec.ListenerRoleBindingMetadata.Annotations["lrb-custom"])
+	require.NotNil(t, ars.Spec.ListenerConfigSecretMetadata)
+	assert.Equal(t, "lcs-custom-value", ars.Spec.ListenerConfigSecretMetadata.Annotations["lcs-custom"])
+	require.NotNil(t, ars.Spec.EphemeralRunnerSetMetadata)
+	assert.Equal(t, "ers-custom-value", ars.Spec.EphemeralRunnerSetMetadata.Annotations["ers-custom"])
+	require.NotNil(t, ars.Spec.EphemeralRunnerMetadata)
+	assert.Equal(t, "er-custom-value", ars.Spec.EphemeralRunnerMetadata.Annotations["er-custom"])
+	require.NotNil(t, ars.Spec.EphemeralRunnerConfigSecretMetadata)
+	assert.Equal(t, "ercs-custom-value", ars.Spec.EphemeralRunnerConfigSecretMetadata.Annotations["ercs-custom"])
 
 	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/kube_mode_serviceaccount.yaml"})
 	var serviceAccount corev1.ServiceAccount

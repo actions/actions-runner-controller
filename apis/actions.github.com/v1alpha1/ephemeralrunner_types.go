@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"github.com/actions/actions-runner-controller/hash"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -29,7 +30,7 @@ const EphemeralRunnerContainerName = "runner"
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=".spec.githubConfigUrl",name="GitHub Config URL",type=string
 // +kubebuilder:printcolumn:JSONPath=".status.runnerId",name=RunnerId,type=number
-// +kubebuilder:printcolumn:JSONPath=".status.phase",name=Status,type=string
+// +kubebuilder:printcolumn:JSONPath=".status.phase",name=Phase,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.jobRepositoryName",name=JobRepository,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.jobWorkflowRef",name=JobWorkflowRef,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.workflowRunId",name=WorkflowRunId,type=number
@@ -48,7 +49,7 @@ type EphemeralRunner struct {
 }
 
 func (er *EphemeralRunner) IsDone() bool {
-	return er.Status.Phase == corev1.PodSucceeded || er.Status.Phase == corev1.PodFailed
+	return er.Status.Phase == EphemeralRunnerPhaseSucceeded || er.Status.Phase == EphemeralRunnerPhaseFailed || er.Status.Phase == EphemeralRunnerPhaseOutdated
 }
 
 func (er *EphemeralRunner) HasJob() bool {
@@ -77,7 +78,7 @@ func (er *EphemeralRunner) GitHubConfigSecret() string {
 }
 
 func (er *EphemeralRunner) GitHubConfigUrl() string {
-	return er.Spec.GitHubConfigUrl
+	return er.Spec.GitHubConfigURL
 }
 
 func (er *EphemeralRunner) GitHubProxy() *ProxyConfig {
@@ -102,7 +103,7 @@ func (er *EphemeralRunner) VaultProxy() *ProxyConfig {
 // EphemeralRunnerSpec defines the desired state of EphemeralRunner
 type EphemeralRunnerSpec struct {
 	// +required
-	GitHubConfigUrl string `json:"githubConfigUrl,omitempty"`
+	GitHubConfigURL string `json:"githubConfigUrl,omitempty"`
 
 	// +required
 	GitHubConfigSecret string `json:"githubConfigSecret,omitempty"`
@@ -111,7 +112,7 @@ type EphemeralRunnerSpec struct {
 	GitHubServerTLS *TLSConfig `json:"githubServerTLS,omitempty"`
 
 	// +required
-	RunnerScaleSetId int `json:"runnerScaleSetId,omitempty"`
+	RunnerScaleSetID int `json:"runnerScaleSetId,omitempty"`
 
 	// +optional
 	Proxy *ProxyConfig `json:"proxy,omitempty"`
@@ -122,7 +123,14 @@ type EphemeralRunnerSpec struct {
 	// +optional
 	VaultConfig *VaultConfig `json:"vaultConfig,omitempty"`
 
+	// +optional
+	EphemeralRunnerConfigSecretMetadata *ResourceMeta `json:"ephemeralRunnerConfigSecretMetadata,omitempty"`
+
 	corev1.PodTemplateSpec `json:",inline"`
+}
+
+func (s *EphemeralRunnerSpec) Hash() string {
+	return hash.ComputeTemplateHash(s)
 }
 
 // EphemeralRunnerStatus defines the observed state of EphemeralRunner
@@ -140,14 +148,14 @@ type EphemeralRunnerStatus struct {
 	// The PodSucceded phase should be set only when confirmed that EphemeralRunner
 	// actually executed the job and has been removed from the service.
 	// +optional
-	Phase corev1.PodPhase `json:"phase,omitempty"`
+	Phase EphemeralRunnerPhase `json:"phase,omitempty"`
 	// +optional
 	Reason string `json:"reason,omitempty"`
 	// +optional
 	Message string `json:"message,omitempty"`
 
 	// +optional
-	RunnerId int `json:"runnerId,omitempty"`
+	RunnerID int `json:"runnerId,omitempty"`
 	// +optional
 	RunnerName string `json:"runnerName,omitempty"`
 
@@ -155,7 +163,7 @@ type EphemeralRunnerStatus struct {
 	Failures map[string]metav1.Time `json:"failures,omitempty"`
 
 	// +optional
-	JobRequestId int64 `json:"jobRequestId,omitempty"`
+	JobRequestID int64 `json:"jobRequestId,omitempty"`
 
 	// +optional
 	JobID string `json:"jobId,omitempty"`
@@ -167,11 +175,32 @@ type EphemeralRunnerStatus struct {
 	JobWorkflowRef string `json:"jobWorkflowRef,omitempty"`
 
 	// +optional
-	WorkflowRunId int64 `json:"workflowRunId,omitempty"`
+	WorkflowRunID int64 `json:"workflowRunId,omitempty"`
 
 	// +optional
 	JobDisplayName string `json:"jobDisplayName,omitempty"`
 }
+
+// EphemeralRunnerPhase is the phase of the ephemeral runner.
+// It must be a superset of the pod phase.
+type EphemeralRunnerPhase string
+
+const (
+	// EphemeralRunnerPhasePending is a phase set when the ephemeral runner is
+	// being provisioned and is not yet online.
+	EphemeralRunnerPhasePending EphemeralRunnerPhase = "Pending"
+	// EphemeralRunnerPhaseRunning is a phase set when the ephemeral runner is online and
+	// waiting for a job to execute.
+	EphemeralRunnerPhaseRunning EphemeralRunnerPhase = "Running"
+	// EphemeralRunnerPhaseSucceeded is a phase set when the ephemeral runner
+	// successfully executed the job and has been removed from the service.
+	EphemeralRunnerPhaseSucceeded EphemeralRunnerPhase = "Succeeded"
+	// EphemeralRunnerPhaseFailed is a phase set when the ephemeral runner
+	// fails with unrecoverable failure.
+	EphemeralRunnerPhaseFailed EphemeralRunnerPhase = "Failed"
+	// EphemeralRunnerPhaseOutdated is a special phase that indicates the runner is outdated and should be upgraded.
+	EphemeralRunnerPhaseOutdated EphemeralRunnerPhase = "Outdated"
+)
 
 func (s *EphemeralRunnerStatus) LastFailure() metav1.Time {
 	var maxTime metav1.Time

@@ -12,3 +12,7 @@ linters:
   exclusions:
     presets:
       - std-error-handling
+    rules:
+      - linters:
+          - staticcheck
+        text: "QF1008:"

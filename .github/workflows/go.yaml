@@ -29,7 +29,7 @@ jobs:
   fmt:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
@@ -42,21 +42,21 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
           cache: false
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9
+        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee
         with:
           only-new-issues: true
-          version: v2.5.0
+          version: v2.11.2
 
   generate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
@@ -66,23 +66,34 @@ jobs:
       - name: Check diff
         run: git diff --exit-code
 
+  mocks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: "go.mod"
+          cache: false
+      - name: "Run mockery"
+        run: go tool github.com/vektra/mockery/v3
+      - name: Check diff
+        run: git diff --exit-code
+
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
       - run: make manifests
       - name: Check diff
         run: git diff --exit-code
-      - name: Install kubebuilder
+      - name: Setup envtest
         run: |
-          curl -D headers.txt -fsL "https://storage.googleapis.com/kubebuilder-tools/kubebuilder-tools-1.26.1-linux-amd64.tar.gz" -o kubebuilder-tools
-          echo "$(grep -i etag headers.txt -m 1 | cut -d'"' -f2) kubebuilder-tools" > sum
-          md5sum -c sum
-          tar -zvxf kubebuilder-tools
-          sudo mv kubebuilder /usr/local/
+          go install sigs.k8s.io/controller-runtime/tools/setup-envtest@$(go list -m -f '{{ .Version }}' sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $2, $3}')
+          ENVTEST_K8S_VERSION=$(go list -m -f '{{ .Version }}' k8s.io/api | awk -F'[v.]' '{printf "1.%d", $3}')
+          echo "KUBEBUILDER_ASSETS=$(setup-envtest use ${ENVTEST_K8S_VERSION} -p path)" >> $GITHUB_ENV
       - name: Run go tests
         run: |
           go test -short `go list ./... | grep -v ./test_e2e_arc`

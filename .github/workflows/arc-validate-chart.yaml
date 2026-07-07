@@ -40,12 +40,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Set up Helm
-        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2
         with:
           version: ${{ env.HELM_VERSION }}
 
@@ -55,7 +55,7 @@ jobs:
           python-version: "3.11"
 
       - name: Set up chart-testing
-        uses: helm/chart-testing-action@0d28d3144d3a25ea2cc349d6e59901c4ff469b3b
+        uses: helm/chart-testing-action@6ec842c01de15ebb84c8627d2744a0c2f2755c9f
 
       - name: Run chart-testing (list-changed)
         id: list-changed
@@ -70,7 +70,7 @@ jobs:
           ct lint --config charts/.ci/ct-config.yaml
 
       - name: Create kind cluster
-        uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc
         if: steps.list-changed.outputs.changed == 'true'
 
       # We need cert-manager already installed in the cluster because we assume the CRDs exist

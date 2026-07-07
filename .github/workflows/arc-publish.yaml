@@ -39,7 +39,7 @@ jobs:
     if: ${{ !startsWith(github.event.inputs.release_tag_name, 'gha-runner-scale-set-') }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - uses: actions/setup-go@v6
         with:
@@ -47,9 +47,7 @@ jobs:
 
       - name: Install tools
         run: |
-          curl -L -O https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.2.0/kubebuilder_2.2.0_linux_amd64.tar.gz
-          tar zxvf kubebuilder_2.2.0_linux_amd64.tar.gz
-          sudo mv kubebuilder_2.2.0_linux_amd64 /usr/local/kubebuilder
+
           curl -s https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh | bash
           sudo mv kustomize /usr/local/bin
           curl -L -O https://github.com/tcnksm/ghr/releases/download/v0.13.0/ghr_v0.13.0_linux_amd64.tar.gz
@@ -73,7 +71,7 @@ jobs:
 
       - name: Get Token
         id: get_workflow_token
-        uses: peter-murray/workflow-application-token-action@d17e3a9a36850ea89f35db16c1067dd2b68ee343
+        uses: peter-murray/workflow-application-token-action@cb731e00cb6754f584507134ff389dfb3dc42bbc
         with:
           application_id: ${{ secrets.ACTIONS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.ACTIONS_ACCESS_PK }}
