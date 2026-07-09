@@ -45,19 +45,22 @@ import (
 
 // AutoscalingRunnerSet is the Schema for the autoscalingrunnersets API
 type AutoscalingRunnerSet struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   AutoscalingRunnerSetSpec   `json:"spec,omitempty"`
+	// +optional
+	Spec AutoscalingRunnerSetSpec `json:"spec,omitempty"`
+	// +optional
 	Status AutoscalingRunnerSetStatus `json:"status,omitempty"`
 }
 
 // AutoscalingRunnerSetSpec defines the desired state of AutoscalingRunnerSet
 type AutoscalingRunnerSetSpec struct {
-	// Required
+	// +optional
 	GitHubConfigUrl string `json:"githubConfigUrl,omitempty"`
 
-	// Required
+	// +optional
 	GitHubConfigSecret string `json:"githubConfigSecret,omitempty"`
 
 	// +optional
@@ -78,7 +81,7 @@ type AutoscalingRunnerSetSpec struct {
 	// +optional
 	VaultConfig *VaultConfig `json:"vaultConfig,omitempty"`
 
-	// Required
+	// +optional
 	Template corev1.PodTemplateSpec `json:"template,omitempty"`
 
 	// +optional

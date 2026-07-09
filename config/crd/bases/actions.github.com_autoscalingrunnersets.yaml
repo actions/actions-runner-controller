@@ -113,10 +113,8 @@ spec:
                       type: object
                   type: object
                 githubConfigSecret:
-                  description: Required
                   type: string
                 githubConfigUrl:
-                  description: Required
                   type: string
                 githubServerTLS:
                   properties:
@@ -8391,7 +8389,7 @@ spec:
                 runnerScaleSetName:
                   type: string
                 template:
-                  description: Required
+                  description: PodTemplateSpec describes the data a pod should have when created from a template
                   properties:
                     metadata:
                       description: |-

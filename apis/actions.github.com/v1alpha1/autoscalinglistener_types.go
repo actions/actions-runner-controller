@@ -24,36 +24,36 @@ import (
 
 // AutoscalingListenerSpec defines the desired state of AutoscalingListener
 type AutoscalingListenerSpec struct {
-	// Required
+	// +optional
 	GitHubConfigURL string `json:"githubConfigUrl,omitempty"`
 
-	// Required
+	// +optional
 	GitHubConfigSecret string `json:"githubConfigSecret,omitempty"`
 
-	// Required
+	// +optional
 	RunnerScaleSetID int `json:"runnerScaleSetId,omitempty"`
 
-	// Required
+	// +optional
 	AutoscalingRunnerSetNamespace string `json:"autoscalingRunnerSetNamespace,omitempty"`
 
-	// Required
+	// +optional
 	AutoscalingRunnerSetName string `json:"autoscalingRunnerSetName,omitempty"`
 
-	// Required
+	// +optional
 	EphemeralRunnerSetName string `json:"ephemeralRunnerSetName,omitempty"`
 
-	// Required
 	// +kubebuilder:validation:Minimum:=0
+	// +optional
 	MaxRunners int `json:"maxRunners,omitempty"`
 
-	// Required
 	// +kubebuilder:validation:Minimum:=0
+	// +optional
 	MinRunners int `json:"minRunners,omitempty"`
 
-	// Required
+	// +optional
 	Image string `json:"image,omitempty"`
 
-	// Required
+	// +optional
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
 	// +optional
@@ -99,10 +99,13 @@ type AutoscalingListenerStatus struct{}
 
 // AutoscalingListener is the Schema for the autoscalinglisteners API
 type AutoscalingListener struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   AutoscalingListenerSpec   `json:"spec,omitempty"`
+	// +optional
+	Spec AutoscalingListenerSpec `json:"spec,omitempty"`
+	// +optional
 	Status AutoscalingListenerStatus `json:"status,omitempty"`
 }
 
@@ -110,6 +113,7 @@ type AutoscalingListener struct {
 // AutoscalingListenerList contains a list of AutoscalingListener
 type AutoscalingListenerList struct {
 	metav1.TypeMeta `json:",inline"`
+	// +optional
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []AutoscalingListener `json:"items"`
 }
