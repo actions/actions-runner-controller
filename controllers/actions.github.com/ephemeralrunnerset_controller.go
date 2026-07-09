@@ -496,23 +496,22 @@ func (r *EphemeralRunnerSetReconciler) reconcileEphemeralRunnerSetProxySecret(ct
 			return nil, false, fmt.Errorf("failed to build desired ephemeralRunnerSet proxy secret: %w", err)
 		}
 
-		updatedProxySecret := proxySecret.DeepCopy()
-		var shouldUpdate bool
-		if !maps.EqualFunc(proxySecret.Data, desiredRunnerSetProxy.Data, bytes.Equal) {
-			updatedProxySecret.Data = desiredRunnerSetProxy.Data
-			shouldUpdate = true
-		}
+		dataModified := !maps.EqualFunc(proxySecret.Data, desiredRunnerSetProxy.Data, bytes.Equal)
 		desiredLabels := r.filterAndMergeLabels(proxySecret.Labels, desiredRunnerSetProxy.Labels)
-		if !maps.Equal(proxySecret.Labels, desiredLabels) {
-			updatedProxySecret.Labels = desiredLabels
-			shouldUpdate = true
-		}
+		labelsModified := !maps.Equal(proxySecret.Labels, desiredLabels)
 		desiredAnnotations := r.mergeAnnotations(proxySecret.Annotations, desiredRunnerSetProxy.Annotations)
-		if !maps.Equal(proxySecret.Annotations, desiredAnnotations) {
-			updatedProxySecret.Annotations = desiredAnnotations
-			shouldUpdate = true
-		}
-		if shouldUpdate {
+		annotationsModified := !maps.Equal(proxySecret.Annotations, desiredAnnotations)
+		if dataModified || labelsModified || annotationsModified {
+			updatedProxySecret := proxySecret.DeepCopy()
+			if dataModified {
+				updatedProxySecret.Data = desiredRunnerSetProxy.Data
+			}
+			if labelsModified {
+				updatedProxySecret.Labels = desiredLabels
+			}
+			if annotationsModified {
+				updatedProxySecret.Annotations = desiredAnnotations
+			}
 			log.Info("Updating ephemeralRunnerSet proxy secret")
 			if err := r.Patch(ctx, updatedProxySecret, client.MergeFrom(&proxySecret)); err != nil {
 				return nil, false, fmt.Errorf("failed to update ephemeralRunnerSet proxy secret: %w", err)
