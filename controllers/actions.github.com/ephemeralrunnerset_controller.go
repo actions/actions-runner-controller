@@ -514,7 +514,7 @@ func (r *EphemeralRunnerSetReconciler) reconcileEphemeralRunnerSetProxySecret(ct
 		}
 		if shouldUpdate {
 			log.Info("Updating ephemeralRunnerSet proxy secret")
-			if err := r.Update(ctx, updatedProxySecret); err != nil {
+			if err := r.Patch(ctx, updatedProxySecret, client.MergeFrom(&proxySecret)); err != nil {
 				return nil, false, fmt.Errorf("failed to update ephemeralRunnerSet proxy secret: %w", err)
 			}
 			return updatedProxySecret, true, nil
