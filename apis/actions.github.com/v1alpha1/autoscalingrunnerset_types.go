@@ -49,10 +49,10 @@ type AutoscalingRunnerSet struct {
 
 // AutoscalingRunnerSetSpec defines the desired state of AutoscalingRunnerSet
 type AutoscalingRunnerSetSpec struct {
-	// Required
+	// +optional
 	GitHubConfigUrl string `json:"githubConfigUrl,omitempty"`
 
-	// Required
+	// +optional
 	GitHubConfigSecret string `json:"githubConfigSecret,omitempty"`
 
 	// +optional
@@ -73,7 +73,7 @@ type AutoscalingRunnerSetSpec struct {
 	// +optional
 	VaultConfig *VaultConfig `json:"vaultConfig,omitempty"`
 
-	// Required
+	// +optional
 	Template corev1.PodTemplateSpec `json:"template,omitempty"`
 
 	// +optional
@@ -116,7 +116,7 @@ type AutoscalingRunnerSetSpec struct {
 }
 
 type TLSConfig struct {
-	// Required
+	// +optional
 	CertificateFrom *TLSCertificateSource `json:"certificateFrom,omitempty"`
 }
 
@@ -153,7 +153,7 @@ func (c *TLSConfig) ToCertPool(keyFetcher func(name, key string) ([]byte, error)
 }
 
 type TLSCertificateSource struct {
-	// Required
+	// +optional
 	ConfigMapKeyRef *corev1.ConfigMapKeySelector `json:"configMapKeyRef,omitempty"`
 }
 
@@ -254,7 +254,7 @@ func (c *ProxyConfig) ProxyFunc(secretFetcher func(string) (*corev1.Secret, erro
 }
 
 type ProxyServerConfig struct {
-	// Required
+	// +optional
 	Url string `json:"url,omitempty"`
 
 	// +optional
