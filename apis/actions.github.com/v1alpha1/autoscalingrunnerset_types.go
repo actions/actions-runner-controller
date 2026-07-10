@@ -36,14 +36,22 @@ import (
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=".spec.minRunners",name=Minimum Runners,type=integer
 // +kubebuilder:printcolumn:JSONPath=".spec.maxRunners",name=Maximum Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.currentRunners",name=Current Runners,type=integer
 // +kubebuilder:printcolumn:JSONPath=".status.phase",name=Phase,type=string
+// +kubebuilder:printcolumn:JSONPath=".status.pendingEphemeralRunners",name=Pending Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.runningEphemeralRunners",name=Running Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.finishedEphemeralRunners",name=Finished Runners,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.deletingEphemeralRunners",name=Deleting Runners,type=integer
 
 // AutoscalingRunnerSet is the Schema for the autoscalingrunnersets API
 type AutoscalingRunnerSet struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   AutoscalingRunnerSetSpec   `json:"spec,omitempty"`
+	// +optional
+	Spec AutoscalingRunnerSetSpec `json:"spec,omitempty"`
+	// +optional
 	Status AutoscalingRunnerSetStatus `json:"status,omitempty"`
 }
 
@@ -116,7 +124,7 @@ type AutoscalingRunnerSetSpec struct {
 }
 
 type TLSConfig struct {
-	// +optional
+	// Required
 	CertificateFrom *TLSCertificateSource `json:"certificateFrom,omitempty"`
 }
 
@@ -153,7 +161,7 @@ func (c *TLSConfig) ToCertPool(keyFetcher func(name, key string) ([]byte, error)
 }
 
 type TLSCertificateSource struct {
-	// +optional
+	// Required
 	ConfigMapKeyRef *corev1.ConfigMapKeySelector `json:"configMapKeyRef,omitempty"`
 }
 
@@ -254,7 +262,7 @@ func (c *ProxyConfig) ProxyFunc(secretFetcher func(string) (*corev1.Secret, erro
 }
 
 type ProxyServerConfig struct {
-	// +optional
+	// Required
 	Url string `json:"url,omitempty"`
 
 	// +optional
