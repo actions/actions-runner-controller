@@ -2218,6 +2218,14 @@ func TestTemplateRenderedAutoScalingRunnerSet_DinDMergePodSpec(t *testing.T) {
 	assert.Equal(t, "/work", ars.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath, "VolumeMount mountPath should be /work")
 	assert.Equal(t, "others", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name, "VolumeMount name should be others")
 	assert.Equal(t, "/others", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath, "VolumeMount mountPath should be /others")
+
+	dindContainer := findContainerByName(ars.Spec.Template.Spec.Containers, "dind")
+	if dindContainer == nil {
+		dindContainer = findContainerByName(ars.Spec.Template.Spec.InitContainers, "dind")
+	}
+	require.NotNil(t, dindContainer, "dind container should be present in containers or initContainers")
+	assert.True(t, dindContainer.Resources.Requests.Cpu().IsZero(), "Dind CPU request should be unset by default")
+	assert.True(t, dindContainer.Resources.Limits.Cpu().IsZero(), "Dind CPU limit should be unset by default")
 }
 
 func TestTemplateRenderedAutoScalingRunnerSet_DindMergeDindResources(t *testing.T) {
@@ -2267,6 +2275,101 @@ func findContainerByName(containers []corev1.Container, name string) *corev1.Con
 		}
 	}
 	return nil
+}
+
+func countContainersByName(containers []corev1.Container, name string) int {
+	count := 0
+	for i := range containers {
+		if containers[i].Name == name {
+			count++
+		}
+	}
+	return count
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_DindMergeInitDindExternalsResources(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values_dind_merge_init_dind_externals_resources.yaml")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+		},
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"}, "--debug")
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	initDindExternals := findContainerByName(ars.Spec.Template.Spec.InitContainers, "init-dind-externals")
+	require.NotNil(t, initDindExternals, "init-dind-externals init container should be present")
+	assert.Equal(t, 1, countContainersByName(ars.Spec.Template.Spec.InitContainers, "init-dind-externals"))
+	assert.Equal(t, "runner-image:latest", initDindExternals.Image, "init-dind-externals should inherit runner image")
+	assert.Equal(t, "cp", initDindExternals.Command[0], "init-dind-externals command should be set by chart")
+	assert.Equal(t, "50m", initDindExternals.Resources.Requests.Cpu().String(), "init-dind-externals CPU request should be set")
+	assert.Equal(t, "128Mi", initDindExternals.Resources.Requests.Memory().String(), "init-dind-externals memory request should be set")
+	assert.Equal(t, "100m", initDindExternals.Resources.Limits.Cpu().String(), "init-dind-externals CPU limit should be set")
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_DindFilterGeneratedInitContainers(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values_dind_filter_generated_init_containers.yaml")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+		},
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"}, "--debug")
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	assert.Equal(t, 1, countContainersByName(ars.Spec.Template.Spec.InitContainers, "init-dind-externals"))
+	assert.Equal(t, 1, countContainersByName(ars.Spec.Template.Spec.InitContainers, "dind")+countContainersByName(ars.Spec.Template.Spec.Containers, "dind"))
+
+	initDindExternals := findContainerByName(ars.Spec.Template.Spec.InitContainers, "init-dind-externals")
+	require.NotNil(t, initDindExternals)
+	assert.Equal(t, "runner-image:latest", initDindExternals.Image, "generated init-dind-externals should not use duplicate template image")
+	assert.Equal(t, "50m", initDindExternals.Resources.Requests.Cpu().String())
+
+	dindContainer := findContainerByName(ars.Spec.Template.Spec.Containers, "dind")
+	if dindContainer == nil {
+		dindContainer = findContainerByName(ars.Spec.Template.Spec.InitContainers, "dind")
+	}
+	require.NotNil(t, dindContainer)
+	assert.Equal(t, "docker:dind", dindContainer.Image, "generated dind should not use duplicate template image")
+	assert.Equal(t, "75m", dindContainer.Resources.Requests.Cpu().String(), "initContainers dind overrides should merge into generated dind")
+
+	customInit := findContainerByName(ars.Spec.Template.Spec.InitContainers, "custom-init")
+	require.NotNil(t, customInit, "custom init container should still be rendered")
+	assert.Equal(t, "custom-init:latest", customInit.Image)
 }
 
 func TestTemplateRenderedAutoScalingRunnerSet_KubeModeMergePodSpec(t *testing.T) {
