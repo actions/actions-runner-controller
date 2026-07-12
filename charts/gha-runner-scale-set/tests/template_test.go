@@ -2220,6 +2220,55 @@ func TestTemplateRenderedAutoScalingRunnerSet_DinDMergePodSpec(t *testing.T) {
 	assert.Equal(t, "/others", ars.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath, "VolumeMount mountPath should be /others")
 }
 
+func TestTemplateRenderedAutoScalingRunnerSet_DindMergeDindResources(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values_dind_merge_dind_resources.yaml")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+		},
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"}, "--debug")
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	assert.Equal(t, "500m", ars.Spec.Template.Spec.Containers[0].Resources.Requests.Cpu().String(), "Runner CPU request should be set")
+	assert.Equal(t, "512Mi", ars.Spec.Template.Spec.Containers[0].Resources.Limits.Memory().String(), "Runner memory limit should be set")
+
+	dindContainer := findContainerByName(ars.Spec.Template.Spec.Containers, "dind")
+	if dindContainer == nil {
+		dindContainer = findContainerByName(ars.Spec.Template.Spec.InitContainers, "dind")
+	}
+	require.NotNil(t, dindContainer, "dind container should be present in containers or initContainers")
+	assert.Equal(t, "100m", dindContainer.Resources.Requests.Cpu().String(), "Dind CPU request should be set")
+	assert.Equal(t, "256Mi", dindContainer.Resources.Requests.Memory().String(), "Dind memory request should be set")
+	assert.Equal(t, "200m", dindContainer.Resources.Limits.Cpu().String(), "Dind CPU limit should be set")
+}
+
+func findContainerByName(containers []corev1.Container, name string) *corev1.Container {
+	for i := range containers {
+		if containers[i].Name == name {
+			return &containers[i]
+		}
+	}
+	return nil
+}
+
 func TestTemplateRenderedAutoScalingRunnerSet_KubeModeMergePodSpec(t *testing.T) {
 	t.Parallel()
 

@@ -357,6 +357,13 @@ template:
   ##           mountPath: /home/runner/_work
   ##         - name: dind-sock
   ##           mountPath: /var/run
+  ##     - name: dind
+  ##       resources:
+  ##         requests:
+  ##           cpu: "100m"
+  ##           memory: "256Mi"
+  ##         limits:
+  ##           cpu: "500m"
   ##     volumes:
   ##     - name: work
   ##       emptyDir: {}
