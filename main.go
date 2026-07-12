@@ -280,7 +280,11 @@ func main() {
 			os.Exit(1)
 		}
 
-		if metricsAddr != "" {
+		// controller-runtime disables its metrics server when BindAddress is
+		// "0"; treat both "0" and "" as metrics disabled so registration and
+		// publishing stay consistent.
+		metricsEnabled := metricsAddr != "" && metricsAddr != "0"
+		if metricsEnabled {
 			log.Info("Registering scale set metrics")
 			actionsgithubcommetrics.RegisterMetrics()
 		}
@@ -350,7 +354,7 @@ func main() {
 			Client:          mgr.GetClient(),
 			Log:             log.WithName("EphemeralRunnerSet").WithValues("version", build.Version),
 			Scheme:          mgr.GetScheme(),
-			PublishMetrics:  metricsAddr != "0",
+			PublishMetrics:  metricsEnabled,
 			ResourceBuilder: rb,
 		}).SetupWithManager(mgr, controllerOpts...); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunnerSet")
