@@ -108,6 +108,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		}
 
 		log.Info("Successfully removed finalizer after cleanup")
+		r.ResourceCache.Delete(&autoscalingRunnerSet)
 		return ctrl.Result{}, nil
 	}
 

@@ -144,6 +144,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			Scheme: mgr.GetScheme(),
 			Log:    logf.Log,
 			ResourceBuilder: ResourceBuilder{
+				ResourceCache: newTestResourceCache(),
 				SecretResolver: secretresolver.New(mgr.GetClient(), fake.NewMultiClient(
 					fake.WithClient(
 						fake.NewClient(
@@ -1363,6 +1364,7 @@ var _ = Describe("EphemeralRunner phase metrics", func() {
 			Log:            logf.Log,
 			PublishMetrics: true,
 			ResourceBuilder: ResourceBuilder{
+				ResourceCache: newTestResourceCache(),
 				SecretResolver: secretresolver.New(k8sClient, fake.NewMultiClient(
 					fake.WithClient(
 						fake.NewClient(
@@ -1494,6 +1496,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 			Scheme: mgr.GetScheme(),
 			Log:    logf.Log,
 			ResourceBuilder: ResourceBuilder{
+				ResourceCache:  newTestResourceCache(),
 				SecretResolver: secretresolver.New(mgr.GetClient(), multiclient.NewScaleset()),
 			},
 		}
@@ -1812,6 +1815,7 @@ var _ = Describe("Test EphemeralRunnerSet controller with custom root CA", func(
 			Scheme: mgr.GetScheme(),
 			Log:    logf.Log,
 			ResourceBuilder: ResourceBuilder{
+				ResourceCache:  newTestResourceCache(),
 				SecretResolver: secretresolver.New(mgr.GetClient(), multiclient.NewScaleset()),
 			},
 		}

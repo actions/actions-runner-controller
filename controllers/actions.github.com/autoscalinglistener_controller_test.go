@@ -50,6 +50,7 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 		)
 
 		rb := ResourceBuilder{
+			ResourceCache:  newTestResourceCache(),
 			SecretResolver: secretResolver,
 		}
 
@@ -593,6 +594,7 @@ var _ = Describe("Test AutoScalingListener customization", func() {
 		secretResolver := secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient())
 
 		rb := ResourceBuilder{
+			ResourceCache:  newTestResourceCache(),
 			SecretResolver: secretResolver,
 		}
 
@@ -922,6 +924,7 @@ var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 		secretResolver := secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient())
 
 		rb := ResourceBuilder{
+			ResourceCache:  newTestResourceCache(),
 			SecretResolver: secretResolver,
 		}
 
@@ -1127,6 +1130,7 @@ var _ = Describe("Test AutoScalingListener controller with template modification
 		secretResolver := secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient())
 
 		rb := ResourceBuilder{
+			ResourceCache:  newTestResourceCache(),
 			SecretResolver: secretResolver,
 		}
 
@@ -1232,6 +1236,7 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 		secretResolver := secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient())
 
 		rb := ResourceBuilder{
+			ResourceCache:  newTestResourceCache(),
 			SecretResolver: secretResolver,
 		}
 

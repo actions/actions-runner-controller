@@ -171,6 +171,7 @@ func TestMetadataPropagation(t *testing.T) {
 
 	ephemeralRunner, err := b.newEphemeralRunner(ephemeralRunnerSet)
 	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName}, ephemeralRunner.Finalizers)
 
 	for _, key := range commonLabelKeys {
 		if key == LabelKeyKubernetesComponent {
