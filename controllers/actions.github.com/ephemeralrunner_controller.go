@@ -22,9 +22,12 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/metrics"
+	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/scaleset"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -46,9 +49,17 @@ const (
 // EphemeralRunnerReconciler reconciles a EphemeralRunner object
 type EphemeralRunnerReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Log            logr.Logger
+	Scheme         *runtime.Scheme
+	PublishMetrics bool
 	ResourceBuilder
+}
+
+var ephemeralRunnerPhaseMetrics = struct {
+	sync.Mutex
+	phases map[types.NamespacedName]v1alpha1.EphemeralRunnerPhase
+}{
+	phases: map[types.NamespacedName]v1alpha1.EphemeralRunnerPhase{},
 }
 
 // precompute backoff durations for failed ephemeral runners
@@ -86,6 +97,8 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	original := ephemeralRunner.DeepCopy()
 
 	if !ephemeralRunner.DeletionTimestamp.IsZero() {
+		r.publishEphemeralRunnerPhaseMetric(&ephemeralRunner, "", log)
+
 		if !controllerutil.ContainsFinalizer(&ephemeralRunner, ephemeralRunnerFinalizerName) {
 			return ctrl.Result{}, nil
 		}
@@ -141,6 +154,8 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		log.Info("Successfully removed finalizer after cleanup")
 		return ctrl.Result{}, nil
 	}
+
+	r.publishEphemeralRunnerPhaseMetric(&ephemeralRunner, ephemeralRunner.Status.Phase, log)
 
 	if ephemeralRunner.IsDone() {
 		log.Info("Cleaning up resources after after ephemeral runner termination", "phase", ephemeralRunner.Status.Phase)
@@ -337,6 +352,10 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			// If the runner container exits with 0, we assume that the runner has finished successfully.
 			// If side-car container exits with non-zero, it shouldn't affect the runner. Runner exit code
 			// drives the controller's inference of whether the job has succeeded or failed.
+			if err := r.markAsSucceeded(ctx, &ephemeralRunner, pod, log); err != nil {
+				log.Error(err, "Failed to set ephemeral runner to phase Succeeded")
+				return ctrl.Result{}, err
+			}
 			if err := r.Delete(ctx, &ephemeralRunner); err != nil {
 				log.Error(err, "Failed to delete ephemeral runner after successful completion")
 				return ctrl.Result{}, err
@@ -390,6 +409,10 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	default: // succeeded
 		log.Info("Ephemeral runner has finished successfully, deleting ephemeral runner", "exitCode", cs.State.Terminated.ExitCode)
+		if err := r.markAsSucceeded(ctx, &ephemeralRunner, pod, log); err != nil {
+			log.Error(err, "Failed to set ephemeral runner to phase Succeeded")
+			return ctrl.Result{}, err
+		}
 		if err := r.Delete(ctx, &ephemeralRunner); err != nil {
 			log.Error(err, "Failed to delete ephemeral runner after successful completion")
 			return ctrl.Result{}, err
@@ -583,6 +606,7 @@ func (r *EphemeralRunnerReconciler) markAsFailed(ctx context.Context, ephemeralR
 	if err := r.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
 		return fmt.Errorf("failed to update ephemeral runner status Phase/Message: %w", err)
 	}
+	r.publishEphemeralRunnerPhaseMetric(ephemeralRunner, ephemeralRunner.Status.Phase, log)
 
 	log.Info("Removing the runner from the service")
 	if err := r.deleteRunnerFromService(ctx, ephemeralRunner, log); err != nil {
@@ -604,11 +628,29 @@ func (r *EphemeralRunnerReconciler) markAsOutdated(ctx context.Context, ephemera
 	if err := r.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
 		return fmt.Errorf("failed to update ephemeral runner status Phase/Message: %w", err)
 	}
+	r.publishEphemeralRunnerPhaseMetric(ephemeralRunner, ephemeralRunner.Status.Phase, log)
 
 	log.Info("Removing the runner from the service")
 	if err := r.deleteRunnerFromService(ctx, ephemeralRunner, log); err != nil {
 		return fmt.Errorf("failed to remove the runner from service: %w", err)
 	}
+	return nil
+}
+
+func (r *EphemeralRunnerReconciler) markAsSucceeded(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, pod *corev1.Pod, log logr.Logger) error {
+	log.Info("Updating ephemeral runner status to Succeeded")
+
+	original := ephemeralRunner.DeepCopy()
+	ephemeralRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseSucceeded
+	ephemeralRunner.Status.Ready = false
+	ephemeralRunner.Status.Reason = pod.Status.Reason
+	ephemeralRunner.Status.Message = pod.Status.Message
+	if err := r.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
+		return fmt.Errorf("failed to update ephemeral runner status Phase/Message: %w", err)
+	}
+	r.publishEphemeralRunnerPhaseMetric(ephemeralRunner, ephemeralRunner.Status.Phase, log)
+
+	log.Info("EphemeralRunner is marked as Succeeded")
 	return nil
 }
 
@@ -835,9 +877,59 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 	if err := r.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
 		return fmt.Errorf("failed to update runner status for Phase/Reason/Message/Ready: %w", err)
 	}
+	r.publishEphemeralRunnerPhaseMetric(ephemeralRunner, ephemeralRunner.Status.Phase, log)
 
 	log.Info("Updated ephemeral runner status")
 	return nil
+}
+
+func (r *EphemeralRunnerReconciler) publishEphemeralRunnerPhaseMetric(ephemeralRunner *v1alpha1.EphemeralRunner, phase v1alpha1.EphemeralRunnerPhase, log logr.Logger) {
+	if !r.PublishMetrics {
+		return
+	}
+
+	commonLabels, err := ephemeralRunnerMetricLabels(ephemeralRunner)
+	if err != nil {
+		log.Error(err, "Failed to build ephemeral runner metric labels")
+		return
+	}
+
+	key := types.NamespacedName{Namespace: ephemeralRunner.Namespace, Name: ephemeralRunner.Name}
+
+	ephemeralRunnerPhaseMetrics.Lock()
+	defer ephemeralRunnerPhaseMetrics.Unlock()
+
+	previousPhase, ok := ephemeralRunnerPhaseMetrics.phases[key]
+	if ok && previousPhase == phase {
+		return
+	}
+
+	if ok {
+		metrics.SubEphemeralRunner(commonLabels, previousPhase)
+	}
+
+	if phase == "" {
+		delete(ephemeralRunnerPhaseMetrics.phases, key)
+		return
+	}
+
+	metrics.AddEphemeralRunner(commonLabels, phase)
+	ephemeralRunnerPhaseMetrics.phases[key] = phase
+}
+
+func ephemeralRunnerMetricLabels(ephemeralRunner *v1alpha1.EphemeralRunner) (metrics.CommonLabels, error) {
+	parsedURL, err := actions.ParseGitHubConfigFromURL(ephemeralRunner.Spec.GitHubConfigURL)
+	if err != nil {
+		return metrics.CommonLabels{}, fmt.Errorf("github config URL is invalid: %w", err)
+	}
+
+	return metrics.CommonLabels{
+		Name:         ephemeralRunner.Labels[LabelKeyGitHubScaleSetName],
+		Namespace:    ephemeralRunner.Labels[LabelKeyGitHubScaleSetNamespace],
+		Repository:   parsedURL.Repository,
+		Organization: parsedURL.Organization,
+		Enterprise:   parsedURL.Enterprise,
+	}, nil
 }
 
 func (r *EphemeralRunnerReconciler) deleteRunnerFromService(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
