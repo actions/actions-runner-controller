@@ -295,17 +295,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			// When runners are actively processing jobs, defer the spec update:
 			// delete the listener to stop accepting new jobs, but leave the ERS
 			// (and its running pods) untouched until all jobs have drained.
-			var ephemeralRunnerList v1alpha1.EphemeralRunnerList
-			if err := r.List(ctx, &ephemeralRunnerList,
-				client.InNamespace(ephemeralRunnerSet.Namespace),
-				client.MatchingFields{resourceOwnerKey: ephemeralRunnerSet.Name},
-			); err != nil {
-				log.Error(err, "Failed to list ephemeral runners")
-				return ctrl.Result{}, err
-			}
-
-			ephemeralRunnersByState := newEphemeralRunnersByStates(&ephemeralRunnerList)
-			if len(ephemeralRunnersByState.running)+len(ephemeralRunnersByState.pending) > 0 {
+			if ephemeralRunnerSet.Status.RunningEphemeralRunners+ephemeralRunnerSet.Status.PendingEphemeralRunners > 0 {
 				log.Info("Ephemeral runner set spec changed but runners are still active; deleting listener to stop new jobs")
 				if _, err := r.cleanupListener(ctx, &autoscalingRunnerSet, log); err != nil {
 					log.Error(err, "Failed to clean up listener while waiting for runners to drain")
@@ -443,13 +433,23 @@ func (r *AutoscalingRunnerSetReconciler) cleanUpResources(ctx context.Context, a
 
 // Update the status of autoscaling runner set if necessary
 func (r *AutoscalingRunnerSetReconciler) updateStatus(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, phase v1alpha1.AutoscalingRunnerSetPhase, log logr.Logger) error {
+	countDiff := ephemeralRunnerSet != nil && ephemeralRunnerSet.Status.CurrentReplicas != autoscalingRunnerSet.Status.CurrentRunners
 	phaseDiff := phase != autoscalingRunnerSet.Status.Phase
-	if !phaseDiff {
+	if !countDiff && !phaseDiff {
 		return nil
 	}
 
 	original := autoscalingRunnerSet.DeepCopy()
-	autoscalingRunnerSet.Status.Phase = phase
+	if phaseDiff {
+		autoscalingRunnerSet.Status.Phase = phase
+	}
+
+	if countDiff && ephemeralRunnerSet != nil {
+		autoscalingRunnerSet.Status.CurrentRunners = ephemeralRunnerSet.Status.CurrentReplicas
+		autoscalingRunnerSet.Status.PendingEphemeralRunners = ephemeralRunnerSet.Status.PendingEphemeralRunners
+		autoscalingRunnerSet.Status.RunningEphemeralRunners = ephemeralRunnerSet.Status.RunningEphemeralRunners
+		autoscalingRunnerSet.Status.FailedEphemeralRunners = ephemeralRunnerSet.Status.FailedEphemeralRunners
+	}
 
 	if err := r.Status().Patch(ctx, autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
 		log.Error(err, "Failed to patch autoscaling runner set status")

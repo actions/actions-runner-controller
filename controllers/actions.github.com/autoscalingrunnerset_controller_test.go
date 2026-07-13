@@ -871,20 +871,34 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			// Emulate running and pending jobs
 			runnerSet := runnerSetList.Items[0]
 			activeRunnerSet := runnerSet.DeepCopy()
-			for _, phase := range []v1alpha1.EphemeralRunnerPhase{
-				v1alpha1.EphemeralRunnerPhaseRunning,
-				v1alpha1.EphemeralRunnerPhasePending,
-			} {
-				runner, err := controller.newEphemeralRunner(activeRunnerSet)
-				Expect(err).NotTo(HaveOccurred(), "Failed to create active runner")
-				err = k8sClient.Create(ctx, runner)
-				Expect(err).NotTo(HaveOccurred(), "Failed to create active runner")
+			activeRunnerSet.Status.CurrentReplicas = 6
+			activeRunnerSet.Status.FailedEphemeralRunners = 1
+			activeRunnerSet.Status.RunningEphemeralRunners = 2
+			activeRunnerSet.Status.PendingEphemeralRunners = 3
 
-				updatedRunner := runner.DeepCopy()
-				updatedRunner.Status.Phase = phase
-				err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(runner))
-				Expect(err).NotTo(HaveOccurred(), "Failed to patch active runner status")
+			desiredStatus := v1alpha1.AutoscalingRunnerSetStatus{
+				CurrentRunners:          activeRunnerSet.Status.CurrentReplicas,
+				Phase:                   v1alpha1.AutoscalingRunnerSetPhaseRunning,
+				PendingEphemeralRunners: activeRunnerSet.Status.PendingEphemeralRunners,
+				RunningEphemeralRunners: activeRunnerSet.Status.RunningEphemeralRunners,
+				FailedEphemeralRunners:  activeRunnerSet.Status.FailedEphemeralRunners,
 			}
+
+			err = k8sClient.Status().Patch(ctx, activeRunnerSet, client.MergeFrom(&runnerSet))
+			Expect(err).NotTo(HaveOccurred(), "Failed to patch runner set status")
+
+			Eventually(
+				func() (v1alpha1.AutoscalingRunnerSetStatus, error) {
+					updated := new(v1alpha1.AutoscalingRunnerSet)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, updated)
+					if err != nil {
+						return v1alpha1.AutoscalingRunnerSetStatus{}, fmt.Errorf("failed to get AutoScalingRunnerSet: %w", err)
+					}
+					return updated.Status, nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(BeEquivalentTo(desiredStatus), "AutoScalingRunnerSet status should be updated")
 
 			// Patch the AutoScalingRunnerSet image which should trigger
 			// the recreation of the Listener and EphemeralRunnerSet
@@ -928,6 +942,71 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 		})
 	})
 
+	It("Should update Status on EphemeralRunnerSet status Update", func() {
+		ars := new(v1alpha1.AutoscalingRunnerSet)
+		Eventually(
+			func() (bool, error) {
+				err := k8sClient.Get(
+					ctx,
+					client.ObjectKey{
+						Name:      autoscalingRunnerSet.Name,
+						Namespace: autoscalingRunnerSet.Namespace,
+					},
+					ars,
+				)
+				if err != nil {
+					return false, err
+				}
+				return true, nil
+			},
+			autoscalingRunnerSetTestTimeout,
+			autoscalingRunnerSetTestInterval,
+		).Should(BeTrue(), "AutoscalingRunnerSet should be created")
+
+		runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
+		Eventually(
+			func() (int, error) {
+				err := k8sClient.List(ctx, runnerSetList, client.InNamespace(ars.Namespace))
+				if err != nil {
+					return 0, err
+				}
+				return len(runnerSetList.Items), nil
+			},
+			autoscalingRunnerSetTestTimeout,
+			autoscalingRunnerSetTestInterval,
+		).Should(BeEquivalentTo(1), "Failed to fetch runner set list")
+
+		runnerSet := runnerSetList.Items[0]
+		statusUpdate := runnerSet.DeepCopy()
+		statusUpdate.Status.CurrentReplicas = 6
+		statusUpdate.Status.FailedEphemeralRunners = 1
+		statusUpdate.Status.RunningEphemeralRunners = 2
+		statusUpdate.Status.PendingEphemeralRunners = 3
+
+		desiredStatus := v1alpha1.AutoscalingRunnerSetStatus{
+			CurrentRunners:          statusUpdate.Status.CurrentReplicas,
+			Phase:                   v1alpha1.AutoscalingRunnerSetPhaseRunning,
+			PendingEphemeralRunners: statusUpdate.Status.PendingEphemeralRunners,
+			RunningEphemeralRunners: statusUpdate.Status.RunningEphemeralRunners,
+			FailedEphemeralRunners:  statusUpdate.Status.FailedEphemeralRunners,
+		}
+
+		err := k8sClient.Status().Patch(ctx, statusUpdate, client.MergeFrom(&runnerSet))
+		Expect(err).NotTo(HaveOccurred(), "Failed to patch runner set status")
+
+		Eventually(
+			func() (v1alpha1.AutoscalingRunnerSetStatus, error) {
+				updated := new(v1alpha1.AutoscalingRunnerSet)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, updated)
+				if err != nil {
+					return v1alpha1.AutoscalingRunnerSetStatus{}, fmt.Errorf("failed to get AutoScalingRunnerSet: %w", err)
+				}
+				return updated.Status, nil
+			},
+			autoscalingRunnerSetTestTimeout,
+			autoscalingRunnerSetTestInterval,
+		).Should(BeEquivalentTo(desiredStatus), "AutoScalingRunnerSet status should be updated")
+	})
 })
 
 var _ = Describe("Test AutoScalingController updates", Ordered, func() {
