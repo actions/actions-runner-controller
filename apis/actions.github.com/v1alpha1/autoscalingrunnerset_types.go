@@ -408,7 +408,3 @@ type AutoscalingRunnerSetList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []AutoscalingRunnerSet `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&AutoscalingRunnerSet{}, &AutoscalingRunnerSetList{})
-}

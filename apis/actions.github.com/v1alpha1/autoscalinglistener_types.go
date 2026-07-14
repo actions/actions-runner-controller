@@ -118,7 +118,3 @@ type AutoscalingListenerList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []AutoscalingListener `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&AutoscalingListener{}, &AutoscalingListenerList{})
-}
