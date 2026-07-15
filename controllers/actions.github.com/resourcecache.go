@@ -10,14 +10,20 @@ import (
 	"github.com/actions/actions-runner-controller/hash"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var resourceCacheObjectTypes sync.Map
+const (
+	resourceCacheInitialEntries        = 4096
+	resourceCacheInitialMainUIDEntries = 4096
+	resourceCacheInitialOwnerEntries   = 8
+	resourceCacheMaxDependencyRefs     = 4
+)
 
 type ResourceCacheObjectRef struct {
-	ObjectType      string
+	ObjectType      schema.GroupVersionKind
 	Namespace       string
 	Name            string
 	UID             types.UID
@@ -33,8 +39,13 @@ type ResourceCacheKey struct {
 type ResourceCacheValue[T client.Object] struct {
 	MainObject      ResourceCacheObjectRef
 	ResourceVersion string
-	Dependencies    []ResourceCacheObjectRef
+	dependencyKey   resourceCacheDependencyKey
 	Object          T
+}
+
+type resourceCacheDependencyKey struct {
+	count int
+	refs  [resourceCacheMaxDependencyRefs]ResourceCacheObjectRef
 }
 
 type ResourceCache struct {
@@ -58,13 +69,15 @@ func NewResourceCache() ResourceCache {
 }
 
 type resourceCacheState[T client.Object] struct {
-	mu      sync.RWMutex
-	entries map[ResourceCacheKey]ResourceCacheValue[T]
+	mu               sync.RWMutex
+	entries          map[ResourceCacheKey]ResourceCacheValue[T]
+	entriesByMainUID map[types.UID]map[ResourceCacheKey]struct{}
 }
 
 func newResourceCacheState[T client.Object]() *resourceCacheState[T] {
 	return &resourceCacheState[T]{
-		entries: make(map[ResourceCacheKey]ResourceCacheValue[T], 512),
+		entries:          make(map[ResourceCacheKey]ResourceCacheValue[T], resourceCacheInitialEntries),
+		entriesByMainUID: make(map[types.UID]map[ResourceCacheKey]struct{}, resourceCacheInitialMainUIDEntries),
 	}
 }
 
@@ -73,17 +86,30 @@ func (s *resourceCacheState[T]) Get(
 	desiredObject T,
 	dependencies ...client.Object,
 ) (T, bool) {
-	key := newResourceCacheKey(mainObject, desiredObject)
-
-	s.mu.RLock()
-	value, ok := s.entries[key]
-	s.mu.RUnlock()
-	if !ok || !value.Matches(mainObject, dependencies...) {
-		var zero T
+	var zero T
+	if s == nil || isNilResourceCacheObject(mainObject) || isNilResourceCacheObject(desiredObject) {
+		return zero, false
+	}
+	dependencyKey, ok := newResourceCacheDependencyKey(dependencies...)
+	if !ok {
+		return zero, false
+	}
+	if mainObject.GetUID() == "" {
 		return zero, false
 	}
 
-	return cloneResourceCacheObject(value.Object), true
+	key := newResourceCacheKey(mainObject, desiredObject)
+	mainObjectRef := newResourceCacheObjectRef(mainObject)
+
+	s.mu.RLock()
+	value, ok := s.entries[key]
+	if ok && value.MainObject == mainObjectRef && value.dependencyKey.Equal(dependencyKey) {
+		s.mu.RUnlock()
+		return value.Object, true
+	}
+	s.mu.RUnlock()
+
+	return zero, false
 }
 
 func (s *resourceCacheState[T]) Upsert(
@@ -91,13 +117,25 @@ func (s *resourceCacheState[T]) Upsert(
 	desiredObject T,
 	dependencies ...client.Object,
 ) (ResourceCacheValue[T], bool) {
+	var zero ResourceCacheValue[T]
+	if s == nil || isNilResourceCacheObject(mainObject) || isNilResourceCacheObject(desiredObject) {
+		return zero, false
+	}
+	dependencyKey, ok := newResourceCacheDependencyKey(dependencies...)
+	if !ok {
+		return zero, false
+	}
+	if mainObject.GetUID() == "" {
+		return zero, false
+	}
+
 	key := newResourceCacheKey(mainObject, desiredObject)
 	mainObjectRef := newResourceCacheObjectRef(mainObject)
 	resourceVersion := desiredObject.GetResourceVersion()
 
 	s.mu.RLock()
 	previous, ok := s.entries[key]
-	if ok && previous.MainObject == mainObjectRef && previous.ResourceVersion == resourceVersion && previous.dependenciesMatch(dependencies...) {
+	if ok && previous.MainObject == mainObjectRef && previous.ResourceVersion == resourceVersion && previous.dependencyKey.Equal(dependencyKey) {
 		s.mu.RUnlock()
 		return previous, false
 	}
@@ -107,13 +145,18 @@ func (s *resourceCacheState[T]) Upsert(
 	defer s.mu.Unlock()
 
 	previous, ok = s.entries[key]
-	if ok && previous.MainObject == mainObjectRef && previous.ResourceVersion == resourceVersion && previous.dependenciesMatch(dependencies...) {
+	if ok && previous.MainObject == mainObjectRef && previous.ResourceVersion == resourceVersion && previous.dependencyKey.Equal(dependencyKey) {
 		return previous, false
 	}
 
-	dependencyRefs := newResourceCacheObjectRefs(dependencies...)
-	value := newResourceCacheValue(mainObjectRef, resourceVersion, dependencyRefs, cloneResourceCacheObject(desiredObject))
+	value := ResourceCacheValue[T]{
+		MainObject:      mainObjectRef,
+		ResourceVersion: resourceVersion,
+		dependencyKey:   dependencyKey,
+		Object:          desiredObject,
+	}
 	s.entries[key] = value
+	s.indexKeyLocked(key)
 	return value, true
 }
 
@@ -131,7 +174,7 @@ func (c *ResourceCache) Delete(mainObject client.Object) {
 }
 
 func (s *resourceCacheState[T]) Delete(mainObject client.Object) {
-	if mainObject == nil {
+	if s == nil || mainObject == nil {
 		return
 	}
 
@@ -143,19 +186,19 @@ func (s *resourceCacheState[T]) Delete(mainObject client.Object) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	for key := range s.entries {
-		if key.MainUID == uid {
-			delete(s.entries, key)
-		}
+	for key := range s.entriesByMainUID[uid] {
+		delete(s.entries, key)
 	}
+	delete(s.entriesByMainUID, uid)
 }
 
-func (v ResourceCacheValue[T]) Matches(mainObject client.Object, dependencies ...client.Object) bool {
-	if v.MainObject != newResourceCacheObjectRef(mainObject) {
-		return false
+func (s *resourceCacheState[T]) indexKeyLocked(key ResourceCacheKey) {
+	keys, ok := s.entriesByMainUID[key.MainUID]
+	if !ok {
+		keys = make(map[ResourceCacheKey]struct{}, resourceCacheInitialOwnerEntries)
+		s.entriesByMainUID[key.MainUID] = keys
 	}
-
-	return v.dependenciesMatch(dependencies...)
+	keys[key] = struct{}{}
 }
 
 func newResourceCacheKey(mainObject client.Object, desiredObject client.Object) ResourceCacheKey {
@@ -166,43 +209,34 @@ func newResourceCacheKey(mainObject client.Object, desiredObject client.Object) 
 	}
 }
 
-func newResourceCacheValue[T client.Object](
-	mainObjectRef ResourceCacheObjectRef,
-	resourceVersion string,
-	dependencyRefs []ResourceCacheObjectRef,
-	object T,
-) ResourceCacheValue[T] {
-	return ResourceCacheValue[T]{
-		MainObject:      mainObjectRef,
-		ResourceVersion: resourceVersion,
-		Dependencies:    dependencyRefs,
-		Object:          object,
+func newResourceCacheDependencyKey(objects ...client.Object) (resourceCacheDependencyKey, bool) {
+	if len(objects) > resourceCacheMaxDependencyRefs {
+		return resourceCacheDependencyKey{}, false
 	}
-}
 
-func cloneResourceCacheObject[T client.Object](object T) T {
-	return object.DeepCopyObject().(T)
-}
-
-func newResourceCacheObjectRefs(objects ...client.Object) []ResourceCacheObjectRef {
-	refs := make([]ResourceCacheObjectRef, 0, len(objects))
-	for _, object := range objects {
-		refs = append(refs, newResourceCacheObjectRef(object))
+	key := resourceCacheDependencyKey{count: len(objects)}
+	for i, object := range objects {
+		if isNilResourceCacheObject(object) {
+			return resourceCacheDependencyKey{}, false
+		}
+		key.refs[i] = newResourceCacheObjectRef(object)
 	}
-	slices.SortFunc(refs, func(a, b ResourceCacheObjectRef) int {
+	slices.SortFunc(key.refs[:key.count], func(a, b ResourceCacheObjectRef) int {
 		return compareResourceCacheObjectRefs(a, b)
 	})
-	return refs
+	return key, true
 }
 
-func (v ResourceCacheValue[T]) dependenciesMatch(objects ...client.Object) bool {
-	if len(v.Dependencies) != len(objects) {
+func (k resourceCacheDependencyKey) Equal(other resourceCacheDependencyKey) bool {
+	if k.count != other.count {
+		return false
+	}
+	if k.count > len(k.refs) || other.count > len(other.refs) {
 		return false
 	}
 
-	for _, object := range objects {
-		ref := newResourceCacheObjectRef(object)
-		if !slices.Contains(v.Dependencies, ref) {
+	for i := range k.count {
+		if k.refs[i] != other.refs[i] {
 			return false
 		}
 	}
@@ -213,11 +247,14 @@ func (v ResourceCacheValue[T]) dependenciesMatch(objects ...client.Object) bool 
 func newResourceCacheObjectRef(object client.Object) ResourceCacheObjectRef {
 	resourceVersion := object.GetResourceVersion()
 	if resourceVersion == "" {
+		resourceVersion = object.GetAnnotations()[annotationKeyIntegrityHash]
+	}
+	if resourceVersion == "" {
 		resourceVersion = hash.ComputeTemplateHash(object)
 	}
 
 	return ResourceCacheObjectRef{
-		ObjectType:      resourceCacheObjectType(object),
+		ObjectType:      object.GetObjectKind().GroupVersionKind(),
 		Namespace:       object.GetNamespace(),
 		Name:            resourceCacheObjectName(object),
 		UID:             object.GetUID(),
@@ -226,7 +263,7 @@ func newResourceCacheObjectRef(object client.Object) ResourceCacheObjectRef {
 }
 
 func compareResourceCacheObjectRefs(a, b ResourceCacheObjectRef) int {
-	if c := strings.Compare(a.ObjectType, b.ObjectType); c != 0 {
+	if c := compareGroupVersionKinds(a.ObjectType, b.ObjectType); c != 0 {
 		return c
 	}
 	if c := strings.Compare(a.Namespace, b.Namespace); c != 0 {
@@ -241,18 +278,14 @@ func compareResourceCacheObjectRefs(a, b ResourceCacheObjectRef) int {
 	return strings.Compare(a.ResourceVersion, b.ResourceVersion)
 }
 
-func resourceCacheObjectType(object client.Object) string {
-	t := reflect.TypeOf(object)
-	if t.Kind() == reflect.Pointer {
-		t = t.Elem()
+func compareGroupVersionKinds(a, b schema.GroupVersionKind) int {
+	if c := strings.Compare(a.Group, b.Group); c != 0 {
+		return c
 	}
-	if objectType, ok := resourceCacheObjectTypes.Load(t); ok {
-		return objectType.(string)
+	if c := strings.Compare(a.Version, b.Version); c != 0 {
+		return c
 	}
-
-	objectType := t.PkgPath() + "." + t.Name()
-	actual, _ := resourceCacheObjectTypes.LoadOrStore(t, objectType)
-	return actual.(string)
+	return strings.Compare(a.Kind, b.Kind)
 }
 
 func resourceCacheObjectName(object client.Object) string {
@@ -260,4 +293,14 @@ func resourceCacheObjectName(object client.Object) string {
 		return object.GetName()
 	}
 	return object.GetGenerateName()
+}
+
+func isNilResourceCacheObject[T client.Object](object T) bool {
+	var clientObject client.Object = object
+	if clientObject == nil {
+		return true
+	}
+
+	value := reflect.ValueOf(clientObject)
+	return value.Kind() == reflect.Pointer && value.IsNil()
 }

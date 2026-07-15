@@ -749,6 +749,7 @@ func (r *AutoscalingRunnerSetReconciler) deleteRunnerScaleSet(ctx context.Contex
 }
 
 func (r *AutoscalingRunnerSetReconciler) createEphemeralRunnerSet(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, log logr.Logger) (ctrl.Result, error) {
+	r.ResourceCache.ephemeralRunnerSet.Delete(autoscalingRunnerSet)
 	desiredRunnerSet, err := r.newEphemeralRunnerSet(autoscalingRunnerSet)
 	if err != nil {
 		log.Error(err, "Could not create EphemeralRunnerSet")
@@ -773,6 +774,7 @@ func (r *AutoscalingRunnerSetReconciler) createAutoScalingListenerForRunnerSet(c
 		})
 	}
 
+	r.ResourceCache.autoscalingListener.Delete(autoscalingRunnerSet)
 	autoscalingListener, err := r.newAutoscalingListener(
 		autoscalingRunnerSet,
 		ephemeralRunnerSet,

@@ -100,18 +100,20 @@ var _ = Describe("EphemeralRunner", func() {
 		var configSecret *corev1.Secret
 		var controller *EphemeralRunnerReconciler
 		var ephemeralRunner *v1alpha1.EphemeralRunner
+		var resourceCache *ResourceCache
 
 		BeforeEach(func() {
 			ctx = context.Background()
 			autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
 			configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
+			resourceCache = newTestResourceCache()
 
 			controller = &EphemeralRunnerReconciler{
 				Client: mgr.GetClient(),
 				Scheme: mgr.GetScheme(),
 				Log:    logf.Log,
 				ResourceBuilder: ResourceBuilder{
-					ResourceCache: newTestResourceCache(),
+					ResourceCache: resourceCache,
 					SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient(
 						scalefake.WithClient(
 							scalefake.NewClient(
@@ -652,6 +654,12 @@ var _ = Describe("EphemeralRunner", func() {
 				return true, nil
 			}).Should(BeEquivalentTo(true))
 
+			created := new(v1alpha1.EphemeralRunner)
+			err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, created)
+			Expect(err).To(BeNil(), "failed to get ephemeral runner")
+			resourceCache.listenerPod.Upsert(created, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "cached-runner-pod", Namespace: created.Namespace}})
+			Expect(resourceCacheHasMainObjectEntries(resourceCache, created)).To(BeTrue(), "test setup should cache an EphemeralRunner-owned resource")
+
 			// create runner-linked pod
 			runnerLinkedPod := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
@@ -671,7 +679,7 @@ var _ = Describe("EphemeralRunner", func() {
 				},
 			}
 
-			err := k8sClient.Create(ctx, runnerLinkedPod)
+			err = k8sClient.Create(ctx, runnerLinkedPod)
 			Expect(err).To(BeNil(), "failed to create runner linked pod")
 			Eventually(
 				func() (bool, error) {
@@ -778,6 +786,14 @@ var _ = Describe("EphemeralRunner", func() {
 				ephemeralRunnerTimeout,
 				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(true))
+
+			Eventually(
+				func() bool {
+					return resourceCacheHasMainObjectEntries(resourceCache, created)
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(BeFalse(), "EphemeralRunner-owned resources should be removed from cache after deletion")
 		})
 
 		It("It should eventually have runner id set", func() {

@@ -133,18 +133,20 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 	var autoscalingNS *corev1.Namespace
 	var ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet
 	var configSecret *corev1.Secret
+	var resourceCache *ResourceCache
 
 	BeforeEach(func() {
 		ctx = context.Background()
 		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
 		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
+		resourceCache = newTestResourceCache()
 
 		controller := &EphemeralRunnerSetReconciler{
 			Client: mgr.GetClient(),
 			Scheme: mgr.GetScheme(),
 			Log:    logf.Log,
 			ResourceBuilder: ResourceBuilder{
-				ResourceCache: newTestResourceCache(),
+				ResourceCache: resourceCache,
 				SecretResolver: secretresolver.New(mgr.GetClient(), fake.NewMultiClient(
 					fake.WithClient(
 						fake.NewClient(
@@ -284,6 +286,8 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			created := new(v1alpha1.EphemeralRunnerSet)
 			err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunnerSet.Name, Namespace: ephemeralRunnerSet.Namespace}, created)
 			Expect(err).NotTo(HaveOccurred(), "failed to get EphemeralRunnerSet")
+			resourceCache.listenerPod.Upsert(created, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "cached-runner-set-pod", Namespace: created.Namespace}})
+			Expect(resourceCacheHasMainObjectEntries(resourceCache, created)).To(BeTrue(), "test setup should cache an EphemeralRunnerSet-owned resource")
 
 			// Scale up the EphemeralRunnerSet
 			updated := created.DeepCopy()
@@ -360,6 +364,14 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 				ephemeralRunnerSetTestTimeout,
 				ephemeralRunnerSetTestInterval,
 			).Should(Succeed(), "EphemeralRunnerSet should be deleted")
+
+			Eventually(
+				func() bool {
+					return resourceCacheHasMainObjectEntries(resourceCache, created)
+				},
+				ephemeralRunnerSetTestTimeout,
+				ephemeralRunnerSetTestInterval,
+			).Should(BeFalse(), "EphemeralRunnerSet-owned resources should be removed from cache after deletion")
 		})
 	})
 

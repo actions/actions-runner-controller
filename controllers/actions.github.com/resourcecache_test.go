@@ -10,13 +10,33 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
-
-var benchmarkEphemeralRunnerSetSink *v1alpha1.EphemeralRunnerSet
 
 func newTestResourceCache() *ResourceCache {
 	cache := NewResourceCache()
 	return &cache
+}
+
+func resourceCacheHasMainObjectEntries(cache *ResourceCache, mainObject client.Object) bool {
+	return resourceCacheStateHasMainObjectEntries(cache.autoscalingListener, mainObject) ||
+		resourceCacheStateHasMainObjectEntries(cache.ephemeralRunnerSet, mainObject) ||
+		resourceCacheStateHasMainObjectEntries(cache.listenerPod, mainObject) ||
+		resourceCacheStateHasMainObjectEntries(cache.listenerServiceAccount, mainObject) ||
+		resourceCacheStateHasMainObjectEntries(cache.listenerRole, mainObject) ||
+		resourceCacheStateHasMainObjectEntries(cache.listenerRoleBinding, mainObject)
+}
+
+func resourceCacheStateHasMainObjectEntries[T client.Object](state *resourceCacheState[T], mainObject client.Object) bool {
+	uid := mainObject.GetUID()
+	if uid == "" {
+		return false
+	}
+
+	state.mu.RLock()
+	defer state.mu.RUnlock()
+
+	return len(state.entriesByMainUID[uid]) > 0
 }
 
 func TestResourceCacheUpsertReplacesByDependencyResourceVersion(t *testing.T) {
@@ -78,17 +98,14 @@ func TestResourceCacheUpsertReplacesByDependencyResourceVersion(t *testing.T) {
 	configSecret.ResourceVersion = "2"
 	value, replaced = cache.listenerPod.Upsert(mainObject, desiredPod, configSecret, serviceAccount, role)
 	assert.True(t, replaced)
-	assert.Contains(t, value.Dependencies, ResourceCacheObjectRef{
-		ObjectType:      resourceCacheObjectType(configSecret),
-		Namespace:       "controller-ns",
-		Name:            "listener-config",
-		UID:             "config-secret-uid",
-		ResourceVersion: "2",
-	})
+	staleConfigSecret := configSecret.DeepCopy()
+	staleConfigSecret.ResourceVersion = "1"
+	_, ok = cache.listenerPod.Get(mainObject, desiredPod, staleConfigSecret, serviceAccount, role)
+	assert.False(t, ok)
+	_, ok = cache.listenerPod.Get(mainObject, desiredPod, configSecret, serviceAccount, role)
+	assert.True(t, ok)
 
-	desiredPod.Labels["mutated"] = "after-cache"
-	cachedPod := value.Object
-	assert.NotContains(t, cachedPod.Labels, "mutated")
+	assert.Same(t, desiredPod, value.Object)
 }
 
 func TestResourceCacheDeleteRemovesMainObjectEntries(t *testing.T) {
@@ -129,6 +146,38 @@ func TestResourceCacheDeletePanicsWithNilCache(t *testing.T) {
 	var cache *ResourceCache
 	assert.Panics(t, func() {
 		cache.Delete(&v1alpha1.AutoscalingListener{})
+	})
+}
+
+func TestResourceCacheIgnoresInvalidInputs(t *testing.T) {
+	cache := NewResourceCache()
+	desiredPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "listener", Namespace: "controller-ns"}}
+	mainObjectWithoutUID := &v1alpha1.AutoscalingListener{ObjectMeta: metav1.ObjectMeta{Name: "listener", Namespace: "controller-ns"}}
+	mainObject := mainObjectWithoutUID.DeepCopy()
+	mainObject.UID = "listener-uid"
+
+	_, replaced := cache.listenerPod.Upsert(mainObjectWithoutUID, desiredPod)
+	assert.False(t, replaced)
+	_, ok := cache.listenerPod.Get(mainObjectWithoutUID, desiredPod)
+	assert.False(t, ok)
+
+	var nilDependency *corev1.Secret
+	assert.NotPanics(t, func() {
+		_, replaced = cache.listenerPod.Upsert(mainObject, desiredPod, nilDependency)
+		assert.False(t, replaced)
+		_, ok = cache.listenerPod.Get(mainObject, desiredPod, nilDependency)
+		assert.False(t, ok)
+	})
+
+	tooManyDependencies := make([]client.Object, resourceCacheMaxDependencyRefs+1)
+	for i := range tooManyDependencies {
+		tooManyDependencies[i] = &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("dependency-%d", i), Namespace: "controller-ns"}}
+	}
+	assert.NotPanics(t, func() {
+		_, replaced = cache.listenerPod.Upsert(mainObject, desiredPod, tooManyDependencies...)
+		assert.False(t, replaced)
+		_, ok = cache.listenerPod.Get(mainObject, desiredPod, tooManyDependencies...)
+		assert.False(t, ok)
 	})
 }
 
@@ -231,128 +280,13 @@ func TestResourceBuilderCachesEphemeralRunnerSet(t *testing.T) {
 	cachedRunnerSet, ok := b.ResourceCache.ephemeralRunnerSet.Get(&autoscalingRunnerSet, runnerSet)
 	require.True(t, ok)
 	assert.Equal(t, runnerSet.Spec, cachedRunnerSet.Spec)
-
-	runnerSet.Labels["mutated"] = "after-cache"
-	assert.NotContains(t, cachedRunnerSet.Labels, "mutated")
+	assert.Same(t, runnerSet, cachedRunnerSet)
 
 	fromBuilder, err := b.newEphemeralRunnerSet(&autoscalingRunnerSet)
 	require.NoError(t, err)
-	assert.NotContains(t, fromBuilder.Labels, "mutated")
+	assert.Same(t, runnerSet, fromBuilder)
 
 	autoscalingRunnerSet.Annotations[runnerScaleSetIDAnnotationKey] = "2"
 	_, ok = b.ResourceCache.ephemeralRunnerSet.Get(&autoscalingRunnerSet, runnerSet)
 	assert.False(t, ok)
-}
-
-func BenchmarkNewEphemeralRunnerSetResourceCache(b *testing.B) {
-	autoscalingRunnerSet := newBenchmarkAutoscalingRunnerSet()
-
-	b.Run("no_cache", func(b *testing.B) {
-		builder := ResourceBuilder{}
-		b.ReportAllocs()
-		b.ResetTimer()
-
-		for i := 0; i < b.N; i++ {
-			runnerSet, err := builder.newEphemeralRunnerSet(autoscalingRunnerSet)
-			if err != nil {
-				b.Fatal(err)
-			}
-			benchmarkEphemeralRunnerSetSink = runnerSet
-		}
-	})
-
-	b.Run("cache_hit", func(b *testing.B) {
-		cache := NewResourceCache()
-		builder := ResourceBuilder{ResourceCache: &cache}
-		if _, err := builder.newEphemeralRunnerSet(autoscalingRunnerSet); err != nil {
-			b.Fatal(err)
-		}
-
-		b.ReportAllocs()
-		b.ResetTimer()
-
-		for i := 0; i < b.N; i++ {
-			runnerSet, err := builder.newEphemeralRunnerSet(autoscalingRunnerSet)
-			if err != nil {
-				b.Fatal(err)
-			}
-			benchmarkEphemeralRunnerSetSink = runnerSet
-		}
-	})
-
-	b.Run("cache_miss", func(b *testing.B) {
-		cache := NewResourceCache()
-		builder := ResourceBuilder{ResourceCache: &cache}
-		autoscalingRunnerSet := autoscalingRunnerSet.DeepCopy()
-
-		b.ReportAllocs()
-		b.ResetTimer()
-
-		for i := 0; i < b.N; i++ {
-			autoscalingRunnerSet.ResourceVersion = fmt.Sprint(i)
-			runnerSet, err := builder.newEphemeralRunnerSet(autoscalingRunnerSet)
-			if err != nil {
-				b.Fatal(err)
-			}
-			benchmarkEphemeralRunnerSetSink = runnerSet
-		}
-	})
-}
-
-func newBenchmarkAutoscalingRunnerSet() *v1alpha1.AutoscalingRunnerSet {
-	return &v1alpha1.AutoscalingRunnerSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "benchmark-scale-set",
-			Namespace:       "benchmark-namespace",
-			UID:             "benchmark-scale-set-uid",
-			ResourceVersion: "1",
-			Labels: map[string]string{
-				LabelKeyKubernetesVersion: "0.12.0",
-				"example.com/label-1":     "value-1",
-				"example.com/label-2":     "value-2",
-			},
-			Annotations: map[string]string{
-				runnerScaleSetIDAnnotationKey:         "123",
-				AnnotationKeyGitHubRunnerGroupName:    "benchmark-runner-group",
-				AnnotationKeyGitHubRunnerScaleSetName: "benchmark-scale-set",
-			},
-		},
-		Spec: v1alpha1.AutoscalingRunnerSetSpec{
-			GitHubConfigUrl: "https://github.com/actions/actions-runner-controller",
-			EphemeralRunnerSetMetadata: &v1alpha1.ResourceMeta{
-				Labels: map[string]string{
-					"example.com/runner-set-label": "runner-set-value",
-				},
-				Annotations: map[string]string{
-					"example.com/runner-set-annotation": "runner-set-value",
-				},
-			},
-			EphemeralRunnerMetadata: &v1alpha1.ResourceMeta{
-				Labels: map[string]string{
-					"example.com/runner-label": "runner-value",
-				},
-				Annotations: map[string]string{
-					"example.com/runner-annotation": "runner-value",
-				},
-			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"example.com/template-label": "template-value",
-					},
-				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name:  v1alpha1.EphemeralRunnerContainerName,
-							Image: "ghcr.io/actions/actions-runner:latest",
-							Env: []corev1.EnvVar{
-								{Name: "ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER", Value: "false"},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
 }

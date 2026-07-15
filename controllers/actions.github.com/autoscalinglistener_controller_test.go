@@ -38,6 +38,7 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 	var autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet
 	var configSecret *corev1.Secret
 	var autoscalingListener *v1alpha1.AutoscalingListener
+	var resourceCache *ResourceCache
 
 	BeforeEach(func() {
 		ctx = context.Background()
@@ -49,8 +50,9 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 			scalefake.NewMultiClient(),
 		)
 
+		resourceCache = newTestResourceCache()
 		rb := ResourceBuilder{
-			ResourceCache:  newTestResourceCache(),
+			ResourceCache:  resourceCache,
 			SecretResolver: secretResolver,
 		}
 
@@ -231,6 +233,17 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 				autoscalingListenerTestTimeout,
 				autoscalingListenerTestInterval,
 			).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
+
+			Eventually(
+				func() bool {
+					return resourceCacheStateHasMainObjectEntries(resourceCache.listenerServiceAccount, created) &&
+						resourceCacheStateHasMainObjectEntries(resourceCache.listenerRole, created) &&
+						resourceCacheStateHasMainObjectEntries(resourceCache.listenerRoleBinding, created) &&
+						resourceCacheStateHasMainObjectEntries(resourceCache.listenerPod, created)
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(BeTrue(), "AutoScalingListener service account, role, role binding, and pod resources should be cached after reconciliation")
 		})
 	})
 
@@ -251,8 +264,22 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 				autoscalingListenerTestInterval,
 			).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
 
+			created := new(v1alpha1.AutoscalingListener)
+			err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, created)
+			Expect(err).NotTo(HaveOccurred(), "failed to get AutoScalingListener")
+			Eventually(
+				func() bool {
+					return resourceCacheStateHasMainObjectEntries(resourceCache.listenerServiceAccount, created) &&
+						resourceCacheStateHasMainObjectEntries(resourceCache.listenerRole, created) &&
+						resourceCacheStateHasMainObjectEntries(resourceCache.listenerRoleBinding, created) &&
+						resourceCacheStateHasMainObjectEntries(resourceCache.listenerPod, created)
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(BeTrue(), "AutoScalingListener service account, role, role binding, and pod resources should be cached before deletion")
+
 			// Delete the AutoScalingListener
-			err := k8sClient.Delete(ctx, autoscalingListener)
+			err = k8sClient.Delete(ctx, autoscalingListener)
 			Expect(err).NotTo(HaveOccurred(), "failed to delete test AutoScalingListener")
 
 			// Cleanup the listener pod
@@ -343,6 +370,17 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 				autoscalingListenerTestTimeout,
 				autoscalingListenerTestInterval,
 			).ShouldNot(Succeed(), "failed to delete AutoScalingListener")
+
+			Eventually(
+				func() bool {
+					return resourceCacheStateHasMainObjectEntries(resourceCache.listenerServiceAccount, created) ||
+						resourceCacheStateHasMainObjectEntries(resourceCache.listenerRole, created) ||
+						resourceCacheStateHasMainObjectEntries(resourceCache.listenerRoleBinding, created) ||
+						resourceCacheStateHasMainObjectEntries(resourceCache.listenerPod, created)
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(BeFalse(), "AutoScalingListener service account, role, role binding, and pod resources should be removed from cache after deletion")
 		})
 	})
 

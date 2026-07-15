@@ -501,6 +501,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			return ctrl.Result{}, nil
 		}
 
+		r.ResourceCache.listenerPod.Delete(&autoscalingListener)
 		desiredPod, err := r.newScaleSetListenerPod(
 			&autoscalingListener,
 			&listenerConfigSecret,
@@ -686,6 +687,7 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 }
 
 func (r *AutoscalingListenerReconciler) createServiceAccountForListener(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) (ctrl.Result, error) {
+	r.ResourceCache.listenerServiceAccount.Delete(autoscalingListener)
 	newServiceAccount, err := r.newScaleSetListenerServiceAccount(autoscalingListener)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -769,6 +771,7 @@ func (r *AutoscalingListenerReconciler) createProxySecret(ctx context.Context, a
 }
 
 func (r *AutoscalingListenerReconciler) createRoleForListener(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) (ctrl.Result, error) {
+	r.ResourceCache.listenerRole.Delete(autoscalingListener)
 	newRole := r.newScaleSetListenerRole(autoscalingListener)
 
 	logger.Info("Creating listener role", "namespace", newRole.Namespace, "name", newRole.Name, "rules", newRole.Rules)
@@ -782,6 +785,7 @@ func (r *AutoscalingListenerReconciler) createRoleForListener(ctx context.Contex
 }
 
 func (r *AutoscalingListenerReconciler) createRoleBindingForListener(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, listenerRole *rbacv1.Role, serviceAccount *corev1.ServiceAccount, logger logr.Logger) (ctrl.Result, error) {
+	r.ResourceCache.listenerRoleBinding.Delete(autoscalingListener)
 	newRoleBinding := r.newScaleSetListenerRoleBinding(autoscalingListener, listenerRole, serviceAccount)
 
 	logger.Info("Creating listener role binding",
