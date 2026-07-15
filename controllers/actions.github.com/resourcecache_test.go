@@ -125,6 +125,13 @@ func TestResourceCacheDeleteRemovesMainObjectEntries(t *testing.T) {
 	assert.True(t, ok)
 }
 
+func TestResourceCacheDeletePanicsWithNilCache(t *testing.T) {
+	var cache *ResourceCache
+	assert.Panics(t, func() {
+		cache.Delete(&v1alpha1.AutoscalingListener{})
+	})
+}
+
 func TestResourceBuilderCachesListenerPodDependencies(t *testing.T) {
 	listener := &v1alpha1.AutoscalingListener{
 		ObjectMeta: metav1.ObjectMeta{

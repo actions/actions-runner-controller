@@ -218,6 +218,7 @@ func main() {
 	}
 
 	actionsgithubcom.SetListenerEntrypoint(os.Getenv("LISTENER_ENTRYPOINT"))
+	resourceCache := actionsgithubcom.NewResourceCache()
 
 	var webhookServer webhook.Server
 	if port != 0 {
@@ -299,7 +300,6 @@ func main() {
 			secretresolver.WithLogger(slogLogger),
 		)
 
-		resourceCache := actionsgithubcom.NewResourceCache()
 		rb := actionsgithubcom.ResourceBuilder{
 			ExcludeLabelPropagationPrefixes: excludeLabelPropagationPrefixes,
 			SecretResolver:                  secretResolver,
