@@ -105,7 +105,3 @@ type RunnerDeploymentList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []RunnerDeployment `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&RunnerDeployment{}, &RunnerDeploymentList{})
-}

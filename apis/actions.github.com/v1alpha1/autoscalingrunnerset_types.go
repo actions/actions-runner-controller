@@ -318,19 +318,7 @@ type HistogramMetric struct {
 // AutoscalingRunnerSetStatus defines the observed state of AutoscalingRunnerSet
 type AutoscalingRunnerSetStatus struct {
 	// +optional
-	CurrentRunners int `json:"currentRunners"`
-
-	// +optional
 	Phase AutoscalingRunnerSetPhase `json:"phase"`
-
-	// EphemeralRunner counts separated by the stage ephemeral runners are in, taken from the EphemeralRunnerSet
-
-	// +optional
-	PendingEphemeralRunners int `json:"pendingEphemeralRunners"`
-	// +optional
-	RunningEphemeralRunners int `json:"runningEphemeralRunners"`
-	// +optional
-	FailedEphemeralRunners int `json:"failedEphemeralRunners"`
 }
 
 type AutoscalingRunnerSetPhase string
@@ -419,8 +407,4 @@ type AutoscalingRunnerSetList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []AutoscalingRunnerSet `json:"items"`
-}
-
-func init() {
-	SchemeBuilder.Register(&AutoscalingRunnerSet{}, &AutoscalingRunnerSetList{})
 }

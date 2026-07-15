@@ -9,14 +9,21 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/metrics"
+	"github.com/actions/actions-runner-controller/github/actions"
+	"github.com/actions/scaleset"
+	prometheusdto "github.com/prometheus/client_model/go"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	controllerMetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -34,8 +41,90 @@ const (
 	ephemeralRunnerSetTestInterval = time.Millisecond * 250
 )
 
+var registerActionsGithubMetricsForTest sync.Once
+
 func TestPrecomputedConstants(t *testing.T) {
 	require.Equal(t, len(failedRunnerBackoff), maxFailures+1)
+}
+
+func expectEphemeralRunnerPhase(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, phase v1alpha1.EphemeralRunnerPhase) {
+	updated := new(v1alpha1.EphemeralRunner)
+	err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated)
+	Expect(err).NotTo(HaveOccurred(), "failed to get ephemeral runner")
+	Expect(updated.Status.Phase).To(Equal(phase))
+}
+
+func expectEphemeralRunnerPhaseMetric(ephemeralRunner *v1alpha1.EphemeralRunner, phase v1alpha1.EphemeralRunnerPhase, expected float64) {
+	metricName := ephemeralRunnerPhaseMetricName(phase)
+	Expect(metricName).NotTo(BeEmpty(), "unexpected ephemeral runner phase")
+
+	parsedURL, err := actions.ParseGitHubConfigFromURL(ephemeralRunner.Spec.GitHubConfigURL)
+	Expect(err).NotTo(HaveOccurred(), "failed to parse GitHub config URL")
+
+	value, err := ephemeralRunnerPhaseMetricValue(metricName, map[string]string{
+		"name":         ephemeralRunner.Labels[LabelKeyGitHubScaleSetName],
+		"namespace":    ephemeralRunner.Labels[LabelKeyGitHubScaleSetNamespace],
+		"repository":   parsedURL.Repository,
+		"organization": parsedURL.Organization,
+		"enterprise":   parsedURL.Enterprise,
+	})
+	Expect(err).NotTo(HaveOccurred(), "failed to gather ephemeral runner phase metrics")
+	Expect(value).To(Equal(expected))
+}
+
+func ephemeralRunnerPhaseMetricName(phase v1alpha1.EphemeralRunnerPhase) string {
+	switch phase {
+	case v1alpha1.EphemeralRunnerPhasePending:
+		return "gha_controller_pending_ephemeral_runners"
+	case v1alpha1.EphemeralRunnerPhaseRunning:
+		return "gha_controller_running_ephemeral_runners"
+	case v1alpha1.EphemeralRunnerPhaseSucceeded:
+		return "gha_controller_succeeded_ephemeral_runners"
+	case v1alpha1.EphemeralRunnerPhaseFailed:
+		return "gha_controller_failed_ephemeral_runners"
+	case v1alpha1.EphemeralRunnerPhaseOutdated:
+		return "gha_controller_outdated_ephemeral_runners"
+	default:
+		return ""
+	}
+}
+
+func ephemeralRunnerPhaseMetricValue(metricName string, labels map[string]string) (float64, error) {
+	metricFamilies, err := controllerMetrics.Registry.Gather()
+	if err != nil {
+		return 0, err
+	}
+
+	for _, metricFamily := range metricFamilies {
+		if metricFamily.GetName() != metricName {
+			continue
+		}
+
+		for _, metric := range metricFamily.GetMetric() {
+			if metricHasLabels(metric, labels) {
+				if metric.GetGauge() == nil {
+					return 0, nil
+				}
+				return metric.GetGauge().GetValue(), nil
+			}
+		}
+	}
+
+	return 0, nil
+}
+
+func metricHasLabels(metric *prometheusdto.Metric, labels map[string]string) bool {
+	metricLabels := map[string]string{}
+	for _, label := range metric.GetLabel() {
+		metricLabels[label.GetName()] = label.GetValue()
+	}
+
+	for name, value := range labels {
+		if metricLabels[name] != value {
+			return false
+		}
+	}
+	return true
 }
 
 var _ = Describe("Test EphemeralRunnerSet controller", func() {
@@ -133,20 +222,20 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 				ephemeralRunnerSetTestInterval,
 			).Should(BeEquivalentTo(0), "No EphemeralRunner should be created")
 
-			// Check if the status stay 0
+			// Check if the status is initialized
 			Consistently(
-				func() (int, error) {
+				func() (v1alpha1.EphemeralRunnerSetPhase, error) {
 					runnerSet := new(v1alpha1.EphemeralRunnerSet)
 					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunnerSet.Name, Namespace: ephemeralRunnerSet.Namespace}, runnerSet)
 					if err != nil {
-						return -1, err
+						return "", err
 					}
 
-					return int(runnerSet.Status.CurrentReplicas), nil
+					return runnerSet.Status.Phase, nil
 				},
 				ephemeralRunnerSetTestTimeout,
 				ephemeralRunnerSetTestInterval,
-			).Should(BeEquivalentTo(0), "EphemeralRunnerSet status should be 0")
+			).Should(BeEquivalentTo(v1alpha1.EphemeralRunnerSetPhaseRunning), "EphemeralRunnerSet status should be running")
 
 			// Scaling up the EphemeralRunnerSet
 			updated := created.DeepCopy()
@@ -187,20 +276,20 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 				ephemeralRunnerSetTestInterval,
 			).Should(BeEquivalentTo(5), "5 EphemeralRunner should be created")
 
-			// Check if the status is updated
+			// Check if the status stays running
 			Eventually(
-				func() (int, error) {
+				func() (v1alpha1.EphemeralRunnerSetPhase, error) {
 					runnerSet := new(v1alpha1.EphemeralRunnerSet)
 					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunnerSet.Name, Namespace: ephemeralRunnerSet.Namespace}, runnerSet)
 					if err != nil {
-						return -1, err
+						return "", err
 					}
 
-					return int(runnerSet.Status.CurrentReplicas), nil
+					return runnerSet.Status.Phase, nil
 				},
 				ephemeralRunnerSetTestTimeout,
 				ephemeralRunnerSetTestInterval,
-			).Should(BeEquivalentTo(5), "EphemeralRunnerSet status should be 5")
+			).Should(BeEquivalentTo(v1alpha1.EphemeralRunnerSetPhaseRunning), "EphemeralRunnerSet status should be running")
 		})
 	})
 
@@ -1184,11 +1273,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			).Should(BeTrue(), "Failed to eventually update to one pending, one running and one failed")
 
 			desiredStatus := v1alpha1.EphemeralRunnerSetStatus{
-				Phase:                   v1alpha1.EphemeralRunnerSetPhaseRunning,
-				CurrentReplicas:         3,
-				PendingEphemeralRunners: 1,
-				RunningEphemeralRunners: 1,
-				FailedEphemeralRunners:  1,
+				Phase: v1alpha1.EphemeralRunnerSetPhaseRunning,
 			}
 			Eventually(
 				func() (v1alpha1.EphemeralRunnerSetStatus, error) {
@@ -1227,11 +1312,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			).Should(BeEquivalentTo(1), "Failed to eventually scale down")
 
 			desiredStatus = v1alpha1.EphemeralRunnerSetStatus{
-				CurrentReplicas:         1,
-				PendingEphemeralRunners: 0,
-				RunningEphemeralRunners: 0,
-				FailedEphemeralRunners:  1,
-				Phase:                   v1alpha1.EphemeralRunnerSetPhaseRunning,
+				Phase: v1alpha1.EphemeralRunnerSetPhaseRunning,
 			}
 
 			Eventually(
@@ -1251,11 +1332,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			Expect(err).To(BeNil(), "Failed to delete failed ephemeral runner")
 
 			desiredStatus = v1alpha1.EphemeralRunnerSetStatus{
-				CurrentReplicas:         0,
-				PendingEphemeralRunners: 0,
-				RunningEphemeralRunners: 0,
-				FailedEphemeralRunners:  0,
-				Phase:                   v1alpha1.EphemeralRunnerSetPhaseRunning,
+				Phase: v1alpha1.EphemeralRunnerSetPhaseRunning,
 			}
 			Eventually(
 				func() (v1alpha1.EphemeralRunnerSetStatus, error) {
@@ -1270,6 +1347,148 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 				ephemeralRunnerSetTestInterval,
 			).Should(BeEquivalentTo(desiredStatus), "Status is not eventually updated to the desired one")
 		})
+	})
+})
+
+var _ = Describe("EphemeralRunner phase metrics", func() {
+	var ctx context.Context
+	var autoscalingNS *corev1.Namespace
+	var mgr ctrl.Manager
+	var configSecret *corev1.Secret
+	var controller *EphemeralRunnerReconciler
+	var ephemeralRunner *v1alpha1.EphemeralRunner
+	var request ctrl.Request
+
+	BeforeEach(func() {
+		registerActionsGithubMetricsForTest.Do(func() {
+			metrics.RegisterMetrics()
+		})
+
+		ephemeralRunnerPhaseMetrics.Lock()
+		ephemeralRunnerPhaseMetrics.phases = map[types.NamespacedName]v1alpha1.EphemeralRunnerPhase{}
+		ephemeralRunnerPhaseMetrics.Unlock()
+
+		ctx = context.Background()
+		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
+		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
+
+		controller = &EphemeralRunnerReconciler{
+			Client:         k8sClient,
+			Scheme:         mgr.GetScheme(),
+			Log:            logf.Log,
+			PublishMetrics: true,
+			ResourceBuilder: ResourceBuilder{
+				SecretResolver: secretresolver.New(k8sClient, fake.NewMultiClient(
+					fake.WithClient(
+						fake.NewClient(
+							fake.WithGenerateJitRunnerConfig(
+								&scaleset.RunnerScaleSetJitRunnerConfig{
+									Runner:           &scaleset.RunnerReference{ID: 100, Name: "test-runner"},
+									EncodedJITConfig: "fake-jit-config",
+								},
+								nil,
+							),
+						),
+					),
+				)),
+			},
+		}
+
+		ephemeralRunner = &v1alpha1.EphemeralRunner{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-runner",
+				Namespace: autoscalingNS.Name,
+				Labels: map[string]string{
+					LabelKeyGitHubScaleSetName:      "test-scale-set",
+					LabelKeyGitHubScaleSetNamespace: autoscalingNS.Name,
+				},
+			},
+			Spec: v1alpha1.EphemeralRunnerSpec{
+				GitHubConfigURL:    "https://github.com/owner/repo",
+				GitHubConfigSecret: configSecret.Name,
+				RunnerScaleSetID:   100,
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  v1alpha1.EphemeralRunnerContainerName,
+								Image: "ghcr.io/actions/runner",
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := k8sClient.Create(ctx, ephemeralRunner)
+		Expect(err).NotTo(HaveOccurred(), "failed to create ephemeral runner")
+
+		request = ctrl.Request{NamespacedName: types.NamespacedName{Namespace: ephemeralRunner.Namespace, Name: ephemeralRunner.Name}}
+	})
+
+	It("publishes pending, running, and succeeded phase transitions", func() {
+		_, err := controller.Reconcile(ctx, request)
+		Expect(err).NotTo(HaveOccurred(), "failed to reconcile ephemeral runner")
+
+		pod := new(corev1.Pod)
+		Eventually(func() error {
+			return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+		}, ephemeralRunnerSetTestTimeout, ephemeralRunnerSetTestInterval).Should(Succeed(), "expected ephemeral runner pod to be created")
+
+		podPending := pod.DeepCopy()
+		podPending.Status.Phase = corev1.PodPending
+		podPending.Status.ContainerStatuses = []corev1.ContainerStatus{
+			{
+				Name:  v1alpha1.EphemeralRunnerContainerName,
+				State: corev1.ContainerState{},
+			},
+		}
+		err = k8sClient.Status().Patch(ctx, podPending, client.MergeFrom(pod))
+		Expect(err).NotTo(HaveOccurred(), "failed to patch pod to pending")
+
+		_, err = controller.Reconcile(ctx, request)
+		Expect(err).NotTo(HaveOccurred(), "failed to reconcile pending pod")
+		expectEphemeralRunnerPhase(ctx, ephemeralRunner, v1alpha1.EphemeralRunnerPhasePending)
+		expectEphemeralRunnerPhaseMetric(ephemeralRunner, v1alpha1.EphemeralRunnerPhasePending, 1)
+		expectEphemeralRunnerPhaseMetric(ephemeralRunner, v1alpha1.EphemeralRunnerPhaseRunning, 0)
+
+		podRunning := podPending.DeepCopy()
+		podRunning.Status.Phase = corev1.PodRunning
+		podRunning.Status.ContainerStatuses = []corev1.ContainerStatus{
+			{
+				Name: v1alpha1.EphemeralRunnerContainerName,
+				State: corev1.ContainerState{
+					Running: &corev1.ContainerStateRunning{StartedAt: metav1.Now()},
+				},
+			},
+		}
+		err = k8sClient.Status().Patch(ctx, podRunning, client.MergeFrom(podPending))
+		Expect(err).NotTo(HaveOccurred(), "failed to patch pod to running")
+
+		_, err = controller.Reconcile(ctx, request)
+		Expect(err).NotTo(HaveOccurred(), "failed to reconcile running pod")
+		expectEphemeralRunnerPhase(ctx, ephemeralRunner, v1alpha1.EphemeralRunnerPhaseRunning)
+		expectEphemeralRunnerPhaseMetric(ephemeralRunner, v1alpha1.EphemeralRunnerPhasePending, 0)
+		expectEphemeralRunnerPhaseMetric(ephemeralRunner, v1alpha1.EphemeralRunnerPhaseRunning, 1)
+
+		podSucceeded := podRunning.DeepCopy()
+		podSucceeded.Status.Phase = corev1.PodSucceeded
+		podSucceeded.Status.ContainerStatuses = []corev1.ContainerStatus{
+			{
+				Name: v1alpha1.EphemeralRunnerContainerName,
+				State: corev1.ContainerState{
+					Terminated: &corev1.ContainerStateTerminated{ExitCode: 0},
+				},
+			},
+		}
+		err = k8sClient.Status().Patch(ctx, podSucceeded, client.MergeFrom(podRunning))
+		Expect(err).NotTo(HaveOccurred(), "failed to patch pod to succeeded")
+
+		_, err = controller.Reconcile(ctx, request)
+		Expect(err).NotTo(HaveOccurred(), "failed to reconcile succeeded pod")
+		expectEphemeralRunnerPhase(ctx, ephemeralRunner, v1alpha1.EphemeralRunnerPhaseSucceeded)
+		expectEphemeralRunnerPhaseMetric(ephemeralRunner, v1alpha1.EphemeralRunnerPhaseRunning, 0)
+		expectEphemeralRunnerPhaseMetric(ephemeralRunner, v1alpha1.EphemeralRunnerPhaseSucceeded, 1)
 	})
 })
 
