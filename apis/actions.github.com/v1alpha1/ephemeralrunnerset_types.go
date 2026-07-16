@@ -36,12 +36,22 @@ type EphemeralRunnerSetSpec struct {
 	// but does not apply to existing ephemeral runners.
 	// +optional
 	EphemeralRunnerMetadata *ResourceMeta `json:"ephemeralRunnerMetadata,omitempty"`
+	// ActionableRevision is a restart-safe applied marker that increments whenever
+	// Spec.EphemeralRunnerSpec changes, enabling detection of spec updates.
+	// Unset defaults to 0.
+	// +optional
+	ActionableRevision int64 `json:"actionableRevision,omitempty"`
 }
 
 // EphemeralRunnerSetStatus defines the observed state of EphemeralRunnerSet
 type EphemeralRunnerSetStatus struct {
 	// +optional
 	Phase EphemeralRunnerSetPhase `json:"phase"`
+	// AppliedActionableRevision is a restart-safe applied marker tracking the last successfully
+	// applied ActionableRevision value. Advances only after spec cleanup succeeds.
+	// Unset defaults to 0.
+	// +optional
+	AppliedActionableRevision int64 `json:"appliedActionableRevision,omitempty"`
 }
 
 // EphemeralRunnerSetPhase is the phase of the ephemeral runner set resource

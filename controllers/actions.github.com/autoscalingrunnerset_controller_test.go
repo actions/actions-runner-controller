@@ -511,7 +511,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 				autoscalingRunnerSetTestInterval,
 			).Should(Succeed(), "EphemeralRunnerSet should be created")
 			originalRunnerSetUID := runnerSet.UID
-			originalRunnerSetHash := runnerSet.Annotations[annotationKeyIntegrityHash]
+			originalActionableRevision := runnerSet.Spec.ActionableRevision
 
 			patched := autoscalingRunnerSet.DeepCopy()
 			patched.Spec.Template.Spec.Containers[0].Image = "ghcr.io/actions/runner:updated"
@@ -524,8 +524,8 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, current)
 					g.Expect(err).NotTo(HaveOccurred(), "failed to get EphemeralRunnerSet")
 					g.Expect(current.UID).To(Equal(originalRunnerSetUID), "EphemeralRunnerSet should be updated in place")
+					g.Expect(current.Spec.ActionableRevision).To(BeNumerically(">", originalActionableRevision), "ActionableRevision should increment for actionable spec changes")
 					g.Expect(current.Spec.EphemeralRunnerSpec.PodTemplateSpec.Spec.Containers[0].Image).To(Equal("ghcr.io/actions/runner:updated"))
-					g.Expect(current.Annotations[annotationKeyIntegrityHash]).NotTo(Equal(originalRunnerSetHash), "EphemeralRunnerSet spec hash should change")
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
@@ -564,7 +564,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 				autoscalingRunnerSetTestInterval,
 			).Should(Succeed(), "EphemeralRunnerSet should be created")
 			originalRunnerSetUID := runnerSet.UID
-			originalRunnerSetHash := runnerSet.Annotations[annotationKeyIntegrityHash]
+			originalActionableRevision := runnerSet.Spec.ActionableRevision
 
 			patched := autoscalingRunnerSet.DeepCopy()
 			max := 20
@@ -590,7 +590,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, current)
 					g.Expect(err).NotTo(HaveOccurred(), "failed to get EphemeralRunnerSet")
 					g.Expect(current.UID).To(Equal(originalRunnerSetUID), "EphemeralRunnerSet should not be recreated")
-					g.Expect(current.Annotations[annotationKeyIntegrityHash]).To(Equal(originalRunnerSetHash), "EphemeralRunnerSet spec should not change")
+					g.Expect(current.Spec.ActionableRevision).To(Equal(originalActionableRevision), "ActionableRevision should not change for non-actionable updates")
 				},
 				time.Second*5,
 				autoscalingRunnerSetTestInterval,
@@ -908,10 +908,6 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 		statusUpdate := runnerSet.DeepCopy()
 		statusUpdate.Status.Phase = v1alpha1.EphemeralRunnerSetPhaseRunning
 
-		desiredStatus := v1alpha1.AutoscalingRunnerSetStatus{
-			Phase: v1alpha1.AutoscalingRunnerSetPhaseRunning,
-		}
-
 		err := k8sClient.Status().Patch(ctx, statusUpdate, client.MergeFrom(&runnerSet))
 		Expect(err).NotTo(HaveOccurred(), "Failed to patch runner set status")
 
@@ -926,7 +922,10 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			},
 			autoscalingRunnerSetTestTimeout,
 			autoscalingRunnerSetTestInterval,
-		).Should(BeEquivalentTo(desiredStatus), "AutoScalingRunnerSet status should be updated")
+		).Should(SatisfyAll(
+			WithTransform(func(s v1alpha1.AutoscalingRunnerSetStatus) v1alpha1.AutoscalingRunnerSetPhase { return s.Phase }, Equal(v1alpha1.AutoscalingRunnerSetPhaseRunning)),
+			WithTransform(func(s v1alpha1.AutoscalingRunnerSetStatus) int64 { return s.ObservedGeneration }, BeNumerically(">=", ars.Generation)),
+		), "AutoScalingRunnerSet status should be updated")
 	})
 })
 

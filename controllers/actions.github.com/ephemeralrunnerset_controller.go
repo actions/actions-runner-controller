@@ -35,6 +35,7 @@ import (
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -133,12 +134,13 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, nil
 	}
 
-	// If hash spec has changed, delete idle ephemeral runners
-	// in order to apply the change to the runners that did not yet receive a job.
-	ephemeralRunnerIntegrityHash := ephemeralRunnerSetIntegrityHash(&ephemeralRunnerSet)
-	if ephemeralRunnerSet.Annotations[annotationKeyIntegrityHash] != ephemeralRunnerIntegrityHash {
-		log.Info("EphemeralRunnerSpec has changed, deleting idle ephemeral runners to apply the new spec")
-		if _, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log); err != nil {
+	if ephemeralRunnerSet.Spec.ActionableRevision > ephemeralRunnerSet.Status.AppliedActionableRevision {
+		log.Info(
+			"EphemeralRunnerSpec revision has changed, deleting idle or pending ephemeral runners to apply the new spec",
+			"specActionableRevision", ephemeralRunnerSet.Spec.ActionableRevision,
+			"statusAppliedActionableRevision", ephemeralRunnerSet.Status.AppliedActionableRevision,
+		)
+		if err := r.cleanUpIdleAndPendingEphemeralRunners(ctx, &ephemeralRunnerSet, log); err != nil {
 			log.Error(err, "Failed to clean up EphemeralRunners")
 			return ctrl.Result{}, err
 		}
@@ -148,18 +150,12 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 			return ctrl.Result{}, err
 		}
 
-		log.Info("Updating EphemeralRunnerSet with new spec hash")
-		original := ephemeralRunnerSet.DeepCopy()
-		if ephemeralRunnerSet.Annotations == nil {
-			ephemeralRunnerSet.Annotations = make(map[string]string)
-		}
-		ephemeralRunnerSet.Annotations[annotationKeyIntegrityHash] = ephemeralRunnerIntegrityHash
-		if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
-			log.Error(err, "Failed to update ephemeral runner set with new spec hash")
+		if err := r.patchAppliedActionableRevisionStatus(ctx, req.NamespacedName, ephemeralRunnerSet.Spec.ActionableRevision); err != nil {
+			log.Error(err, "Failed to update EphemeralRunnerSet applied actionable revision status")
 			return ctrl.Result{}, err
 		}
 
-		log.Info("Updated ephemeral runner set with new spec hash")
+		log.Info("Updated EphemeralRunnerSet applied actionable revision status", "appliedActionableRevision", ephemeralRunnerSet.Spec.ActionableRevision)
 		return ctrl.Result{}, nil
 	}
 
@@ -245,6 +241,33 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 	return ctrl.Result{}, r.updateStatus(ctx, &ephemeralRunnerSet, ephemeralRunnersByState, log)
 }
 
+func (r *EphemeralRunnerSetReconciler) patchAppliedActionableRevisionStatus(ctx context.Context, key types.NamespacedName, targetAppliedRevision int64) error {
+	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		var latest v1alpha1.EphemeralRunnerSet
+		if err := r.Get(ctx, key, &latest); err != nil {
+			return err
+		}
+
+		original := latest.DeepCopy()
+		latest.Status.AppliedActionableRevision = targetAppliedRevision
+
+		ephemeralRunnerList := new(v1alpha1.EphemeralRunnerList)
+		if err := r.List(ctx, ephemeralRunnerList, client.InNamespace(latest.Namespace), client.MatchingFields{resourceOwnerKey: latest.Name}); err != nil {
+			return fmt.Errorf("failed to list child ephemeral runners: %w", err)
+		}
+
+		if len(newEphemeralRunnersByStates(ephemeralRunnerList).outdated) == 0 {
+			latest.Status.Phase = v1alpha1.EphemeralRunnerSetPhaseRunning
+		}
+
+		if original.Status == latest.Status {
+			return nil
+		}
+
+		return r.Status().Patch(ctx, &latest, client.MergeFrom(original))
+	})
+}
+
 func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, state *ephemeralRunnersByState, log logr.Logger) error {
 	original := ephemeralRunnerSet.DeepCopy()
 	var phase v1alpha1.EphemeralRunnerSetPhase
@@ -257,7 +280,8 @@ func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemer
 		phase = ephemeralRunnerSet.Status.Phase
 	}
 	desiredStatus := v1alpha1.EphemeralRunnerSetStatus{
-		Phase: phase,
+		Phase:                     phase,
+		AppliedActionableRevision: ephemeralRunnerSet.Status.AppliedActionableRevision,
 	}
 
 	// Update the status if needed.
@@ -396,6 +420,60 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 	}
 
 	return false, nil
+}
+
+func (r *EphemeralRunnerSetReconciler) cleanUpIdleAndPendingEphemeralRunners(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) error {
+	ephemeralRunnerList := new(v1alpha1.EphemeralRunnerList)
+	err := r.List(ctx, ephemeralRunnerList, client.InNamespace(ephemeralRunnerSet.Namespace), client.MatchingFields{resourceOwnerKey: ephemeralRunnerSet.Name})
+	if err != nil {
+		return fmt.Errorf("failed to list child ephemeral runners: %w", err)
+	}
+
+	ephemeralRunnerState := newEphemeralRunnersByStates(ephemeralRunnerList)
+	if len(ephemeralRunnerState.running) == 0 && len(ephemeralRunnerState.pending) == 0 {
+		return nil
+	}
+
+	actionsClient, err := r.GetActionsService(ctx, ephemeralRunnerSet)
+	if err != nil {
+		return err
+	}
+
+	log.Info("Cleanup pending or idle ephemeral runners", "pending", len(ephemeralRunnerState.pending), "running", len(ephemeralRunnerState.running))
+	var errs []error
+	for _, ephemeralRunner := range ephemeralRunnerState.pending {
+		log.Info("Removing the pending ephemeral runner from the service", "name", ephemeralRunner.Name)
+		_, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	for _, ephemeralRunner := range ephemeralRunnerState.running {
+		if ephemeralRunner.HasJob() {
+			log.Info(
+				"Skipping ephemeral runner since it is running a job",
+				"name", ephemeralRunner.Name,
+				"workflowRunId", ephemeralRunner.Status.WorkflowRunID,
+				"jobId", ephemeralRunner.Status.JobID,
+			)
+			continue
+		}
+
+		log.Info("Removing the idle ephemeral runner from the service", "name", ephemeralRunner.Name)
+		_, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if len(errs) > 0 {
+		mergedErrs := multierr.Combine(errs...)
+		log.Error(mergedErrs, "Failed to remove idle or pending ephemeral runners from the service")
+		return mergedErrs
+	}
+
+	return nil
 }
 
 func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunnerSetProxySecret(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) (done bool, err error) {
