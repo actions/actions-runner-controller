@@ -74,7 +74,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	if err := r.Get(ctx, req.NamespacedName, &autoscalingRunnerSet); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	original := autoscalingRunnerSet.DeepCopy()
+	var original once[*v1alpha1.AutoscalingRunnerSet]
 
 	if !autoscalingRunnerSet.DeletionTimestamp.IsZero() {
 		if !controllerutil.ContainsFinalizer(&autoscalingRunnerSet, autoscalingRunnerSetFinalizerName) {
@@ -90,7 +90,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		if !done {
 			log.Info("Waiting for resources to be cleaned up before removing finalizer")
 			return ctrl.Result{
-				RequeueAfter: 5 * time.Second,
+				RequeueAfter: 2 * time.Second,
 			}, nil
 		}
 
@@ -99,9 +99,14 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			return ctrl.Result{}, err
 		}
 
-		if controllerutil.RemoveFinalizer(&autoscalingRunnerSet, autoscalingRunnerSetFinalizerName) {
+		removeFinalizer := controllerutil.ContainsFinalizer(&autoscalingRunnerSet, autoscalingRunnerSetFinalizerName)
+		if removeFinalizer {
+			original.Do(autoscalingRunnerSet.DeepCopy)
+			controllerutil.RemoveFinalizer(&autoscalingRunnerSet, autoscalingRunnerSetFinalizerName)
+		}
+		if removeFinalizer {
 			log.Info("Removing finalizer")
-			if err := r.Patch(ctx, &autoscalingRunnerSet, client.MergeFrom(original)); err != nil && !kerrors.IsNotFound(err) {
+			if err := r.Patch(ctx, &autoscalingRunnerSet, client.MergeFrom(original.Get())); err != nil && !kerrors.IsNotFound(err) {
 				log.Error(err, "Failed to update autoscaling runner set without finalizer")
 				return ctrl.Result{}, err
 			}
@@ -130,10 +135,15 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, nil
 	}
 
-	if controllerutil.AddFinalizer(&autoscalingRunnerSet, autoscalingRunnerSetFinalizerName) {
+	addFinalizer := !controllerutil.ContainsFinalizer(&autoscalingRunnerSet, autoscalingRunnerSetFinalizerName)
+	if addFinalizer {
+		original.Do(autoscalingRunnerSet.DeepCopy)
+		controllerutil.AddFinalizer(&autoscalingRunnerSet, autoscalingRunnerSetFinalizerName)
+	}
+	if addFinalizer {
 		log.Info("Adding finalizer")
 
-		if err := r.Patch(ctx, &autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
+		if err := r.Patch(ctx, &autoscalingRunnerSet, client.MergeFrom(original.Get())); err != nil {
 			log.Error(err, "Failed to update autoscaling runner set with finalizer")
 			return ctrl.Result{}, err
 		}
@@ -195,12 +205,22 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 				return ctrl.Result{}, nil
 			}
 
-			original := ephemeralRunnerSet.DeepCopy()
-			ephemeralRunnerSet.Spec.Replicas = 0
-			ephemeralRunnerSet.Spec.PatchID = 0
-			if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
-				log.Error(err, "Failed to patch ephemeral runner set with 0 replicas and reset patch ID for the outdated runner set")
-				return ctrl.Result{}, err
+			var original once[*v1alpha1.EphemeralRunnerSet]
+			ephemeralRunnerReplicasModified := ephemeralRunnerSet.Spec.Replicas != 0
+			if ephemeralRunnerReplicasModified {
+				original.Do(ephemeralRunnerSet.DeepCopy)
+				ephemeralRunnerSet.Spec.Replicas = 0
+			}
+			ephemeralRunnerPatchIDModified := ephemeralRunnerSet.Spec.PatchID != 0
+			if ephemeralRunnerPatchIDModified {
+				original.Do(ephemeralRunnerSet.DeepCopy)
+				ephemeralRunnerSet.Spec.PatchID = 0
+			}
+			if ephemeralRunnerReplicasModified || ephemeralRunnerPatchIDModified {
+				if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original.Get())); err != nil {
+					log.Error(err, "Failed to patch ephemeral runner set with 0 replicas and reset patch ID for the outdated runner set")
+					return ctrl.Result{}, err
+				}
 			}
 
 			return ctrl.Result{}, nil
@@ -282,40 +302,44 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			return ctrl.Result{}, nil
 		}
 
-		if ephemeralRunnerSetActionableSpecChanged(&ephemeralRunnerSet, desired) {
-			original := ephemeralRunnerSet.DeepCopy()
-			ephemeralRunnerSet.Spec.EphemeralRunnerMetadata = desired.Spec.EphemeralRunnerMetadata
+		var original once[*v1alpha1.EphemeralRunnerSet]
+
+		ephemeralRunnerActionableSpecModified := !cmp.Equal(ephemeralRunnerSet.Spec.EphemeralRunnerSpec, desired.Spec.EphemeralRunnerSpec)
+		if ephemeralRunnerActionableSpecModified {
+			original.Do(ephemeralRunnerSet.DeepCopy)
 			ephemeralRunnerSet.Spec.EphemeralRunnerSpec = desired.Spec.EphemeralRunnerSpec
 			ephemeralRunnerSet.Spec.ActionableRevision = nextActionableRevision(&ephemeralRunnerSet)
-			ephemeralRunnerSet.Labels = r.filterAndMergeLabels(ephemeralRunnerSet.Labels, desired.Labels)
-			ephemeralRunnerSet.Annotations = desired.Annotations
-
-			log.Info("Updating ephemeral runner set spec to match the desired spec")
-			if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
-				log.Error(err, "Failed to patch ephemeral runner set to match the desired spec")
-				return ctrl.Result{}, err
-			}
-
-			log.Info("Successfully patched ephemeral runner set spec")
-			return ctrl.Result{}, nil
 		}
 
 		ephemeralRunnerMetadataModified := !cmp.Equal(ephemeralRunnerSet.Spec.EphemeralRunnerMetadata, desired.Spec.EphemeralRunnerMetadata)
-		ephemeralRunnerLabelsModified := !maps.Equal(ephemeralRunnerSet.Labels, desired.Labels)
-		ephemeralRunnerAnnotationsModified := !maps.Equal(ephemeralRunnerSet.Annotations, desired.Annotations)
-
-		if ephemeralRunnerLabelsModified || ephemeralRunnerAnnotationsModified || ephemeralRunnerMetadataModified {
-			original := ephemeralRunnerSet.DeepCopy()
-			ephemeralRunnerSet.Labels = r.filterAndMergeLabels(ephemeralRunnerSet.Labels, desired.Labels)
-			ephemeralRunnerSet.Annotations = desired.Annotations
+		if ephemeralRunnerMetadataModified {
+			original.Do(ephemeralRunnerSet.DeepCopy)
 			ephemeralRunnerSet.Spec.EphemeralRunnerMetadata = desired.Spec.EphemeralRunnerMetadata
-			log.Info("Updating ephemeral runner set metadata to match desired labels and annotations")
+		}
+		ephemeralRunnerLabelsModified := !maps.Equal(ephemeralRunnerSet.Labels, desired.Labels)
+		if ephemeralRunnerLabelsModified {
+			original.Do(ephemeralRunnerSet.DeepCopy)
+			ephemeralRunnerSet.Labels = r.filterAndMergeLabels(ephemeralRunnerSet.Labels, desired.Labels)
+		}
+		ephemeralRunnerAnnotationsModified := !maps.Equal(ephemeralRunnerSet.Annotations, desired.Annotations)
+		if ephemeralRunnerAnnotationsModified {
+			original.Do(ephemeralRunnerSet.DeepCopy)
+			ephemeralRunnerSet.Annotations = r.mergeAnnotations(ephemeralRunnerSet.Annotations, desired.Annotations)
+		}
+
+		if ephemeralRunnerActionableSpecModified || ephemeralRunnerLabelsModified || ephemeralRunnerAnnotationsModified || ephemeralRunnerMetadataModified {
+			original := original.Get()
+			if ephemeralRunnerActionableSpecModified {
+				log.Info("Updating ephemeral runner set spec to match the desired spec")
+			} else {
+				log.Info("Updating ephemeral runner set metadata to match desired labels and annotations")
+			}
 			if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
-				log.Error(err, "Failed to patch ephemeral runner set metadata to match desired labels and annotations")
+				log.Error(err, "Failed to patch ephemeral runner set to match the desired state")
 				return ctrl.Result{}, err
 			}
 
-			log.Info("Successfully patched ephemeral runner set metadata")
+			log.Info("Successfully patched ephemeral runner set")
 			return ctrl.Result{}, nil
 		}
 	}
@@ -512,10 +536,11 @@ func (r *AutoscalingRunnerSetReconciler) removeFinalizersFromDependentResources(
 }
 
 func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (ctrl.Result, error) {
-	original := autoscalingRunnerSet.DeepCopy()
+	var original once[*v1alpha1.AutoscalingRunnerSet]
 	logger.Info("Creating a new runner scale set")
 	actionsClient, err := r.GetActionsService(ctx, autoscalingRunnerSet)
 	if len(autoscalingRunnerSet.Spec.RunnerScaleSetName) == 0 {
+		original.Do(autoscalingRunnerSet.DeepCopy)
 		autoscalingRunnerSet.Spec.RunnerScaleSetName = autoscalingRunnerSet.Name
 	}
 	if err != nil {
@@ -590,6 +615,7 @@ func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Contex
 	actionsClient.SetSystemInfo(info)
 
 	logger.Info("Created/Reused a runner scale set", "id", runnerScaleSet.ID, "runnerGroupName", runnerScaleSet.RunnerGroupName)
+	original.Do(autoscalingRunnerSet.DeepCopy)
 	if autoscalingRunnerSet.Annotations == nil {
 		autoscalingRunnerSet.Annotations = map[string]string{}
 	}
@@ -606,7 +632,7 @@ func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Contex
 	}
 
 	logger.Info("Adding runner scale set ID, name and runner group name as an annotation and url labels")
-	if err = r.Patch(ctx, autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
+	if err = r.Patch(ctx, autoscalingRunnerSet, client.MergeFrom(original.Get())); err != nil {
 		logger.Error(err, "Failed to add runner scale set ID, name and runner group name as an annotation")
 		return ctrl.Result{}, err
 	}
@@ -1093,6 +1119,11 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeManagerRoleBindin
 	err := c.client.Get(ctx, types.NamespacedName{Name: managerRoleBindingName, Namespace: c.autoscalingRunnerSet.Namespace}, roleBinding)
 	switch {
 	case err == nil:
+		if !controllerutil.ContainsFinalizer(roleBinding, AutoscalingRunnerSetCleanupFinalizerName) {
+			c.logger.Info("Manager role binding finalizer has already been removed", "name", managerRoleBindingName)
+			return
+		}
+
 		original := roleBinding.DeepCopy()
 		if controllerutil.RemoveFinalizer(roleBinding, AutoscalingRunnerSetCleanupFinalizerName) {
 			if err = c.client.Patch(ctx, roleBinding, client.MergeFrom(original)); err != nil {
@@ -1133,6 +1164,11 @@ func (c *autoscalingRunnerSetFinalizerDependencyCleaner) removeManagerRoleFinali
 	err := c.client.Get(ctx, types.NamespacedName{Name: managerRoleName, Namespace: c.autoscalingRunnerSet.Namespace}, role)
 	switch {
 	case err == nil:
+		if !controllerutil.ContainsFinalizer(role, AutoscalingRunnerSetCleanupFinalizerName) {
+			c.logger.Info("Manager role finalizer has already been removed", "name", managerRoleName)
+			return
+		}
+
 		original := role.DeepCopy()
 		if controllerutil.RemoveFinalizer(role, AutoscalingRunnerSetCleanupFinalizerName) {
 			if err := c.client.Patch(ctx, role, client.MergeFrom(original)); err != nil {

@@ -1084,7 +1084,6 @@ func (b *ResourceBuilder) mergeAnnotations(base, overwrite map[string]string) ma
 	if base == nil && overwrite == nil {
 		return nil
 	}
-	base = maps.Clone(base)
 	maps.Copy(base, overwrite)
 	return base
 }

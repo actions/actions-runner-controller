@@ -1,8 +1,6 @@
 package actionsgithubcom
 
-import (
-	"k8s.io/apimachinery/pkg/util/rand"
-)
+import "sigs.k8s.io/controller-runtime/pkg/client"
 
 func FilterLabels(labels map[string]string, filter string) map[string]string {
 	filtered := map[string]string{}
@@ -16,12 +14,23 @@ func FilterLabels(labels map[string]string, filter string) map[string]string {
 	return filtered
 }
 
-var letterRunes = []rune("abcdefghijklmnopqrstuvwxyz1234567890")
+type once[T client.Object] struct {
+	value T
+	fn    func(T) *T
+	done  bool
+}
 
-func RandStringRunes(n int) string {
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+func (o *once[T]) Do(f func() T) T {
+	if !o.done {
+		o.value = f()
+		o.done = true
 	}
-	return string(b)
+	return o.value
+}
+
+func (o *once[T]) Get() T {
+	if !o.done {
+		panic("not done")
+	}
+	return o.value
 }
