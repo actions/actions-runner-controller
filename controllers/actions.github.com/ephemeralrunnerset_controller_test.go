@@ -1670,6 +1670,28 @@ var _ = Describe("Test EphemeralRunnerSet actionable revision cleanup", func() {
 		}
 	}
 
+	waitForCachedActionableRevision := func(controller *EphemeralRunnerSetReconciler, key types.NamespacedName, specRevision, appliedRevision int64) {
+		Eventually(func(g Gomega) {
+			cached := new(v1alpha1.EphemeralRunnerSet)
+			g.Expect(controller.Get(ctx, key, cached)).To(Succeed())
+			g.Expect(cached.Spec.ActionableRevision).To(Equal(specRevision))
+			g.Expect(cached.Status.AppliedActionableRevision).To(Equal(appliedRevision))
+			g.Expect(cached.Finalizers).To(ContainElement(EphemeralRunnerSetFinalizerName))
+		}, ephemeralRunnerSetTestTimeout, ephemeralRunnerSetTestInterval).Should(Succeed())
+	}
+
+	waitForCachedRunningRunners := func(controller *EphemeralRunnerSetReconciler, namespace, owner string, expected int) {
+		Eventually(func(g Gomega) {
+			runners := new(v1alpha1.EphemeralRunnerList)
+			g.Expect(controller.List(ctx, runners, client.InNamespace(namespace), client.MatchingFields{resourceOwnerKey: owner})).To(Succeed())
+			state := newEphemeralRunnersByStates(runners)
+			g.Expect(state.running).To(HaveLen(expected))
+			for _, runner := range state.running {
+				g.Expect(runner.Status.RunnerID).NotTo(BeZero())
+			}
+		}, ephemeralRunnerSetTestTimeout, ephemeralRunnerSetTestInterval).Should(Succeed())
+	}
+
 	BeforeEach(func() {
 		ctx = context.Background()
 		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
@@ -1903,6 +1925,9 @@ var _ = Describe("Test EphemeralRunnerSet actionable revision cleanup", func() {
 		specUpdated.Spec.ActionableRevision = 4
 		err = k8sClient.Patch(ctx, specUpdated, client.MergeFrom(current))
 		Expect(err).NotTo(HaveOccurred())
+
+		waitForCachedActionableRevision(controller, request.NamespacedName, 4, 3)
+		waitForCachedRunningRunners(controller, autoscalingNS.Name, ephemeralRunnerSet.Name, 1)
 
 		_, err = controller.Reconcile(ctx, request)
 		Expect(err).To(HaveOccurred())

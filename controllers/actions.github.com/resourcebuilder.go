@@ -163,7 +163,7 @@ func (b *ResourceBuilder) newAutoscalingListener(autoscalingRunnerSet *v1alpha1.
 		ConfigSecretMetadata:          autoscalingRunnerSet.Spec.ListenerConfigSecretMetadata,
 	}
 
-	labels := b.filterAndMergeLabels(autoscalingRunnerSet.Labels, map[string]string{
+	labels := b.propagateLabels(autoscalingRunnerSet.Labels, map[string]string{
 		LabelKeyGitHubScaleSetNamespace: autoscalingRunnerSet.Namespace,
 		LabelKeyGitHubScaleSetName:      autoscalingRunnerSet.Name,
 		LabelKeyKubernetesPartOf:        labelValueKubernetesPartOf,
@@ -178,8 +178,8 @@ func (b *ResourceBuilder) newAutoscalingListener(autoscalingRunnerSet *v1alpha1.
 	var annotations map[string]string
 
 	if autoscalingRunnerSet.Spec.AutoscalingListenerMetadata != nil {
-		labels = b.filterAndMergeLabels(autoscalingRunnerSet.Spec.AutoscalingListenerMetadata.Labels, labels)
-		annotations = b.mergeAnnotations(autoscalingRunnerSet.Spec.AutoscalingListenerMetadata.Annotations, annotations)
+		labels, _ = b.mergeLabels(autoscalingRunnerSet.Spec.AutoscalingListenerMetadata.Labels, labels)
+		annotations, _ = b.mergeAnnotations(autoscalingRunnerSet.Spec.AutoscalingListenerMetadata.Annotations, annotations)
 	}
 
 	autoscalingListener := &v1alpha1.AutoscalingListener{
@@ -285,7 +285,7 @@ func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha
 
 	var labels map[string]string
 	if autoscalingListener.Spec.ConfigSecretMetadata != nil && len(autoscalingListener.Spec.ConfigSecretMetadata.Labels) > 0 {
-		labels = b.filterAndMergeLabels(autoscalingListener.Spec.ConfigSecretMetadata.Labels, nil)
+		labels = autoscalingListener.Spec.ConfigSecretMetadata.Labels
 	}
 
 	annotations := make(map[string]string)
@@ -307,6 +307,7 @@ func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha
 		Data: map[string][]byte{
 			"config.json": buf.Bytes(),
 		},
+		Type: corev1.SecretTypeOpaque,
 	}
 
 	if err := b.setControllerReference(autoscalingListener, desiredSecret); err != nil {
@@ -593,27 +594,29 @@ func (b *ResourceBuilder) newScaleSetListenerServiceAccount(autoscalingListener 
 		return cached, nil
 	}
 
+	labels := b.propagateLabels(autoscalingListener.Labels, map[string]string{
+		LabelKeyGitHubScaleSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
+		LabelKeyGitHubScaleSetName:      autoscalingListener.Spec.AutoscalingRunnerSetName,
+	})
+	annotations := make(map[string]string)
+
+	if autoscalingListener.Spec.ServiceAccountMetadata != nil {
+		labels, _ = b.mergeLabels(autoscalingListener.Spec.ServiceAccountMetadata.Labels, labels)
+		annotations, _ = b.mergeAnnotations(autoscalingListener.Spec.ServiceAccountMetadata.Annotations, annotations)
+	}
+
 	base := &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: corev1.SchemeGroupVersion.String(),
 			Kind:       "ServiceAccount",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      autoscalingListener.Name,
-			Namespace: autoscalingListener.Namespace,
-			Labels: b.filterAndMergeLabels(autoscalingListener.Labels, map[string]string{
-				LabelKeyGitHubScaleSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
-				LabelKeyGitHubScaleSetName:      autoscalingListener.Spec.AutoscalingRunnerSetName,
-			}),
-			Annotations: make(map[string]string),
+			Name:        autoscalingListener.Name,
+			Namespace:   autoscalingListener.Namespace,
+			Labels:      labels,
+			Annotations: annotations,
 		},
 	}
-
-	if autoscalingListener.Spec.ServiceAccountMetadata != nil {
-		base.Labels = b.filterAndMergeLabels(autoscalingListener.Spec.ServiceAccountMetadata.Labels, base.Labels)
-		base.Annotations = b.mergeAnnotations(autoscalingListener.Spec.ServiceAccountMetadata.Annotations, base.Annotations)
-	}
-
 	if err := b.setControllerReference(autoscalingListener, base); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for listener service account: %w", err)
 	}
@@ -633,7 +636,7 @@ func (b *ResourceBuilder) newScaleSetListenerRole(autoscalingListener *v1alpha1.
 		return cached
 	}
 
-	labels := b.filterAndMergeLabels(autoscalingListener.Labels, map[string]string{
+	labels := b.propagateLabels(autoscalingListener.Labels, map[string]string{
 		LabelKeyGitHubScaleSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
 		LabelKeyGitHubScaleSetName:      autoscalingListener.Spec.AutoscalingRunnerSetName,
 		labelKeyListenerNamespace:       autoscalingListener.Namespace,
@@ -642,8 +645,8 @@ func (b *ResourceBuilder) newScaleSetListenerRole(autoscalingListener *v1alpha1.
 
 	annotations := make(map[string]string)
 	if autoscalingListener.Spec.RoleMetadata != nil {
-		labels = b.filterAndMergeLabels(autoscalingListener.Spec.RoleMetadata.Labels, labels)
-		annotations = b.mergeAnnotations(autoscalingListener.Spec.RoleMetadata.Annotations, nil)
+		labels, _ = b.mergeLabels(autoscalingListener.Spec.RoleMetadata.Labels, labels)
+		annotations = autoscalingListener.Spec.RoleMetadata.Annotations
 	}
 
 	newRole := &rbacv1.Role{
@@ -677,8 +680,9 @@ func (b *ResourceBuilder) newScaleSetListenerRoleBinding(autoscalingListener *v1
 	}
 
 	roleRef := rbacv1.RoleRef{
-		Kind: "Role",
-		Name: listenerRole.Name,
+		APIGroup: rbacv1.GroupName,
+		Kind:     "Role",
+		Name:     listenerRole.Name,
 	}
 
 	subjects := []rbacv1.Subject{
@@ -689,7 +693,7 @@ func (b *ResourceBuilder) newScaleSetListenerRoleBinding(autoscalingListener *v1
 		},
 	}
 
-	labels := b.filterAndMergeLabels(autoscalingListener.Labels, map[string]string{
+	labels := b.propagateLabels(autoscalingListener.Labels, map[string]string{
 		LabelKeyGitHubScaleSetNamespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace,
 		LabelKeyGitHubScaleSetName:      autoscalingListener.Spec.AutoscalingRunnerSetName,
 		labelKeyListenerNamespace:       autoscalingListener.Namespace,
@@ -698,7 +702,7 @@ func (b *ResourceBuilder) newScaleSetListenerRoleBinding(autoscalingListener *v1
 
 	annotations := make(map[string]string)
 	if autoscalingListener.Spec.RoleBindingMetadata != nil {
-		labels = b.filterAndMergeLabels(autoscalingListener.Spec.RoleBindingMetadata.Labels, labels)
+		labels, _ = b.mergeLabels(autoscalingListener.Spec.RoleBindingMetadata.Labels, labels)
 		annotations = autoscalingListener.Spec.RoleBindingMetadata.Annotations
 	}
 
@@ -753,7 +757,7 @@ func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 		EphemeralRunnerMetadata: autoscalingRunnerSet.Spec.EphemeralRunnerMetadata,
 	}
 
-	labels := b.filterAndMergeLabels(autoscalingRunnerSet.Labels, map[string]string{
+	labels := b.propagateLabels(autoscalingRunnerSet.Labels, map[string]string{
 		LabelKeyKubernetesPartOf:        labelValueKubernetesPartOf,
 		LabelKeyKubernetesComponent:     "runner-set",
 		LabelKeyKubernetesVersion:       autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
@@ -771,8 +775,8 @@ func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 	}
 
 	if autoscalingRunnerSet.Spec.EphemeralRunnerSetMetadata != nil {
-		labels = b.filterAndMergeLabels(autoscalingRunnerSet.Spec.EphemeralRunnerSetMetadata.Labels, labels)
-		annotations = b.mergeAnnotations(autoscalingRunnerSet.Spec.EphemeralRunnerSetMetadata.Annotations, annotations)
+		labels, _ = b.mergeLabels(autoscalingRunnerSet.Spec.EphemeralRunnerSetMetadata.Labels, labels)
+		annotations, _ = b.mergeAnnotations(autoscalingRunnerSet.Spec.EphemeralRunnerSetMetadata.Annotations, annotations)
 	}
 
 	newEphemeralRunnerSet := &v1alpha1.EphemeralRunnerSet{
@@ -809,6 +813,7 @@ func (b *ResourceBuilder) newAutoscalingListenerProxySecret(autoscalingListener 
 			Annotations: make(map[string]string, 1),
 		},
 		Data: data,
+		Type: corev1.SecretTypeOpaque,
 	}
 
 	if err := b.setControllerReference(autoscalingListener, newProxySecret); err != nil {
@@ -828,8 +833,8 @@ func (b *ResourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.Epheme
 	annotations[AnnotationKeyPatchID] = strconv.Itoa(ephemeralRunnerSet.Spec.PatchID)
 
 	if ephemeralRunnerSet.Spec.EphemeralRunnerMetadata != nil {
-		labels = b.filterAndMergeLabels(ephemeralRunnerSet.Spec.EphemeralRunnerMetadata.Labels, labels)
-		annotations = b.mergeAnnotations(ephemeralRunnerSet.Spec.EphemeralRunnerMetadata.Annotations, annotations)
+		labels, _ = b.mergeLabels(ephemeralRunnerSet.Spec.EphemeralRunnerMetadata.Labels, labels)
+		annotations, _ = b.mergeAnnotations(ephemeralRunnerSet.Spec.EphemeralRunnerMetadata.Annotations, annotations)
 	}
 
 	ephemeralRunner := &v1alpha1.EphemeralRunner{
@@ -925,7 +930,7 @@ func (b *ResourceBuilder) newEphemeralRunnerJitSecret(ephemeralRunner *v1alpha1.
 	)
 
 	if ephemeralRunner.Spec.EphemeralRunnerConfigSecretMetadata != nil {
-		labels = b.filterAndMergeLabels(ephemeralRunner.Spec.EphemeralRunnerConfigSecretMetadata.Labels, nil)
+		labels = ephemeralRunner.Spec.EphemeralRunnerConfigSecretMetadata.Labels
 		annotations = ephemeralRunner.Spec.EphemeralRunnerConfigSecretMetadata.Annotations
 	}
 
@@ -1051,39 +1056,67 @@ func trimLabelValue(val string) string {
 	return strings.Trim(val, "-_.")
 }
 
-func (b *ResourceBuilder) filterAndMergeLabels(base, overwrite map[string]string) map[string]string {
-	if base == nil && overwrite == nil {
-		return nil
-	}
-
-	mergedLabels := make(map[string]string, len(base))
-base:
-	for k, v := range base {
-		for _, prefix := range b.ExcludeLabelPropagationPrefixes {
-			if strings.HasPrefix(k, prefix) {
-				continue base
-			}
+func (b *ResourceBuilder) shouldExcludePropagatedLabel(k, _ string) bool {
+	for _, prefix := range b.ExcludeLabelPropagationPrefixes {
+		if strings.HasPrefix(k, prefix) {
+			return true
 		}
-		mergedLabels[k] = v
 	}
-
-overwrite:
-	for k, v := range overwrite {
-		for _, prefix := range b.ExcludeLabelPropagationPrefixes {
-			if strings.HasPrefix(k, prefix) {
-				continue overwrite
-			}
-		}
-		mergedLabels[k] = v
-	}
-
-	return mergedLabels
+	return false
 }
 
-func (b *ResourceBuilder) mergeAnnotations(base, overwrite map[string]string) map[string]string {
+// propagateLabels is responsible for filtering labels during propagation.
+// It only makes sense when we are creating the resource derived from some other resource.
+// Since the desired resource is cached, then we don't need to call this method every time.
+func (b *ResourceBuilder) propagateLabels(base, overwrite map[string]string) map[string]string {
 	if base == nil && overwrite == nil {
 		return nil
 	}
-	maps.Copy(base, overwrite)
-	return base
+
+	labels := make(map[string]string, len(base)+len(overwrite))
+	for k, v := range base {
+		if b.shouldExcludePropagatedLabel(k, v) {
+			continue
+		}
+		labels[k] = v
+	}
+	maps.Copy(labels, overwrite)
+
+	if len(labels) == 0 {
+		return nil
+	}
+	return labels
+}
+
+func (b *ResourceBuilder) mergeLabels(base, overwrite map[string]string) (map[string]string, bool) {
+	return mergeMaps(base, overwrite)
+}
+
+func (b *ResourceBuilder) mergeAnnotations(base, overwrite map[string]string) (map[string]string, bool) {
+	return mergeMaps(base, overwrite)
+}
+
+func mergeMaps[M ~map[K]V, K comparable, V comparable](base M, overwrite M) (M, bool) {
+	if len(overwrite) == 0 {
+		return base, false
+	}
+
+	if containsMapEntries(base, overwrite) {
+		return base, false
+	}
+
+	merged := make(M, len(base)+len(overwrite))
+	maps.Copy(merged, base)
+	maps.Copy(merged, overwrite)
+	return merged, true
+}
+
+func containsMapEntries[M ~map[K]V, K comparable, V comparable](base M, entries M) bool {
+	for k, v := range entries {
+		current, ok := base[k]
+		if !ok || current != v {
+			return false
+		}
+	}
+	return true
 }

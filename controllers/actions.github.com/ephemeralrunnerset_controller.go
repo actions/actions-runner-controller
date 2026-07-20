@@ -80,7 +80,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 	if err := r.Get(ctx, req.NamespacedName, &ephemeralRunnerSet); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	var original once[*v1alpha1.EphemeralRunnerSet]
+	original := newOnce(ephemeralRunnerSet.DeepCopy)
 
 	// Requested deletion does not need reconciled.
 	if !ephemeralRunnerSet.DeletionTimestamp.IsZero() {
@@ -111,7 +111,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 		removeFinalizer := controllerutil.ContainsFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName)
 		if removeFinalizer {
-			original.Do(ephemeralRunnerSet.DeepCopy)
+			original.Do()
 			controllerutil.RemoveFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName)
 		}
 		if removeFinalizer {
@@ -130,7 +130,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 	// Add finalizer if not present
 	addFinalizer := !controllerutil.ContainsFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName)
 	if addFinalizer {
-		original.Do(ephemeralRunnerSet.DeepCopy)
+		original.Do()
 		controllerutil.AddFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName)
 	}
 	if addFinalizer {
@@ -538,21 +538,19 @@ func (r *EphemeralRunnerSetReconciler) reconcileEphemeralRunnerSetProxySecret(ct
 		}
 
 		dataModified := !maps.EqualFunc(proxySecret.Data, desiredRunnerSetProxy.Data, bytes.Equal)
-		desiredLabels := r.filterAndMergeLabels(proxySecret.Labels, desiredRunnerSetProxy.Labels)
-		labelsModified := !maps.Equal(proxySecret.Labels, desiredLabels)
-		desiredAnnotations := r.mergeAnnotations(proxySecret.Annotations, desiredRunnerSetProxy.Annotations)
-		annotationsModified := !maps.Equal(proxySecret.Annotations, desiredAnnotations)
-		var original once[*corev1.Secret]
+		desiredLabels, labelsModified := r.mergeLabels(proxySecret.Labels, desiredRunnerSetProxy.Labels)
+		desiredAnnotations, annotationsModified := r.mergeAnnotations(proxySecret.Annotations, desiredRunnerSetProxy.Annotations)
+		original := newOnce(proxySecret.DeepCopy)
 		if dataModified {
-			original.Do(proxySecret.DeepCopy)
+			original.Do()
 			proxySecret.Data = desiredRunnerSetProxy.Data
 		}
 		if labelsModified {
-			original.Do(proxySecret.DeepCopy)
+			original.Do()
 			proxySecret.Labels = desiredLabels
 		}
 		if annotationsModified {
-			original.Do(proxySecret.DeepCopy)
+			original.Do()
 			proxySecret.Annotations = desiredAnnotations
 		}
 		if dataModified || labelsModified || annotationsModified {

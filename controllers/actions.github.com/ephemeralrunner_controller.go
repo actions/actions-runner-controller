@@ -94,7 +94,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if err := r.Get(ctx, req.NamespacedName, &ephemeralRunner); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	var original once[*v1alpha1.EphemeralRunner]
+	original := newOnce(ephemeralRunner.DeepCopy)
 
 	if !ephemeralRunner.DeletionTimestamp.IsZero() {
 		r.publishEphemeralRunnerPhaseMetric(&ephemeralRunner, "", log)
@@ -117,7 +117,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			}
 
 			log.Info("Runner is cleaned up from the service, removing finalizer")
-			original.Do(ephemeralRunner.DeepCopy)
+			original.Do()
 			controllerutil.RemoveFinalizer(&ephemeralRunner, ephemeralRunnerActionsFinalizerName)
 		}
 		if removeActionsFinalizer {
@@ -147,7 +147,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 		removeFinalizer := controllerutil.ContainsFinalizer(&ephemeralRunner, ephemeralRunnerFinalizerName)
 		if removeFinalizer {
-			original.Do(ephemeralRunner.DeepCopy)
+			original.Do()
 			controllerutil.RemoveFinalizer(&ephemeralRunner, ephemeralRunnerFinalizerName)
 		}
 		if removeFinalizer {
@@ -181,12 +181,12 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	ephemeralRunnerFinalizerModified := !controllerutil.ContainsFinalizer(&ephemeralRunner, ephemeralRunnerFinalizerName)
 	if ephemeralRunnerFinalizerModified {
-		original.Do(ephemeralRunner.DeepCopy)
+		original.Do()
 		controllerutil.AddFinalizer(&ephemeralRunner, ephemeralRunnerFinalizerName)
 	}
 	ephemeralRunnerActionsFinalizerModified := !controllerutil.ContainsFinalizer(&ephemeralRunner, ephemeralRunnerActionsFinalizerName)
 	if ephemeralRunnerActionsFinalizerModified {
-		original.Do(ephemeralRunner.DeepCopy)
+		original.Do()
 		controllerutil.AddFinalizer(&ephemeralRunner, ephemeralRunnerActionsFinalizerName)
 	}
 	if ephemeralRunnerFinalizerModified || ephemeralRunnerActionsFinalizerModified {

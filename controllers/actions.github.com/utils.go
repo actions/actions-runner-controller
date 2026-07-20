@@ -16,21 +16,31 @@ func FilterLabels(labels map[string]string, filter string) map[string]string {
 
 type once[T client.Object] struct {
 	value T
-	fn    func(T) *T
+	fn    func() T
 	done  bool
 }
 
-func (o *once[T]) Do(f func() T) T {
+func newOnce[T client.Object](fn func() T) *once[T] {
+	return &once[T]{
+		fn: fn,
+	}
+}
+
+func (o *once[T]) Do() T {
 	if !o.done {
-		o.value = f()
+		o.value = o.fn()
 		o.done = true
 	}
 	return o.value
 }
 
 func (o *once[T]) Get() T {
-	if !o.done {
+	if !o.Called() {
 		panic("not done")
 	}
 	return o.value
+}
+
+func (o *once[T]) Called() bool {
+	return o.done
 }

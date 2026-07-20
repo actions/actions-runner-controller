@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -157,6 +158,7 @@ func TestMetadataPropagation(t *testing.T) {
 	assert.Equal(t, "listener-role-annotation", listenerRole.Annotations["test.com/listener-role-annotation"])
 
 	listenerRoleBinding := b.newScaleSetListenerRoleBinding(listener, listenerRole, listenerServiceAccount)
+	assert.Equal(t, rbacv1.GroupName, listenerRoleBinding.RoleRef.APIGroup)
 	assert.Equal(t, "listener-role-binding-label", listenerRoleBinding.Labels["test.com/listener-role-binding-label"])
 	assert.Equal(t, "listener-role-binding-annotation", listenerRoleBinding.Annotations["test.com/listener-role-binding-annotation"])
 
@@ -229,6 +231,75 @@ func TestEphemeralRunnerSetProxySecretMetadata(t *testing.T) {
 	assert.Equal(t, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName], proxySecret.Labels[LabelKeyGitHubScaleSetName])
 	assert.Equal(t, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace], proxySecret.Labels[LabelKeyGitHubScaleSetNamespace])
 	assert.NotContains(t, proxySecret.Annotations, "actions.github.com/integrity-hash")
+}
+
+func TestMergeMaps(t *testing.T) {
+	t.Run("equal overwrite is not modified", func(t *testing.T) {
+		base := map[string]string{
+			"a": "1",
+			"b": "2",
+		}
+		overwrite := map[string]string{
+			"a": "1",
+			"b": "2",
+		}
+
+		merged, modified := mergeMaps(base, overwrite)
+
+		require.False(t, modified)
+		merged["a"] = "changed"
+		assert.Equal(t, "changed", base["a"])
+	})
+
+	t.Run("base superset is not modified", func(t *testing.T) {
+		base := map[string]string{
+			"a":     "1",
+			"b":     "2",
+			"extra": "base-only",
+		}
+		overwrite := map[string]string{
+			"a": "1",
+			"b": "2",
+		}
+
+		merged, modified := mergeMaps(base, overwrite)
+
+		require.False(t, modified)
+		merged["a"] = "changed"
+		assert.Equal(t, "changed", base["a"])
+	})
+
+	t.Run("missing overwrite key is modified", func(t *testing.T) {
+		base := map[string]string{
+			"a": "1",
+		}
+		overwrite := map[string]string{
+			"a": "1",
+			"b": "2",
+		}
+
+		merged, modified := mergeMaps(base, overwrite)
+
+		require.True(t, modified)
+		assert.Equal(t, map[string]string{"a": "1", "b": "2"}, merged)
+		assert.NotContains(t, base, "b")
+	})
+
+	t.Run("different overwrite value is modified", func(t *testing.T) {
+		base := map[string]string{
+			"a": "1",
+			"b": "2",
+		}
+		overwrite := map[string]string{
+			"a": "updated",
+		}
+
+		merged, modified := mergeMaps(base, overwrite)
+
+		require.True(t, modified)
+		assert.Equal(t, map[string]string{"a": "updated", "b": "2"}, merged)
+		assert.Equal(t, "1", base["a"])
+	})
 }
 
 func TestGitHubURLTrimLabelValues(t *testing.T) {
