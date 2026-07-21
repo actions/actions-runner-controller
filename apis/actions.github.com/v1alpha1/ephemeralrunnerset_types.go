@@ -23,10 +23,13 @@ import (
 // EphemeralRunnerSetSpec defines the desired state of EphemeralRunnerSet
 type EphemeralRunnerSetSpec struct {
 	// Replicas is the number of desired EphemeralRunner resources in the k8s namespace.
+	// +optional
 	Replicas int `json:"replicas,omitempty"`
 	// PatchID is the unique identifier for the patch issued by the listener app
+	// +optional
 	PatchID int `json:"patchID"`
 	// EphemeralRunnerSpec is the spec of the ephemeral runner
+	// +optional
 	EphemeralRunnerSpec EphemeralRunnerSpec `json:"ephemeralRunnerSpec,omitempty"`
 	// EphemeralRunnerMetadata is the metadata to be applied to all ephemeral runners created by this set.
 	// If the EphemeralRunnerMetadata is updated, the update applies to new ephemeral runners created after the update,
@@ -37,14 +40,6 @@ type EphemeralRunnerSetSpec struct {
 
 // EphemeralRunnerSetStatus defines the observed state of EphemeralRunnerSet
 type EphemeralRunnerSetStatus struct {
-	// CurrentReplicas is the number of currently running EphemeralRunner resources being managed by this EphemeralRunnerSet.
-	CurrentReplicas int `json:"currentReplicas"`
-	// +optional
-	PendingEphemeralRunners int `json:"pendingEphemeralRunners"`
-	// +optional
-	RunningEphemeralRunners int `json:"runningEphemeralRunners"`
-	// +optional
-	FailedEphemeralRunners int `json:"failedEphemeralRunners"`
 	// +optional
 	Phase EphemeralRunnerSetPhase `json:"phase"`
 }
@@ -62,19 +57,17 @@ const (
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=".spec.replicas",name="DesiredReplicas",type="integer"
-// +kubebuilder:printcolumn:JSONPath=".status.currentReplicas", name="CurrentReplicas",type="integer"
-// +kubebuilder:printcolumn:JSONPath=".status.pendingEphemeralRunners",name=Pending Runners,type=integer
-// +kubebuilder:printcolumn:JSONPath=".status.runningEphemeralRunners",name=Running Runners,type=integer
-// +kubebuilder:printcolumn:JSONPath=".status.finishedEphemeralRunners",name=Finished Runners,type=integer
-// +kubebuilder:printcolumn:JSONPath=".status.deletingEphemeralRunners",name=Deleting Runners,type=integer
 // +kubebuilder:printcolumn:JSONPath=".status.phase",name=Phase,type=string
 
 // EphemeralRunnerSet is the Schema for the ephemeralrunnersets API
 type EphemeralRunnerSet struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   EphemeralRunnerSetSpec   `json:"spec,omitempty"`
+	// +optional
+	Spec EphemeralRunnerSetSpec `json:"spec,omitempty"`
+	// +optional
 	Status EphemeralRunnerSetStatus `json:"status,omitempty"`
 }
 
@@ -116,8 +109,4 @@ type EphemeralRunnerSetList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []EphemeralRunnerSet `json:"items"`
-}
-
-func init() {
-	SchemeBuilder.Register(&EphemeralRunnerSet{}, &EphemeralRunnerSetList{})
 }

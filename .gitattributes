@@ -1,1 +1,8 @@
 *.png filter=lfs diff=lfs merge=lfs -text
+
+**/zz_generated.deepcopy.go linguist-generated=true
+**/mocks_test.go linguist-generated=true
+config/crd/bases/*.yaml linguist-generated=true
+config/rbac/role.yaml linguist-generated=true
+config/webhook/manifests.yaml linguist-generated=true
+charts/*/crds/*.yaml linguist-generated=true

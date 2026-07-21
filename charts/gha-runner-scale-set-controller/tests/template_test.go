@@ -33,7 +33,7 @@ func TestTemplate_CreateServiceAccount(t *testing.T) {
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
-	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
 
 	options := &helm.Options{
 		Logger: logger.Discard,
@@ -44,7 +44,7 @@ func TestTemplate_CreateServiceAccount(t *testing.T) {
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
-	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/serviceaccount.yaml"})
+	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/serviceaccount.yaml"})
 
 	var serviceAccount corev1.ServiceAccount
 	helm.UnmarshalK8SYaml(t, output, &serviceAccount)
@@ -62,7 +62,7 @@ func TestTemplate_CreateServiceAccount_OverwriteName(t *testing.T) {
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
-	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
 
 	options := &helm.Options{
 		Logger: logger.Discard,
@@ -74,7 +74,7 @@ func TestTemplate_CreateServiceAccount_OverwriteName(t *testing.T) {
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
-	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/serviceaccount.yaml"})
+	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/serviceaccount.yaml"})
 
 	var serviceAccount corev1.ServiceAccount
 	helm.UnmarshalK8SYaml(t, output, &serviceAccount)
@@ -92,7 +92,7 @@ func TestTemplate_CreateServiceAccount_CannotUseDefaultServiceAccount(t *testing
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
-	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
 
 	options := &helm.Options{
 		Logger: logger.Discard,
@@ -104,7 +104,7 @@ func TestTemplate_CreateServiceAccount_CannotUseDefaultServiceAccount(t *testing
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
-	_, err = helm.RenderTemplateE(t, options, helmChartPath, releaseName, []string{"templates/serviceaccount.yaml"})
+	_, err = helm.RenderTemplateContextE(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/serviceaccount.yaml"})
 	assert.ErrorContains(t, err, "serviceAccount.name cannot be set to 'default'", "We should get an error because the default service account cannot be used")
 }
 
@@ -116,7 +116,7 @@ func TestTemplate_NotCreateServiceAccount(t *testing.T) {
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
-	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
 
 	options := &helm.Options{
 		Logger: logger.Discard,
@@ -128,7 +128,7 @@ func TestTemplate_NotCreateServiceAccount(t *testing.T) {
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
-	_, err = helm.RenderTemplateE(t, options, helmChartPath, releaseName, []string{"templates/serviceaccount.yaml"})
+	_, err = helm.RenderTemplateContextE(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/serviceaccount.yaml"})
 	assert.ErrorContains(t, err, "could not find template templates/serviceaccount.yaml in chart", "We should get an error because the template should be skipped")
 }
 
@@ -140,7 +140,7 @@ func TestTemplate_NotCreateServiceAccount_ServiceAccountNotSet(t *testing.T) {
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
-	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
 
 	options := &helm.Options{
 		Logger: logger.Discard,
@@ -151,7 +151,7 @@ func TestTemplate_NotCreateServiceAccount_ServiceAccountNotSet(t *testing.T) {
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
-	_, err = helm.RenderTemplateE(t, options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
+	_, err = helm.RenderTemplateContextE(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
 	assert.ErrorContains(t, err, "serviceAccount.name must be set if serviceAccount.create is false", "We should get an error because the default service account cannot be used")
 }
 
@@ -163,7 +163,7 @@ func TestTemplate_CreateManagerClusterRole(t *testing.T) {
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
-	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
 
 	options := &helm.Options{
 		Logger:         logger.Discard,
@@ -171,7 +171,7 @@ func TestTemplate_CreateManagerClusterRole(t *testing.T) {
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
-	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/manager_cluster_role.yaml"})
+	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/manager_cluster_role.yaml"})
 
 	var managerClusterRole rbacv1.ClusterRole
 	helm.UnmarshalK8SYaml(t, output, &managerClusterRole)
@@ -180,10 +180,10 @@ func TestTemplate_CreateManagerClusterRole(t *testing.T) {
 	assert.Equal(t, "test-arc-gha-rs-controller", managerClusterRole.Name)
 	assert.Equal(t, 16, len(managerClusterRole.Rules))
 
-	_, err = helm.RenderTemplateE(t, options, helmChartPath, releaseName, []string{"templates/manager_single_namespace_controller_role.yaml"})
+	_, err = helm.RenderTemplateContextE(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/manager_single_namespace_controller_role.yaml"})
 	assert.ErrorContains(t, err, "could not find template templates/manager_single_namespace_controller_role.yaml in chart", "We should get an error because the template should be skipped")
 
-	_, err = helm.RenderTemplateE(t, options, helmChartPath, releaseName, []string{"templates/manager_single_namespace_watch_role.yaml"})
+	_, err = helm.RenderTemplateContextE(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/manager_single_namespace_watch_role.yaml"})
 	assert.ErrorContains(t, err, "could not find template templates/manager_single_namespace_watch_role.yaml in chart", "We should get an error because the template should be skipped")
 }
 
@@ -195,7 +195,7 @@ func TestTemplate_ManagerClusterRoleBinding(t *testing.T) {
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
-	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
 
 	options := &helm.Options{
 		Logger: logger.Discard,
@@ -205,7 +205,7 @@ func TestTemplate_ManagerClusterRoleBinding(t *testing.T) {
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
-	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/manager_cluster_role_binding.yaml"})
+	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/manager_cluster_role_binding.yaml"})
 
 	var managerClusterRoleBinding rbacv1.ClusterRoleBinding
 	helm.UnmarshalK8SYaml(t, output, &managerClusterRoleBinding)
@@ -216,10 +216,10 @@ func TestTemplate_ManagerClusterRoleBinding(t *testing.T) {
 	assert.Equal(t, "test-arc-gha-rs-controller", managerClusterRoleBinding.Subjects[0].Name)
 	assert.Equal(t, namespaceName, managerClusterRoleBinding.Subjects[0].Namespace)
 
-	_, err = helm.RenderTemplateE(t, options, helmChartPath, releaseName, []string{"templates/manager_single_namespace_controller_role_binding.yaml"})
+	_, err = helm.RenderTemplateContextE(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/manager_single_namespace_controller_role_binding.yaml"})
 	assert.ErrorContains(t, err, "could not find template templates/manager_single_namespace_controller_role_binding.yaml in chart", "We should get an error because the template should be skipped")
 
-	_, err = helm.RenderTemplateE(t, options, helmChartPath, releaseName, []string{"templates/manager_single_namespace_watch_role_binding.yaml"})
+	_, err = helm.RenderTemplateContextE(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/manager_single_namespace_watch_role_binding.yaml"})
 	assert.ErrorContains(t, err, "could not find template templates/manager_single_namespace_watch_role_binding.yaml in chart", "We should get an error because the template should be skipped")
 }
 
@@ -231,7 +231,7 @@ func TestTemplate_CreateManagerListenerRole(t *testing.T) {
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
-	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
 
 	options := &helm.Options{
 		Logger:         logger.Discard,
@@ -239,7 +239,7 @@ func TestTemplate_CreateManagerListenerRole(t *testing.T) {
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
-	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/manager_listener_role.yaml"})
+	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/manager_listener_role.yaml"})
 
 	var managerListenerRole rbacv1.Role
 	helm.UnmarshalK8SYaml(t, output, &managerListenerRole)
@@ -261,7 +261,7 @@ func TestTemplate_ManagerListenerRoleBinding(t *testing.T) {
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
-	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
 
 	options := &helm.Options{
 		Logger: logger.Discard,
@@ -271,7 +271,7 @@ func TestTemplate_ManagerListenerRoleBinding(t *testing.T) {
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
-	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/manager_listener_role_binding.yaml"})
+	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/manager_listener_role_binding.yaml"})
 
 	var managerListenerRoleBinding rbacv1.RoleBinding
 	helm.UnmarshalK8SYaml(t, output, &managerListenerRoleBinding)
@@ -298,7 +298,7 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
-	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
 
 	options := &helm.Options{
 		Logger: logger.Discard,
@@ -308,7 +308,7 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
-	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
+	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
 
 	var deployment appsv1.Deployment
 	helm.UnmarshalK8SYaml(t, output, &deployment)
@@ -339,10 +339,10 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 	assert.Equal(t, "test-arc-gha-rs-controller", deployment.Spec.Template.Spec.ServiceAccountName)
 	assert.Nil(t, deployment.Spec.Template.Spec.SecurityContext)
 	assert.Empty(t, deployment.Spec.Template.Spec.PriorityClassName)
-	assert.Equal(t, int64(10), *deployment.Spec.Template.Spec.TerminationGracePeriodSeconds)
+	assert.Equal(t, int64(35), *deployment.Spec.Template.Spec.TerminationGracePeriodSeconds)
 	assert.Len(t, deployment.Spec.Template.Spec.Volumes, 1)
 	assert.Equal(t, "tmp", deployment.Spec.Template.Spec.Volumes[0].Name)
-	assert.NotNil(t, 10, deployment.Spec.Template.Spec.Volumes[0].EmptyDir)
+	assert.NotNil(t, deployment.Spec.Template.Spec.Volumes[0].EmptyDir)
 
 	assert.Len(t, deployment.Spec.Template.Spec.NodeSelector, 0)
 	assert.Nil(t, deployment.Spec.Template.Spec.Affinity)
@@ -399,7 +399,7 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
-	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
 
 	options := &helm.Options{
 		Logger: logger.Discard,
@@ -429,18 +429,19 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 			"topologySpreadConstraints[0].labelSelector.matchLabels.foo":                                                             "bar",
 			"topologySpreadConstraints[0].maxSkew":                                                                                   "1",
 			"topologySpreadConstraints[0].topologyKey":                                                                               "foo",
-			"priorityClassName":         "test-priority-class",
-			"flags.logLevel":            "info",
-			"flags.logFormat":           "json",
-			"volumes[0].name":           "customMount",
-			"volumes[0].configMap.name": "my-configmap",
-			"volumeMounts[0].name":      "customMount",
-			"volumeMounts[0].mountPath": "/my/mount/path",
+			"priorityClassName":             "test-priority-class",
+			"terminationGracePeriodSeconds": "60",
+			"flags.logLevel":                "info",
+			"flags.logFormat":               "json",
+			"volumes[0].name":               "customMount",
+			"volumes[0].configMap.name":     "my-configmap",
+			"volumeMounts[0].name":          "customMount",
+			"volumeMounts[0].mountPath":     "/my/mount/path",
 		},
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
-	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
+	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
 
 	var deployment appsv1.Deployment
 	helm.UnmarshalK8SYaml(t, output, &deployment)
@@ -477,7 +478,7 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 	assert.Equal(t, "gha-rs-controller-sa", deployment.Spec.Template.Spec.ServiceAccountName)
 	assert.Equal(t, int64(1000), *deployment.Spec.Template.Spec.SecurityContext.FSGroup)
 	assert.Equal(t, "test-priority-class", deployment.Spec.Template.Spec.PriorityClassName)
-	assert.Equal(t, int64(10), *deployment.Spec.Template.Spec.TerminationGracePeriodSeconds)
+	assert.Equal(t, int64(60), *deployment.Spec.Template.Spec.TerminationGracePeriodSeconds)
 	assert.Len(t, deployment.Spec.Template.Spec.Volumes, 2)
 	assert.Equal(t, "tmp", deployment.Spec.Template.Spec.Volumes[0].Name)
 	assert.NotNil(t, deployment.Spec.Template.Spec.Volumes[0].EmptyDir)
@@ -551,7 +552,7 @@ func TestTemplate_EnableLeaderElectionRole(t *testing.T) {
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
-	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
 
 	options := &helm.Options{
 		Logger: logger.Discard,
@@ -561,7 +562,7 @@ func TestTemplate_EnableLeaderElectionRole(t *testing.T) {
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
-	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/leader_election_role.yaml"})
+	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/leader_election_role.yaml"})
 
 	var leaderRole rbacv1.Role
 	helm.UnmarshalK8SYaml(t, output, &leaderRole)
@@ -578,7 +579,7 @@ func TestTemplate_EnableLeaderElectionRoleBinding(t *testing.T) {
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
-	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
 
 	options := &helm.Options{
 		Logger: logger.Discard,
@@ -588,7 +589,7 @@ func TestTemplate_EnableLeaderElectionRoleBinding(t *testing.T) {
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
-	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/leader_election_role_binding.yaml"})
+	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/leader_election_role_binding.yaml"})
 
 	var leaderRoleBinding rbacv1.RoleBinding
 	helm.UnmarshalK8SYaml(t, output, &leaderRoleBinding)
@@ -607,7 +608,7 @@ func TestTemplate_EnableLeaderElection(t *testing.T) {
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
-	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
 
 	options := &helm.Options{
 		Logger: logger.Discard,
@@ -618,7 +619,7 @@ func TestTemplate_EnableLeaderElection(t *testing.T) {
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
-	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
+	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
 
 	var deployment appsv1.Deployment
 	helm.UnmarshalK8SYaml(t, output, &deployment)
@@ -659,7 +660,7 @@ func TestTemplate_ControllerDeployment_ForwardImagePullSecrets(t *testing.T) {
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
-	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
 
 	options := &helm.Options{
 		Logger: logger.Discard,
@@ -670,7 +671,7 @@ func TestTemplate_ControllerDeployment_ForwardImagePullSecrets(t *testing.T) {
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
-	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
+	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
 
 	var deployment appsv1.Deployment
 	helm.UnmarshalK8SYaml(t, output, &deployment)
@@ -707,7 +708,7 @@ func TestTemplate_ControllerDeployment_WatchSingleNamespace(t *testing.T) {
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
-	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
 
 	options := &helm.Options{
 		Logger: logger.Discard,
@@ -718,7 +719,7 @@ func TestTemplate_ControllerDeployment_WatchSingleNamespace(t *testing.T) {
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
-	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
+	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
 
 	var deployment appsv1.Deployment
 	helm.UnmarshalK8SYaml(t, output, &deployment)
@@ -748,10 +749,10 @@ func TestTemplate_ControllerDeployment_WatchSingleNamespace(t *testing.T) {
 	assert.Equal(t, "test-arc-gha-rs-controller", deployment.Spec.Template.Spec.ServiceAccountName)
 	assert.Nil(t, deployment.Spec.Template.Spec.SecurityContext)
 	assert.Empty(t, deployment.Spec.Template.Spec.PriorityClassName)
-	assert.Equal(t, int64(10), *deployment.Spec.Template.Spec.TerminationGracePeriodSeconds)
+	assert.Equal(t, int64(35), *deployment.Spec.Template.Spec.TerminationGracePeriodSeconds)
 	assert.Len(t, deployment.Spec.Template.Spec.Volumes, 1)
 	assert.Equal(t, "tmp", deployment.Spec.Template.Spec.Volumes[0].Name)
-	assert.NotNil(t, 10, deployment.Spec.Template.Spec.Volumes[0].EmptyDir)
+	assert.NotNil(t, deployment.Spec.Template.Spec.Volumes[0].EmptyDir)
 
 	assert.Len(t, deployment.Spec.Template.Spec.NodeSelector, 0)
 	assert.Nil(t, deployment.Spec.Template.Spec.Affinity)
@@ -803,7 +804,7 @@ func TestTemplate_ControllerContainerEnvironmentVariables(t *testing.T) {
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
-	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
 
 	options := &helm.Options{
 		Logger: logger.Discard,
@@ -821,7 +822,7 @@ func TestTemplate_ControllerContainerEnvironmentVariables(t *testing.T) {
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
-	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
+	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
 
 	var deployment appsv1.Deployment
 	helm.UnmarshalK8SYaml(t, output, &deployment)
@@ -850,7 +851,7 @@ func TestTemplate_WatchSingleNamespace_NotCreateManagerClusterRole(t *testing.T)
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
-	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
 
 	options := &helm.Options{
 		Logger: logger.Discard,
@@ -860,7 +861,7 @@ func TestTemplate_WatchSingleNamespace_NotCreateManagerClusterRole(t *testing.T)
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
-	_, err = helm.RenderTemplateE(t, options, helmChartPath, releaseName, []string{"templates/manager_cluster_role.yaml"})
+	_, err = helm.RenderTemplateContextE(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/manager_cluster_role.yaml"})
 	assert.ErrorContains(t, err, "could not find template templates/manager_cluster_role.yaml in chart", "We should get an error because the template should be skipped")
 }
 
@@ -872,7 +873,7 @@ func TestTemplate_WatchSingleNamespace_NotManagerClusterRoleBinding(t *testing.T
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
-	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
 
 	options := &helm.Options{
 		Logger: logger.Discard,
@@ -883,7 +884,7 @@ func TestTemplate_WatchSingleNamespace_NotManagerClusterRoleBinding(t *testing.T
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
-	_, err = helm.RenderTemplateE(t, options, helmChartPath, releaseName, []string{"templates/manager_cluster_role_binding.yaml"})
+	_, err = helm.RenderTemplateContextE(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/manager_cluster_role_binding.yaml"})
 	assert.ErrorContains(t, err, "could not find template templates/manager_cluster_role_binding.yaml in chart", "We should get an error because the template should be skipped")
 }
 
@@ -895,7 +896,7 @@ func TestTemplate_CreateManagerSingleNamespaceRole(t *testing.T) {
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
-	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
 
 	options := &helm.Options{
 		Logger: logger.Discard,
@@ -905,7 +906,7 @@ func TestTemplate_CreateManagerSingleNamespaceRole(t *testing.T) {
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
-	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/manager_single_namespace_controller_role.yaml"})
+	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/manager_single_namespace_controller_role.yaml"})
 
 	var managerSingleNamespaceControllerRole rbacv1.Role
 	helm.UnmarshalK8SYaml(t, output, &managerSingleNamespaceControllerRole)
@@ -914,7 +915,7 @@ func TestTemplate_CreateManagerSingleNamespaceRole(t *testing.T) {
 	assert.Equal(t, namespaceName, managerSingleNamespaceControllerRole.Namespace)
 	assert.Equal(t, 10, len(managerSingleNamespaceControllerRole.Rules))
 
-	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/manager_single_namespace_watch_role.yaml"})
+	output = helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/manager_single_namespace_watch_role.yaml"})
 
 	var managerSingleNamespaceWatchRole rbacv1.Role
 	helm.UnmarshalK8SYaml(t, output, &managerSingleNamespaceWatchRole)
@@ -932,7 +933,7 @@ func TestTemplate_ManagerSingleNamespaceRoleBinding(t *testing.T) {
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
-	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
 
 	options := &helm.Options{
 		Logger: logger.Discard,
@@ -942,7 +943,7 @@ func TestTemplate_ManagerSingleNamespaceRoleBinding(t *testing.T) {
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
-	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/manager_single_namespace_controller_role_binding.yaml"})
+	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/manager_single_namespace_controller_role_binding.yaml"})
 
 	var managerSingleNamespaceControllerRoleBinding rbacv1.RoleBinding
 	helm.UnmarshalK8SYaml(t, output, &managerSingleNamespaceControllerRoleBinding)
@@ -953,7 +954,7 @@ func TestTemplate_ManagerSingleNamespaceRoleBinding(t *testing.T) {
 	assert.Equal(t, "test-arc-gha-rs-controller", managerSingleNamespaceControllerRoleBinding.Subjects[0].Name)
 	assert.Equal(t, namespaceName, managerSingleNamespaceControllerRoleBinding.Subjects[0].Namespace)
 
-	output = helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/manager_single_namespace_watch_role_binding.yaml"})
+	output = helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/manager_single_namespace_watch_role_binding.yaml"})
 
 	var managerSingleNamespaceWatchRoleBinding rbacv1.RoleBinding
 	helm.UnmarshalK8SYaml(t, output, &managerSingleNamespaceWatchRoleBinding)
@@ -980,7 +981,7 @@ func TestControllerDeployment_MetricsPorts(t *testing.T) {
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
-	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
 
 	options := &helm.Options{
 		Logger: logger.Discard,
@@ -993,7 +994,7 @@ func TestControllerDeployment_MetricsPorts(t *testing.T) {
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
-	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
+	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
 
 	var deployment appsv1.Deployment
 	helm.UnmarshalK8SYaml(t, output, &deployment)
@@ -1052,7 +1053,7 @@ func TestDeployment_excludeLabelPropagationPrefixes(t *testing.T) {
 	require.NoError(t, err)
 
 	releaseName := "test-arc"
-	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
 
 	options := &helm.Options{
 		Logger: logger.Discard,
@@ -1063,7 +1064,7 @@ func TestDeployment_excludeLabelPropagationPrefixes(t *testing.T) {
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
-	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
+	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
 
 	var deployment appsv1.Deployment
 	helm.UnmarshalK8SYaml(t, output, &deployment)
@@ -1081,8 +1082,8 @@ func TestNamespaceOverride(t *testing.T) {
 	chartPath := "../../gha-runner-scale-set-controller"
 
 	releaseName := "test"
-	releaseNamespace := "test-" + strings.ToLower(random.UniqueId())
-	namespaceOverride := "test-" + strings.ToLower(random.UniqueId())
+	releaseNamespace := "test-" + strings.ToLower(random.UniqueID())
+	namespaceOverride := "test-" + strings.ToLower(random.UniqueID())
 
 	tt := map[string]struct {
 		file          string
@@ -1204,7 +1205,7 @@ func TestNamespaceOverride(t *testing.T) {
 			t.Parallel()
 			templateFile := filepath.Join("./templates", c.file)
 
-			output, err := helm.RenderTemplateE(t, c.options, chartPath, releaseName, []string{templateFile})
+			output, err := helm.RenderTemplateContextE(t, t.Context(), c.options, chartPath, releaseName, []string{templateFile})
 			if err != nil {
 				t.Errorf("Error rendering template %s from chart %s: %s", c.file, chartPath, err)
 			}

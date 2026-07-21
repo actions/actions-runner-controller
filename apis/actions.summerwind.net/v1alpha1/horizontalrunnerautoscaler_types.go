@@ -263,7 +263,3 @@ type HorizontalRunnerAutoscalerList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []HorizontalRunnerAutoscaler `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&HorizontalRunnerAutoscaler{}, &HorizontalRunnerAutoscalerList{})
-}

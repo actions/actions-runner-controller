@@ -51,10 +51,8 @@ spec:
             description: AutoscalingListenerSpec defines the desired state of AutoscalingListener
             properties:
               autoscalingRunnerSetName:
-                description: Required
                 type: string
               autoscalingRunnerSetNamespace:
-                description: Required
                 type: string
               configSecretMetadata:
                 description: ResourceMeta carries metadata common to all internal
@@ -70,13 +68,10 @@ spec:
                     type: object
                 type: object
               ephemeralRunnerSetName:
-                description: Required
                 type: string
               githubConfigSecret:
-                description: Required
                 type: string
               githubConfigUrl:
-                description: Required
                 type: string
               githubServerTLS:
                 properties:
@@ -109,10 +104,8 @@ spec:
                     type: object
                 type: object
               image:
-                description: Required
                 type: string
               imagePullSecrets:
-                description: Required
                 items:
                   description: |-
                     LocalObjectReference contains enough information to let you locate the
@@ -131,7 +124,6 @@ spec:
                   x-kubernetes-map-type: atomic
                 type: array
               maxRunners:
-                description: Required
                 minimum: 0
                 type: integer
               metrics:
@@ -183,7 +175,6 @@ spec:
                     type: object
                 type: object
               minRunners:
-                description: Required
                 minimum: 0
                 type: integer
               proxy:
@@ -236,7 +227,6 @@ spec:
                     type: object
                 type: object
               runnerScaleSetId:
-                description: Required
                 type: integer
               serviceAccountMetadata:
                 description: ResourceMeta carries metadata common to all internal

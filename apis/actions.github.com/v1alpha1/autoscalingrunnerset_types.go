@@ -45,19 +45,22 @@ import (
 
 // AutoscalingRunnerSet is the Schema for the autoscalingrunnersets API
 type AutoscalingRunnerSet struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   AutoscalingRunnerSetSpec   `json:"spec,omitempty"`
+	// +optional
+	Spec AutoscalingRunnerSetSpec `json:"spec,omitempty"`
+	// +optional
 	Status AutoscalingRunnerSetStatus `json:"status,omitempty"`
 }
 
 // AutoscalingRunnerSetSpec defines the desired state of AutoscalingRunnerSet
 type AutoscalingRunnerSetSpec struct {
-	// Required
+	// +optional
 	GitHubConfigUrl string `json:"githubConfigUrl,omitempty"`
 
-	// Required
+	// +optional
 	GitHubConfigSecret string `json:"githubConfigSecret,omitempty"`
 
 	// +optional
@@ -78,7 +81,7 @@ type AutoscalingRunnerSetSpec struct {
 	// +optional
 	VaultConfig *VaultConfig `json:"vaultConfig,omitempty"`
 
-	// Required
+	// +optional
 	Template corev1.PodTemplateSpec `json:"template,omitempty"`
 
 	// +optional
@@ -315,19 +318,7 @@ type HistogramMetric struct {
 // AutoscalingRunnerSetStatus defines the observed state of AutoscalingRunnerSet
 type AutoscalingRunnerSetStatus struct {
 	// +optional
-	CurrentRunners int `json:"currentRunners"`
-
-	// +optional
 	Phase AutoscalingRunnerSetPhase `json:"phase"`
-
-	// EphemeralRunner counts separated by the stage ephemeral runners are in, taken from the EphemeralRunnerSet
-
-	// +optional
-	PendingEphemeralRunners int `json:"pendingEphemeralRunners"`
-	// +optional
-	RunningEphemeralRunners int `json:"runningEphemeralRunners"`
-	// +optional
-	FailedEphemeralRunners int `json:"failedEphemeralRunners"`
 }
 
 type AutoscalingRunnerSetPhase string
@@ -416,8 +407,4 @@ type AutoscalingRunnerSetList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []AutoscalingRunnerSet `json:"items"`
-}
-
-func init() {
-	SchemeBuilder.Register(&AutoscalingRunnerSet{}, &AutoscalingRunnerSetList{})
 }

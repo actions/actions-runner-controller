@@ -40,7 +40,7 @@ spec:
         -
       {{- toYaml . | nindent 10 }}
         {{- end }}
-      terminationGracePeriodSeconds: {{ default 10 (index $podSpec "terminationGracePeriodSeconds") }}
+      terminationGracePeriodSeconds: {{ default 35 (index $podSpec "terminationGracePeriodSeconds") }}
       volumes:
         - name: tmp
           emptyDir: {}

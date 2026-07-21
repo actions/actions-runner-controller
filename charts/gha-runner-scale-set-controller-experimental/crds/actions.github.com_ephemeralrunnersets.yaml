@@ -18,21 +18,6 @@ spec:
         - jsonPath: .spec.replicas
           name: DesiredReplicas
           type: integer
-        - jsonPath: .status.currentReplicas
-          name: CurrentReplicas
-          type: integer
-        - jsonPath: .status.pendingEphemeralRunners
-          name: Pending Runners
-          type: integer
-        - jsonPath: .status.runningEphemeralRunners
-          name: Running Runners
-          type: integer
-        - jsonPath: .status.finishedEphemeralRunners
-          name: Finished Runners
-          type: integer
-        - jsonPath: .status.deletingEphemeralRunners
-          name: Deleting Runners
-          type: integer
         - jsonPath: .status.phase
           name: Phase
           type: string
@@ -8299,10 +8284,6 @@ spec:
                             It is used to identify which vault integration should be used to resolve secrets.
                           type: string
                       type: object
-                  required:
-                    - githubConfigSecret
-                    - githubConfigUrl
-                    - runnerScaleSetId
                   type: object
                 patchID:
                   description: PatchID is the unique identifier for the patch issued by the listener app
@@ -8310,26 +8291,13 @@ spec:
                 replicas:
                   description: Replicas is the number of desired EphemeralRunner resources in the k8s namespace.
                   type: integer
-              required:
-                - patchID
               type: object
             status:
               description: EphemeralRunnerSetStatus defines the observed state of EphemeralRunnerSet
               properties:
-                currentReplicas:
-                  description: CurrentReplicas is the number of currently running EphemeralRunner resources being managed by this EphemeralRunnerSet.
-                  type: integer
-                failedEphemeralRunners:
-                  type: integer
-                pendingEphemeralRunners:
-                  type: integer
                 phase:
                   description: EphemeralRunnerSetPhase is the phase of the ephemeral runner set resource
                   type: string
-                runningEphemeralRunners:
-                  type: integer
-              required:
-                - currentReplicas
               type: object
           type: object
       served: true

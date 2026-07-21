@@ -88,7 +88,3 @@ type RunnerReplicaSetList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []RunnerReplicaSet `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&RunnerReplicaSet{}, &RunnerReplicaSetList{})
-}

@@ -96,7 +96,9 @@ controller:
       affinity: {}
       # Pod topology spread constraints.
       topologySpreadConstraints: []
-      # Pod termination grace period (overrides default 10s).
+      # Pod termination grace period. Overrides the default of 35s, which must
+      # stay above the manager's graceful shutdown timeout (30s, controller-runtime's
+      # default) so in-flight reconciles can finish before the kubelet sends SIGKILL.
       terminationGracePeriodSeconds: null
       # Additional volumes appended to the default ones.
       volumes: []

@@ -167,7 +167,7 @@ function wait_for_scale_set() {
             break
         fi
 
-        if [ "$count" -ge 60 ]; then
+        if [ "$count" -ge "${SCALE_SET_POD_TIMEOUT:-120}" ]; then
             log "Timeout waiting for listener pod with label actions.github.com/scale-set-name=${NAME}"
             return 1
         fi
@@ -175,7 +175,7 @@ function wait_for_scale_set() {
         sleep 1
         count=$((count + 1))
     done
-    kubectl wait --timeout=30s --for=condition=ready pod -n "${NAMESPACE}" -l "actions.github.com/scale-set-name=${NAME}"
+    kubectl wait --timeout="${SCALE_SET_READY_TIMEOUT:-120s}" --for=condition=ready pod -n "${NAMESPACE}" -l "actions.github.com/scale-set-name=${NAME}"
     kubectl get pod -n "${NAMESPACE}" -l "actions.github.com/scale-set-name=${NAME}"
 }
 
@@ -184,7 +184,7 @@ function cleanup_scale_set() {
     helm uninstall "${INSTALLATION_NAME}" --namespace "${NAMESPACE}" --debug
 
     log "Waiting for autoscaling runner sets to be deleted"
-    kubectl wait --timeout=40s --for=delete autoscalingrunnersets -n "${NAMESPACE}" -l app.kubernetes.io/instance="${INSTALLATION_NAME}"
+    kubectl wait --timeout="${SCALE_SET_CLEANUP_TIMEOUT:-120s}" --for=delete autoscalingrunnersets -n "${NAMESPACE}" -l app.kubernetes.io/instance="${INSTALLATION_NAME}"
 }
 
 function print_results() {
@@ -286,8 +286,10 @@ function start_workflow() {
     local count=0
     local run_id=
     local run_id_output=
+    local run_start_interval=5
+    local run_start_max=$(( "${RUN_START_TIMEOUT:-180}" / run_start_interval ))
     while true; do
-        if [[ "${count}" -ge 12 ]]; then
+        if [[ "${count}" -ge "${run_start_max}" ]]; then
             log "Timeout waiting for run to start"
             return 1
         fi
@@ -301,8 +303,8 @@ function start_workflow() {
             break
         fi
 
-        log "Run not found yet, waiting 5 seconds"
-        sleep 5
+        log "Run not found yet, waiting ${run_start_interval} seconds"
+        sleep "${run_start_interval}"
         count=$((count + 1))
     done
 
