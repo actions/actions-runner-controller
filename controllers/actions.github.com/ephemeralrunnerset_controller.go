@@ -140,7 +140,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 			"specActionableRevision", ephemeralRunnerSet.Spec.ActionableRevision,
 			"statusAppliedActionableRevision", ephemeralRunnerSet.Status.AppliedActionableRevision,
 		)
-		if err := r.cleanUpIdleAndPendingEphemeralRunners(ctx, &ephemeralRunnerSet, log); err != nil {
+		if _, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log); err != nil {
 			log.Error(err, "Failed to clean up EphemeralRunners")
 			return ctrl.Result{}, err
 		}
@@ -420,60 +420,6 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 	}
 
 	return false, nil
-}
-
-func (r *EphemeralRunnerSetReconciler) cleanUpIdleAndPendingEphemeralRunners(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) error {
-	ephemeralRunnerList := new(v1alpha1.EphemeralRunnerList)
-	err := r.List(ctx, ephemeralRunnerList, client.InNamespace(ephemeralRunnerSet.Namespace), client.MatchingFields{resourceOwnerKey: ephemeralRunnerSet.Name})
-	if err != nil {
-		return fmt.Errorf("failed to list child ephemeral runners: %w", err)
-	}
-
-	ephemeralRunnerState := newEphemeralRunnersByStates(ephemeralRunnerList)
-	if len(ephemeralRunnerState.running) == 0 && len(ephemeralRunnerState.pending) == 0 {
-		return nil
-	}
-
-	actionsClient, err := r.GetActionsService(ctx, ephemeralRunnerSet)
-	if err != nil {
-		return err
-	}
-
-	log.Info("Cleanup pending or idle ephemeral runners", "pending", len(ephemeralRunnerState.pending), "running", len(ephemeralRunnerState.running))
-	var errs []error
-	for _, ephemeralRunner := range ephemeralRunnerState.pending {
-		log.Info("Removing the pending ephemeral runner from the service", "name", ephemeralRunner.Name)
-		_, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
-		if err != nil {
-			errs = append(errs, err)
-		}
-	}
-
-	for _, ephemeralRunner := range ephemeralRunnerState.running {
-		if ephemeralRunner.HasJob() {
-			log.Info(
-				"Skipping ephemeral runner since it is running a job",
-				"name", ephemeralRunner.Name,
-				"workflowRunId", ephemeralRunner.Status.WorkflowRunID,
-				"jobId", ephemeralRunner.Status.JobID,
-			)
-			continue
-		}
-
-		log.Info("Removing the idle ephemeral runner from the service", "name", ephemeralRunner.Name)
-		_, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
-		if err != nil {
-			errs = append(errs, err)
-		}
-	}
-
-	if len(errs) > 0 {
-		mergedErrs := multierr.Combine(errs...)
-		log.Error(mergedErrs, "Failed to remove idle or pending ephemeral runners from the service")
-		return mergedErrs
-	}
-
-	return nil
 }
 
 func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunnerSetProxySecret(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) (done bool, err error) {

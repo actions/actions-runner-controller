@@ -1523,6 +1523,59 @@ var _ = Describe("Test EphemeralRunnerSet actionable revision cleanup", func() {
 		startManagers(GinkgoT(), mgr)
 	})
 
+	It("does not clean up runners on initial creation without an actionable revision", func() {
+		controller := &EphemeralRunnerSetReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+			Log:    logf.Log,
+			ResourceBuilder: ResourceBuilder{
+				ResourceCache: newTestResourceCache(),
+				SecretResolver: secretresolver.New(mgr.GetClient(), fake.NewMultiClient(
+					fake.WithClient(fake.NewClient(fake.WithRemoveRunner(nil))),
+				)),
+			},
+		}
+
+		ephemeralRunnerSet := &v1alpha1.EphemeralRunnerSet{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-actionable-revision-initial", Namespace: autoscalingNS.Name},
+			Spec: v1alpha1.EphemeralRunnerSetSpec{
+				EphemeralRunnerSpec: v1alpha1.EphemeralRunnerSpec{
+					GitHubConfigURL:    "https://github.com/owner/repo",
+					GitHubConfigSecret: configSecret.Name,
+					RunnerScaleSetID:   100,
+					PodTemplateSpec:    corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "runner", Image: "ghcr.io/actions/runner"}}}},
+				},
+			},
+		}
+
+		err := k8sClient.Create(ctx, ephemeralRunnerSet)
+		Expect(err).NotTo(HaveOccurred())
+
+		request := ctrl.Request{NamespacedName: types.NamespacedName{Name: ephemeralRunnerSet.Name, Namespace: ephemeralRunnerSet.Namespace}}
+		_, err = controller.Reconcile(ctx, request)
+		Expect(err).NotTo(HaveOccurred())
+
+		pendingRunner := newRunner("runner-pending-initial", ephemeralRunnerSet)
+		err = k8sClient.Create(ctx, pendingRunner)
+		Expect(err).NotTo(HaveOccurred())
+
+		_, err = controller.Reconcile(ctx, request)
+		Expect(err).NotTo(HaveOccurred())
+
+		Consistently(func() error {
+			runner := new(v1alpha1.EphemeralRunner)
+			return k8sClient.Get(ctx, types.NamespacedName{Namespace: autoscalingNS.Name, Name: pendingRunner.Name}, runner)
+		}, time.Second, ephemeralRunnerSetTestInterval).Should(Succeed())
+
+		Consistently(func() int64 {
+			updatedSet := new(v1alpha1.EphemeralRunnerSet)
+			if err := k8sClient.Get(ctx, request.NamespacedName, updatedSet); err != nil {
+				return -1
+			}
+			return updatedSet.Status.AppliedActionableRevision
+		}, time.Second, ephemeralRunnerSetTestInterval).Should(Equal(int64(0)))
+	})
+
 	It("deletes runner-a-idle, keeps runner-b-busy, and advances applied actionable revision 3 to 4", func() {
 		controller := &EphemeralRunnerSetReconciler{
 			Client: mgr.GetClient(),
@@ -1698,7 +1751,7 @@ var _ = Describe("Test EphemeralRunnerSet actionable revision cleanup", func() {
 		}, time.Second, ephemeralRunnerSetTestInterval).Should(Equal(int64(3)))
 	})
 
-	It("deletes idle runner and advances revision after restart with no cache", func() {
+	It("does not delete unregistered pending runner after restart with no cache", func() {
 		controller := &EphemeralRunnerSetReconciler{
 			Client: mgr.GetClient(),
 			Scheme: mgr.GetScheme(),
@@ -1738,31 +1791,20 @@ var _ = Describe("Test EphemeralRunnerSet actionable revision cleanup", func() {
 		err = k8sClient.Status().Patch(ctx, statusUpdated, client.MergeFrom(current))
 		Expect(err).NotTo(HaveOccurred())
 
-		// Create idle runner (running but no job)
-		idleRunner := newRunner("runner-restart-idle", statusUpdated)
-		err = k8sClient.Create(ctx, idleRunner)
-		Expect(err).NotTo(HaveOccurred())
-
-		idleCurrent := new(v1alpha1.EphemeralRunner)
-		err = k8sClient.Get(ctx, client.ObjectKeyFromObject(idleRunner), idleCurrent)
-		Expect(err).NotTo(HaveOccurred())
-		idleUpdated := idleCurrent.DeepCopy()
-		idleUpdated.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
-		idleUpdated.Status.RunnerID = 201
-		err = k8sClient.Status().Patch(ctx, idleUpdated, client.MergeFrom(idleCurrent))
+		pendingRunner := newRunner("runner-restart-pending", statusUpdated)
+		err = k8sClient.Create(ctx, pendingRunner)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Reconcile with fresh cache (simulating restart)
 		_, err = controller.Reconcile(ctx, request)
 		Expect(err).NotTo(HaveOccurred())
 
-		// Idle runner should be deleted
-		Eventually(func() bool {
+		Consistently(func() error {
 			runner := new(v1alpha1.EphemeralRunner)
-			return kerrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Namespace: autoscalingNS.Name, Name: "runner-restart-idle"}, runner))
-		}, ephemeralRunnerSetTestTimeout, ephemeralRunnerSetTestInterval).Should(BeTrue())
+			return k8sClient.Get(ctx, types.NamespacedName{Namespace: autoscalingNS.Name, Name: "runner-restart-pending"}, runner)
+		}, time.Second, ephemeralRunnerSetTestInterval).Should(Succeed())
 
-		// AppliedActionableRevision should advance to 4
+		// AppliedActionableRevision should advance because there was nothing safe to clean up.
 		Eventually(func() int64 {
 			updatedSet := new(v1alpha1.EphemeralRunnerSet)
 			if err := k8sClient.Get(ctx, request.NamespacedName, updatedSet); err != nil {

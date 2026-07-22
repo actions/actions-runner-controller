@@ -303,16 +303,12 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		ephemeralRunnerMetadataModified := !cmp.Equal(ephemeralRunnerSet.Spec.EphemeralRunnerMetadata, desired.Spec.EphemeralRunnerMetadata)
 		ephemeralRunnerLabelsModified := !maps.Equal(ephemeralRunnerSet.Labels, desired.Labels)
 		ephemeralRunnerAnnotationsModified := !maps.Equal(ephemeralRunnerSet.Annotations, desired.Annotations)
-		ephemeralRunnerReplicasModified := ephemeralRunnerSet.Spec.Replicas != desired.Spec.Replicas
-		ephemeralRunnerPatchIDModified := ephemeralRunnerSet.Spec.PatchID != desired.Spec.PatchID
 
-		if ephemeralRunnerLabelsModified || ephemeralRunnerAnnotationsModified || ephemeralRunnerMetadataModified || ephemeralRunnerReplicasModified || ephemeralRunnerPatchIDModified {
+		if ephemeralRunnerLabelsModified || ephemeralRunnerAnnotationsModified || ephemeralRunnerMetadataModified {
 			original := ephemeralRunnerSet.DeepCopy()
 			ephemeralRunnerSet.Labels = r.filterAndMergeLabels(ephemeralRunnerSet.Labels, desired.Labels)
 			ephemeralRunnerSet.Annotations = desired.Annotations
 			ephemeralRunnerSet.Spec.EphemeralRunnerMetadata = desired.Spec.EphemeralRunnerMetadata
-			ephemeralRunnerSet.Spec.Replicas = desired.Spec.Replicas
-			ephemeralRunnerSet.Spec.PatchID = desired.Spec.PatchID
 			log.Info("Updating ephemeral runner set metadata to match desired labels and annotations")
 			if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
 				log.Error(err, "Failed to patch ephemeral runner set metadata to match desired labels and annotations")
@@ -759,8 +755,6 @@ func (r *AutoscalingRunnerSetReconciler) createEphemeralRunnerSet(ctx context.Co
 		log.Error(err, "Could not create EphemeralRunnerSet")
 		return ctrl.Result{}, err
 	}
-	desiredRunnerSet.Spec.ActionableRevision = 1
-
 	log.Info("Creating a new EphemeralRunnerSet resource")
 	if err := r.Create(ctx, desiredRunnerSet); err != nil {
 		log.Error(err, "Failed to create EphemeralRunnerSet resource")
