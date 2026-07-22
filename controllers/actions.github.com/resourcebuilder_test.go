@@ -115,6 +115,7 @@ func TestMetadataPropagation(t *testing.T) {
 	assert.Equal(t, labelValueKubernetesPartOf, ephemeralRunnerSet.Labels[LabelKeyKubernetesPartOf])
 	assert.Equal(t, "runner-set", ephemeralRunnerSet.Labels[LabelKeyKubernetesComponent])
 	assert.Equal(t, autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion], ephemeralRunnerSet.Labels[LabelKeyKubernetesVersion])
+	assert.NotContains(t, ephemeralRunnerSet.Annotations, "actions.github.com/integrity-hash")
 	assert.Equal(t, autoscalingRunnerSet.Name, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName])
 	assert.Equal(t, autoscalingRunnerSet.Namespace, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace])
 	assert.Equal(t, "", ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise])
@@ -131,6 +132,7 @@ func TestMetadataPropagation(t *testing.T) {
 	assert.Equal(t, labelValueKubernetesPartOf, listener.Labels[LabelKeyKubernetesPartOf])
 	assert.Equal(t, "runner-scale-set-listener", listener.Labels[LabelKeyKubernetesComponent])
 	assert.Equal(t, autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion], listener.Labels[LabelKeyKubernetesVersion])
+	assert.NotContains(t, listener.Annotations, "actions.github.com/integrity-hash")
 	assert.Equal(t, autoscalingRunnerSet.Name, listener.Labels[LabelKeyGitHubScaleSetName])
 	assert.Equal(t, autoscalingRunnerSet.Namespace, listener.Labels[LabelKeyGitHubScaleSetNamespace])
 	assert.Equal(t, "", listener.Labels[LabelKeyGitHubEnterprise])
@@ -202,6 +204,31 @@ func TestMetadataPropagation(t *testing.T) {
 	for key := range ephemeralRunner.Labels {
 		assert.Equal(t, ephemeralRunner.Labels[key], pod.Labels[key])
 	}
+}
+
+func TestEphemeralRunnerSetProxySecretMetadata(t *testing.T) {
+	ephemeralRunnerSet := &v1alpha1.EphemeralRunnerSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-scale-set",
+			Namespace: "test-ns",
+			Labels: map[string]string{
+				LabelKeyGitHubScaleSetName:      "test-scale-set",
+				LabelKeyGitHubScaleSetNamespace: "test-ns",
+			},
+		},
+	}
+
+	var b ResourceBuilder
+	proxySecret, err := b.newEphemeralRunnerSetProxySecret(ephemeralRunnerSet, map[string][]byte{
+		"http_proxy": []byte("http://proxy.example.com"),
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet), proxySecret.Name)
+	assert.Equal(t, ephemeralRunnerSet.Namespace, proxySecret.Namespace)
+	assert.Equal(t, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName], proxySecret.Labels[LabelKeyGitHubScaleSetName])
+	assert.Equal(t, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace], proxySecret.Labels[LabelKeyGitHubScaleSetNamespace])
+	assert.NotContains(t, proxySecret.Annotations, "actions.github.com/integrity-hash")
 }
 
 func TestGitHubURLTrimLabelValues(t *testing.T) {

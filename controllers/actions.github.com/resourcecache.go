@@ -19,7 +19,7 @@ const (
 	resourceCacheInitialEntries        = 4096
 	resourceCacheInitialMainUIDEntries = 4096
 	resourceCacheInitialOwnerEntries   = 8
-	resourceCacheMaxDependencyRefs     = 5
+	resourceCacheMaxDependencyRefs     = 4
 )
 
 type ResourceCacheObjectRef struct {
@@ -28,7 +28,6 @@ type ResourceCacheObjectRef struct {
 	Name            string
 	UID             types.UID
 	ResourceVersion string
-	Generation      int64 // Used for CR owner identity (main objects), zero for dependencies/desired objects
 }
 
 type ResourceCacheKey struct {
@@ -100,15 +99,11 @@ func (s *resourceCacheState[T]) Get(
 	}
 
 	key := newResourceCacheKey(mainObject, desiredObject)
-	mainObjectRef := newResourceCacheMainObjectRef(mainObject)
-	resourceVersion := desiredObject.GetResourceVersion()
-	if resourceVersion == "" && !isResourceCacheLookupObject(desiredObject) {
-		resourceVersion = hash.ComputeTemplateHash(desiredObject)
-	}
+	mainObjectRef := newResourceCacheObjectRef(mainObject)
 
 	s.mu.RLock()
 	value, ok := s.entries[key]
-	if ok && value.MainObject == mainObjectRef && (resourceVersion == "" || value.ResourceVersion == resourceVersion) && value.dependencyKey.Equal(dependencyKey) {
+	if ok && value.MainObject == mainObjectRef && value.dependencyKey.Equal(dependencyKey) {
 		s.mu.RUnlock()
 		return value.Object, true
 	}
@@ -135,11 +130,8 @@ func (s *resourceCacheState[T]) Upsert(
 	}
 
 	key := newResourceCacheKey(mainObject, desiredObject)
-	mainObjectRef := newResourceCacheMainObjectRef(mainObject)
+	mainObjectRef := newResourceCacheObjectRef(mainObject)
 	resourceVersion := desiredObject.GetResourceVersion()
-	if resourceVersion == "" {
-		resourceVersion = hash.ComputeTemplateHash(desiredObject)
-	}
 
 	s.mu.RLock()
 	previous, ok := s.entries[key]
@@ -227,7 +219,7 @@ func newResourceCacheDependencyKey(objects ...client.Object) (resourceCacheDepen
 		if isNilResourceCacheObject(object) {
 			return resourceCacheDependencyKey{}, false
 		}
-		key.refs[i] = newResourceCacheDependencyObjectRef(object)
+		key.refs[i] = newResourceCacheObjectRef(object)
 	}
 	slices.SortFunc(key.refs[:key.count], func(a, b ResourceCacheObjectRef) int {
 		return compareResourceCacheObjectRefs(a, b)
@@ -243,7 +235,7 @@ func (k resourceCacheDependencyKey) Equal(other resourceCacheDependencyKey) bool
 		return false
 	}
 
-	for i := range k.count {
+	for i := 0; i < k.count; i++ {
 		if k.refs[i] != other.refs[i] {
 			return false
 		}
@@ -252,17 +244,7 @@ func (k resourceCacheDependencyKey) Equal(other resourceCacheDependencyKey) bool
 	return true
 }
 
-func newResourceCacheMainObjectRef(object client.Object) ResourceCacheObjectRef {
-	return ResourceCacheObjectRef{
-		ObjectType: object.GetObjectKind().GroupVersionKind(),
-		Namespace:  object.GetNamespace(),
-		Name:       resourceCacheObjectName(object),
-		UID:        object.GetUID(),
-		Generation: object.GetGeneration(),
-	}
-}
-
-func newResourceCacheDependencyObjectRef(object client.Object) ResourceCacheObjectRef {
+func newResourceCacheObjectRef(object client.Object) ResourceCacheObjectRef {
 	resourceVersion := object.GetResourceVersion()
 	if resourceVersion == "" {
 		resourceVersion = hash.ComputeTemplateHash(object)
@@ -289,12 +271,6 @@ func compareResourceCacheObjectRefs(a, b ResourceCacheObjectRef) int {
 	}
 	if c := strings.Compare(string(a.UID), string(b.UID)); c != 0 {
 		return c
-	}
-	if a.Generation != b.Generation {
-		if a.Generation < b.Generation {
-			return -1
-		}
-		return 1
 	}
 	return strings.Compare(a.ResourceVersion, b.ResourceVersion)
 }
@@ -324,26 +300,4 @@ func isNilResourceCacheObject[T client.Object](object T) bool {
 
 	value := reflect.ValueOf(clientObject)
 	return value.Kind() == reflect.Pointer && value.IsNil()
-}
-
-func isResourceCacheLookupObject(object client.Object) bool {
-	lookupObject, ok := object.DeepCopyObject().(client.Object)
-	if !ok {
-		return false
-	}
-	lookupObject.SetGenerateName(object.GetGenerateName())
-	lookupObject.SetName("")
-	lookupObject.SetNamespace("")
-	lookupObject.SetResourceVersion("")
-
-	objectValue := reflect.ValueOf(object)
-	if objectValue.Kind() != reflect.Pointer {
-		return false
-	}
-	zeroObject, ok := reflect.New(objectValue.Elem().Type()).Interface().(client.Object)
-	if !ok {
-		return false
-	}
-
-	return hash.ComputeTemplateHash(lookupObject) == hash.ComputeTemplateHash(zeroObject)
 }

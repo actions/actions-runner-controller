@@ -186,8 +186,8 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		log.Info("Successfully added finalizers")
 	}
 
-	var secret corev1.Secret
-	if err := r.Get(ctx, req.NamespacedName, &secret); err != nil {
+	secret := new(corev1.Secret)
+	if err := r.Get(ctx, req.NamespacedName, secret); err != nil {
 		if !kerrors.IsNotFound(err) {
 			log.Error(err, "Failed to fetch secret")
 			return ctrl.Result{}, err
@@ -203,7 +203,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				return ctrl.Result{}, fmt.Errorf("failed to create secret: %w", err)
 			}
 			log.Info("Created new ephemeral runner secret for jitconfig.")
-			secret = *jitSecret
+			secret = jitSecret
 
 		case errors.Is(err, retryableError):
 			log.Info("Encountered retryable error, requeueing", "error", err.Error())
@@ -227,7 +227,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		if err != nil {
 			log.Error(err, "Runner config secret is corrupted: missing runnerId")
 			log.Info("Deleting corrupted runner config secret")
-			if err := r.Delete(ctx, &secret); err != nil {
+			if err := r.Delete(ctx, secret); err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to delete the corrupted runner config secret")
 			}
 			log.Info("Corrupted runner config secret has been deleted")
@@ -273,15 +273,15 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}, nil
 	}
 
-	var pod corev1.Pod
-	if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
+	pod := new(corev1.Pod)
+	if err := r.Get(ctx, req.NamespacedName, pod); err != nil {
 		if !kerrors.IsNotFound(err) {
 			log.Error(err, "Failed to fetch the pod")
 			return ctrl.Result{}, err
 		}
 		log.Info("Ephemeral runner pod does not exist. Creating new ephemeral runner")
 
-		result, err := r.createPod(ctx, &ephemeralRunner, &secret, log)
+		result, err := r.createPod(ctx, &ephemeralRunner, secret, log)
 		switch {
 		case err == nil:
 			return result, nil
@@ -329,7 +329,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 
-	cs := runnerContainerStatus(&pod)
+	cs := runnerContainerStatus(pod)
 	switch {
 	case pod.Status.Phase == corev1.PodFailed: // All containers are stopped
 		log.Info(
@@ -342,7 +342,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		// Therefore, we should try to restart it.
 		if cs == nil || cs.State.Terminated == nil {
 			log.Info("Runner container does not have state set, deleting pod as failed so it can be restarted")
-			return ctrl.Result{}, r.deleteEphemeralRunnerOrPod(ctx, &ephemeralRunner, &pod, log)
+			return ctrl.Result{}, r.deleteEphemeralRunnerOrPod(ctx, &ephemeralRunner, pod, log)
 		}
 
 		switch cs.State.Terminated.ExitCode {
@@ -352,7 +352,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			// If the runner container exits with 0, we assume that the runner has finished successfully.
 			// If side-car container exits with non-zero, it shouldn't affect the runner. Runner exit code
 			// drives the controller's inference of whether the job has succeeded or failed.
-			if err := r.markAsSucceeded(ctx, &ephemeralRunner, &pod, log); err != nil {
+			if err := r.markAsSucceeded(ctx, &ephemeralRunner, pod, log); err != nil {
 				log.Error(err, "Failed to set ephemeral runner to phase Succeeded")
 				return ctrl.Result{}, err
 			}
@@ -374,14 +374,14 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			"Ephemeral runner container has failed, and runner container termination exit code is non-zero",
 			"containerTerminatedState", cs.State.Terminated,
 		)
-		return ctrl.Result{}, r.deleteEphemeralRunnerOrPod(ctx, &ephemeralRunner, &pod, log)
+		return ctrl.Result{}, r.deleteEphemeralRunnerOrPod(ctx, &ephemeralRunner, pod, log)
 
-	case initContainerFailed(&pod):
+	case initContainerFailed(pod):
 		log.Info(
 			"Pod has a failed init container, deleting pod as failed so it can be restarted",
 			"initContainerStatuses", pod.Status.InitContainerStatuses,
 		)
-		return ctrl.Result{}, r.deleteEphemeralRunnerOrPod(ctx, &ephemeralRunner, &pod, log)
+		return ctrl.Result{}, r.deleteEphemeralRunnerOrPod(ctx, &ephemeralRunner, pod, log)
 
 	case cs == nil:
 		// starting, no container state yet
@@ -390,7 +390,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	case cs.State.Terminated == nil: // container is not terminated and pod phase is not failed, so runner is still running
 		log.Info("Runner container is still running; updating ephemeral runner status")
-		if err := r.updateRunStatusFromPod(ctx, &ephemeralRunner, &pod, log); err != nil {
+		if err := r.updateRunStatusFromPod(ctx, &ephemeralRunner, pod, log); err != nil {
 			log.Info("Failed to update ephemeral runner status. Requeue to not miss this event")
 			return ctrl.Result{}, err
 		}
@@ -405,11 +405,11 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	case cs.State.Terminated.ExitCode != 0: // failed
 		log.Info("Ephemeral runner container failed", "exitCode", cs.State.Terminated.ExitCode)
-		return ctrl.Result{}, r.deleteEphemeralRunnerOrPod(ctx, &ephemeralRunner, &pod, log)
+		return ctrl.Result{}, r.deleteEphemeralRunnerOrPod(ctx, &ephemeralRunner, pod, log)
 
 	default: // succeeded
 		log.Info("Ephemeral runner has finished successfully, deleting ephemeral runner", "exitCode", cs.State.Terminated.ExitCode)
-		if err := r.markAsSucceeded(ctx, &ephemeralRunner, &pod, log); err != nil {
+		if err := r.markAsSucceeded(ctx, &ephemeralRunner, pod, log); err != nil {
 			log.Error(err, "Failed to set ephemeral runner to phase Succeeded")
 			return ctrl.Result{}, err
 		}
@@ -471,13 +471,13 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerFromService(ctx context.Context
 
 func (r *EphemeralRunnerReconciler) cleanupResources(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
 	log.Info("Cleaning up the runner pod")
-	var pod corev1.Pod
-	err := r.Get(ctx, types.NamespacedName{Namespace: ephemeralRunner.Namespace, Name: ephemeralRunner.Name}, &pod)
+	pod := new(corev1.Pod)
+	err := r.Get(ctx, types.NamespacedName{Namespace: ephemeralRunner.Namespace, Name: ephemeralRunner.Name}, pod)
 	switch {
 	case err == nil:
 		if pod.DeletionTimestamp.IsZero() {
 			log.Info("Deleting the runner pod")
-			if err := r.Delete(ctx, &pod); err != nil && !kerrors.IsNotFound(err) {
+			if err := r.Delete(ctx, pod); err != nil && !kerrors.IsNotFound(err) {
 				return fmt.Errorf("failed to delete pod: %w", err)
 			}
 			log.Info("Deleted the runner pod")
@@ -491,13 +491,13 @@ func (r *EphemeralRunnerReconciler) cleanupResources(ctx context.Context, epheme
 	}
 
 	log.Info("Cleaning up the runner jitconfig secret")
-	var secret corev1.Secret
-	err = r.Get(ctx, types.NamespacedName{Namespace: ephemeralRunner.Namespace, Name: ephemeralRunner.Name}, &secret)
+	secret := new(corev1.Secret)
+	err = r.Get(ctx, types.NamespacedName{Namespace: ephemeralRunner.Namespace, Name: ephemeralRunner.Name}, secret)
 	switch {
 	case err == nil:
 		if secret.DeletionTimestamp.IsZero() {
 			log.Info("Deleting the jitconfig secret")
-			if err := r.Delete(ctx, &secret); err != nil && !kerrors.IsNotFound(err) {
+			if err := r.Delete(ctx, secret); err != nil && !kerrors.IsNotFound(err) {
 				return fmt.Errorf("failed to delete secret: %w", err)
 			}
 			log.Info("Deleted jitconfig secret")

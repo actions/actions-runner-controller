@@ -401,8 +401,6 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 				autoscalingListenerTestInterval,
 			).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
 
-			oldPodUID := string(pod.UID)
-
 			// Update the AutoScalingListener
 			updated := autoscalingListener.DeepCopy()
 			updated.Spec.EphemeralRunnerSetName = "test-ers-updated"
@@ -423,20 +421,6 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 				autoscalingListenerTestTimeout,
 				autoscalingListenerTestInterval,
 			).Should(BeEquivalentTo(rulesForListenerRole([]string{updated.Spec.EphemeralRunnerSetName})), "Role should be updated")
-
-			Eventually(
-				func() (string, error) {
-					pod := new(corev1.Pod)
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
-					if err != nil {
-						return "", err
-					}
-
-					return string(pod.UID), nil
-				},
-				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval,
-			).Should(BeEquivalentTo(oldPodUID), "Pod should not be re-created when only listener role rules change")
 		})
 
 		It("propagates updated listener metadata to owned resources", func() {
@@ -447,25 +431,37 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 						err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, serviceAccount)
 						g.Expect(err).NotTo(HaveOccurred(), "failed to get ServiceAccount")
 						g.Expect(serviceAccount.Labels["arc.test/listener-label"]).To(Equal(expected))
-						g.Expect(serviceAccount.Annotations["arc.test/service-account-annotation"]).To(Equal("initial"))
+						g.Expect(serviceAccount.Annotations["arc.test/service-account-annotation"]).To(Equal(expected))
+						if expected == "updated" {
+							g.Expect(serviceAccount.Annotations["arc.test/new-service-account-annotation"]).To(Equal("added"))
+						}
 
 						role := new(rbacv1.Role)
 						err = k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace}, role)
 						g.Expect(err).NotTo(HaveOccurred(), "failed to get Role")
 						g.Expect(role.Labels["arc.test/listener-label"]).To(Equal(expected))
-						g.Expect(role.Annotations["arc.test/role-annotation"]).To(Equal("initial"))
+						g.Expect(role.Annotations["arc.test/role-annotation"]).To(Equal(expected))
+						if expected == "updated" {
+							g.Expect(role.Annotations["arc.test/new-role-annotation"]).To(Equal("added"))
+						}
 
 						roleBinding := new(rbacv1.RoleBinding)
 						err = k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace}, roleBinding)
 						g.Expect(err).NotTo(HaveOccurred(), "failed to get RoleBinding")
 						g.Expect(roleBinding.Labels["arc.test/listener-label"]).To(Equal(expected))
-						g.Expect(roleBinding.Annotations["arc.test/role-binding-annotation"]).To(Equal("initial"))
+						g.Expect(roleBinding.Annotations["arc.test/role-binding-annotation"]).To(Equal(expected))
+						if expected == "updated" {
+							g.Expect(roleBinding.Annotations["arc.test/new-role-binding-annotation"]).To(Equal("added"))
+						}
 
 						secret := new(corev1.Secret)
 						err = k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerConfigName(autoscalingListener), Namespace: autoscalingListener.Namespace}, secret)
 						g.Expect(err).NotTo(HaveOccurred(), "failed to get config Secret")
-						g.Expect(secret.Labels["arc.test/config-secret-label"]).To(Equal("initial"))
-						g.Expect(secret.Annotations["arc.test/config-secret-annotation"]).To(Equal("initial"))
+						g.Expect(secret.Labels["arc.test/config-secret-label"]).To(Equal(expected))
+						g.Expect(secret.Annotations["arc.test/config-secret-annotation"]).To(Equal(expected))
+						if expected == "updated" {
+							g.Expect(secret.Annotations["arc.test/new-config-secret-annotation"]).To(Equal("added"))
+						}
 
 						pod := new(corev1.Pod)
 						err = k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
@@ -479,84 +475,45 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 
 			assertPropagatedMetadata("initial")
 
-			pod := new(corev1.Pod)
-			Eventually(
-				func() (string, error) {
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
-					if err != nil {
-						return "", err
-					}
-
-					return string(pod.UID), nil
-				},
-				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval,
-			).ShouldNot(BeEmpty(), "Pod should be created")
-
-			oldPodUID := string(pod.UID)
-
-			serviceAccount := new(corev1.ServiceAccount)
-			err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, serviceAccount)
-			Expect(err).NotTo(HaveOccurred(), "failed to get ServiceAccount")
-
-			updatedServiceAccount := serviceAccount.DeepCopy()
-			if updatedServiceAccount.Annotations == nil {
-				updatedServiceAccount.Annotations = make(map[string]string)
-			}
-			updatedServiceAccount.Annotations["arc.test/third-party-service-account-annotation"] = "preserved"
-			err = k8sClient.Patch(ctx, updatedServiceAccount, client.MergeFrom(serviceAccount))
-			Expect(err).NotTo(HaveOccurred(), "failed to patch third-party ServiceAccount annotation")
-
-			updatedPod := pod.DeepCopy()
-			if updatedPod.Annotations == nil {
-				updatedPod.Annotations = make(map[string]string)
-			}
-			updatedPod.Annotations["arc.test/third-party-pod-annotation"] = "preserved"
-			err = k8sClient.Patch(ctx, updatedPod, client.MergeFrom(pod))
-			Expect(err).NotTo(HaveOccurred(), "failed to patch third-party Pod annotation")
-
 			current := new(v1alpha1.AutoscalingListener)
-			err = k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, current)
+			err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, current)
 			Expect(err).NotTo(HaveOccurred(), "failed to get AutoScalingListener")
 
 			updated := current.DeepCopy()
 			updated.Labels = map[string]string{
 				"arc.test/listener-label": "updated",
 			}
+			updated.Spec.ServiceAccountMetadata = &v1alpha1.ResourceMeta{
+				Annotations: map[string]string{
+					"arc.test/service-account-annotation":     "updated",
+					"arc.test/new-service-account-annotation": "added",
+				},
+			}
+			updated.Spec.RoleMetadata = &v1alpha1.ResourceMeta{
+				Annotations: map[string]string{
+					"arc.test/role-annotation":     "updated",
+					"arc.test/new-role-annotation": "added",
+				},
+			}
+			updated.Spec.RoleBindingMetadata = &v1alpha1.ResourceMeta{
+				Annotations: map[string]string{
+					"arc.test/role-binding-annotation":     "updated",
+					"arc.test/new-role-binding-annotation": "added",
+				},
+			}
+			updated.Spec.ConfigSecretMetadata = &v1alpha1.ResourceMeta{
+				Labels: map[string]string{
+					"arc.test/config-secret-label": "updated",
+				},
+				Annotations: map[string]string{
+					"arc.test/config-secret-annotation":     "updated",
+					"arc.test/new-config-secret-annotation": "added",
+				},
+			}
 			err = k8sClient.Patch(ctx, updated, client.MergeFrom(current))
-			Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingListener labels")
+			Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingListener metadata")
 
 			assertPropagatedMetadata("updated")
-
-			Eventually(
-				func(g Gomega) {
-					serviceAccount := new(corev1.ServiceAccount)
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, serviceAccount)
-					g.Expect(err).NotTo(HaveOccurred(), "failed to get ServiceAccount")
-					g.Expect(serviceAccount.Annotations).To(HaveKeyWithValue("arc.test/third-party-service-account-annotation", "preserved"))
-
-					pod := new(corev1.Pod)
-					err = k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
-					g.Expect(err).NotTo(HaveOccurred(), "failed to get Pod")
-					g.Expect(pod.Annotations).To(HaveKeyWithValue("arc.test/third-party-pod-annotation", "preserved"))
-				},
-				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval,
-			).Should(Succeed())
-
-			Eventually(
-				func() (string, error) {
-					pod := new(corev1.Pod)
-					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
-					if err != nil {
-						return "", err
-					}
-
-					return string(pod.UID), nil
-				},
-				autoscalingListenerTestTimeout,
-				autoscalingListenerTestInterval,
-			).Should(BeEquivalentTo(oldPodUID), "Pod should be patched, not re-created, for metadata-only updates")
 		})
 
 		It("It should re-create pod but persist config secret whenever listener container is terminated", func() {
@@ -631,7 +588,6 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 				autoscalingListenerTestInterval,
 			).Should(BeEquivalentTo(oldSecretUID), "Config secret should persist (not be re-created)")
 		})
-
 	})
 })
 
@@ -1140,64 +1096,6 @@ var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 			autoscalingListenerTestTimeout,
 			autoscalingListenerTestInterval,
 		).Should(Succeed(), "failed to delete secret with proxy details")
-	})
-
-	It("should re-create listener pod when proxy dependency changes", func() {
-		proxy := &v1alpha1.ProxyConfig{
-			HTTP: &v1alpha1.ProxyServerConfig{
-				Url: "http://localhost:8080",
-			},
-			NoProxy: []string{"example.com"},
-		}
-
-		createRunnerSetAndListener(proxy)
-
-		pod := new(corev1.Pod)
-		Eventually(
-			func() (string, error) {
-				err := k8sClient.Get(
-					ctx,
-					client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace},
-					pod,
-				)
-				if err != nil {
-					return "", err
-				}
-
-				return string(pod.UID), nil
-			},
-			autoscalingListenerTestTimeout,
-			autoscalingListenerTestInterval,
-		).ShouldNot(BeEmpty(), "Pod should be created")
-
-		oldPodUID := string(pod.UID)
-
-		current := new(v1alpha1.AutoscalingListener)
-		err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, current)
-		Expect(err).NotTo(HaveOccurred(), "failed to get AutoScalingListener")
-
-		updated := current.DeepCopy()
-		updated.Spec.Proxy.NoProxy = []string{"example.com", "example.org"}
-		err = k8sClient.Patch(ctx, updated, client.MergeFrom(current))
-		Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingListener proxy")
-
-		Eventually(
-			func() (string, error) {
-				pod := new(corev1.Pod)
-				err := k8sClient.Get(
-					ctx,
-					client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace},
-					pod,
-				)
-				if err != nil {
-					return "", err
-				}
-
-				return string(pod.UID), nil
-			},
-			autoscalingListenerTestTimeout,
-			autoscalingListenerTestInterval,
-		).Should(BeEquivalentTo(oldPodUID), "Pod should not be re-created when proxy metadata updates do not change pod spec")
 	})
 })
 

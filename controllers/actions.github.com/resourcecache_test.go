@@ -184,10 +184,9 @@ func TestResourceCacheIgnoresInvalidInputs(t *testing.T) {
 func TestResourceBuilderCachesListenerPodDependencies(t *testing.T) {
 	listener := &v1alpha1.AutoscalingListener{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        "listener",
-			Namespace:   "controller-ns",
-			UID:         "listener-uid",
-			Annotations: map[string]string{"example.com/listener-hash": "listener-hash"},
+			Name:      "listener",
+			Namespace: "controller-ns",
+			UID:       "listener-uid",
 		},
 		Spec: v1alpha1.AutoscalingListenerSpec{
 			Image:                         "listener:latest",
@@ -202,7 +201,6 @@ func TestResourceBuilderCachesListenerPodDependencies(t *testing.T) {
 			Namespace:       "controller-ns",
 			UID:             "config-secret-uid",
 			ResourceVersion: "11",
-			Annotations:     map[string]string{"example.com/config-hash": "config-hash"},
 		},
 	}
 	serviceAccount := &corev1.ServiceAccount{
@@ -211,7 +209,6 @@ func TestResourceBuilderCachesListenerPodDependencies(t *testing.T) {
 			Namespace:       "controller-ns",
 			UID:             "service-account-uid",
 			ResourceVersion: "12",
-			Annotations:     map[string]string{"example.com/service-account-hash": "service-account-hash"},
 		},
 	}
 	role := &rbacv1.Role{
@@ -220,7 +217,6 @@ func TestResourceBuilderCachesListenerPodDependencies(t *testing.T) {
 			Namespace:       "scale-set-ns",
 			UID:             "role-uid",
 			ResourceVersion: "13",
-			Annotations:     map[string]string{"example.com/role-hash": "role-hash"},
 		},
 	}
 	roleBinding := &rbacv1.RoleBinding{
@@ -229,7 +225,6 @@ func TestResourceBuilderCachesListenerPodDependencies(t *testing.T) {
 			Namespace:       "scale-set-ns",
 			UID:             "role-binding-uid",
 			ResourceVersion: "14",
-			Annotations:     map[string]string{"example.com/role-binding-hash": "role-binding-hash"},
 		},
 	}
 
@@ -238,60 +233,13 @@ func TestResourceBuilderCachesListenerPodDependencies(t *testing.T) {
 	listenerPod, err := b.newScaleSetListenerPod(listener, podConfig, serviceAccount, role, roleBinding, nil)
 	require.NoError(t, err)
 
-	metadataDependency := resourceCacheObjectMetadataInputObject(listener)
-	cachedPod, ok := b.ResourceCache.listenerPod.Get(listener, listenerPod, podConfig, serviceAccount, role, roleBinding, metadataDependency)
+	cachedPod, ok := b.ResourceCache.listenerPod.Get(listener, listenerPod, podConfig, serviceAccount, role, roleBinding)
 	require.True(t, ok)
 	assert.IsType(t, &corev1.Pod{}, cachedPod)
 
-	lookupPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      listenerPod.Name,
-			Namespace: listenerPod.Namespace,
-		},
-	}
-	cachedPod, ok = b.ResourceCache.listenerPod.Get(listener, lookupPod, podConfig, serviceAccount, role, roleBinding, metadataDependency)
-	require.True(t, ok, "name-only lookup object should hit the cached desired pod")
-	assert.Same(t, listenerPod, cachedPod)
-
 	role.ResourceVersion = "changed"
-	_, ok = b.ResourceCache.listenerPod.Get(listener, lookupPod, podConfig, serviceAccount, role, roleBinding, metadataDependency)
+	_, ok = b.ResourceCache.listenerPod.Get(listener, listenerPod, podConfig, serviceAccount, role, roleBinding)
 	assert.False(t, ok)
-}
-
-func TestResourceBuilderCachesListenerPodMetadataDependency(t *testing.T) {
-	listener := &v1alpha1.AutoscalingListener{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "listener",
-			Namespace: "controller-ns",
-			UID:       "listener-uid",
-			Labels: map[string]string{
-				"arc.test/listener-label": "initial",
-			},
-		},
-		Spec: v1alpha1.AutoscalingListenerSpec{
-			Image:                         "listener:latest",
-			AutoscalingRunnerSetName:      "scale-set",
-			AutoscalingRunnerSetNamespace: "scale-set-ns",
-			EphemeralRunnerSetName:        "scale-set",
-		},
-	}
-	podConfig := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "listener-config", Namespace: "controller-ns", UID: "config-secret-uid", ResourceVersion: "11"}}
-	serviceAccount := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "listener", Namespace: "controller-ns", UID: "service-account-uid", ResourceVersion: "12"}}
-	role := &rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "listener", Namespace: "scale-set-ns", UID: "role-uid", ResourceVersion: "13"}}
-	roleBinding := &rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "listener", Namespace: "scale-set-ns", UID: "role-binding-uid", ResourceVersion: "14"}}
-
-	cache := NewResourceCache()
-	b := ResourceBuilder{ResourceCache: &cache}
-	listenerPod, err := b.newScaleSetListenerPod(listener, podConfig, serviceAccount, role, roleBinding, nil)
-	require.NoError(t, err)
-
-	lookupPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: listenerPod.Name, Namespace: listenerPod.Namespace}}
-	_, ok := b.ResourceCache.listenerPod.Get(listener, lookupPod, podConfig, serviceAccount, role, roleBinding, resourceCacheObjectMetadataInputObject(listener))
-	assert.True(t, ok)
-
-	listener.Labels["arc.test/listener-label"] = "updated"
-	_, ok = b.ResourceCache.listenerPod.Get(listener, lookupPod, podConfig, serviceAccount, role, roleBinding, resourceCacheObjectMetadataInputObject(listener))
-	assert.False(t, ok, "cache miss when listener metadata used by the pod changes")
 }
 
 func TestResourceBuilderCachesEphemeralRunnerSet(t *testing.T) {
@@ -314,184 +262,16 @@ func TestResourceBuilderCachesEphemeralRunnerSet(t *testing.T) {
 	runnerSet, err := b.newEphemeralRunnerSet(&autoscalingRunnerSet)
 	require.NoError(t, err)
 
-	metadataDependency := resourceCacheObjectMetadataInputObject(&autoscalingRunnerSet)
-	cachedRunnerSet, ok := b.ResourceCache.ephemeralRunnerSet.Get(&autoscalingRunnerSet, runnerSet, metadataDependency)
-	require.True(t, ok, "direct cache Get with returned object should hit")
+	cachedRunnerSet, ok := b.ResourceCache.ephemeralRunnerSet.Get(&autoscalingRunnerSet, runnerSet)
+	require.True(t, ok)
 	assert.Equal(t, runnerSet.Spec, cachedRunnerSet.Spec)
 	assert.Same(t, runnerSet, cachedRunnerSet)
 
-	lookupRunnerSet := &v1alpha1.EphemeralRunnerSet{ObjectMeta: metav1.ObjectMeta{Name: runnerSet.Name, Namespace: runnerSet.Namespace}}
-	cachedRunnerSet, ok = b.ResourceCache.ephemeralRunnerSet.Get(&autoscalingRunnerSet, lookupRunnerSet, metadataDependency)
-	require.True(t, ok, "name-only lookup object should hit the cached desired runner set")
-	assert.Same(t, runnerSet, cachedRunnerSet)
+	fromBuilder, err := b.newEphemeralRunnerSet(&autoscalingRunnerSet)
+	require.NoError(t, err)
+	assert.Same(t, runnerSet, fromBuilder)
 
 	autoscalingRunnerSet.Annotations[runnerScaleSetIDAnnotationKey] = "2"
-	_, ok = b.ResourceCache.ephemeralRunnerSet.Get(&autoscalingRunnerSet, lookupRunnerSet, metadataDependency)
-	assert.True(t, ok, "cache should be valid when main object generation unchanged")
-}
-
-func TestResourceBuilderCachesEphemeralRunnerSetMetadataDependency(t *testing.T) {
-	autoscalingRunnerSet := v1alpha1.AutoscalingRunnerSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "scale-set",
-			Namespace: "default",
-			UID:       "scale-set-uid",
-			Labels: map[string]string{
-				"arc.test/scale-set-label": "initial",
-			},
-			Annotations: map[string]string{
-				runnerScaleSetIDAnnotationKey: "1",
-			},
-		},
-		Spec: v1alpha1.AutoscalingRunnerSetSpec{
-			GitHubConfigUrl: "https://github.com/actions/actions-runner-controller",
-		},
-	}
-
-	cache := NewResourceCache()
-	b := ResourceBuilder{ResourceCache: &cache}
-	runnerSet, err := b.newEphemeralRunnerSet(&autoscalingRunnerSet)
-	require.NoError(t, err)
-
-	lookupRunnerSet := &v1alpha1.EphemeralRunnerSet{ObjectMeta: metav1.ObjectMeta{Name: runnerSet.Name, Namespace: runnerSet.Namespace}}
-	_, ok := b.ResourceCache.ephemeralRunnerSet.Get(&autoscalingRunnerSet, lookupRunnerSet, resourceCacheObjectMetadataInputObject(&autoscalingRunnerSet))
-	assert.True(t, ok)
-
-	autoscalingRunnerSet.Labels["arc.test/scale-set-label"] = "updated"
-	_, ok = b.ResourceCache.ephemeralRunnerSet.Get(&autoscalingRunnerSet, lookupRunnerSet, resourceCacheObjectMetadataInputObject(&autoscalingRunnerSet))
-	assert.False(t, ok, "cache miss when autoscaling runner set metadata used by the runner set changes")
-}
-
-func TestResourceCacheOwnerGenerationDoesNotAffectCacheEntry(t *testing.T) {
-	mainObject := &v1alpha1.AutoscalingListener{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       "listener",
-			Namespace:  "controller-ns",
-			UID:        "listener-uid",
-			Generation: 5,
-		},
-	}
-	desiredPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "listener",
-			Namespace: "controller-ns",
-		},
-	}
-
-	cache := NewResourceCache()
-	_, replaced := cache.listenerPod.Upsert(mainObject, desiredPod)
-	assert.True(t, replaced)
-	_, ok := cache.listenerPod.Get(mainObject, desiredPod)
-	assert.True(t, ok)
-
-	mainObjectCopy := mainObject.DeepCopy()
-	_, ok = cache.listenerPod.Get(mainObjectCopy, desiredPod)
-	assert.True(t, ok, "cache hit when owner generation unchanged")
-}
-
-func TestResourceCacheOwnerGenerationChangeInvalidatesCacheEntry(t *testing.T) {
-	mainObject := &v1alpha1.AutoscalingListener{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       "listener",
-			Namespace:  "controller-ns",
-			UID:        "listener-uid",
-			Generation: 5,
-		},
-	}
-	desiredPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "listener",
-			Namespace: "controller-ns",
-		},
-	}
-
-	cache := NewResourceCache()
-	_, replaced := cache.listenerPod.Upsert(mainObject, desiredPod)
-	assert.True(t, replaced)
-	_, ok := cache.listenerPod.Get(mainObject, desiredPod)
-	assert.True(t, ok)
-
-	mainObjectWithNewGeneration := mainObject.DeepCopy()
-	mainObjectWithNewGeneration.Generation = 6
-	_, ok = cache.listenerPod.Get(mainObjectWithNewGeneration, desiredPod)
-	assert.False(t, ok, "cache miss when owner generation changes")
-}
-
-func TestResourceCacheDependencyResourceVersionChangeInvalidates(t *testing.T) {
-	mainObject := &v1alpha1.AutoscalingListener{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "listener",
-			Namespace: "controller-ns",
-			UID:       "listener-uid",
-		},
-	}
-	desiredPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "listener",
-			Namespace: "controller-ns",
-		},
-	}
-	dependency := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "config",
-			Namespace:       "controller-ns",
-			UID:             "config-uid",
-			ResourceVersion: "1",
-		},
-	}
-
-	cache := NewResourceCache()
-	_, replaced := cache.listenerPod.Upsert(mainObject, desiredPod, dependency)
-	assert.True(t, replaced)
-	_, ok := cache.listenerPod.Get(mainObject, desiredPod, dependency)
-	assert.True(t, ok)
-
-	dependencyWithNewResourceVersion := dependency.DeepCopy()
-	dependencyWithNewResourceVersion.ResourceVersion = "2"
-	_, ok = cache.listenerPod.Get(mainObject, desiredPod, dependencyWithNewResourceVersion)
-	assert.False(t, ok, "cache miss when dependency resourceVersion changes")
-}
-
-func TestResourceCacheNoAnnotationFallback(t *testing.T) {
-	mainObject := &v1alpha1.AutoscalingListener{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "listener",
-			Namespace: "controller-ns",
-			UID:       "listener-uid",
-		},
-	}
-	desiredPodWithoutResourceVersion := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "listener",
-			Namespace: "controller-ns",
-		},
-	}
-	desiredPodWithDifferentAnnotation := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "listener",
-			Namespace: "controller-ns",
-			Annotations: map[string]string{
-				"unrelated-key": "unrelated-value",
-			},
-		},
-	}
-
-	cache := NewResourceCache()
-	_, replaced := cache.listenerPod.Upsert(mainObject, desiredPodWithoutResourceVersion)
-	assert.True(t, replaced)
-
-	_, ok := cache.listenerPod.Get(mainObject, desiredPodWithoutResourceVersion)
-	assert.True(t, ok, "cache hit with same pod object")
-
-	_, ok = cache.listenerPod.Get(mainObject, desiredPodWithDifferentAnnotation)
-	assert.False(t, ok, "cache miss when pod changed - uses hash not annotation fallback")
-
-	desiredPodIdentical := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "listener",
-			Namespace: "controller-ns",
-		},
-	}
-	_, ok = cache.listenerPod.Get(mainObject, desiredPodIdentical)
-	assert.True(t, ok, "cache hit when pod structure identical even if different instance")
+	_, ok = b.ResourceCache.ephemeralRunnerSet.Get(&autoscalingRunnerSet, runnerSet)
+	assert.False(t, ok)
 }
