@@ -1808,20 +1808,32 @@ var _ = Describe("Test EphemeralRunnerSet actionable revision cleanup", func() {
 		err = k8sClient.Patch(ctx, specUpdated, client.MergeFrom(current))
 		Expect(err).NotTo(HaveOccurred())
 
-		_, err = controller.Reconcile(ctx, request)
-		Expect(err).NotTo(HaveOccurred())
-
 		Eventually(func() bool {
+			_, err := controller.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+
 			runner := new(v1alpha1.EphemeralRunner)
 			return kerrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Namespace: autoscalingNS.Name, Name: "runner-a-idle"}, runner))
 		}, ephemeralRunnerSetTestTimeout, ephemeralRunnerSetTestInterval).Should(BeTrue())
 
 		Consistently(func() error {
 			runner := new(v1alpha1.EphemeralRunner)
-			return k8sClient.Get(ctx, types.NamespacedName{Namespace: autoscalingNS.Name, Name: "runner-b-busy"}, runner)
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: autoscalingNS.Name, Name: "runner-b-busy"}, runner); err != nil {
+				return err
+			}
+			if runner.Status.RunnerID != 102 {
+				return fmt.Errorf("expected busy runner ID 102, got %d", runner.Status.RunnerID)
+			}
+			if !runner.HasJob() {
+				return fmt.Errorf("expected runner-b-busy to keep its assigned job")
+			}
+			return nil
 		}, time.Second, ephemeralRunnerSetTestInterval).Should(Succeed())
 
 		Eventually(func() int64 {
+			_, err := controller.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+
 			updatedSet := new(v1alpha1.EphemeralRunnerSet)
 			if err := k8sClient.Get(ctx, request.NamespacedName, updatedSet); err != nil {
 				return 0
@@ -1905,7 +1917,7 @@ var _ = Describe("Test EphemeralRunnerSet actionable revision cleanup", func() {
 		}, time.Second, ephemeralRunnerSetTestInterval).Should(Equal(int64(3)))
 	})
 
-	It("does not delete unregistered pending runner after restart with no cache", func() {
+	It("deletes unregistered pending runner during actionable revision cleanup after restart with no cache", func() {
 		controller := &EphemeralRunnerSetReconciler{
 			Client: mgr.GetClient(),
 			Scheme: mgr.GetScheme(),
@@ -1949,17 +1961,33 @@ var _ = Describe("Test EphemeralRunnerSet actionable revision cleanup", func() {
 		err = k8sClient.Create(ctx, pendingRunner)
 		Expect(err).NotTo(HaveOccurred())
 
-		// Reconcile with fresh cache (simulating restart)
-		_, err = controller.Reconcile(ctx, request)
-		Expect(err).NotTo(HaveOccurred())
+		Eventually(func(g Gomega) {
+			cachedSet := new(v1alpha1.EphemeralRunnerSet)
+			err := controller.Get(ctx, request.NamespacedName, cachedSet)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(cachedSet.Status.AppliedActionableRevision).To(Equal(int64(3)))
 
-		Consistently(func() error {
+			cachedRunner := new(v1alpha1.EphemeralRunner)
+			err = controller.Get(ctx, types.NamespacedName{Namespace: autoscalingNS.Name, Name: "runner-restart-pending"}, cachedRunner)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(cachedRunner.Status.RunnerID).To(BeZero())
+			g.Expect(cachedRunner.Status.Phase).To(BeEmpty())
+		}, ephemeralRunnerSetTestTimeout, ephemeralRunnerSetTestInterval).Should(Succeed())
+
+		// Reconcile with fresh cache (simulating restart). Actionable revision cleanup deletes pending runners.
+		Eventually(func() bool {
+			_, err := controller.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+
 			runner := new(v1alpha1.EphemeralRunner)
-			return k8sClient.Get(ctx, types.NamespacedName{Namespace: autoscalingNS.Name, Name: "runner-restart-pending"}, runner)
-		}, time.Second, ephemeralRunnerSetTestInterval).Should(Succeed())
+			return kerrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Namespace: autoscalingNS.Name, Name: "runner-restart-pending"}, runner))
+		}, ephemeralRunnerSetTestTimeout, ephemeralRunnerSetTestInterval).Should(BeTrue())
 
-		// AppliedActionableRevision should advance because there was nothing safe to clean up.
+		// AppliedActionableRevision should advance after cleanup completes.
 		Eventually(func() int64 {
+			_, err := controller.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+
 			updatedSet := new(v1alpha1.EphemeralRunnerSet)
 			if err := k8sClient.Get(ctx, request.NamespacedName, updatedSet); err != nil {
 				return 0
@@ -2050,14 +2078,25 @@ var _ = Describe("Test EphemeralRunnerSet actionable revision cleanup", func() {
 		err = k8sClient.Status().Patch(ctx, runnerStatusUpdated, client.MergeFrom(ephemeralRunner))
 		Expect(err).NotTo(HaveOccurred())
 
-		// Reconcile - should detect outdated runner and change phase to Outdated
-		_, err = controller.Reconcile(ctx, request)
-		Expect(err).NotTo(HaveOccurred())
+		Eventually(func(g Gomega) {
+			cachedSet := new(v1alpha1.EphemeralRunnerSet)
+			err := controller.Get(ctx, request.NamespacedName, cachedSet)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(cachedSet.Status.AppliedActionableRevision).To(Equal(int64(5)))
+
+			cachedRunner := new(v1alpha1.EphemeralRunner)
+			err = controller.Get(ctx, types.NamespacedName{Namespace: autoscalingNS.Name, Name: "test-runner-outdated"}, cachedRunner)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(cachedRunner.Status.Phase).To(Equal(v1alpha1.EphemeralRunnerPhaseOutdated))
+		}, ephemeralRunnerSetTestTimeout, ephemeralRunnerSetTestInterval).Should(Succeed())
 
 		// Verify: Phase changed to Outdated, but AppliedActionableRevision preserved
 		Eventually(func(g Gomega) {
+			_, err := controller.Reconcile(ctx, request)
+			g.Expect(err).NotTo(HaveOccurred())
+
 			updatedSet := new(v1alpha1.EphemeralRunnerSet)
-			err := k8sClient.Get(ctx, request.NamespacedName, updatedSet)
+			err = k8sClient.Get(ctx, request.NamespacedName, updatedSet)
 			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(updatedSet.Status.Phase).To(Equal(v1alpha1.EphemeralRunnerSetPhaseOutdated), "phase should change to Outdated")
 			g.Expect(updatedSet.Status.AppliedActionableRevision).To(Equal(int64(5)), "AppliedActionableRevision should be preserved")
