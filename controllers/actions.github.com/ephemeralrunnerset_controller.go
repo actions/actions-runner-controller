@@ -201,15 +201,31 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	total := ephemeralRunnersByState.scaleTotal()
 	if ephemeralRunnerSet.Spec.PatchID == 0 || ephemeralRunnerSet.Spec.PatchID != ephemeralRunnersByState.latestPatchID {
-		defer func() {
+		if len(ephemeralRunnersByState.finished) > 0 {
 			if err := r.cleanupFinishedEphemeralRunners(ctx, ephemeralRunnersByState.finished, log); err != nil {
 				log.Error(err, "failed to cleanup finished ephemeral runners")
+				return ctrl.Result{}, err
 			}
-		}()
-		log.Info("Scaling comparison", "current", total, "desired", ephemeralRunnerSet.Spec.Replicas)
+			if err := r.patchFinishedRunnerCleanupPatchIDStatus(ctx, req.NamespacedName, ephemeralRunnerSet.Spec.PatchID); err != nil {
+				log.Error(err, "failed to update finished runner cleanup patch ID status")
+				return ctrl.Result{}, err
+			}
+			ephemeralRunnerSet.Status.FinishedRunnerCleanupPatchID = ephemeralRunnerSet.Spec.PatchID
+
+			log.Info("Finished ephemeral runners were cleaned up, deferring scaling decision")
+			return ctrl.Result{}, r.updateStatus(ctx, &ephemeralRunnerSet, ephemeralRunnersByState, log)
+		}
+
+		scaleUpTotal := total + len(ephemeralRunnersByState.deleting)
+		log.Info("Scaling comparison", "current", total, "deleting", len(ephemeralRunnersByState.deleting), "desired", ephemeralRunnerSet.Spec.Replicas)
 		switch {
-		case total < ephemeralRunnerSet.Spec.Replicas: // Handle scale up
-			count := ephemeralRunnerSet.Spec.Replicas - total
+		case scaleUpTotal < ephemeralRunnerSet.Spec.Replicas: // Handle scale up
+			if ephemeralRunnerSet.Spec.PatchID > 0 && ephemeralRunnerSet.Status.FinishedRunnerCleanupPatchID == ephemeralRunnerSet.Spec.PatchID {
+				log.Info("Skipping scale up until listener publishes a fresh desired state after finished runner cleanup", "patchID", ephemeralRunnerSet.Spec.PatchID)
+				return ctrl.Result{}, r.updateStatus(ctx, &ephemeralRunnerSet, ephemeralRunnersByState, log)
+			}
+
+			count := ephemeralRunnerSet.Spec.Replicas - scaleUpTotal
 			log.Info("Creating new ephemeral runners (scale up)", "count", count)
 			if err := r.createEphemeralRunners(ctx, &ephemeralRunnerSet, count, log); err != nil {
 				log.Error(err, "failed to make ephemeral runner")
@@ -268,6 +284,24 @@ func (r *EphemeralRunnerSetReconciler) patchAppliedActionableRevisionStatus(ctx 
 	})
 }
 
+func (r *EphemeralRunnerSetReconciler) patchFinishedRunnerCleanupPatchIDStatus(ctx context.Context, key types.NamespacedName, patchID int) error {
+	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		var latest v1alpha1.EphemeralRunnerSet
+		if err := r.Get(ctx, key, &latest); err != nil {
+			return err
+		}
+
+		original := latest.DeepCopy()
+		latest.Status.FinishedRunnerCleanupPatchID = patchID
+
+		if original.Status == latest.Status {
+			return nil
+		}
+
+		return r.Status().Patch(ctx, &latest, client.MergeFrom(original))
+	})
+}
+
 func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, state *ephemeralRunnersByState, log logr.Logger) error {
 	original := ephemeralRunnerSet.DeepCopy()
 	var phase v1alpha1.EphemeralRunnerSetPhase
@@ -280,8 +314,9 @@ func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemer
 		phase = ephemeralRunnerSet.Status.Phase
 	}
 	desiredStatus := v1alpha1.EphemeralRunnerSetStatus{
-		Phase:                     phase,
-		AppliedActionableRevision: ephemeralRunnerSet.Status.AppliedActionableRevision,
+		Phase:                        phase,
+		AppliedActionableRevision:    ephemeralRunnerSet.Status.AppliedActionableRevision,
+		FinishedRunnerCleanupPatchID: ephemeralRunnerSet.Status.FinishedRunnerCleanupPatchID,
 	}
 
 	// Update the status if needed.
