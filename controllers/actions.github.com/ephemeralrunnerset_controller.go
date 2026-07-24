@@ -37,8 +37,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
@@ -710,11 +712,45 @@ func (r *EphemeralRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager, opts .
 
 	return builderWithOptions(
 		ctrl.NewControllerManagedBy(mgr).
-			For(&v1alpha1.EphemeralRunnerSet{}).
-			Owns(&v1alpha1.EphemeralRunner{}).
-			WithEventFilter(predicate.ResourceVersionChangedPredicate{}),
+			For(&v1alpha1.EphemeralRunnerSet{}, builder.WithPredicates(ephemeralRunnerSetPrimaryPredicate())).
+			Owns(&v1alpha1.EphemeralRunner{}, builder.WithPredicates(ephemeralRunnerSetOwnedEphemeralRunnerPredicate())),
 		opts,
 	).Complete(r)
+}
+
+func ephemeralRunnerSetPrimaryPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			if e.ObjectOld == nil || e.ObjectNew == nil {
+				return false
+			}
+
+			return e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration() ||
+				!equalStringSlices(e.ObjectOld.GetFinalizers(), e.ObjectNew.GetFinalizers()) ||
+				e.ObjectOld.GetDeletionTimestamp() != e.ObjectNew.GetDeletionTimestamp()
+		},
+	}
+}
+
+func ephemeralRunnerSetOwnedEphemeralRunnerPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldRunner, oldOk := e.ObjectOld.(*v1alpha1.EphemeralRunner)
+			newRunner, newOk := e.ObjectNew.(*v1alpha1.EphemeralRunner)
+			if !oldOk || !newOk {
+				return false
+			}
+
+			if oldRunner.GetGeneration() != newRunner.GetGeneration() ||
+				!equalStringSlices(oldRunner.GetFinalizers(), newRunner.GetFinalizers()) ||
+				oldRunner.GetDeletionTimestamp() != newRunner.GetDeletionTimestamp() {
+				return true
+			}
+
+			return oldRunner.Status.Phase != newRunner.Status.Phase ||
+				oldRunner.Status.RunnerID != newRunner.Status.RunnerID
+		},
+	}
 }
 
 type ephemeralRunnerStepper struct {

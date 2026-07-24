@@ -825,32 +825,47 @@ var _ = Describe("EphemeralRunner", func() {
 				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(true))
 
-			for _, phase := range []corev1.PodPhase{corev1.PodRunning, corev1.PodPending} {
-				podCopy := pod.DeepCopy()
-				pod.Status.Phase = phase
-				// set container state to force status update
-				pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
-					Name:  v1alpha1.EphemeralRunnerContainerName,
-					State: corev1.ContainerState{},
-				})
+			podCopy := pod.DeepCopy()
+			pod.Status.Phase = corev1.PodPending
+			// set container state to force status update
+			pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
+				Name:  v1alpha1.EphemeralRunnerContainerName,
+				State: corev1.ContainerState{},
+			})
 
-				err := k8sClient.Status().Patch(ctx, pod, client.MergeFrom(podCopy))
-				Expect(err).To(BeNil(), "failed to patch pod status")
+			err := k8sClient.Status().Patch(ctx, pod, client.MergeFrom(podCopy))
+			Expect(err).To(BeNil(), "failed to patch pod status")
 
-				var updated *v1alpha1.EphemeralRunner
-				Eventually(
-					func() (v1alpha1.EphemeralRunnerPhase, error) {
-						updated = new(v1alpha1.EphemeralRunner)
-						err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated)
-						if err != nil {
-							return "", err
-						}
-						return updated.Status.Phase, nil
-					},
-					ephemeralRunnerTimeout,
-					ephemeralRunnerInterval,
-				).Should(BeEquivalentTo(phase))
-			}
+			Eventually(
+				func() (v1alpha1.EphemeralRunnerPhase, error) {
+					updated := new(v1alpha1.EphemeralRunner)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated)
+					if err != nil {
+						return "", err
+					}
+					return updated.Status.Phase, nil
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(BeEquivalentTo(v1alpha1.EphemeralRunnerPhasePending))
+
+			podCopy = pod.DeepCopy()
+			pod.Status.Phase = corev1.PodRunning
+			err = k8sClient.Status().Patch(ctx, pod, client.MergeFrom(podCopy))
+			Expect(err).To(BeNil(), "failed to patch pod status")
+
+			Consistently(
+				func() (v1alpha1.EphemeralRunnerPhase, error) {
+					updated := new(v1alpha1.EphemeralRunner)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated)
+					if err != nil {
+						return "", err
+					}
+					return updated.Status.Phase, nil
+				},
+				ephemeralRunnerInterval*3,
+				ephemeralRunnerInterval,
+			).Should(BeEquivalentTo(v1alpha1.EphemeralRunnerPhasePending), "controller should not set Running from pod status")
 		})
 
 		It("It should update ready based on the latest condition", func() {
@@ -1173,7 +1188,6 @@ var _ = Describe("EphemeralRunner", func() {
 				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(true))
 
-			// first set phase to running
 			pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
 				Name: v1alpha1.EphemeralRunnerContainerName,
 				State: corev1.ContainerState{
@@ -1186,19 +1200,15 @@ var _ = Describe("EphemeralRunner", func() {
 			err := k8sClient.Status().Update(ctx, pod)
 			Expect(err).To(BeNil())
 
-			Eventually(
-				func() (v1alpha1.EphemeralRunnerPhase, error) {
-					updated := new(v1alpha1.EphemeralRunner)
-					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated); err != nil {
-						return "", err
-					}
-					return updated.Status.Phase, nil
-				},
-				ephemeralRunnerTimeout,
-				ephemeralRunnerInterval,
-			).Should(BeEquivalentTo(v1alpha1.EphemeralRunnerPhaseRunning))
+			updated := new(v1alpha1.EphemeralRunner)
+			err = k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated)
+			Expect(err).To(BeNil())
 
-			// set phase to succeeded
+			original := updated.DeepCopy()
+			updated.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
+			err = k8sClient.Status().Patch(ctx, updated, client.MergeFrom(original))
+			Expect(err).To(BeNil())
+
 			pod.Status.Phase = corev1.PodSucceeded
 			err = k8sClient.Status().Update(ctx, pod)
 			Expect(err).To(BeNil())
@@ -1213,6 +1223,60 @@ var _ = Describe("EphemeralRunner", func() {
 				},
 				ephemeralRunnerTimeout,
 			).Should(BeEquivalentTo(v1alpha1.EphemeralRunnerPhaseRunning))
+		})
+
+		It("Controller should not set Running phase from pod status - listener owns Running transition", func() {
+			pod := new(corev1.Pod)
+			Eventually(
+				func() (bool, error) {
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod); err != nil {
+						return false, err
+					}
+					return true, nil
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(BeEquivalentTo(true))
+
+			pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
+				Name: v1alpha1.EphemeralRunnerContainerName,
+				State: corev1.ContainerState{
+					Running: &corev1.ContainerStateRunning{
+						StartedAt: metav1.Now(),
+					},
+				},
+			})
+			pod.Status.Phase = corev1.PodRunning
+			pod.Status.Conditions = append(pod.Status.Conditions, corev1.PodCondition{
+				Type:               corev1.PodReady,
+				Status:             corev1.ConditionTrue,
+				LastTransitionTime: metav1.Now(),
+			})
+			err := k8sClient.Status().Update(ctx, pod)
+			Expect(err).To(BeNil())
+
+			Consistently(
+				func() (v1alpha1.EphemeralRunnerPhase, error) {
+					updated := new(v1alpha1.EphemeralRunner)
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated); err != nil {
+						return "Unknown", err
+					}
+					return updated.Status.Phase, nil
+				},
+				ephemeralRunnerTimeout,
+			).Should(BeEquivalentTo(""))
+
+			updated := new(v1alpha1.EphemeralRunner)
+			Eventually(
+				func() (bool, error) {
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated); err != nil {
+						return false, err
+					}
+					return updated.Status.Ready, nil
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(BeEquivalentTo(true))
 		})
 	})
 

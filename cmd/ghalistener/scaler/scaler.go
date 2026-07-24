@@ -88,6 +88,7 @@ func (w *Scaler) applyDefaults() error {
 // It takes a context and a jobInfo parameter which contains the details of the started job.
 // This update marks the ephemeral runner so that the controller would have more context
 // about the ephemeral runner that should not be deleted when scaling down.
+// It also transitions the phase to Running if the runner is not in a terminal state.
 // It returns an error if there is any issue with updating the job information.
 func (w *Scaler) HandleJobStarted(ctx context.Context, jobInfo *scaleset.JobStarted) error {
 	w.logger.Info("Updating job info for the runner",
@@ -102,23 +103,50 @@ func (w *Scaler) HandleJobStarted(ctx context.Context, jobInfo *scaleset.JobStar
 
 	w.dirty = true
 
+	// Fetch current EphemeralRunner to check phase and deletion status
+	currentRunner := &v1alpha1.EphemeralRunner{}
+	err := w.clientset.RESTClient().
+		Get().
+		Prefix("apis", v1alpha1.GroupVersion.Group, v1alpha1.GroupVersion.Version).
+		Namespace(w.config.EphemeralRunnerSetNamespace).
+		Resource("EphemeralRunners").
+		Name(jobInfo.RunnerName).
+		Do(ctx).
+		Into(currentRunner)
+	if err != nil {
+		if kerrors.IsNotFound(err) {
+			w.logger.Info("Ephemeral runner not found, skipping job info update", "runnerName", jobInfo.RunnerName)
+			return nil
+		}
+		return fmt.Errorf("failed to get ephemeral runner: %w", err)
+	}
+
 	original, err := json.Marshal(&v1alpha1.EphemeralRunner{})
 	if err != nil {
 		return fmt.Errorf("failed to marshal empty ephemeral runner: %w", err)
 	}
 
-	patch, err := json.Marshal(
-		&v1alpha1.EphemeralRunner{
-			Status: v1alpha1.EphemeralRunnerStatus{
-				JobRequestID:      jobInfo.RunnerRequestID,
-				JobRepositoryName: fmt.Sprintf("%s/%s", jobInfo.OwnerName, jobInfo.RepositoryName),
-				JobID:             jobInfo.JobID,
-				WorkflowRunID:     jobInfo.WorkflowRunID,
-				JobWorkflowRef:    jobInfo.JobWorkflowRef,
-				JobDisplayName:    jobInfo.JobDisplayName,
-			},
+	// Build patch with job fields
+	patchRunner := &v1alpha1.EphemeralRunner{
+		Status: v1alpha1.EphemeralRunnerStatus{
+			JobRequestID:      jobInfo.RunnerRequestID,
+			JobRepositoryName: fmt.Sprintf("%s/%s", jobInfo.OwnerName, jobInfo.RepositoryName),
+			JobID:             jobInfo.JobID,
+			WorkflowRunID:     jobInfo.WorkflowRunID,
+			JobWorkflowRef:    jobInfo.JobWorkflowRef,
+			JobDisplayName:    jobInfo.JobDisplayName,
 		},
-	)
+	}
+
+	// Only set Running phase if current phase is not terminal/failure and deletion is not in progress
+	if currentRunner.DeletionTimestamp == nil &&
+		currentRunner.Status.Phase != v1alpha1.EphemeralRunnerPhaseFailed &&
+		currentRunner.Status.Phase != v1alpha1.EphemeralRunnerPhaseSucceeded &&
+		currentRunner.Status.Phase != v1alpha1.EphemeralRunnerPhaseOutdated {
+		patchRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
+	}
+
+	patch, err := json.Marshal(patchRunner)
 	if err != nil {
 		return fmt.Errorf("failed to marshal ephemeral runner patch: %w", err)
 	}

@@ -1619,6 +1619,14 @@ var _ = Describe("EphemeralRunner phase metrics", func() {
 		err = k8sClient.Status().Patch(ctx, podRunning, client.MergeFrom(podPending))
 		Expect(err).NotTo(HaveOccurred(), "failed to patch pod to running")
 
+		runnerRunning := new(v1alpha1.EphemeralRunner)
+		err = k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, runnerRunning)
+		Expect(err).NotTo(HaveOccurred(), "failed to get ephemeral runner before listener-owned running patch")
+		runnerRunningOriginal := runnerRunning.DeepCopy()
+		runnerRunning.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
+		err = k8sClient.Status().Patch(ctx, runnerRunning, client.MergeFrom(runnerRunningOriginal))
+		Expect(err).NotTo(HaveOccurred(), "failed to simulate listener running phase patch")
+
 		_, err = controller.Reconcile(ctx, request)
 		Expect(err).NotTo(HaveOccurred(), "failed to reconcile running pod")
 		expectEphemeralRunnerPhase(ctx, ephemeralRunner, v1alpha1.EphemeralRunnerPhaseRunning)

@@ -36,8 +36,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
@@ -848,6 +850,7 @@ func (r *EphemeralRunnerReconciler) createSecret(ctx context.Context, runner *v1
 
 // updateRunStatusFromPod is responsible for updating non-exiting statuses.
 // It should never update phase to Failed or Succeeded
+// It should never update phase to Running (listener owns that transition)
 //
 // The event should not be re-queued since the termination status should be set
 // before proceeding with reconciliation logic
@@ -865,8 +868,14 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 		}
 	}
 
-	phase := v1alpha1.EphemeralRunnerPhase(pod.Status.Phase)
-	phaseChanged := ephemeralRunner.Status.Phase != phase
+	phase := ephemeralRunner.Status.Phase
+	if pod.Status.Phase == corev1.PodPending && phase == "" {
+		phase = v1alpha1.EphemeralRunnerPhasePending
+	}
+
+	// Controller no longer sets Running phase - listener owns that transition when job is assigned.
+	// The controller still publishes the initial Pending phase while the runner pod is starting.
+	phaseChanged := phase != ephemeralRunner.Status.Phase
 	readyChanged := ready != ephemeralRunner.Status.Ready
 
 	if !phaseChanged && !readyChanged {
@@ -966,11 +975,105 @@ func (r *EphemeralRunnerReconciler) SetupWithManager(mgr ctrl.Manager, opts ...O
 
 	return builderWithOptions(
 		ctrl.NewControllerManagedBy(mgr).
-			For(&v1alpha1.EphemeralRunner{}).
-			Owns(&corev1.Pod{}).
-			WithEventFilter(predicate.ResourceVersionChangedPredicate{}),
+			For(&v1alpha1.EphemeralRunner{}, builder.WithPredicates(ephemeralRunnerPrimaryPredicate())).
+			Owns(&corev1.Pod{}, builder.WithPredicates(ephemeralRunnerOwnedPodPredicate())),
 		opts,
 	).Complete(r)
+}
+
+func ephemeralRunnerPrimaryPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			if e.ObjectOld == nil || e.ObjectNew == nil {
+				return false
+			}
+
+			return e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration() ||
+				!equalStringSlices(e.ObjectOld.GetFinalizers(), e.ObjectNew.GetFinalizers()) ||
+				e.ObjectOld.GetDeletionTimestamp() != e.ObjectNew.GetDeletionTimestamp()
+		},
+	}
+}
+
+func ephemeralRunnerOwnedPodPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldPod, oldOk := e.ObjectOld.(*corev1.Pod)
+			newPod, newOk := e.ObjectNew.(*corev1.Pod)
+			if !oldOk || !newOk {
+				return false
+			}
+
+			if oldPod.Status.Phase != newPod.Status.Phase {
+				return true
+			}
+
+			if !equalContainerStatus(runnerContainerStatus(oldPod), runnerContainerStatus(newPod)) {
+				return true
+			}
+
+			if !equalContainerStatusesByName(oldPod.Status.InitContainerStatuses, newPod.Status.InitContainerStatuses) {
+				return true
+			}
+
+			return oldPod.GetDeletionTimestamp() != newPod.GetDeletionTimestamp()
+		},
+	}
+}
+
+func equalContainerStatusesByName(old, new []corev1.ContainerStatus) bool {
+	if len(old) != len(new) {
+		return false
+	}
+
+	newByName := make(map[string]*corev1.ContainerStatus, len(new))
+	for i := range new {
+		newByName[new[i].Name] = &new[i]
+	}
+
+	for i := range old {
+		newStatus, ok := newByName[old[i].Name]
+		if !ok {
+			return false
+		}
+		if !equalContainerStatus(&old[i], newStatus) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func equalContainerStatus(old, new *corev1.ContainerStatus) bool {
+	if old == nil && new == nil {
+		return true
+	}
+	if old == nil || new == nil {
+		return false
+	}
+
+	if containerStateString(old.State) != containerStateString(new.State) {
+		return false
+	}
+
+	if old.State.Terminated != nil && new.State.Terminated != nil && old.State.Terminated.ExitCode != new.State.Terminated.ExitCode {
+		return false
+	}
+
+	return old.Ready == new.Ready
+}
+
+func containerStateString(state corev1.ContainerState) string {
+	if state.Running != nil {
+		return "running"
+	}
+	if state.Terminated != nil {
+		return "terminated"
+	}
+	if state.Waiting != nil {
+		return "waiting"
+	}
+	return "unknown"
 }
 
 func runnerContainerStatus(pod *corev1.Pod) *corev1.ContainerStatus {
