@@ -283,8 +283,8 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			original.Do()
 			listenerRoleBinding.Annotations = desiredAnnotations
 		}
-		rulesModified := !cmp.Equal(listenerRoleBinding.RoleRef, desiredRoleBinding.RoleRef)
-		if rulesModified {
+		roleRefModified := !cmp.Equal(listenerRoleBinding.RoleRef, desiredRoleBinding.RoleRef)
+		if roleRefModified {
 			original.Do()
 			listenerRoleBinding.RoleRef = desiredRoleBinding.RoleRef
 		}

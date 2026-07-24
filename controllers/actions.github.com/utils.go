@@ -36,7 +36,7 @@ func (o *once[T]) Do() T {
 
 func (o *once[T]) Get() T {
 	if !o.Called() {
-		panic("not done")
+		panic("once.Get called before Do")
 	}
 	return o.value
 }

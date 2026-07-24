@@ -373,8 +373,8 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		}
 
 		original := newOnce(listener.DeepCopy)
-		desiredLabels, listnerLabelsModified := r.mergeLabels(listener.Labels, desired.Labels)
-		if listnerLabelsModified {
+		desiredLabels, listenerLabelsModified := r.mergeLabels(listener.Labels, desired.Labels)
+		if listenerLabelsModified {
 			original.Do()
 			listener.Labels = desiredLabels
 		}
