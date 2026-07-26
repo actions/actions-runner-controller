@@ -354,12 +354,6 @@ func (ars *AutoscalingRunnerSet) Hash() string {
 	return hash.ComputeTemplateHash(d)
 }
 
-func (ars *AutoscalingRunnerSet) ListenerSpecHash() string {
-	arsSpec := ars.Spec.DeepCopy()
-	spec := arsSpec
-	return hash.ComputeTemplateHash(&spec)
-}
-
 func (ars *AutoscalingRunnerSet) GitHubConfigSecret() string {
 	return ars.Spec.GitHubConfigSecret
 }
@@ -385,28 +379,6 @@ func (ars *AutoscalingRunnerSet) VaultProxy() *ProxyConfig {
 		return ars.Spec.VaultConfig.Proxy
 	}
 	return nil
-}
-
-func (ars *AutoscalingRunnerSet) RunnerSetSpecHash() string {
-	type runnerSetSpec struct {
-		GitHubConfigUrl    string
-		GitHubConfigSecret string
-		RunnerGroup        string
-		RunnerScaleSetName string
-		Proxy              *ProxyConfig
-		GitHubServerTLS    *TLSConfig
-		Template           corev1.PodTemplateSpec
-	}
-	spec := &runnerSetSpec{
-		GitHubConfigUrl:    ars.Spec.GitHubConfigUrl,
-		GitHubConfigSecret: ars.Spec.GitHubConfigSecret,
-		RunnerGroup:        ars.Spec.RunnerGroup,
-		RunnerScaleSetName: ars.Spec.RunnerScaleSetName,
-		Proxy:              ars.Spec.Proxy,
-		GitHubServerTLS:    ars.Spec.GitHubServerTLS,
-		Template:           ars.Spec.Template,
-	}
-	return hash.ComputeTemplateHash(&spec)
 }
 
 // +kubebuilder:object:root=true
