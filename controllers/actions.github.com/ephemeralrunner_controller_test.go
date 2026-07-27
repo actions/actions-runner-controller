@@ -1285,6 +1285,193 @@ var _ = Describe("EphemeralRunner", func() {
 		})
 	})
 
+	Describe("Registration finalizer force removal", func() {
+		var ctx context.Context
+		var mgr ctrl.Manager
+		var autoscalingNS *corev1.Namespace
+		var configSecret *corev1.Secret
+		var controller *EphemeralRunnerReconciler
+		var ephemeralRunner *v1alpha1.EphemeralRunner
+		var forceTimeout time.Duration
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
+			configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
+		})
+
+		JustBeforeEach(func() {
+			controller = &EphemeralRunnerReconciler{
+				Client:                            mgr.GetClient(),
+				Scheme:                            mgr.GetScheme(),
+				Log:                               logf.Log,
+				RegistrationFinalizerForceTimeout: forceTimeout,
+				ResourceBuilder: ResourceBuilder{
+					SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient(
+						scalefake.WithClient(
+							scalefake.NewClient(
+								scalefake.WithGenerateJitRunnerConfig(
+									&scaleset.RunnerScaleSetJitRunnerConfig{
+										Runner:           &scaleset.RunnerReference{ID: 1, Name: "test-runner"},
+										EncodedJITConfig: "fake-jit-config",
+									},
+									nil,
+								),
+								scalefake.WithRemoveRunner(scaleset.JobStillRunningError),
+							),
+						),
+					)),
+				},
+			}
+
+			err := controller.SetupWithManager(mgr)
+			Expect(err).To(BeNil(), "failed to setup controller")
+
+			ephemeralRunner = newExampleRunner("test-runner", autoscalingNS.Name, configSecret.Name)
+			err = k8sClient.Create(ctx, ephemeralRunner)
+			Expect(err).To(BeNil(), "failed to create ephemeral runner")
+
+			startManagers(GinkgoT(), mgr)
+
+			Eventually(
+				func() ([]string, error) {
+					er := new(v1alpha1.EphemeralRunner)
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, er); err != nil {
+						return nil, err
+					}
+					n := len(er.Finalizers)
+					return er.Finalizers[:n:n], nil
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(ContainElements(ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName), "both finalizers should be added")
+
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, new(corev1.Pod))
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(Succeed(), "runner pod should be created")
+		})
+
+		deleteEphemeralRunnerAndWaitForTerminating := func() {
+			err := k8sClient.Delete(ctx, ephemeralRunner)
+			Expect(err).To(BeNil(), "failed to delete ephemeral runner")
+
+			Eventually(
+				func() (bool, error) {
+					er := new(v1alpha1.EphemeralRunner)
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, er); err != nil {
+						return false, err
+					}
+					return !er.DeletionTimestamp.IsZero(), nil
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(BeTrue(), "ephemeral runner should be terminating but held by finalizers")
+		}
+
+		Context("with a short force timeout", func() {
+			BeforeEach(func() {
+				forceTimeout = time.Second
+			})
+
+			It("force-removes the registration finalizer when the pod is gone and deletion exceeded the timeout", func() {
+				deleteEphemeralRunnerAndWaitForTerminating()
+
+				Consistently(
+					func() error {
+						return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, new(v1alpha1.EphemeralRunner))
+					},
+					2*time.Second,
+					ephemeralRunnerInterval,
+				).Should(Succeed(), "ephemeral runner should stay terminating while the pod exists")
+
+				pod := new(corev1.Pod)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+				Expect(err).To(BeNil(), "failed to get runner pod")
+				err = k8sClient.Delete(ctx, pod)
+				Expect(err).To(BeNil(), "failed to delete runner pod")
+
+				Eventually(
+					func() bool {
+						err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, new(v1alpha1.EphemeralRunner))
+						return kerrors.IsNotFound(err)
+					},
+					ephemeralRunnerTimeout,
+					ephemeralRunnerInterval,
+				).Should(BeTrue(), "ephemeral runner should be force-finalized and deleted")
+			})
+
+			It("force-removes the registration finalizer when the pod is in a terminal phase and deletion exceeded the timeout", func() {
+				deleteEphemeralRunnerAndWaitForTerminating()
+
+				Consistently(
+					func() error {
+						return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, new(v1alpha1.EphemeralRunner))
+					},
+					2*time.Second,
+					ephemeralRunnerInterval,
+				).Should(Succeed(), "ephemeral runner should stay terminating while the pod is not terminal")
+
+				pod := new(corev1.Pod)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+				Expect(err).To(BeNil(), "failed to get runner pod")
+				pod.Status.Phase = corev1.PodFailed
+				err = k8sClient.Status().Update(ctx, pod)
+				Expect(err).To(BeNil(), "failed to update pod status")
+
+				Eventually(
+					func() bool {
+						err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, new(v1alpha1.EphemeralRunner))
+						return kerrors.IsNotFound(err)
+					},
+					ephemeralRunnerTimeout,
+					ephemeralRunnerInterval,
+				).Should(BeTrue(), "ephemeral runner should be force-finalized and deleted")
+			})
+		})
+
+		Context("with a long force timeout", func() {
+			BeforeEach(func() {
+				forceTimeout = 5 * time.Minute
+			})
+
+			It("does not force-remove the registration finalizer before the timeout even when the pod is gone", func() {
+				deleteEphemeralRunnerAndWaitForTerminating()
+
+				pod := new(corev1.Pod)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+				Expect(err).To(BeNil(), "failed to get runner pod")
+				err = k8sClient.Delete(ctx, pod)
+				Expect(err).To(BeNil(), "failed to delete runner pod")
+
+				Eventually(
+					func() bool {
+						err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, new(corev1.Pod))
+						return kerrors.IsNotFound(err)
+					},
+					ephemeralRunnerTimeout,
+					ephemeralRunnerInterval,
+				).Should(BeTrue(), "runner pod should be gone")
+
+				Consistently(
+					func() ([]string, error) {
+						er := new(v1alpha1.EphemeralRunner)
+						if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, er); err != nil {
+							return nil, err
+						}
+						n := len(er.Finalizers)
+						return er.Finalizers[:n:n], nil
+					},
+					3*time.Second,
+					ephemeralRunnerInterval,
+				).Should(ContainElement(ephemeralRunnerActionsFinalizerName), "registration finalizer should be kept before the timeout")
+			})
+		})
+	})
+
 	Describe("Pod proxy config", func() {
 		var ctx context.Context
 		var mgr ctrl.Manager
