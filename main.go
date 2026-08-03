@@ -340,6 +340,7 @@ func main() {
 			Client:          mgr.GetClient(),
 			Log:             log.WithName("EphemeralRunner").WithValues("version", build.Version),
 			Scheme:          mgr.GetScheme(),
+			PublishMetrics:  metricsAddr != "0",
 			ResourceBuilder: rb,
 		}).SetupWithManager(mgr, runnerOpts...); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunner")
@@ -350,7 +351,6 @@ func main() {
 			Client:          mgr.GetClient(),
 			Log:             log.WithName("EphemeralRunnerSet").WithValues("version", build.Version),
 			Scheme:          mgr.GetScheme(),
-			PublishMetrics:  metricsAddr != "0",
 			ResourceBuilder: rb,
 		}).SetupWithManager(mgr, controllerOpts...); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunnerSet")

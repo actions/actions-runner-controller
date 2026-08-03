@@ -228,7 +228,3 @@ type EphemeralRunnerList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []EphemeralRunner `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&EphemeralRunner{}, &EphemeralRunnerList{})
-}

@@ -16541,16 +16541,8 @@ spec:
             status:
               description: AutoscalingRunnerSetStatus defines the observed state of AutoscalingRunnerSet
               properties:
-                currentRunners:
-                  type: integer
-                failedEphemeralRunners:
-                  type: integer
-                pendingEphemeralRunners:
-                  type: integer
                 phase:
                   type: string
-                runningEphemeralRunners:
-                  type: integer
               type: object
           type: object
       served: true

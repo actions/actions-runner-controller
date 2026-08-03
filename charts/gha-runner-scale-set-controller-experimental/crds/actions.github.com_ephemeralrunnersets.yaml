@@ -18,21 +18,6 @@ spec:
         - jsonPath: .spec.replicas
           name: DesiredReplicas
           type: integer
-        - jsonPath: .status.currentReplicas
-          name: CurrentReplicas
-          type: integer
-        - jsonPath: .status.pendingEphemeralRunners
-          name: Pending Runners
-          type: integer
-        - jsonPath: .status.runningEphemeralRunners
-          name: Running Runners
-          type: integer
-        - jsonPath: .status.finishedEphemeralRunners
-          name: Finished Runners
-          type: integer
-        - jsonPath: .status.deletingEphemeralRunners
-          name: Deleting Runners
-          type: integer
         - jsonPath: .status.phase
           name: Phase
           type: string
@@ -8310,18 +8295,9 @@ spec:
             status:
               description: EphemeralRunnerSetStatus defines the observed state of EphemeralRunnerSet
               properties:
-                currentReplicas:
-                  description: CurrentReplicas is the number of currently running EphemeralRunner resources being managed by this EphemeralRunnerSet.
-                  type: integer
-                failedEphemeralRunners:
-                  type: integer
-                pendingEphemeralRunners:
-                  type: integer
                 phase:
                   description: EphemeralRunnerSetPhase is the phase of the ephemeral runner set resource
                   type: string
-                runningEphemeralRunners:
-                  type: integer
               type: object
           type: object
       served: true
