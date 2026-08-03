@@ -2099,6 +2099,101 @@ func TestTemplateRenderedAutoScalingRunnerSet_ExtraContainers(t *testing.T) {
 	assert.Equal(t, "192.0.2.1", ars.Spec.Template.Spec.DNSConfig.Nameservers[0], "DNS Nameserver should be set")
 }
 
+// Overriding template.spec.containers to set only e.g. resources on the
+// "runner" container must not drop the chart's default image/command --
+// Helm replaces list values wholesale rather than merging list items, so
+// without a template-side fallback the resulting container has no image,
+// and the pod fails admission entirely.
+func TestTemplateRenderedAutoScalingRunnerSet_RunnerResourcesOnlyKeepsDefaultImageAndCommand(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testCases := []struct {
+		name           string
+		valuesFile     string
+		containerIndex int
+	}{
+		{name: "default mode", valuesFile: "values_runner_resources_only.yaml", containerIndex: 0},
+		{name: "dind mode", valuesFile: "values_runner_resources_only_dind.yaml", containerIndex: 0},
+		{name: "kubernetes mode", valuesFile: "values_runner_resources_only_kubernetes.yaml", containerIndex: 0},
+		{name: "kubernetes-novolume mode", valuesFile: "values_runner_resources_only_kubernetes_novolume.yaml", containerIndex: 0},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			testValuesPath, err := filepath.Abs("../tests/" + tc.valuesFile)
+			require.NoError(t, err)
+
+			releaseName := "test-runners"
+			namespaceName := "test-" + strings.ToLower(random.UniqueID())
+
+			options := &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"controllerServiceAccount.name":      "arc",
+					"controllerServiceAccount.namespace": "arc-system",
+				},
+				ValuesFiles:    []string{testValuesPath},
+				KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+			}
+
+			output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"}, "--debug")
+
+			var ars v1alpha1.AutoscalingRunnerSet
+			helm.UnmarshalK8SYaml(t, output, &ars)
+
+			runner := ars.Spec.Template.Spec.Containers[tc.containerIndex]
+			assert.Equal(t, "runner", runner.Name)
+			assert.Equal(t, "ghcr.io/actions/actions-runner:latest", runner.Image, "runner container should keep the chart's default image")
+			assert.Equal(t, []string{"/home/runner/run.sh"}, runner.Command, "runner container should keep the chart's default command")
+			assert.Equal(t, "50m", runner.Resources.Requests.Cpu().String(), "user-supplied resources should still be applied")
+			assert.Equal(t, "50Mi", runner.Resources.Requests.Memory().String(), "user-supplied resources should still be applied")
+			assert.Equal(t, "2Gi", runner.Resources.Limits.Memory().String(), "user-supplied resources should still be applied")
+		})
+	}
+}
+
+// A user-supplied custom image should never be paired with a forced default
+// command -- if they haven't set command either, leave it unset rather than
+// assuming their custom image expects the stock runner's entrypoint.
+func TestTemplateRenderedAutoScalingRunnerSet_CustomImageWithoutCommandIsNotForced(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values_runner_custom_image_no_command.yaml")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+		},
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"}, "--debug")
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	runner := ars.Spec.Template.Spec.Containers[0]
+	assert.Equal(t, "runner", runner.Name)
+	assert.Equal(t, "my-custom-runner-image:latest", runner.Image, "user-supplied custom image should be respected")
+	assert.Empty(t, runner.Command, "command should not be forced onto a custom image")
+}
+
 func TestTemplateRenderedAutoScalingRunnerSet_RestartPolicy(t *testing.T) {
 	t.Parallel()
 

@@ -96,6 +96,22 @@ annotations:
 {{- include "gha-runner-scale-set.fullname" . | replace "_" "-" }}-kube-mode
 {{- end }}
 
+{{/*
+Default image/command for the "runner" container, mirroring values.yaml's
+template.spec.containers default. Helm replaces list values wholesale rather
+than merging list items, so a user-supplied template.spec.containers entry
+for "runner" (e.g. to set only resources) otherwise loses image/command
+entirely -- these are used as a fallback in each mode's runner-container
+render logic when the user's override doesn't set that key.
+*/}}
+{{- define "gha-runner-scale-set.defaultRunnerImage" -}}
+ghcr.io/actions/actions-runner:latest
+{{- end -}}
+
+{{- define "gha-runner-scale-set.defaultRunnerCommand" -}}
+["/home/runner/run.sh"]
+{{- end -}}
+
 {{- define "gha-runner-scale-set.dind-init-container" -}}
 {{- range $i, $val := .Values.template.spec.containers }}
   {{- if eq $val.name "runner" }}
@@ -220,6 +236,13 @@ volumeMounts:
 {{ $key }}: {{ $val | toYaml | nindent 2 }}
       {{- end }}
     {{- end }}
+    {{- $usingDefaultRunnerImage := not (hasKey $container "image") }}
+    {{- if $usingDefaultRunnerImage }}
+image: {{ include "gha-runner-scale-set.defaultRunnerImage" . }}
+    {{- end }}
+    {{- if and $usingDefaultRunnerImage (not (hasKey $container "command")) }}
+command: {{ include "gha-runner-scale-set.defaultRunnerCommand" . }}
+    {{- end }}
     {{- $setDockerHost := 1 }}
     {{- $setRunnerWaitDocker := 1 }}
     {{- $setNodeExtraCaCerts := 0 }}
@@ -308,6 +331,13 @@ volumeMounts:
       {{- if and (ne $key "env") (ne $key "volumeMounts") (ne $key "name") }}
 {{ $key }}: {{ $val | toYaml | nindent 2 }}
       {{- end }}
+    {{- end }}
+    {{- $usingDefaultRunnerImage := not (hasKey $container "image") }}
+    {{- if $usingDefaultRunnerImage }}
+image: {{ include "gha-runner-scale-set.defaultRunnerImage" . }}
+    {{- end }}
+    {{- if and $usingDefaultRunnerImage (not (hasKey $container "command")) }}
+command: {{ include "gha-runner-scale-set.defaultRunnerCommand" . }}
     {{- end }}
     {{- $setContainerHooks := 1 }}
     {{- $setPodName := 1 }}
@@ -403,6 +433,14 @@ volumeMounts:
       {{- end }}
 {{ $key }}: {{ $val | toYaml | nindent 2 }}
       {{- end }}
+    {{- end }}
+    {{- $usingDefaultRunnerImage := not $setRunnerImage }}
+    {{- if $usingDefaultRunnerImage }}
+      {{- $setRunnerImage = include "gha-runner-scale-set.defaultRunnerImage" . }}
+image: {{ $setRunnerImage }}
+    {{- end }}
+    {{- if and $usingDefaultRunnerImage (not (hasKey $container "command")) }}
+command: {{ include "gha-runner-scale-set.defaultRunnerCommand" . }}
     {{- end }}
     {{- $setContainerHooks := 1 }}
     {{- $setPodName := 1 }}
@@ -501,6 +539,13 @@ volumeMounts: []
     {{- if and (ne $key "env") (ne $key "volumeMounts") (ne $key "name") }}
   {{ $key }}: {{ $val | toYaml | nindent 4 }}
     {{- end }}
+  {{- end }}
+  {{- $usingDefaultRunnerImage := not (hasKey $container "image") }}
+  {{- if $usingDefaultRunnerImage }}
+  image: {{ include "gha-runner-scale-set.defaultRunnerImage" . }}
+  {{- end }}
+  {{- if and $usingDefaultRunnerImage (not (hasKey $container "command")) }}
+  command: {{ include "gha-runner-scale-set.defaultRunnerCommand" . }}
   {{- end }}
   {{- $setNodeExtraCaCerts := 0 }}
   {{- $setRunnerUpdateCaCerts := 0 }}
