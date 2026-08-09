@@ -422,7 +422,7 @@ func TestGetScaleUpTargetWithFunctionPropagatesTraverseError(t *testing.T) {
 		t.Fatal("expected the error raised while resolving a candidate runner group to propagate, got nil")
 	}
 	if err.Error() != wantErr.Error() {
-		t.Fatalf("expected error %q to propagate unchanged, got %q", wantErr, err)
+		t.Fatalf("expected error %v to propagate unchanged, got %v", wantErr, err)
 	}
 }
 
