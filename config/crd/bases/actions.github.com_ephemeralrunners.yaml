@@ -8299,6 +8299,28 @@ spec:
                     format: date-time
                     type: string
                   type: object
+                jobCompletion:
+                  description: JobCompletion records the terminal job event received for this runner.
+                  properties:
+                    finishedAt:
+                      format: date-time
+                      type: string
+                    jobId:
+                      type: string
+                    result:
+                      type: string
+                    runnerId:
+                      type: integer
+                    workflowRunId:
+                      format: int64
+                      type: integer
+                  required:
+                    - finishedAt
+                    - jobId
+                    - result
+                    - runnerId
+                    - workflowRunId
+                  type: object
                 jobDisplayName:
                   type: string
                 jobId:

@@ -185,6 +185,35 @@ var _ = Describe("EphemeralRunner", func() {
 			).Should(BeEquivalentTo(ephemeralRunner.Name))
 		})
 
+		It("deletes a live runner after receiving its exact terminal job event", func() {
+			created := new(v1alpha1.EphemeralRunner)
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(ephemeralRunner), created)).To(Succeed())
+				g.Expect(created.Finalizers).To(ConsistOf(ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName))
+
+				pod := new(corev1.Pod)
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(ephemeralRunner), pod)).To(Succeed())
+			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed())
+
+			created.Status.RunnerID = 2402
+			created.Status.RunnerName = created.Name
+			created.Status.JobID = "85cb98eb-2919-5766-872c-cc997f618c1f"
+			created.Status.WorkflowRunID = 31753891150
+			created.Status.JobCompletion = &v1alpha1.EphemeralRunnerJobCompletion{
+				Result:        "failed",
+				RunnerID:      created.Status.RunnerID,
+				JobID:         created.Status.JobID,
+				WorkflowRunID: created.Status.WorkflowRunID,
+				FinishedAt:    metav1.NewTime(time.Now().Add(-completedJobRunnerGracePeriod - time.Second)),
+			}
+			Expect(k8sClient.Status().Update(ctx, created)).To(Succeed())
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(ephemeralRunner), new(v1alpha1.EphemeralRunner))
+				return kerrors.IsNotFound(err)
+			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeTrue())
+		})
+
 		It("It should re-create pod on failure and no job assigned", func() {
 			pod := new(corev1.Pod)
 			Eventually(func() (bool, error) {

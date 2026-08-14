@@ -12,6 +12,7 @@ import (
 	"github.com/actions/scaleset/listener"
 	jsonpatch "github.com/evanphx/json-patch"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -156,6 +157,59 @@ func (w *Scaler) HandleJobStarted(ctx context.Context, jobInfo *scaleset.JobStar
 
 func (w *Scaler) HandleJobCompleted(ctx context.Context, msg *scaleset.JobCompleted) error {
 	w.dirty = true
+
+	w.logger.Info("Recording completed job for the runner",
+		"runnerName", msg.RunnerName,
+		"runnerId", msg.RunnerID,
+		"jobId", msg.JobID,
+		"workflowRunId", msg.WorkflowRunID,
+		"result", msg.Result,
+		"finishedAt", msg.FinishTime)
+
+	original, err := json.Marshal(&v1alpha1.EphemeralRunner{})
+	if err != nil {
+		return fmt.Errorf("failed to marshal empty ephemeral runner: %w", err)
+	}
+
+	patch, err := json.Marshal(&v1alpha1.EphemeralRunner{
+		Status: v1alpha1.EphemeralRunnerStatus{
+			JobCompletion: &v1alpha1.EphemeralRunnerJobCompletion{
+				Result:        msg.Result,
+				RunnerID:      msg.RunnerID,
+				JobID:         msg.JobID,
+				WorkflowRunID: msg.WorkflowRunID,
+				FinishedAt:    metav1.NewTime(msg.FinishTime),
+			},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to marshal ephemeral runner completion patch: %w", err)
+	}
+
+	mergePatch, err := jsonpatch.CreateMergePatch(original, patch)
+	if err != nil {
+		return fmt.Errorf("failed to create completion merge patch for ephemeral runner: %w", err)
+	}
+
+	patchedStatus := &v1alpha1.EphemeralRunner{}
+	err = w.clientset.RESTClient().
+		Patch(types.MergePatchType).
+		Prefix("apis", v1alpha1.GroupVersion.Group, v1alpha1.GroupVersion.Version).
+		Namespace(w.config.EphemeralRunnerSetNamespace).
+		Resource("EphemeralRunners").
+		Name(msg.RunnerName).
+		SubResource("status").
+		Body(mergePatch).
+		Do(ctx).
+		Into(patchedStatus)
+	if err != nil {
+		if kerrors.IsNotFound(err) {
+			w.logger.Info("Ephemeral runner not found, skipping completed job status patch", "runnerName", msg.RunnerName)
+			return nil
+		}
+		return fmt.Errorf("could not patch completed job status, patch JSON: %s, error: %w", string(mergePatch), err)
+	}
+
 	return nil
 }
 
