@@ -136,7 +136,7 @@ func (w *Scaler) HandleJobStarted(ctx context.Context, jobInfo *scaleset.JobStar
 		Patch(types.MergePatchType).
 		Prefix("apis", v1alpha1.GroupVersion.Group, v1alpha1.GroupVersion.Version).
 		Namespace(w.config.EphemeralRunnerSetNamespace).
-		Resource("EphemeralRunners").
+		Resource("ephemeralrunners").
 		Name(jobInfo.RunnerName).
 		SubResource("status").
 		Body(mergePatch).
@@ -196,7 +196,7 @@ func (w *Scaler) HandleJobCompleted(ctx context.Context, msg *scaleset.JobComple
 		Patch(types.MergePatchType).
 		Prefix("apis", v1alpha1.GroupVersion.Group, v1alpha1.GroupVersion.Version).
 		Namespace(w.config.EphemeralRunnerSetNamespace).
-		Resource("EphemeralRunners").
+		Resource("ephemeralrunners").
 		Name(msg.RunnerName).
 		SubResource("status").
 		Body(mergePatch).
