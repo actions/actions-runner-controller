@@ -9,6 +9,13 @@ import (
 type WorkflowRefInfo struct {
 	// Name is the workflow file name without extension
 	Name string
+	// Repo is the {owner}/{repo} hosting the workflow file, which can differ
+	// from the repository running the job when the workflow is reusable
+	// Example: myorg/myrepo
+	Repo string
+	// FilePath is the workflow file path within the hosting repository
+	// Example: .github/workflows/blank.yml
+	FilePath string
 	// Target is the target ref with type prefix retained for clarity
 	// Examples:
 	//   - heads/main (branch)
@@ -18,7 +25,8 @@ type WorkflowRefInfo struct {
 	Target string
 }
 
-// ParseWorkflowRef parses a job_workflow_ref string to extract workflow name and target
+// ParseWorkflowRef parses a job_workflow_ref string to extract workflow name,
+// hosting repository, file path, and target
 // Format: {owner}/{repo}/.github/workflows/{workflow_file}@{ref}
 // Example: mygithuborg/myrepo/.github/workflows/blank.yml@refs/heads/main
 //
@@ -47,6 +55,15 @@ func ParseWorkflowRef(workflowRef string) WorkflowRefInfo {
 	workflowFile := path.Base(workflowPath)
 	// Remove .yml or .yaml extension
 	info.Name = strings.TrimSuffix(strings.TrimSuffix(workflowFile, ".yml"), ".yaml")
+
+	// Extract the hosting repository ({owner}/{repo}) and the workflow file
+	// path within it, so that reusable workflows called from another
+	// repository remain distinguishable
+	segments := strings.SplitN(workflowPath, "/", 3)
+	if len(segments) == 3 {
+		info.Repo = segments[0] + "/" + segments[1]
+		info.FilePath = segments[2]
+	}
 
 	// Extract target from ref based on type
 	// Branch refs: refs/heads/{branch}

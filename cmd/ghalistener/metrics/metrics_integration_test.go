@@ -24,6 +24,8 @@ func TestMetricsWithWorkflowRefParsing(t *testing.T) {
 		name       string
 		jobBase    scaleset.JobMessageBase
 		wantName   string
+		wantRepo   string
+		wantPath   string
 		wantTarget string
 	}{
 		{
@@ -36,6 +38,8 @@ func TestMetricsWithWorkflowRefParsing(t *testing.T) {
 				EventName:      "push",
 			},
 			wantName:   "build",
+			wantRepo:   "actions/runner",
+			wantPath:   ".github/workflows/build.yml",
 			wantTarget: "heads/main",
 		},
 		{
@@ -48,6 +52,8 @@ func TestMetricsWithWorkflowRefParsing(t *testing.T) {
 				EventName:      "push",
 			},
 			wantName:   "ci-cd-pipeline",
+			wantRepo:   "myorg/myrepo",
+			wantPath:   ".github/workflows/ci-cd-pipeline.yml",
 			wantTarget: "heads/feature/new-metrics",
 		},
 		{
@@ -60,6 +66,8 @@ func TestMetricsWithWorkflowRefParsing(t *testing.T) {
 				EventName:      "pull_request",
 			},
 			wantName:   "pr-checks",
+			wantRepo:   "actions/runner",
+			wantPath:   ".github/workflows/pr-checks.yml",
 			wantTarget: "pull/123",
 		},
 		{
@@ -72,6 +80,8 @@ func TestMetricsWithWorkflowRefParsing(t *testing.T) {
 				EventName:      "release",
 			},
 			wantName:   "release",
+			wantRepo:   "actions/runner",
+			wantPath:   ".github/workflows/release.yml",
 			wantTarget: "tags/v1.2.3",
 		},
 	}
@@ -88,6 +98,8 @@ func TestMetricsWithWorkflowRefParsing(t *testing.T) {
 				labelKeyJobName:           tt.jobBase.JobDisplayName,
 				labelKeyJobWorkflowRef:    tt.jobBase.JobWorkflowRef,
 				labelKeyJobWorkflowName:   tt.wantName,
+				labelKeyJobWorkflowRepo:   tt.wantRepo,
+				labelKeyJobWorkflowPath:   tt.wantPath,
 				labelKeyJobWorkflowTarget: tt.wantTarget,
 				labelKeyEventName:         tt.jobBase.EventName,
 			}
