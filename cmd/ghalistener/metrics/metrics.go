@@ -75,7 +75,7 @@ var metricsHelp = metricsHelpRegistry{
 	},
 }
 
-func (e *exporter) jobLabels(jobBase *scaleset.JobMessageBase) prometheus.Labels {
+func (e *recorder) jobLabels(jobBase *scaleset.JobMessageBase) prometheus.Labels {
 	workflowRefInfo := ParseWorkflowRef(jobBase.JobWorkflowRef)
 	return prometheus.Labels{
 		labelKeyEnterprise:        e.scaleSetLabels[labelKeyEnterprise],
@@ -89,13 +89,13 @@ func (e *exporter) jobLabels(jobBase *scaleset.JobMessageBase) prometheus.Labels
 	}
 }
 
-func (e *exporter) completedJobLabels(msg *scaleset.JobCompleted) prometheus.Labels {
+func (e *recorder) completedJobLabels(msg *scaleset.JobCompleted) prometheus.Labels {
 	l := e.jobLabels(&msg.JobMessageBase)
 	l[labelKeyJobResult] = msg.Result
 	return l
 }
 
-func (e *exporter) startedJobLabels(msg *scaleset.JobStarted) prometheus.Labels {
+func (e *recorder) startedJobLabels(msg *scaleset.JobStarted) prometheus.Labels {
 	return e.jobLabels(&msg.JobMessageBase)
 }
 
@@ -114,16 +114,35 @@ type ServerExporter interface {
 
 var (
 	_ Recorder       = &discard{}
+	_ Recorder       = &recorder{}
 	_ ServerExporter = &exporter{}
 )
 
 var Discard Recorder = &discard{}
 
-type exporter struct {
-	logger         *slog.Logger
-	scaleSetLabels prometheus.Labels
+// server owns the Prometheus registry and the HTTP endpoint. One server can be
+// shared by many recorders, one per scale set, so a multiplexing listener
+// exposes all its variants on a single metrics port.
+type server struct {
+	logger *slog.Logger
 	*metrics
 	srv *http.Server
+}
+
+// recorder is a per-scale-set view over a shared server's metrics. Its
+// scaleSetLabels carry the scale set name so series from different variants do
+// not collide. It holds the shared metrics by a named field (not embedded) so
+// exporter, which embeds both server and recorder, has no ambiguous promotion.
+type recorder struct {
+	m              *metrics
+	scaleSetLabels prometheus.Labels
+}
+
+// exporter is a single-set ServerExporter: a server plus its one recorder. It
+// keeps the legacy behaviour byte-for-byte for listeners that service one set.
+type exporter struct {
+	*server
+	*recorder
 }
 
 type metrics struct {
@@ -295,6 +314,79 @@ func (e *ExporterConfig) defaults() {
 
 func NewExporter(config ExporterConfig) ServerExporter {
 	config.defaults()
+	srv := newServer(config)
+	return &exporter{
+		server: srv,
+		recorder: srv.recorderFor(
+			config.ScaleSetName,
+			config.ScaleSetNamespace,
+			config.Enterprise,
+			config.Organization,
+			config.Repository,
+		),
+	}
+}
+
+// ServerConfig configures a metrics server shared by many scale set recorders.
+// It holds the fields common to every variant on one listener; the per-scale-set
+// name and namespace are supplied to RecorderFor.
+type ServerConfig struct {
+	Enterprise     string
+	Organization   string
+	Repository     string
+	ServerAddr     string
+	ServerEndpoint string
+	Logger         *slog.Logger
+	Metrics        *v1alpha1.MetricsConfig
+}
+
+func (c *ServerConfig) defaults() {
+	if c.ServerAddr == "" {
+		c.ServerAddr = ":8080"
+	}
+	if c.ServerEndpoint == "" {
+		c.ServerEndpoint = "/metrics"
+	}
+	if c.Metrics == nil {
+		defaultMetrics := defaultMetrics
+		c.Metrics = &defaultMetrics
+	}
+}
+
+// Server is a metrics endpoint shared by one or more scale set recorders.
+type Server struct {
+	*server
+	config ServerConfig
+}
+
+// NewServer creates a metrics server that a multiplexing listener can share
+// across its scale sets. Call RecorderFor once per scale set, then ListenAndServe.
+func NewServer(config ServerConfig) *Server {
+	config.defaults()
+	return &Server{
+		server: newServer(ExporterConfig{
+			ServerAddr:     config.ServerAddr,
+			ServerEndpoint: config.ServerEndpoint,
+			Logger:         config.Logger,
+			Metrics:        config.Metrics,
+		}),
+		config: config,
+	}
+}
+
+// RecorderFor returns a recorder that stamps every series with the given scale
+// set name and namespace, sharing this server's registry and HTTP endpoint.
+func (s *Server) RecorderFor(scaleSetName, scaleSetNamespace string) Recorder {
+	return s.server.recorderFor(
+		scaleSetName,
+		scaleSetNamespace,
+		s.config.Enterprise,
+		s.config.Organization,
+		s.config.Repository,
+	)
+}
+
+func newServer(config ExporterConfig) *server {
 	reg := prometheus.NewRegistry()
 
 	metrics := installMetrics(*config.Metrics, reg, config.Logger)
@@ -305,19 +397,25 @@ func NewExporter(config ExporterConfig) ServerExporter {
 		promhttp.HandlerFor(reg, promhttp.HandlerOpts{Registry: reg}),
 	)
 
-	return &exporter{
-		logger: config.Logger.With("component", "metrics exporter"),
-		scaleSetLabels: prometheus.Labels{
-			labelKeyRunnerScaleSetName:      config.ScaleSetName,
-			labelKeyRunnerScaleSetNamespace: config.ScaleSetNamespace,
-			labelKeyEnterprise:              config.Enterprise,
-			labelKeyOrganization:            config.Organization,
-			labelKeyRepository:              config.Repository,
-		},
+	return &server{
+		logger:  config.Logger.With("component", "metrics exporter"),
 		metrics: metrics,
 		srv: &http.Server{
 			Addr:    config.ServerAddr,
 			Handler: mux,
+		},
+	}
+}
+
+func (s *server) recorderFor(scaleSetName, scaleSetNamespace, enterprise, organization, repository string) *recorder {
+	return &recorder{
+		m: s.metrics,
+		scaleSetLabels: prometheus.Labels{
+			labelKeyRunnerScaleSetName:      scaleSetName,
+			labelKeyRunnerScaleSetNamespace: scaleSetNamespace,
+			labelKeyEnterprise:              enterprise,
+			labelKeyOrganization:            organization,
+			labelKeyRepository:              repository,
 		},
 	}
 }
@@ -423,7 +521,7 @@ func installMetrics(config v1alpha1.MetricsConfig, reg *prometheus.Registry, log
 	return metrics
 }
 
-func (e *exporter) ListenAndServe(ctx context.Context) error {
+func (e *server) ListenAndServe(ctx context.Context) error {
 	e.logger.Info("starting metrics server", "addr", e.srv.Addr)
 	go func() {
 		<-ctx.Done()
@@ -435,8 +533,8 @@ func (e *exporter) ListenAndServe(ctx context.Context) error {
 	return e.srv.ListenAndServe()
 }
 
-func (e *exporter) setGauge(name string, allLabels prometheus.Labels, val float64) {
-	m, ok := e.gauges[name]
+func (e *recorder) setGauge(name string, allLabels prometheus.Labels, val float64) {
+	m, ok := e.m.gauges[name]
 	if !ok {
 		return
 	}
@@ -447,8 +545,8 @@ func (e *exporter) setGauge(name string, allLabels prometheus.Labels, val float6
 	m.gauge.With(labels).Set(val)
 }
 
-func (e *exporter) incCounter(name string, allLabels prometheus.Labels) {
-	m, ok := e.counters[name]
+func (e *recorder) incCounter(name string, allLabels prometheus.Labels) {
+	m, ok := e.m.counters[name]
 	if !ok {
 		return
 	}
@@ -459,8 +557,8 @@ func (e *exporter) incCounter(name string, allLabels prometheus.Labels) {
 	m.counter.With(labels).Inc()
 }
 
-func (e *exporter) observeHistogram(name string, allLabels prometheus.Labels, val float64) {
-	m, ok := e.histograms[name]
+func (e *recorder) observeHistogram(name string, allLabels prometheus.Labels, val float64) {
+	m, ok := e.m.histograms[name]
 	if !ok {
 		return
 	}
@@ -471,12 +569,12 @@ func (e *exporter) observeHistogram(name string, allLabels prometheus.Labels, va
 	m.histogram.With(labels).Observe(val)
 }
 
-func (e *exporter) RecordStatic(min, max int) {
+func (e *recorder) RecordStatic(min, max int) {
 	e.setGauge(MetricMaxRunners, e.scaleSetLabels, float64(max))
 	e.setGauge(MetricMinRunners, e.scaleSetLabels, float64(min))
 }
 
-func (e *exporter) RecordStatistics(stats *scaleset.RunnerScaleSetStatistic) {
+func (e *recorder) RecordStatistics(stats *scaleset.RunnerScaleSetStatistic) {
 	e.setGauge(MetricAssignedJobs, e.scaleSetLabels, float64(stats.TotalAssignedJobs))
 	e.setGauge(MetricRunningJobs, e.scaleSetLabels, float64(stats.TotalRunningJobs))
 	e.setGauge(MetricRegisteredRunners, e.scaleSetLabels, float64(stats.TotalRegisteredRunners))
@@ -484,7 +582,7 @@ func (e *exporter) RecordStatistics(stats *scaleset.RunnerScaleSetStatistic) {
 	e.setGauge(MetricIdleRunners, e.scaleSetLabels, float64(stats.TotalIdleRunners))
 }
 
-func (e *exporter) RecordJobStarted(msg *scaleset.JobStarted) {
+func (e *recorder) RecordJobStarted(msg *scaleset.JobStarted) {
 	l := e.startedJobLabels(msg)
 	e.incCounter(MetricStartedJobsTotal, l)
 
@@ -492,7 +590,7 @@ func (e *exporter) RecordJobStarted(msg *scaleset.JobStarted) {
 	e.observeHistogram(MetricJobStartupDurationSeconds, l, float64(startupDuration))
 }
 
-func (e *exporter) RecordJobCompleted(msg *scaleset.JobCompleted) {
+func (e *recorder) RecordJobCompleted(msg *scaleset.JobCompleted) {
 	if msg.RunnerAssignTime.IsZero() {
 		return
 	}
@@ -502,7 +600,7 @@ func (e *exporter) RecordJobCompleted(msg *scaleset.JobCompleted) {
 	e.observeHistogram(MetricJobExecutionDurationSeconds, l, float64(msg.FinishTime.Unix()-msg.RunnerAssignTime.Unix()))
 }
 
-func (e *exporter) RecordDesiredRunners(count int) {
+func (e *recorder) RecordDesiredRunners(count int) {
 	e.setGauge(MetricDesiredRunners, e.scaleSetLabels, float64(count))
 }
 
