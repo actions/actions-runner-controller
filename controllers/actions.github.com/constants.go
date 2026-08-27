@@ -63,6 +63,14 @@ const (
 	// existing scalar runner-scale-set-id annotation is kept for the single
 	// (default) variant so existing objects are untouched on upgrade.
 	AnnotationKeyGitHubRunnerScaleSetIDs = "actions.github.com/runner-scale-set-ids"
+
+	// AnnotationKeyGitHubListenerScaleSets carries the JSON list of scale set
+	// tuples a multi-variant AutoscalingListener must service. It rides on the
+	// AutoscalingListener object out of band, NOT in the hashed listener spec,
+	// so a single-variant listener spec and its hash stay byte-for-byte
+	// identical and existing listeners do not churn on upgrade. It is set only
+	// when the AutoscalingRunnerSet declares more than one variant.
+	AnnotationKeyGitHubListenerScaleSets = "actions.github.com/listener-scale-sets"
 )
 
 // Labels applied to listener roles
