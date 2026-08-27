@@ -121,6 +121,117 @@ type AutoscalingRunnerSetSpec struct {
 	// +optional
 	// +kubebuilder:validation:Minimum:=0
 	MinRunners *int `json:"minRunners,omitempty"`
+
+	// RunnerVariants lets one AutoscalingRunnerSet manage several runner pod
+	// shapes behind a single listener pod and a single RBAC bundle. Each variant
+	// registers its own GitHub runner scale set (its own labels) and gets its own
+	// EphemeralRunnerSet, but the listener, ServiceAccount, Role, RoleBinding and
+	// config secret are shared. Leave this empty for the classic single-shape
+	// behaviour, which stays byte-for-byte identical.
+	// +optional
+	RunnerVariants []RunnerVariant `json:"runnerVariants,omitempty"`
+}
+
+// RunnerVariant is one runner pod shape managed by an AutoscalingRunnerSet. A
+// job targeting the variant's RunnerScaleSetLabels runs on a pod built from the
+// variant's Template. Fields left unset fall back to the AutoscalingRunnerSet
+// level values.
+type RunnerVariant struct {
+	// Name identifies the variant within the AutoscalingRunnerSet. It must be a
+	// DNS label and unique among the variants. Child object names are derived as
+	// "<AutoscalingRunnerSet name>-<Name>", so keep it short enough that the
+	// combined name stays within 63 characters.
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+
+	// RunnerScaleSetLabels are the GitHub runner labels this variant registers.
+	// A workflow job that requests these labels is routed to this variant.
+	// +optional
+	RunnerScaleSetLabels []string `json:"runnerScaleSetLabels,omitempty"`
+
+	// Template is the runner pod template for this variant. When unset the
+	// AutoscalingRunnerSet level Template is used.
+	// +optional
+	Template *corev1.PodTemplateSpec `json:"template,omitempty"`
+
+	// MaxRunners overrides the AutoscalingRunnerSet level MaxRunners for this
+	// variant.
+	// +optional
+	// +kubebuilder:validation:Minimum:=0
+	MaxRunners *int `json:"maxRunners,omitempty"`
+
+	// MinRunners overrides the AutoscalingRunnerSet level MinRunners for this
+	// variant.
+	// +optional
+	// +kubebuilder:validation:Minimum:=0
+	MinRunners *int `json:"minRunners,omitempty"`
+}
+
+// EffectiveVariant is a fully resolved variant: variant level fields with the
+// AutoscalingRunnerSet level values filled in where the variant left them unset.
+// The default (single-shape) case resolves to exactly one EffectiveVariant with
+// an empty Name that reproduces today's names, labels and hashes.
+type EffectiveVariant struct {
+	// Name is empty for the default variant and equals RunnerVariant.Name
+	// otherwise.
+	Name                 string
+	RunnerScaleSetLabels []string
+	Template             corev1.PodTemplateSpec
+	MaxRunners           *int
+	MinRunners           *int
+}
+
+// EffectiveVariants resolves the spec into the list of variants to reconcile.
+// With no RunnerVariants it returns a single default variant (empty Name)
+// carrying the top level Template, labels and runner bounds, so every builder
+// can loop over the result and the default path stays byte-for-byte identical to
+// the pre-runnerVariants behaviour.
+func (s *AutoscalingRunnerSetSpec) EffectiveVariants() []EffectiveVariant {
+	if len(s.RunnerVariants) == 0 {
+		return []EffectiveVariant{
+			{
+				Name:                 "",
+				RunnerScaleSetLabels: s.RunnerScaleSetLabels,
+				Template:             s.Template,
+				MaxRunners:           s.MaxRunners,
+				MinRunners:           s.MinRunners,
+			},
+		}
+	}
+
+	variants := make([]EffectiveVariant, 0, len(s.RunnerVariants))
+	for i := range s.RunnerVariants {
+		v := &s.RunnerVariants[i]
+
+		template := s.Template
+		if v.Template != nil {
+			template = *v.Template
+		}
+
+		labels := v.RunnerScaleSetLabels
+		if labels == nil {
+			labels = s.RunnerScaleSetLabels
+		}
+
+		maxRunners := s.MaxRunners
+		if v.MaxRunners != nil {
+			maxRunners = v.MaxRunners
+		}
+
+		minRunners := s.MinRunners
+		if v.MinRunners != nil {
+			minRunners = v.MinRunners
+		}
+
+		variants = append(variants, EffectiveVariant{
+			Name:                 v.Name,
+			RunnerScaleSetLabels: labels,
+			Template:             template,
+			MaxRunners:           maxRunners,
+			MinRunners:           minRunners,
+		})
+	}
+	return variants
 }
 
 type TLSConfig struct {

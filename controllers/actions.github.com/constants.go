@@ -40,6 +40,12 @@ const (
 	LabelKeyGitHubEnterprise        = "actions.github.com/enterprise"
 	LabelKeyGitHubOrganization      = "actions.github.com/organization"
 	LabelKeyGitHubRepository        = "actions.github.com/repository"
+
+	// LabelKeyGitHubRunnerVariant names the runnerVariant an EphemeralRunnerSet
+	// belongs to when an AutoscalingRunnerSet declares more than one variant. It
+	// is not set on the single (default) variant, so existing scale sets keep
+	// their labels unchanged.
+	LabelKeyGitHubRunnerVariant = "actions.github.com/runner-variant"
 )
 
 // AutoscalingRunnerSetCleanupFinalizerName is a finalizer used to protect resources
@@ -50,6 +56,13 @@ const (
 	AnnotationKeyGitHubRunnerGroupName    = "actions.github.com/runner-group-name"
 	AnnotationKeyGitHubRunnerScaleSetName = "actions.github.com/runner-scale-set-name"
 	AnnotationKeyPatchID                  = "actions.github.com/patch-id"
+
+	// AnnotationKeyGitHubRunnerScaleSetIDs carries the JSON map of
+	// runnerVariant name to registered GitHub runner-scale-set id, set on the
+	// AutoscalingRunnerSet only when it declares more than one variant. The
+	// existing scalar runner-scale-set-id annotation is kept for the single
+	// (default) variant so existing objects are untouched on upgrade.
+	AnnotationKeyGitHubRunnerScaleSetIDs = "actions.github.com/runner-scale-set-ids"
 )
 
 // Labels applied to listener roles
