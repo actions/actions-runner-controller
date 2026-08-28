@@ -530,3 +530,44 @@ namespaceOverride: ""
 #       key: value
 #     annotations:
 #       key: value
+
+## runnerVariants lets one scale set bring up runner Pods of different specs
+## behind a SINGLE listener Pod and a SINGLE RBAC bundle. Each variant registers
+## its own runner scale set on GitHub and gets its own EphemeralRunnerSet, named
+## "<release name>-<variant name>". A workflow job is routed to the variant whose
+## runnerScaleSetLabels it requests.
+##
+## When runnerVariants is empty the scale set behaves exactly as before: one
+## EphemeralRunnerSet, one listener, one RBAC bundle.
+##
+## Each variant supplies its own runner Pod template verbatim (the same PodSpec
+## shape as the top-level `template` above, but NOT assembled from containerMode;
+## give the full spec you want for that variant). name is required, must be a DNS
+## label, and unique. maxRunners / minRunners override the top-level values for
+## that variant.
+# runnerVariants:
+#   - name: cpu
+#     runnerScaleSetLabels:
+#       - self-hosted-cpu
+#     minRunners: 0
+#     maxRunners: 10
+#     template:
+#       spec:
+#         containers:
+#           - name: runner
+#             image: ghcr.io/actions/actions-runner:latest
+#             command: ["/home/runner/run.sh"]
+#   - name: gpu
+#     runnerScaleSetLabels:
+#       - self-hosted-gpu
+#     minRunners: 0
+#     maxRunners: 2
+#     template:
+#       spec:
+#         containers:
+#           - name: runner
+#             image: ghcr.io/actions/actions-runner:latest
+#             command: ["/home/runner/run.sh"]
+#             resources:
+#               limits:
+#                 nvidia.com/gpu: "1"

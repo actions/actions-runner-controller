@@ -2987,3 +2987,71 @@ func TestAutoscalingRunnerSetCustomAnnotationsAndLabelsApplied(t *testing.T) {
 	assert.NotEqual(t, "not-propagated", autoscalingRunnerSet.Annotations["actions.github.com/cleanup-manager-role-name"])
 	assert.NotEqual(t, "not-propagated", autoscalingRunnerSet.Labels["app.kubernetes.io/component"])
 }
+
+func TestTemplateRenderedAutoScalingRunnerSet_RunnerVariants(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values_runner_variants.yaml")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
+
+	options := &helm.Options{
+		Logger:         logger.Discard,
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var ars v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &ars)
+
+	require.Len(t, ars.Spec.RunnerVariants, 2, "both variants should render")
+
+	cpu := ars.Spec.RunnerVariants[0]
+	assert.Equal(t, "cpu", cpu.Name)
+	assert.Equal(t, []string{"self-hosted-cpu"}, cpu.RunnerScaleSetLabels)
+	require.NotNil(t, cpu.MaxRunners)
+	assert.Equal(t, 10, *cpu.MaxRunners)
+	require.NotNil(t, cpu.Template)
+	require.NotEmpty(t, cpu.Template.Spec.Containers)
+	assert.Equal(t, "ghcr.io/actions/actions-runner:latest", cpu.Template.Spec.Containers[0].Image)
+
+	gpu := ars.Spec.RunnerVariants[1]
+	assert.Equal(t, "gpu", gpu.Name)
+	assert.Equal(t, []string{"self-hosted-gpu"}, gpu.RunnerScaleSetLabels)
+	require.NotNil(t, gpu.MaxRunners)
+	assert.Equal(t, 2, *gpu.MaxRunners)
+	require.NotNil(t, gpu.Template)
+	require.NotEmpty(t, gpu.Template.Spec.Containers)
+	assert.Equal(t, "ghcr.io/actions/actions-runner-gpu:latest", gpu.Template.Spec.Containers[0].Image)
+	assert.Equal(t, "1", gpu.Template.Spec.Containers[0].Resources.Limits.Name("nvidia.com/gpu", "").String())
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_RunnerVariants_DuplicateNameFails(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values_runner_variants_dup.yaml")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
+
+	options := &helm.Options{
+		Logger:         logger.Discard,
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	_, err = helm.RenderTemplateContextE(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+	require.Error(t, err, "duplicate variant names should fail rendering")
+	assert.Contains(t, err.Error(), "duplicated")
+}
