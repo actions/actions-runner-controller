@@ -88,6 +88,26 @@ func (s *AutoscalingListenerSpec) Hash() string {
 	return hash.ComputeTemplateHash(s)
 }
 
+// ListenerScaleSet is one scale set a listener services. A single-variant
+// listener carries its one scale set in the AutoscalingListenerSpec scalar
+// fields, exactly as before. A multi-variant listener carries the extra scale
+// sets out of band (a JSON annotation feeding the listener config), so the
+// AutoscalingListenerSpec and its Hash stay byte-for-byte identical for the
+// default case and existing listeners do not churn on upgrade.
+type ListenerScaleSet struct {
+	// VariantName is the runnerVariant name this scale set belongs to.
+	VariantName string `json:"variantName"`
+	// RunnerScaleSetID is the registered GitHub runner scale set id.
+	RunnerScaleSetID int `json:"runnerScaleSetId"`
+	// EphemeralRunnerSetName is the EphemeralRunnerSet the listener scales for
+	// this scale set.
+	EphemeralRunnerSetName string `json:"ephemeralRunnerSetName"`
+	// MaxRunners is the maximum number of runners for this scale set.
+	MaxRunners int `json:"maxRunners"`
+	// MinRunners is the minimum number of runners for this scale set.
+	MinRunners int `json:"minRunners"`
+}
+
 // AutoscalingListenerStatus defines the observed state of AutoscalingListener
 type AutoscalingListenerStatus struct{}
 

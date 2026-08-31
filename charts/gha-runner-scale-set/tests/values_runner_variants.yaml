@@ -1,0 +1,32 @@
+githubConfigUrl: https://github.com/actions
+githubConfigSecret:
+  github_token: gh_token12345
+controllerServiceAccount:
+  name: arc
+  namespace: arc-system
+runnerVariants:
+  - name: cpu
+    runnerScaleSetLabels:
+      - self-hosted-cpu
+    minRunners: 0
+    maxRunners: 10
+    template:
+      spec:
+        containers:
+          - name: runner
+            image: ghcr.io/actions/actions-runner:latest
+            command: ["/home/runner/run.sh"]
+  - name: gpu
+    runnerScaleSetLabels:
+      - self-hosted-gpu
+    minRunners: 0
+    maxRunners: 2
+    template:
+      spec:
+        containers:
+          - name: runner
+            image: ghcr.io/actions/actions-runner-gpu:latest
+            command: ["/home/runner/run.sh"]
+            resources:
+              limits:
+                nvidia.com/gpu: "1"

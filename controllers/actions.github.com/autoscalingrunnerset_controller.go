@@ -26,6 +26,7 @@ import (
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/build"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient"
 	"github.com/actions/scaleset"
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
@@ -219,6 +220,15 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	if shouldCreateScaleSet(&autoscalingRunnerSet) {
 		log.Info("Creating runner scale set")
 		return r.createRunnerScaleSet(ctx, &autoscalingRunnerSet, log)
+	}
+
+	// A multi-variant AutoscalingRunnerSet fans out to one EphemeralRunnerSet per
+	// variant behind a single listener. It manages its own per-variant scale sets,
+	// so the scalar runner group / name reconciliation below (a single-scale-set
+	// concept) does not apply. The single (default) variant keeps the classic
+	// one-ERS path below, byte-for-byte unchanged.
+	if isMultiVariant(&autoscalingRunnerSet) {
+		return r.reconcileMultiVariant(ctx, &autoscalingRunnerSet, log)
 	}
 
 	// Make sure the runner group of the scale set is up to date
@@ -466,30 +476,39 @@ func (r *AutoscalingRunnerSetReconciler) cleanupListener(ctx context.Context, au
 
 func (r *AutoscalingRunnerSetReconciler) cleanupEphemeralRunnerSet(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (done bool, err error) {
 	logger.Info("Cleaning up ephemeral runner set")
-	var ers v1alpha1.EphemeralRunnerSet
-	err = r.Get(
+
+	// A multi-variant scale set owns one EphemeralRunnerSet per variant, none of
+	// them named after the AutoscalingRunnerSet itself. List every owned set by
+	// label so no variant is left orphaned on delete. The single (default) set
+	// matches the same labels, so this path also covers the classic case.
+	var ersList v1alpha1.EphemeralRunnerSetList
+	if err := r.List(
 		ctx,
-		client.ObjectKey{
-			Namespace: autoscalingRunnerSet.Namespace,
-			Name:      autoscalingRunnerSet.Name,
+		&ersList,
+		client.InNamespace(autoscalingRunnerSet.Namespace),
+		client.MatchingLabels{
+			LabelKeyGitHubScaleSetName:      autoscalingRunnerSet.Name,
+			LabelKeyGitHubScaleSetNamespace: autoscalingRunnerSet.Namespace,
 		},
-		&ers,
-	)
-	switch {
-	case err == nil:
-		if ers.DeletionTimestamp.IsZero() {
-			logger.Info("Deleting the ephemeral runner set")
-			if err := r.Delete(ctx, &ers); err != nil {
-				return false, fmt.Errorf("failed to delete ephemeral runner set: %w", err)
-			}
-		}
-		return false, nil
-	case !kerrors.IsNotFound(err):
-		return false, fmt.Errorf("failed to get ephemeral runner set: %w", err)
+	); err != nil {
+		return false, fmt.Errorf("failed to list ephemeral runner sets: %w", err)
 	}
 
-	logger.Info("Ephemeral runner set is deleted")
-	return true, nil
+	if len(ersList.Items) == 0 {
+		logger.Info("Ephemeral runner set is deleted")
+		return true, nil
+	}
+
+	for i := range ersList.Items {
+		ers := &ersList.Items[i]
+		if ers.DeletionTimestamp.IsZero() {
+			logger.Info("Deleting the ephemeral runner set", "name", ers.Name)
+			if err := r.Delete(ctx, ers); err != nil && !kerrors.IsNotFound(err) {
+				return false, fmt.Errorf("failed to delete ephemeral runner set %s: %w", ers.Name, err)
+			}
+		}
+	}
+	return false, nil
 }
 
 func (r *AutoscalingRunnerSetReconciler) removeFinalizersFromDependentResources(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) error {
@@ -533,62 +552,47 @@ func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Contex
 		runnerGroupID = int(runnerGroup.ID)
 	}
 
-	runnerScaleSet, err := actionsClient.GetRunnerScaleSet(ctx, runnerGroupID, autoscalingRunnerSet.Spec.RunnerScaleSetName)
-	if err != nil {
-		logger.Error(err, "Failed to get runner scale set from Actions service",
-			"runnerGroupId",
-			strconv.Itoa(runnerGroupID),
-			"runnerScaleSetName",
-			autoscalingRunnerSet.Spec.RunnerScaleSetName)
-		return ctrl.Result{}, err
-	}
+	variants := autoscalingRunnerSet.Spec.EffectiveVariants()
 
-	if runnerScaleSet == nil {
-		labels := []scaleset.Label{
-			{
-				Name: autoscalingRunnerSet.Spec.RunnerScaleSetName,
-				Type: "System",
-			},
-		}
+	// variantIDs collects the registered id for each named variant. It is only
+	// written to the annotation when there is more than one variant, so a single
+	// (default) scale set keeps just the scalar runner-scale-set-id annotation.
+	variantIDs := map[string]int{}
+	var defaultRunnerScaleSet *scaleset.RunnerScaleSet
 
-		if labelCount := len(autoscalingRunnerSet.Spec.RunnerScaleSetLabels); labelCount > 0 {
-			unique := make(map[string]bool, labelCount+1)
-			unique[autoscalingRunnerSet.Spec.RunnerScaleSetName] = true
+	for _, variant := range variants {
+		scaleSetName := variantRunnerScaleSetName(autoscalingRunnerSet, variant)
 
-			for _, label := range autoscalingRunnerSet.Spec.RunnerScaleSetLabels {
-				if _, exists := unique[label]; exists {
-					logger.Info("Duplicate label found. Skipping adding duplicate label to runner scale set", "label", label)
-					continue
-				}
-				labels = append(labels, scaleset.Label{
-					Name: label,
-					Type: "System",
-				})
-				unique[label] = true
-			}
-		}
-		runnerScaleSet, err = actionsClient.CreateRunnerScaleSet(
-			ctx,
-			&scaleset.RunnerScaleSet{
-				Name:          autoscalingRunnerSet.Spec.RunnerScaleSetName,
-				RunnerGroupID: runnerGroupID,
-				Labels:        labels,
-				RunnerSetting: scaleset.RunnerSetting{
-					DisableUpdate: true,
-				},
-			},
-		)
+		runnerScaleSet, err := r.getOrCreateRunnerScaleSet(ctx, actionsClient, runnerGroupID, scaleSetName, variant.RunnerScaleSetLabels, logger)
 		if err != nil {
-			logger.Error(err, "Failed to create a new runner scale set on Actions service")
 			return ctrl.Result{}, err
 		}
+
+		logger.Info("Created/Reused a runner scale set", "variant", variant.Name, "id", runnerScaleSet.ID, "runnerGroupName", runnerScaleSet.RunnerGroupName)
+
+		if variant.Name == "" {
+			defaultRunnerScaleSet = runnerScaleSet
+		} else {
+			variantIDs[variant.Name] = runnerScaleSet.ID
+			// Mirror the first variant's scale set into the scalar annotations so
+			// every classic scalar-reading path (runner group / name update,
+			// listener config, delete) keeps working for a multi-variant set. The
+			// per-variant ids still live in the variant id map.
+			if defaultRunnerScaleSet == nil {
+				defaultRunnerScaleSet = runnerScaleSet
+			}
+		}
 	}
 
-	info := actionsClient.SystemInfo()
-	info.ScaleSetID = runnerScaleSet.ID
-	actionsClient.SetSystemInfo(info)
+	// SystemInfo tracks the first (default) scale set id, exactly as before. For
+	// a multi-variant set this is the default variant; each variant's listener
+	// session sets its own id from the scale set client.
+	if defaultRunnerScaleSet != nil {
+		info := actionsClient.SystemInfo()
+		info.ScaleSetID = defaultRunnerScaleSet.ID
+		actionsClient.SetSystemInfo(info)
+	}
 
-	logger.Info("Created/Reused a runner scale set", "id", runnerScaleSet.ID, "runnerGroupName", runnerScaleSet.RunnerGroupName)
 	if autoscalingRunnerSet.Annotations == nil {
 		autoscalingRunnerSet.Annotations = map[string]string{}
 	}
@@ -596,9 +600,19 @@ func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Contex
 		autoscalingRunnerSet.Labels = map[string]string{}
 	}
 
-	autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName] = runnerScaleSet.Name
-	autoscalingRunnerSet.Annotations[runnerScaleSetIDAnnotationKey] = strconv.Itoa(runnerScaleSet.ID)
-	autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName] = runnerScaleSet.RunnerGroupName
+	if defaultRunnerScaleSet != nil {
+		autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName] = defaultRunnerScaleSet.Name
+		autoscalingRunnerSet.Annotations[runnerScaleSetIDAnnotationKey] = strconv.Itoa(defaultRunnerScaleSet.ID)
+		autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName] = defaultRunnerScaleSet.RunnerGroupName
+	}
+	if len(variantIDs) > 0 {
+		encoded, err := encodeRunnerScaleSetIDs(variantIDs)
+		if err != nil {
+			logger.Error(err, "Failed to encode runner scale set ids annotation")
+			return ctrl.Result{}, err
+		}
+		autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetIDs] = encoded
+	}
 	if err := applyGitHubURLLabels(autoscalingRunnerSet.Spec.GitHubConfigUrl, autoscalingRunnerSet.Labels); err != nil { // should never happen
 		logger.Error(err, "Failed to apply GitHub URL labels")
 		return ctrl.Result{}, err
@@ -610,11 +624,75 @@ func (r *AutoscalingRunnerSetReconciler) createRunnerScaleSet(ctx context.Contex
 		return ctrl.Result{}, err
 	}
 
-	logger.Info("Updated with runner scale set ID, name and runner group name as an annotation",
-		"id", runnerScaleSet.ID,
-		"name", runnerScaleSet.Name,
-		"runnerGroupName", runnerScaleSet.RunnerGroupName)
+	logger.Info("Updated with runner scale set IDs, names and runner group name as annotations")
 	return ctrl.Result{}, nil
+}
+
+// getOrCreateRunnerScaleSet looks up a runner scale set by name and creates it
+// if it does not exist, applying the given extra runner labels. It is the
+// per-variant registration step; a single (default) variant calls it once with
+// the top-level name and labels, exactly as the classic code did.
+func (r *AutoscalingRunnerSetReconciler) getOrCreateRunnerScaleSet(ctx context.Context, actionsClient multiclient.Client, runnerGroupID int, scaleSetName string, runnerScaleSetLabels []string, logger logr.Logger) (*scaleset.RunnerScaleSet, error) {
+	runnerScaleSet, err := actionsClient.GetRunnerScaleSet(ctx, runnerGroupID, scaleSetName)
+	if err != nil {
+		logger.Error(err, "Failed to get runner scale set from Actions service",
+			"runnerGroupId", strconv.Itoa(runnerGroupID),
+			"runnerScaleSetName", scaleSetName)
+		return nil, err
+	}
+	if runnerScaleSet != nil {
+		return runnerScaleSet, nil
+	}
+
+	labels := []scaleset.Label{
+		{
+			Name: scaleSetName,
+			Type: "System",
+		},
+	}
+	if labelCount := len(runnerScaleSetLabels); labelCount > 0 {
+		unique := make(map[string]bool, labelCount+1)
+		unique[scaleSetName] = true
+
+		for _, label := range runnerScaleSetLabels {
+			if _, exists := unique[label]; exists {
+				logger.Info("Duplicate label found. Skipping adding duplicate label to runner scale set", "label", label)
+				continue
+			}
+			labels = append(labels, scaleset.Label{
+				Name: label,
+				Type: "System",
+			})
+			unique[label] = true
+		}
+	}
+	runnerScaleSet, err = actionsClient.CreateRunnerScaleSet(
+		ctx,
+		&scaleset.RunnerScaleSet{
+			Name:          scaleSetName,
+			RunnerGroupID: runnerGroupID,
+			Labels:        labels,
+			RunnerSetting: scaleset.RunnerSetting{
+				DisableUpdate: true,
+			},
+		},
+	)
+	if err != nil {
+		logger.Error(err, "Failed to create a new runner scale set on Actions service")
+		return nil, err
+	}
+	return runnerScaleSet, nil
+}
+
+// variantRunnerScaleSetName is the GitHub runner scale set name to register for
+// one variant. The default variant uses the ARS runner scale set name (its
+// classic value); a named variant registers a distinct name so GitHub tracks it
+// as its own scale set.
+func variantRunnerScaleSetName(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, variant v1alpha1.EffectiveVariant) string {
+	if variant.Name == "" {
+		return autoscalingRunnerSet.Spec.RunnerScaleSetName
+	}
+	return autoscalingRunnerSet.Spec.RunnerScaleSetName + "-" + variant.Name
 }
 
 func (r *AutoscalingRunnerSetReconciler) updateRunnerScaleSetRunnerGroup(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (ctrl.Result, error) {
@@ -735,8 +813,24 @@ func (r *AutoscalingRunnerSetReconciler) deleteRunnerScaleSet(ctx context.Contex
 		return err
 	}
 
+	// Delete every additional variant scale set registered for a multi-variant
+	// set. A single (default) set has no such map, so this loop is a no-op and
+	// the behaviour is unchanged.
+	variantIDs, err := decodeRunnerScaleSetIDs(autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetIDs])
+	if err != nil {
+		logger.Error(err, "Failed to decode runner scale set ids annotation, skipping variant scale set deletion")
+	} else {
+		for variantName, variantID := range variantIDs {
+			if err := actionsClient.DeleteRunnerScaleSet(ctx, variantID); err != nil {
+				logger.Error(err, "Failed to delete variant runner scale set", "variant", variantName, "runnerScaleSetId", variantID)
+				return err
+			}
+		}
+	}
+
 	original := autoscalingRunnerSet.DeepCopy()
 	delete(autoscalingRunnerSet.Annotations, runnerScaleSetIDAnnotationKey)
+	delete(autoscalingRunnerSet.Annotations, AnnotationKeyGitHubRunnerScaleSetIDs)
 
 	if err := r.Patch(ctx, autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
 		logger.Error(err, "Failed to remove runner scale set ID annotation after deleting the runner scale set", "runnerScaleSetId", runnerScaleSetID)
@@ -794,14 +888,250 @@ func (r *AutoscalingRunnerSetReconciler) createAutoScalingListenerForRunnerSet(c
 	return ctrl.Result{}, nil
 }
 
-// TODO: change that
+// isMultiVariant reports whether the AutoscalingRunnerSet declares any runner
+// variants. When it does, the reconciler takes the fan-out path (one named
+// EphemeralRunnerSet per variant behind a single listener). A set with NO
+// variants uses the classic single-set path, byte-for-byte unchanged, which the
+// golden hash tests pin. Even a single named variant is a distinct construct
+// (named child ERS, variant label, id map), so it takes the fan-out path too;
+// this also lets orphan cleanup run when a set drops from many variants to one.
+func isMultiVariant(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) bool {
+	return len(autoscalingRunnerSet.Spec.RunnerVariants) > 0
+}
+
+// reconcileMultiVariant drives the fan-out path: one EphemeralRunnerSet per
+// variant, orphan cleanup for removed variants, and exactly one listener that
+// services every variant. It runs only when isMultiVariant is true, so the
+// classic single-set path is never affected.
+func (r *AutoscalingRunnerSetReconciler) reconcileMultiVariant(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, log logr.Logger) (ctrl.Result, error) {
+	variants := autoscalingRunnerSet.Spec.EffectiveVariants()
+
+	// List every EphemeralRunnerSet owned by this scale set so we can create the
+	// missing ones, patch drifted ones, and delete orphans left by a removed
+	// variant.
+	var childList v1alpha1.EphemeralRunnerSetList
+	if err := r.List(
+		ctx,
+		&childList,
+		client.InNamespace(autoscalingRunnerSet.Namespace),
+		client.MatchingLabels{
+			LabelKeyGitHubScaleSetName:      autoscalingRunnerSet.Name,
+			LabelKeyGitHubScaleSetNamespace: autoscalingRunnerSet.Namespace,
+		},
+	); err != nil {
+		log.Error(err, "Failed to list ephemeral runner sets for multi-variant scale set")
+		return ctrl.Result{}, err
+	}
+
+	existing := make(map[string]*v1alpha1.EphemeralRunnerSet, len(childList.Items))
+	for i := range childList.Items {
+		existing[childList.Items[i].Name] = &childList.Items[i]
+	}
+
+	expected := make(map[string]struct{}, len(variants))
+	for _, variant := range variants {
+		name := ephemeralRunnerSetName(autoscalingRunnerSet, variant)
+		expected[name] = struct{}{}
+
+		desired, err := r.newEphemeralRunnerSetForVariant(autoscalingRunnerSet, variant)
+		if err != nil {
+			log.Error(err, "Failed to build ephemeral runner set for variant", "variant", variant.Name)
+			return ctrl.Result{}, err
+		}
+
+		current, ok := existing[name]
+		if !ok {
+			log.Info("Creating ephemeral runner set for variant", "variant", variant.Name, "name", name)
+			if err := r.Create(ctx, desired); err != nil {
+				log.Error(err, "Failed to create ephemeral runner set for variant", "variant", variant.Name)
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{Requeue: true}, nil
+		}
+
+		if current.Annotations[annotationKeyIntegrityHash] != desired.Annotations[annotationKeyIntegrityHash] {
+			original := current.DeepCopy()
+			current.Spec.EphemeralRunnerMetadata = desired.Spec.EphemeralRunnerMetadata
+			current.Spec.EphemeralRunnerSpec = desired.Spec.EphemeralRunnerSpec
+			current.Labels = r.filterAndMergeLabels(current.Labels, desired.Labels)
+			current.Annotations = r.mergeAnnotations(current.Annotations, desired.Annotations)
+			log.Info("Updating ephemeral runner set for variant to match desired spec", "variant", variant.Name)
+			if err := r.Patch(ctx, current, client.MergeFrom(original)); err != nil {
+				log.Error(err, "Failed to patch ephemeral runner set for variant", "variant", variant.Name)
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{Requeue: true}, nil
+		}
+	}
+
+	// Delete orphan ephemeral runner sets left by a removed variant.
+	for name, ers := range existing {
+		if _, keep := expected[name]; keep {
+			continue
+		}
+		if !ers.DeletionTimestamp.IsZero() {
+			continue
+		}
+		log.Info("Deleting orphan ephemeral runner set for removed variant", "name", name)
+		if err := r.Delete(ctx, ers); err != nil && !kerrors.IsNotFound(err) {
+			log.Error(err, "Failed to delete orphan ephemeral runner set", "name", name)
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	return r.reconcileMultiVariantListener(ctx, autoscalingRunnerSet, variants, log)
+}
+
+// reconcileMultiVariantListener ensures exactly one AutoscalingListener exists
+// for a multi-variant scale set, carrying the per-variant scale set tuples on
+// the out-of-band annotation so the listener spec and hash stay stable.
+func (r *AutoscalingRunnerSetReconciler) reconcileMultiVariantListener(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, variants []v1alpha1.EffectiveVariant, log logr.Logger) (ctrl.Result, error) {
+	tuples, err := r.listenerScaleSetTuples(autoscalingRunnerSet, variants)
+	if err != nil {
+		log.Error(err, "Failed to build listener scale set tuples")
+		return ctrl.Result{}, err
+	}
+
+	// The listener spec is built from the first variant's EphemeralRunnerSet,
+	// exactly like a single-set listener is built from its one ERS; the extra
+	// variants ride on the annotation. Fetch that ERS so the listener owner
+	// references and scalar fields line up. A multi-variant set has no ERS named
+	// after the AutoscalingRunnerSet itself, so key off the first variant.
+	if len(variants) == 0 {
+		return ctrl.Result{}, nil
+	}
+	firstERSName := ephemeralRunnerSetName(autoscalingRunnerSet, variants[0])
+	var defaultERS v1alpha1.EphemeralRunnerSet
+	if err := r.Get(ctx, types.NamespacedName{Namespace: autoscalingRunnerSet.Namespace, Name: firstERSName}, &defaultERS); err != nil {
+		if kerrors.IsNotFound(err) {
+			log.Info("First ephemeral runner set not found yet, requeuing", "name", firstERSName)
+			return ctrl.Result{Requeue: true}, nil
+		}
+		log.Error(err, "Failed to get ephemeral runner set for listener")
+		return ctrl.Result{}, err
+	}
+
+	var listener v1alpha1.AutoscalingListener
+	err = r.Get(ctx, types.NamespacedName{Namespace: r.ControllerNamespace, Name: scaleSetListenerName(autoscalingRunnerSet)}, &listener)
+	switch {
+	case kerrors.IsNotFound(err):
+		return r.createMultiVariantListener(ctx, autoscalingRunnerSet, &defaultERS, tuples, log)
+	case err != nil:
+		log.Error(err, "Failed to get AutoscalingListener resource")
+		return ctrl.Result{}, err
+	default:
+		desired, err := r.newMultiVariantListener(autoscalingRunnerSet, &defaultERS, tuples, nil)
+		if err != nil {
+			log.Error(err, "Failed to generate AutoscalingListener spec")
+			return ctrl.Result{}, nil
+		}
+		if !cmp.Equal(listener.Spec, desired.Spec) ||
+			!cmp.Equal(listener.Labels, desired.Labels) ||
+			!cmp.Equal(listener.Annotations, desired.Annotations) {
+			log.Info("Recreating the listener for multi-variant scale set to match desired state")
+			if _, err := r.cleanupListener(ctx, autoscalingRunnerSet, log); err != nil {
+				log.Error(err, "Failed to clean up listener before recreation")
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{Requeue: true}, nil
+		}
+	}
+
+	return ctrl.Result{}, nil
+}
+
+// listenerScaleSetTuples builds the ordered scale set tuples for a multi-variant
+// listener from the registered variant ids and per-variant bounds.
+func (r *AutoscalingRunnerSetReconciler) listenerScaleSetTuples(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, variants []v1alpha1.EffectiveVariant) ([]v1alpha1.ListenerScaleSet, error) {
+	tuples := make([]v1alpha1.ListenerScaleSet, 0, len(variants))
+	for _, variant := range variants {
+		id, err := variantScaleSetID(autoscalingRunnerSet, variant)
+		if err != nil {
+			return nil, err
+		}
+		minRunners := 0
+		maxRunners := 0
+		if variant.MinRunners != nil {
+			minRunners = *variant.MinRunners
+		}
+		if variant.MaxRunners != nil {
+			maxRunners = *variant.MaxRunners
+		}
+		tuples = append(tuples, v1alpha1.ListenerScaleSet{
+			VariantName:            variant.Name,
+			RunnerScaleSetID:       id,
+			EphemeralRunnerSetName: ephemeralRunnerSetName(autoscalingRunnerSet, variant),
+			MinRunners:             minRunners,
+			MaxRunners:             maxRunners,
+		})
+	}
+	return tuples, nil
+}
+
+// newMultiVariantListener builds the listener object for a multi-variant scale
+// set: the classic single-set listener plus the out-of-band scale set tuples.
+func (r *AutoscalingRunnerSetReconciler) newMultiVariantListener(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, defaultERS *v1alpha1.EphemeralRunnerSet, tuples []v1alpha1.ListenerScaleSet, imagePullSecrets []corev1.LocalObjectReference) (*v1alpha1.AutoscalingListener, error) {
+	listener, err := r.newAutoscalingListener(autoscalingRunnerSet, defaultERS, r.ControllerNamespace, r.DefaultRunnerScaleSetListenerImage, imagePullSecrets)
+	if err != nil {
+		return nil, err
+	}
+	if err := stampListenerScaleSets(listener, tuples); err != nil {
+		return nil, err
+	}
+	return listener, nil
+}
+
+func (r *AutoscalingRunnerSetReconciler) createMultiVariantListener(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, defaultERS *v1alpha1.EphemeralRunnerSet, tuples []v1alpha1.ListenerScaleSet, log logr.Logger) (ctrl.Result, error) {
+	var imagePullSecrets []corev1.LocalObjectReference
+	for _, imagePullSecret := range r.DefaultRunnerScaleSetListenerImagePullSecrets {
+		imagePullSecrets = append(imagePullSecrets, corev1.LocalObjectReference{Name: imagePullSecret})
+	}
+
+	listener, err := r.newMultiVariantListener(autoscalingRunnerSet, defaultERS, tuples, imagePullSecrets)
+	if err != nil {
+		log.Error(err, "Could not create AutoscalingListener spec")
+		return ctrl.Result{}, err
+	}
+
+	log.Info("Creating a new AutoscalingListener resource for multi-variant scale set", "name", listener.Name, "variants", len(tuples))
+	if err := r.Create(ctx, listener); err != nil {
+		log.Error(err, "Failed to create AutoscalingListener resource")
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, nil
+}
+
+// shouldCreateScaleSet reports whether any variant still needs a registered
+// runner scale set id. For the single (default) variant this is exactly the
+// classic scalar-annotation check. When more than one variant is declared, it
+// also requires an id for every named variant in the runner-scale-set-ids map,
+// so adding a variant to an existing set re-enters the registration path.
 func shouldCreateScaleSet(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) bool {
-	scaleSetIDRaw, ok := autoscalingRunnerSet.Annotations[runnerScaleSetIDAnnotationKey]
-	if !ok {
+	variants := autoscalingRunnerSet.Spec.EffectiveVariants()
+
+	ids, err := decodeRunnerScaleSetIDs(autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetIDs])
+	if err != nil {
 		return true
 	}
-	id, err := strconv.Atoi(scaleSetIDRaw)
-	return err != nil || id <= 0
+
+	for _, variant := range variants {
+		if variant.Name == "" {
+			scaleSetIDRaw, ok := autoscalingRunnerSet.Annotations[runnerScaleSetIDAnnotationKey]
+			if !ok {
+				return true
+			}
+			id, err := strconv.Atoi(scaleSetIDRaw)
+			if err != nil || id <= 0 {
+				return true
+			}
+			continue
+		}
+		if id, ok := ids[variant.Name]; !ok || id <= 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // SetupWithManager sets up the controller with the Manager.

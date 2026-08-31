@@ -685,3 +685,27 @@ volumeMounts: []
   {{- .Release.Namespace }}
 {{- end }}
 {{- end }}
+
+{{/*
+Validate runnerVariants: each name must be a DNS label, unique, and short
+enough that the derived EphemeralRunnerSet name "<release name>-<variant name>"
+stays within the 63 character Kubernetes name limit.
+*/}}
+{{- define "gha-runner-scale-set.validate-runner-variants" -}}
+{{- $seen := dict }}
+{{- $release := .Release.Name }}
+{{- range .Values.runnerVariants }}
+  {{- $name := required "each runnerVariants entry needs a name" .name }}
+  {{- if hasKey $seen $name }}
+    {{- fail (printf "runnerVariants name %q is duplicated; names must be unique" $name) }}
+  {{- end }}
+  {{- $_ := set $seen $name true }}
+  {{- if not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $name) }}
+    {{- fail (printf "runnerVariants name %q must be a DNS label (lower case letters, digits and dashes)" $name) }}
+  {{- end }}
+  {{- $child := printf "%s-%s" $release $name }}
+  {{- if gt (len $child) 63 }}
+    {{- fail (printf "runnerVariants name %q makes the EphemeralRunnerSet name %q longer than 63 characters; use a shorter variant name" $name $child) }}
+  {{- end }}
+{{- end }}
+{{- end }}

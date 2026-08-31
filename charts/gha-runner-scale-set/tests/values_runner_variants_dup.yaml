@@ -1,0 +1,13 @@
+githubConfigUrl: https://github.com/actions
+githubConfigSecret:
+  github_token: gh_token12345
+controllerServiceAccount:
+  name: arc
+  namespace: arc-system
+runnerVariants:
+  - name: cpu
+    runnerScaleSetLabels:
+      - self-hosted-cpu
+  - name: cpu
+    runnerScaleSetLabels:
+      - self-hosted-cpu-2

@@ -9,8 +9,8 @@ import (
 )
 
 func TestMetricsWithWorkflowRefParsing(t *testing.T) {
-	// Create a test exporter
-	exporter := &exporter{
+	// Create a test recorder
+	exporter := &recorder{
 		scaleSetLabels: prometheus.Labels{
 			labelKeyEnterprise:              "test-enterprise",
 			labelKeyOrganization:            "test-org",

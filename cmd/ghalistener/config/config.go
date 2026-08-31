@@ -44,6 +44,39 @@ type Config struct {
 	MetricsAddr                 string                  `json:"metrics_addr"`
 	MetricsEndpoint             string                  `json:"metrics_endpoint"`
 	Metrics                     *v1alpha1.MetricsConfig `json:"metrics"`
+	// ScaleSets, when non-empty, makes this listener multiplex one message
+	// session per entry (one runner variant each) instead of the single set
+	// described by the scalar RunnerScaleSet* / EphemeralRunnerSet* fields.
+	// An empty list keeps the legacy single-set behaviour byte-for-byte.
+	ScaleSets []ScaleSetConfig `json:"scale_sets,omitempty"`
+}
+
+// ScaleSetConfig describes one runner variant the listener must service: its
+// registered scale set id and the EphemeralRunnerSet the scaler patches for it.
+type ScaleSetConfig struct {
+	RunnerScaleSetID       int    `json:"runner_scale_set_id"`
+	RunnerScaleSetName     string `json:"runner_scale_set_name"`
+	EphemeralRunnerSetName string `json:"ephemeral_runner_set_name"`
+	MaxRunners             int    `json:"max_runners"`
+	MinRunners             int    `json:"min_runners"`
+}
+
+// EffectiveScaleSets returns the scale sets this listener must service. When
+// ScaleSets is empty it returns a single synthetic entry built from the scalar
+// fields, so the multi-session driver can treat both cases the same way.
+func (c *Config) EffectiveScaleSets() []ScaleSetConfig {
+	if len(c.ScaleSets) > 0 {
+		return c.ScaleSets
+	}
+	return []ScaleSetConfig{
+		{
+			RunnerScaleSetID:       c.RunnerScaleSetID,
+			RunnerScaleSetName:     c.RunnerScaleSetName,
+			EphemeralRunnerSetName: c.EphemeralRunnerSetName,
+			MaxRunners:             c.MaxRunners,
+			MinRunners:             c.MinRunners,
+		},
+	}
 }
 
 func Read(ctx context.Context, configPath string) (*Config, error) {
@@ -106,16 +139,24 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("GitHubConfigUrl is not provided")
 	}
 
-	if len(c.EphemeralRunnerSetNamespace) == 0 || len(c.EphemeralRunnerSetName) == 0 {
-		return fmt.Errorf("EphemeralRunnerSetNamespace %q or EphemeralRunnerSetName %q is missing", c.EphemeralRunnerSetNamespace, c.EphemeralRunnerSetName)
+	if len(c.EphemeralRunnerSetNamespace) == 0 {
+		return fmt.Errorf("EphemeralRunnerSetNamespace %q is missing", c.EphemeralRunnerSetNamespace)
 	}
 
-	if c.RunnerScaleSetID == 0 {
-		return fmt.Errorf(`RunnerScaleSetId "%d" is missing`, c.RunnerScaleSetID)
-	}
-
-	if c.MaxRunners < c.MinRunners {
-		return fmt.Errorf(`MinRunners "%d" cannot be greater than MaxRunners "%d"`, c.MinRunners, c.MaxRunners)
+	if len(c.ScaleSets) > 0 {
+		if err := c.validateScaleSets(); err != nil {
+			return err
+		}
+	} else {
+		if len(c.EphemeralRunnerSetName) == 0 {
+			return fmt.Errorf("EphemeralRunnerSetName %q is missing", c.EphemeralRunnerSetName)
+		}
+		if c.RunnerScaleSetID == 0 {
+			return fmt.Errorf(`RunnerScaleSetId "%d" is missing`, c.RunnerScaleSetID)
+		}
+		if c.MaxRunners < c.MinRunners {
+			return fmt.Errorf(`MinRunners "%d" cannot be greater than MaxRunners "%d"`, c.MinRunners, c.MaxRunners)
+		}
 	}
 
 	if c.VaultType != "" {
@@ -133,6 +174,29 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	return nil
+}
+
+// validateScaleSets checks the multi-session ScaleSets list. Each entry needs a
+// scale set id and its own EphemeralRunnerSet name; names must be unique so the
+// scaler patches distinct objects.
+func (c *Config) validateScaleSets() error {
+	seen := make(map[string]struct{}, len(c.ScaleSets))
+	for i, s := range c.ScaleSets {
+		if s.RunnerScaleSetID == 0 {
+			return fmt.Errorf(`ScaleSets[%d].RunnerScaleSetId "%d" is missing`, i, s.RunnerScaleSetID)
+		}
+		if len(s.EphemeralRunnerSetName) == 0 {
+			return fmt.Errorf("ScaleSets[%d].EphemeralRunnerSetName is missing", i)
+		}
+		if s.MaxRunners < s.MinRunners {
+			return fmt.Errorf(`ScaleSets[%d].MinRunners "%d" cannot be greater than MaxRunners "%d"`, i, s.MinRunners, s.MaxRunners)
+		}
+		if _, dup := seen[s.EphemeralRunnerSetName]; dup {
+			return fmt.Errorf("ScaleSets[%d].EphemeralRunnerSetName %q is duplicated", i, s.EphemeralRunnerSetName)
+		}
+		seen[s.EphemeralRunnerSetName] = struct{}{}
+	}
 	return nil
 }
 

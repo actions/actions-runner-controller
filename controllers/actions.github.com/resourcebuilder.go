@@ -233,6 +233,25 @@ func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha
 		Metrics:                     autoscalingListener.Spec.Metrics,
 	}
 
+	// A multi-variant listener carries its extra scale sets out of band on the
+	// listener object. Translate them into the listener config ScaleSets list so
+	// the listener process multiplexes one message session per variant. A single
+	// (default) variant leaves ScaleSets empty and the scalar fields above drive
+	// the classic single-session behaviour, byte-for-byte unchanged.
+	tuples, err := decodeListenerScaleSets(autoscalingListener.Annotations[AnnotationKeyGitHubListenerScaleSets])
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range tuples {
+		config.ScaleSets = append(config.ScaleSets, ghalistenerconfig.ScaleSetConfig{
+			RunnerScaleSetID:       t.RunnerScaleSetID,
+			RunnerScaleSetName:     autoscalingListener.Spec.AutoscalingRunnerSetName,
+			EphemeralRunnerSetName: t.EphemeralRunnerSetName,
+			MaxRunners:             t.MaxRunners,
+			MinRunners:             t.MinRunners,
+		})
+	}
+
 	vault := autoscalingListener.Spec.VaultConfig
 	if vault == nil {
 		config.AppConfig = appConfig
@@ -660,12 +679,60 @@ func (b *ResourceBuilder) newScaleSetListenerRole(autoscalingListener *v1alpha1.
 			Labels:      labels,
 			Annotations: annotations,
 		},
-		Rules: rulesForListenerRole([]string{autoscalingListener.Spec.EphemeralRunnerSetName}),
+		Rules: rulesForListenerRole(listenerEphemeralRunnerSetNames(autoscalingListener)),
 	}
 
 	newRole.Annotations[annotationKeyIntegrityHash] = scaleSetRoleIntegrityHash(newRole)
 
 	return newRole
+}
+
+// listenerEphemeralRunnerSetNames returns the EphemeralRunnerSet names the
+// listener Role must grant patch on. A single-variant listener returns exactly
+// the one scalar name (so the Role and its hash are byte-for-byte unchanged); a
+// multi-variant listener returns one name per scale set from the out-of-band
+// annotation, in the order they were stamped.
+func listenerEphemeralRunnerSetNames(autoscalingListener *v1alpha1.AutoscalingListener) []string {
+	tuples, err := decodeListenerScaleSets(autoscalingListener.Annotations[AnnotationKeyGitHubListenerScaleSets])
+	if err != nil || len(tuples) == 0 {
+		return []string{autoscalingListener.Spec.EphemeralRunnerSetName}
+	}
+	names := make([]string, 0, len(tuples))
+	for _, t := range tuples {
+		names = append(names, t.EphemeralRunnerSetName)
+	}
+	return names
+}
+
+// stampListenerScaleSets records the multi-variant scale set tuples on the
+// listener object as an out-of-band annotation. It is a no-op for a single
+// (default) variant, keeping the listener object byte-for-byte identical.
+func stampListenerScaleSets(autoscalingListener *v1alpha1.AutoscalingListener, tuples []v1alpha1.ListenerScaleSet) error {
+	if len(tuples) == 0 {
+		return nil
+	}
+	raw, err := json.Marshal(tuples)
+	if err != nil {
+		return fmt.Errorf("failed to encode listener scale sets annotation: %w", err)
+	}
+	if autoscalingListener.Annotations == nil {
+		autoscalingListener.Annotations = map[string]string{}
+	}
+	autoscalingListener.Annotations[AnnotationKeyGitHubListenerScaleSets] = string(raw)
+	return nil
+}
+
+// decodeListenerScaleSets parses the scale set tuples carried in the
+// listener-scale-sets annotation. An empty string decodes to a nil slice.
+func decodeListenerScaleSets(raw string) ([]v1alpha1.ListenerScaleSet, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	var tuples []v1alpha1.ListenerScaleSet
+	if err := json.Unmarshal([]byte(raw), &tuples); err != nil {
+		return nil, fmt.Errorf("failed to decode listener scale sets annotation: %w", err)
+	}
+	return tuples, nil
 }
 
 func scaleSetRoleIntegrityHash(role *rbacv1.Role) string {
@@ -738,7 +805,17 @@ func scaleSetListenerRoleBindingIntegrityHash(rb *rbacv1.RoleBinding) string {
 }
 
 func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) (*v1alpha1.EphemeralRunnerSet, error) {
-	runnerScaleSetID, err := strconv.Atoi(autoscalingRunnerSet.Annotations[runnerScaleSetIDAnnotationKey])
+	// The default variant carries no name and reproduces the classic single-set
+	// EphemeralRunnerSet byte-for-byte, so existing scale sets do not churn.
+	return b.newEphemeralRunnerSetForVariant(autoscalingRunnerSet, defaultEffectiveVariant(autoscalingRunnerSet))
+}
+
+// newEphemeralRunnerSetForVariant builds the EphemeralRunnerSet for one runner
+// variant. For the default variant (empty name) it is identical to the classic
+// single-set object. A named variant gets its own name, scale set id, template
+// override and a runner-variant label, but is otherwise built the same way.
+func (b *ResourceBuilder) newEphemeralRunnerSetForVariant(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, variant v1alpha1.EffectiveVariant) (*v1alpha1.EphemeralRunnerSet, error) {
+	runnerScaleSetID, err := variantScaleSetID(autoscalingRunnerSet, variant)
 	if err != nil {
 		return nil, err
 	}
@@ -751,20 +828,26 @@ func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 			GitHubConfigSecret:                  autoscalingRunnerSet.Spec.GitHubConfigSecret,
 			Proxy:                               autoscalingRunnerSet.Spec.Proxy,
 			GitHubServerTLS:                     autoscalingRunnerSet.Spec.GitHubServerTLS,
-			PodTemplateSpec:                     autoscalingRunnerSet.Spec.Template,
+			PodTemplateSpec:                     variant.Template,
 			VaultConfig:                         autoscalingRunnerSet.VaultConfig(),
 			EphemeralRunnerConfigSecretMetadata: autoscalingRunnerSet.Spec.EphemeralRunnerConfigSecretMetadata,
 		},
 		EphemeralRunnerMetadata: autoscalingRunnerSet.Spec.EphemeralRunnerMetadata,
 	}
 
-	labels := b.filterAndMergeLabels(autoscalingRunnerSet.Labels, map[string]string{
+	extraLabels := map[string]string{
 		LabelKeyKubernetesPartOf:        labelValueKubernetesPartOf,
 		LabelKeyKubernetesComponent:     "runner-set",
 		LabelKeyKubernetesVersion:       autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion],
 		LabelKeyGitHubScaleSetName:      autoscalingRunnerSet.Name,
 		LabelKeyGitHubScaleSetNamespace: autoscalingRunnerSet.Namespace,
-	})
+	}
+	// Only a named variant stamps the runner-variant label, so a single-set
+	// EphemeralRunnerSet keeps the exact label set it had before.
+	if variant.Name != "" {
+		extraLabels[LabelKeyGitHubRunnerVariant] = variant.Name
+	}
+	labels := b.filterAndMergeLabels(autoscalingRunnerSet.Labels, extraLabels)
 
 	if err := applyGitHubURLLabels(autoscalingRunnerSet.Spec.GitHubConfigUrl, labels); err != nil {
 		return nil, fmt.Errorf("failed to apply GitHub URL labels: %v", err)
@@ -783,7 +866,7 @@ func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 	newEphemeralRunnerSet := &v1alpha1.EphemeralRunnerSet{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        autoscalingRunnerSet.Name,
+			Name:        ephemeralRunnerSetName(autoscalingRunnerSet, variant),
 			Namespace:   autoscalingRunnerSet.Namespace,
 			Labels:      labels,
 			Annotations: annotations,
@@ -1047,6 +1130,66 @@ func proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet *v1alpha1.EphemeralRun
 		namespaceHash = namespaceHash[:8]
 	}
 	return fmt.Sprintf("%v-%v-runner-proxy", ephemeralRunnerSet.Name, namespaceHash)
+}
+
+// defaultEffectiveVariant returns the single synthetic variant that reproduces
+// the classic single-set shape for an AutoscalingRunnerSet with no
+// runnerVariants. It is the first element of EffectiveVariants() in that case;
+// having it as a named helper keeps the builders readable.
+func defaultEffectiveVariant(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) v1alpha1.EffectiveVariant {
+	return autoscalingRunnerSet.Spec.EffectiveVariants()[0]
+}
+
+// ephemeralRunnerSetName is the name of the EphemeralRunnerSet for one variant.
+// The default variant (empty name) keeps the classic name (the ARS name), so
+// existing objects are untouched; a named variant is suffixed with its name.
+func ephemeralRunnerSetName(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, variant v1alpha1.EffectiveVariant) string {
+	if variant.Name == "" {
+		return autoscalingRunnerSet.Name
+	}
+	return autoscalingRunnerSet.Name + "-" + variant.Name
+}
+
+// variantScaleSetID returns the registered GitHub runner scale set id for one
+// variant. The default variant reads the classic scalar annotation; a named
+// variant reads its entry from the runner-scale-set-ids JSON map.
+func variantScaleSetID(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, variant v1alpha1.EffectiveVariant) (int, error) {
+	if variant.Name == "" {
+		return strconv.Atoi(autoscalingRunnerSet.Annotations[runnerScaleSetIDAnnotationKey])
+	}
+	ids, err := decodeRunnerScaleSetIDs(autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetIDs])
+	if err != nil {
+		return 0, err
+	}
+	id, ok := ids[variant.Name]
+	if !ok {
+		return 0, fmt.Errorf("no registered runner scale set id for variant %q", variant.Name)
+	}
+	return id, nil
+}
+
+// decodeRunnerScaleSetIDs parses the variantName->id map carried in the
+// runner-scale-set-ids annotation. An empty string decodes to an empty map.
+func decodeRunnerScaleSetIDs(raw string) (map[string]int, error) {
+	ids := map[string]int{}
+	if raw == "" {
+		return ids, nil
+	}
+	if err := json.Unmarshal([]byte(raw), &ids); err != nil {
+		return nil, fmt.Errorf("failed to decode runner scale set ids annotation: %w", err)
+	}
+	return ids, nil
+}
+
+// encodeRunnerScaleSetIDs serialises the variantName->id map for the
+// runner-scale-set-ids annotation. Keys are sorted by json.Marshal, so the
+// output is stable for a given map.
+func encodeRunnerScaleSetIDs(ids map[string]int) (string, error) {
+	b, err := json.Marshal(ids)
+	if err != nil {
+		return "", fmt.Errorf("failed to encode runner scale set ids annotation: %w", err)
+	}
+	return string(b), nil
 }
 
 func rulesForListenerRole(resourceNames []string) []rbacv1.PolicyRule {
