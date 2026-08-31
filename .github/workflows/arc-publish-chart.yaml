@@ -58,7 +58,7 @@ jobs:
         run: helm template  --values charts/.ci/values-kube-score.yaml charts/* | ./kube-score score - --ignore-test pod-networkpolicy --ignore-test deployment-has-poddisruptionbudget --ignore-test deployment-has-host-podantiaffinity --ignore-test container-security-context --ignore-test pod-probes --ignore-test container-image-tag --enable-optional-test container-security-context-privileged --enable-optional-test container-security-context-readonlyrootfilesystem
 
       # python is a requirement for the chart-testing action below (supports yamllint among other tests)
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
@@ -145,7 +145,7 @@ jobs:
 
       - name: Get Token
         id: get_workflow_token
-        uses: peter-murray/workflow-application-token-action@cb731e00cb6754f584507134ff389dfb3dc42bbc
+        uses: peter-murray/workflow-application-token-action@dad2b81e50ce3edeb5f3b7ffbd79f731368bd668
         with:
           application_id: ${{ secrets.ACTIONS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.ACTIONS_ACCESS_PK }}
