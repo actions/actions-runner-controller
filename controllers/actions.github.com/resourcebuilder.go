@@ -183,6 +183,19 @@ func (b *ResourceBuilder) newAutoscalingListener(autoscalingRunnerSet *v1alpha1.
 		Spec: spec,
 	}
 
+	if namespace == autoscalingRunnerSet.Namespace {
+		autoscalingListener.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
+			{
+				APIVersion:         autoscalingRunnerSet.GetObjectKind().GroupVersionKind().GroupVersion().String(),
+				Kind:               autoscalingRunnerSet.GetObjectKind().GroupVersionKind().Kind,
+				UID:                autoscalingRunnerSet.GetUID(),
+				Name:               autoscalingRunnerSet.GetName(),
+				Controller:         boolPtr(true),
+				BlockOwnerDeletion: boolPtr(true),
+			},
+		}
+	}
+
 	return autoscalingListener, nil
 }
 
