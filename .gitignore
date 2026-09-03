@@ -9,6 +9,9 @@ release
 *.dylib
 bin
 
+# Locally built command binaries (e.g. `go build ./cmd/ghalistener`)
+/ghalistener
+
 # Test binary, build with `go test -c`
 *.test
 

@@ -1219,3 +1219,59 @@ func TestNamespaceOverride(t *testing.T) {
 		})
 	}
 }
+
+func TestTemplate_ControllerDeployment_ListenerOTelEndpoint(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set-controller")
+	require.NoError(t, err)
+
+	releaseName := "test-arc"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"image.tag":             "dev",
+			"otel.listenerEndpoint": "http://otel-collector:4318",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
+
+	var deployment appsv1.Deployment
+	helm.UnmarshalK8SYaml(t, output, &deployment)
+
+	assert.Contains(t, deployment.Spec.Template.Spec.Containers[0].Args,
+		"--listener-otel-endpoint=http://otel-collector:4318")
+}
+
+func TestTemplate_ControllerDeployment_NoOTelByDefault(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set-controller")
+	require.NoError(t, err)
+
+	releaseName := "test-arc"
+	namespaceName := "test-" + strings.ToLower(random.UniqueId())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"image.tag": "dev",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
+
+	var deployment appsv1.Deployment
+	helm.UnmarshalK8SYaml(t, output, &deployment)
+
+	for _, arg := range deployment.Spec.Template.Spec.Containers[0].Args {
+		assert.NotContains(t, arg, "--listener-otel-endpoint")
+	}
+}

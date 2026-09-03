@@ -44,6 +44,11 @@ type Config struct {
 	MetricsAddr                 string                  `json:"metrics_addr"`
 	MetricsEndpoint             string                  `json:"metrics_endpoint"`
 	Metrics                     *v1alpha1.MetricsConfig `json:"metrics"`
+	// OTelEndpoint enables OTLP trace export of job lifecycle spans.
+	// Full base URL (like OTEL_EXPORTER_OTLP_ENDPOINT), e.g.
+	// http://collector:4318; TLS follows the URL scheme. When empty,
+	// the standard OTEL_EXPORTER_OTLP_* env vars still apply.
+	OTelEndpoint string `json:"otel_endpoint"`
 }
 
 func Read(ctx context.Context, configPath string) (*Config, error) {
