@@ -18,6 +18,7 @@ package actionsgithubcom
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"strconv"
@@ -339,6 +340,16 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	)
 	switch {
 	case kerrors.IsNotFound(err):
+		gone, err := r.runnerScaleSetGone(ctx, &autoscalingRunnerSet)
+		if err != nil {
+			log.Error(err, "Failed to confirm the runner scale set exists before creating the listener")
+			return ctrl.Result{}, err
+		}
+		if gone {
+			log.Info("Recorded runner scale set no longer exists on the Actions service. Registering it again before creating the listener")
+			return r.createRunnerScaleSet(ctx, &autoscalingRunnerSet, log)
+		}
+
 		log.Info("AutoscalingListener does not exist, creating autoscaling listener")
 		return r.createAutoScalingListenerForRunnerSet(ctx, &autoscalingRunnerSet, &ephemeralRunnerSet, log)
 	case err != nil:
@@ -729,8 +740,12 @@ func (r *AutoscalingRunnerSetReconciler) deleteRunnerScaleSet(ctx context.Contex
 		return err
 	}
 
-	err = actionsClient.DeleteRunnerScaleSet(ctx, runnerScaleSetID)
-	if err != nil {
+	switch err := actionsClient.DeleteRunnerScaleSet(ctx, runnerScaleSetID); {
+	case errors.Is(err, scaleset.NotFoundError):
+		// Already gone, so the desired state is met. Returning the error instead would leave the
+		// finalizer in place and the autoscaling runner set stuck in Terminating.
+		logger.Info("Runner scale set is already deleted from the Actions service", "runnerScaleSetId", runnerScaleSetID)
+	case err != nil:
 		logger.Error(err, "Failed to delete runner scale set", "runnerScaleSetId", runnerScaleSetID)
 		return err
 	}
@@ -792,6 +807,34 @@ func (r *AutoscalingRunnerSetReconciler) createAutoScalingListenerForRunnerSet(c
 
 	log.Info("Created a new AutoscalingListener resource", "name", autoscalingListener.Name, "namespace", autoscalingListener.Namespace)
 	return ctrl.Result{}, nil
+}
+
+// runnerScaleSetGone reports whether the runner scale set recorded on the autoscaling runner set is
+// no longer present on the Actions service. A scale set can disappear out of band: deleted from the
+// organization settings, or dropped and re-registered with a fresh ID. The listener bakes the ID in
+// at startup and crash-loops when it is gone, so this is checked before the listener is created.
+//
+// Only a definitive not-found counts as gone. Any other error is returned so a transient Actions
+// service outage never causes a scale set to be registered a second time.
+func (r *AutoscalingRunnerSetReconciler) runnerScaleSetGone(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) (bool, error) {
+	runnerScaleSetID, err := strconv.Atoi(autoscalingRunnerSet.Annotations[runnerScaleSetIDAnnotationKey])
+	if err != nil {
+		return false, fmt.Errorf("failed to parse runner scale set ID: %w", err)
+	}
+
+	actionsClient, err := r.GetActionsService(ctx, autoscalingRunnerSet)
+	if err != nil {
+		return false, fmt.Errorf("failed to initialize Actions service client: %w", err)
+	}
+
+	switch _, err := actionsClient.GetRunnerScaleSetByID(ctx, runnerScaleSetID); {
+	case errors.Is(err, scaleset.NotFoundError):
+		return true, nil
+	case err != nil:
+		return false, fmt.Errorf("failed to get runner scale set %d: %w", runnerScaleSetID, err)
+	default:
+		return false, nil
+	}
 }
 
 // TODO: change that
