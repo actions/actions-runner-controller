@@ -549,6 +549,58 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 				autoscalingListenerTestInterval,
 			).Should(BeEquivalentTo(oldSecretUID), "Config secret should persist (not be re-created)")
 		})
+
+		It("It should propagate rotated GitHub credentials into the listener config secret", func() {
+			secret := new(corev1.Secret)
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerConfigName(autoscalingListener), Namespace: autoscalingListener.Namespace}, secret)
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(Succeed(), "Config secret should be created")
+
+			var originalConfig ghalistenerconfig.Config
+			err := json.Unmarshal(secret.Data["config.json"], &originalConfig)
+			Expect(err).NotTo(HaveOccurred(), "failed to parse listener configuration file")
+			Expect(originalConfig.Token).To(Equal(defaultGitHubToken))
+			oldHash := secret.Annotations[annotationKeyIntegrityHash]
+
+			// Rotate the GitHub credentials. There is intentionally no watch on the
+			// credentials secret, so reconciliation is triggered below by mutating the listener.
+			const rotatedGitHubToken = "gh_token_rotated"
+			currentCredentials := new(corev1.Secret)
+			err = k8sClient.Get(ctx, client.ObjectKey{Name: configSecret.Name, Namespace: configSecret.Namespace}, currentCredentials)
+			Expect(err).NotTo(HaveOccurred(), "failed to get credentials secret")
+			updatedCredentials := currentCredentials.DeepCopy()
+			updatedCredentials.Data["github_token"] = []byte(rotatedGitHubToken)
+			err = k8sClient.Update(ctx, updatedCredentials)
+			Expect(err).NotTo(HaveOccurred(), "failed to update credentials secret")
+
+			current := new(v1alpha1.AutoscalingListener)
+			err = k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, current)
+			Expect(err).NotTo(HaveOccurred(), "failed to get AutoScalingListener")
+			updatedListener := current.DeepCopy()
+			updatedListener.Labels["arc.test/listener-label"] = "rotated"
+			err = k8sClient.Patch(ctx, updatedListener, client.MergeFrom(current))
+			Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingListener to trigger reconcile")
+
+			Eventually(
+				func(g Gomega) {
+					updatedSecret := new(corev1.Secret)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerConfigName(autoscalingListener), Namespace: autoscalingListener.Namespace}, updatedSecret)
+					g.Expect(err).NotTo(HaveOccurred(), "failed to get config Secret")
+
+					var rotatedConfig ghalistenerconfig.Config
+					err = json.Unmarshal(updatedSecret.Data["config.json"], &rotatedConfig)
+					g.Expect(err).NotTo(HaveOccurred(), "failed to parse listener configuration file")
+					g.Expect(rotatedConfig.Token).To(Equal(rotatedGitHubToken), "config secret should embed the rotated token")
+					g.Expect(updatedSecret.Annotations[annotationKeyIntegrityHash]).NotTo(Equal(oldHash), "integrity hash annotation should change")
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(Succeed())
+		})
 	})
 })
 
@@ -1055,6 +1107,100 @@ var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 			autoscalingListenerTestTimeout,
 			autoscalingListenerTestInterval,
 		).Should(Succeed(), "failed to delete secret with proxy details")
+	})
+
+	It("should propagate rotated proxy credentials into the mirror proxy secret", func() {
+		proxyCredentials := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "proxy-credentials",
+				Namespace: autoscalingNS.Name,
+			},
+			Data: map[string][]byte{
+				"username": []byte("test"),
+				"password": []byte("password"),
+			},
+		}
+
+		err := k8sClient.Create(ctx, proxyCredentials)
+		Expect(err).NotTo(HaveOccurred(), "failed to create proxy credentials secret")
+
+		proxy := &v1alpha1.ProxyConfig{
+			HTTP: &v1alpha1.ProxyServerConfig{
+				Url:                 "http://localhost:8080",
+				CredentialSecretRef: "proxy-credentials",
+			},
+			HTTPS: &v1alpha1.ProxyServerConfig{
+				Url:                 "https://localhost:8443",
+				CredentialSecretRef: "proxy-credentials",
+			},
+			NoProxy: []string{
+				"example.com",
+				"example.org",
+			},
+		}
+
+		createRunnerSetAndListener(proxy)
+
+		var proxySecret corev1.Secret
+		Eventually(
+			func(g Gomega) {
+				err := k8sClient.Get(
+					ctx,
+					types.NamespacedName{Name: proxyListenerSecretName(autoscalingListener), Namespace: autoscalingNS.Name},
+					&proxySecret,
+				)
+				g.Expect(err).NotTo(HaveOccurred(), "failed to get secret")
+			},
+			autoscalingListenerTestTimeout,
+			autoscalingListenerTestInterval,
+		).Should(Succeed(), "failed to create secret with proxy details")
+
+		// Rotate the proxy credentials.
+		currentCredentials := new(corev1.Secret)
+		err = k8sClient.Get(ctx, types.NamespacedName{Name: proxyCredentials.Name, Namespace: autoscalingNS.Name}, currentCredentials)
+		Expect(err).NotTo(HaveOccurred(), "failed to get proxy credentials secret")
+		updatedCredentials := currentCredentials.DeepCopy()
+		updatedCredentials.Data["password"] = []byte("rotated-password")
+		err = k8sClient.Update(ctx, updatedCredentials)
+		Expect(err).NotTo(HaveOccurred(), "failed to update proxy credentials secret")
+
+		// There is no watch on the proxy credentials secret, so reconciliation is
+		// triggered below by mutating the listener.
+		current := new(v1alpha1.AutoscalingListener)
+		err = k8sClient.Get(ctx, types.NamespacedName{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, current)
+		Expect(err).NotTo(HaveOccurred(), "failed to get AutoScalingListener")
+		updated := current.DeepCopy()
+		if updated.Labels == nil {
+			updated.Labels = map[string]string{}
+		}
+		updated.Labels["arc.test/rotate"] = "true"
+		err = k8sClient.Patch(ctx, updated, client.MergeFrom(current))
+		Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingListener to trigger reconcile")
+
+		Eventually(
+			func(g Gomega) {
+				var rotatedProxySecret corev1.Secret
+				err := k8sClient.Get(
+					ctx,
+					types.NamespacedName{Name: proxyListenerSecretName(autoscalingListener), Namespace: autoscalingNS.Name},
+					&rotatedProxySecret,
+				)
+				g.Expect(err).NotTo(HaveOccurred(), "failed to get secret")
+
+				expected, err := autoscalingListener.Spec.Proxy.ToSecretData(func(s string) (*corev1.Secret, error) {
+					var secret corev1.Secret
+					err := k8sClient.Get(ctx, types.NamespacedName{Name: s, Namespace: autoscalingNS.Name}, &secret)
+					if err != nil {
+						return nil, err
+					}
+					return &secret, nil
+				})
+				g.Expect(err).NotTo(HaveOccurred(), "failed to convert proxy config to secret data")
+				g.Expect(rotatedProxySecret.Data).To(Equal(expected), "mirror proxy secret should reflect the rotated credentials")
+			},
+			autoscalingListenerTestTimeout,
+			autoscalingListenerTestInterval,
+		).Should(Succeed(), "failed to propagate rotated proxy credentials")
 	})
 })
 

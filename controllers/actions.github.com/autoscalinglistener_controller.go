@@ -17,6 +17,7 @@ limitations under the License.
 package actionsgithubcom
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"maps"
@@ -298,17 +299,32 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		)
 		switch {
 		case err == nil:
-			desiredListenerProxy, err := r.newAutoscalingListenerProxySecret(&autoscalingListener, proxySecret.Data)
+			proxySecretData, err := autoscalingListener.Spec.Proxy.ToSecretData(func(s string) (*corev1.Secret, error) {
+				var secret corev1.Secret
+				err := r.Get(ctx, types.NamespacedName{Name: s, Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace}, &secret)
+				if err != nil {
+					return nil, fmt.Errorf("failed to get secret %s: %w", s, err)
+				}
+				return &secret, nil
+			})
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to convert proxy config to secret data: %w", err)
+			}
+			desiredListenerProxy, err := r.newAutoscalingListenerProxySecret(&autoscalingListener, proxySecretData)
 			if err != nil {
 				log.Error(err, "Failed to build desired listener proxy secret")
 				return ctrl.Result{}, err
 			}
+			dataModified := !maps.EqualFunc(proxySecret.Data, desiredListenerProxy.Data, bytes.Equal)
 			desiredLabels := r.filterAndMergeLabels(proxySecret.Labels, desiredListenerProxy.Labels)
 			labelsModified := !maps.Equal(proxySecret.Labels, desiredLabels)
 			desiredAnnotations := r.mergeAnnotations(proxySecret.Annotations, desiredListenerProxy.Annotations)
 			annotationsModified := !maps.Equal(proxySecret.Annotations, desiredAnnotations)
-			if labelsModified || annotationsModified {
+			if dataModified || labelsModified || annotationsModified {
 				updatedProxySecret := proxySecret.DeepCopy()
+				if dataModified {
+					updatedProxySecret.Data = desiredListenerProxy.Data
+				}
 				if labelsModified {
 					updatedProxySecret.Labels = desiredLabels
 				}
@@ -389,13 +405,17 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to build listener config secret: %w", err)
 		}
+		dataModified := !maps.EqualFunc(listenerConfigSecret.Data, desiredSecret.Data, bytes.Equal)
 		desiredLabels := r.filterAndMergeLabels(listenerConfigSecret.Labels, desiredSecret.Labels)
 		labelsModified := !maps.Equal(listenerConfigSecret.Labels, desiredLabels)
 		desiredAnnotations := r.mergeAnnotations(listenerConfigSecret.Annotations, desiredSecret.Annotations)
 		annotationsModified := !maps.Equal(listenerConfigSecret.Annotations, desiredAnnotations)
 
-		if labelsModified || annotationsModified {
+		if dataModified || labelsModified || annotationsModified {
 			updatedSecret := listenerConfigSecret.DeepCopy()
+			if dataModified {
+				updatedSecret.Data = desiredSecret.Data
+			}
 			if labelsModified {
 				updatedSecret.Labels = desiredLabels
 			}
