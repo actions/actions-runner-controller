@@ -170,7 +170,13 @@ spec:
     {{- include "listener-template.pod" . | nindent 4}}
   {{- end }}
 
-  {{- with .Values.listenerMetrics }}
+  {{- $listener := .Values.listener | default dict }}
+  {{- with $listener.scaler }}
+  listenerConfig:
+    scaler:
+      {{- toYaml . | nindent 6 }}
+  {{- end }}
+  {{- with $listener.metrics }}
   listenerMetrics:
     {{- toYaml . | nindent 4 }}
   {{- end }}

@@ -312,158 +312,164 @@ controllerServiceAccount:
   namespace: ""
   name: ""
 
-## listenerMetrics are configurable metrics applied to the listener.
-## In order to avoid helm merging these fields, we left the metrics commented out.
-## When configuring metrics, please uncomment the listenerMetrics object below.
-## You can modify the configuration to remove the label or specify custom buckets for histogram.
-##
-## If the buckets field is not specified, the default buckets will be applied. Default buckets are
-## provided here for documentation purposes
-# listenerMetrics:
-#   counters:
-#     gha_started_jobs_total:
-#       labels:
-#         ["repository", "organization", "enterprise", "job_name", "event_name", "job_workflow_ref", "job_workflow_name", "job_workflow_target"]
-#     gha_completed_jobs_total:
-#       labels:
-#         [
-#           "repository",
-#           "organization",
-#           "enterprise",
-#           "job_name",
-#           "event_name",
-#           "job_result",
-#           "job_workflow_ref",
-#           "job_workflow_name",
-#           "job_workflow_target",
-#         ]
-#   gauges:
-#     gha_assigned_jobs:
-#       labels: ["name", "namespace", "repository", "organization", "enterprise"]
-#     gha_running_jobs:
-#       labels: ["name", "namespace", "repository", "organization", "enterprise"]
-#     gha_registered_runners:
-#       labels: ["name", "namespace", "repository", "organization", "enterprise"]
-#     gha_busy_runners:
-#       labels: ["name", "namespace", "repository", "organization", "enterprise"]
-#     gha_min_runners:
-#       labels: ["name", "namespace", "repository", "organization", "enterprise"]
-#     gha_max_runners:
-#       labels: ["name", "namespace", "repository", "organization", "enterprise"]
-#     gha_desired_runners:
-#       labels: ["name", "namespace", "repository", "organization", "enterprise"]
-#     gha_idle_runners:
-#       labels: ["name", "namespace", "repository", "organization", "enterprise"]
-#   histograms:
-#     gha_job_startup_duration_seconds:
-#       labels:
-#         ["repository", "organization", "enterprise", "job_name", "event_name","job_workflow_ref", "job_workflow_name", "job_workflow_target"]
-#       buckets:
-#         [
-#           0.01,
-#           0.05,
-#           0.1,
-#           0.5,
-#           1.0,
-#           2.0,
-#           3.0,
-#           4.0,
-#           5.0,
-#           6.0,
-#           7.0,
-#           8.0,
-#           9.0,
-#           10.0,
-#           12.0,
-#           15.0,
-#           18.0,
-#           20.0,
-#           25.0,
-#           30.0,
-#           40.0,
-#           50.0,
-#           60.0,
-#           70.0,
-#           80.0,
-#           90.0,
-#           100.0,
-#           110.0,
-#           120.0,
-#           150.0,
-#           180.0,
-#           210.0,
-#           240.0,
-#           300.0,
-#           360.0,
-#           420.0,
-#           480.0,
-#           540.0,
-#           600.0,
-#           900.0,
-#           1200.0,
-#           1800.0,
-#           2400.0,
-#           3000.0,
-#           3600.0,
-#         ]
-#     gha_job_execution_duration_seconds:
-#       labels:
-#         [
-#           "repository",
-#           "organization",
-#           "enterprise",
-#           "job_name",
-#           "event_name",
-#           "job_result",
-#           "job_workflow_ref",
-#           "job_workflow_name",
-#           "job_workflow_target"
-#         ]
-#       buckets:
-#         [
-#           0.01,
-#           0.05,
-#           0.1,
-#           0.5,
-#           1.0,
-#           2.0,
-#           3.0,
-#           4.0,
-#           5.0,
-#           6.0,
-#           7.0,
-#           8.0,
-#           9.0,
-#           10.0,
-#           12.0,
-#           15.0,
-#           18.0,
-#           20.0,
-#           25.0,
-#           30.0,
-#           40.0,
-#           50.0,
-#           60.0,
-#           70.0,
-#           80.0,
-#           90.0,
-#           100.0,
-#           110.0,
-#           120.0,
-#           150.0,
-#           180.0,
-#           210.0,
-#           240.0,
-#           300.0,
-#           360.0,
-#           420.0,
-#           480.0,
-#           540.0,
-#           600.0,
-#           900.0,
-#           1200.0,
-#           1800.0,
-#           2400.0,
-#           3000.0,
-#           3600.0,
-#         ]
+# listener specific configuration. This configuration is applied to the listener component of the chart.
+listener:
+  # scaler is config applied to the kubernetes client component of the listener.
+  scaler:
+    qps: 50
+    burst: 100
+  ## metrics configuration for the listener.
+  ## In order to avoid helm merging these fields, we left the metrics commented out.
+  ## When configuring metrics, please uncomment the listenerMetrics object below.
+  ## You can modify the configuration to remove the label or specify custom buckets for histogram.
+  ##
+  ## If the buckets field is not specified, the default buckets will be applied. Default buckets are
+  ## provided here for documentation purposes
+  # metrics:
+  #   counters:
+  #     gha_started_jobs_total:
+  #       labels:
+  #         ["repository", "organization", "enterprise", "job_name", "event_name", "job_workflow_ref", "job_workflow_name", "job_workflow_target"]
+  #     gha_completed_jobs_total:
+  #       labels:
+  #         [
+  #           "repository",
+  #           "organization",
+  #           "enterprise",
+  #           "job_name",
+  #           "event_name",
+  #           "job_result",
+  #           "job_workflow_ref",
+  #           "job_workflow_name",
+  #           "job_workflow_target",
+  #         ]
+  #   gauges:
+  #     gha_assigned_jobs:
+  #       labels: ["name", "namespace", "repository", "organization", "enterprise"]
+  #     gha_running_jobs:
+  #       labels: ["name", "namespace", "repository", "organization", "enterprise"]
+  #     gha_registered_runners:
+  #       labels: ["name", "namespace", "repository", "organization", "enterprise"]
+  #     gha_busy_runners:
+  #       labels: ["name", "namespace", "repository", "organization", "enterprise"]
+  #     gha_min_runners:
+  #       labels: ["name", "namespace", "repository", "organization", "enterprise"]
+  #     gha_max_runners:
+  #       labels: ["name", "namespace", "repository", "organization", "enterprise"]
+  #     gha_desired_runners:
+  #       labels: ["name", "namespace", "repository", "organization", "enterprise"]
+  #     gha_idle_runners:
+  #       labels: ["name", "namespace", "repository", "organization", "enterprise"]
+  #   histograms:
+  #     gha_job_startup_duration_seconds:
+  #       labels:
+  #         ["repository", "organization", "enterprise", "job_name", "event_name","job_workflow_ref", "job_workflow_name", "job_workflow_target"]
+  #       buckets:
+  #         [
+  #           0.01,
+  #           0.05,
+  #           0.1,
+  #           0.5,
+  #           1.0,
+  #           2.0,
+  #           3.0,
+  #           4.0,
+  #           5.0,
+  #           6.0,
+  #           7.0,
+  #           8.0,
+  #           9.0,
+  #           10.0,
+  #           12.0,
+  #           15.0,
+  #           18.0,
+  #           20.0,
+  #           25.0,
+  #           30.0,
+  #           40.0,
+  #           50.0,
+  #           60.0,
+  #           70.0,
+  #           80.0,
+  #           90.0,
+  #           100.0,
+  #           110.0,
+  #           120.0,
+  #           150.0,
+  #           180.0,
+  #           210.0,
+  #           240.0,
+  #           300.0,
+  #           360.0,
+  #           420.0,
+  #           480.0,
+  #           540.0,
+  #           600.0,
+  #           900.0,
+  #           1200.0,
+  #           1800.0,
+  #           2400.0,
+  #           3000.0,
+  #           3600.0,
+  #         ]
+  #     gha_job_execution_duration_seconds:
+  #       labels:
+  #         [
+  #           "repository",
+  #           "organization",
+  #           "enterprise",
+  #           "job_name",
+  #           "event_name",
+  #           "job_result",
+  #           "job_workflow_ref",
+  #           "job_workflow_name",
+  #           "job_workflow_target"
+  #         ]
+  #       buckets:
+  #         [
+  #           0.01,
+  #           0.05,
+  #           0.1,
+  #           0.5,
+  #           1.0,
+  #           2.0,
+  #           3.0,
+  #           4.0,
+  #           5.0,
+  #           6.0,
+  #           7.0,
+  #           8.0,
+  #           9.0,
+  #           10.0,
+  #           12.0,
+  #           15.0,
+  #           18.0,
+  #           20.0,
+  #           25.0,
+  #           30.0,
+  #           40.0,
+  #           50.0,
+  #           60.0,
+  #           70.0,
+  #           80.0,
+  #           90.0,
+  #           100.0,
+  #           110.0,
+  #           120.0,
+  #           150.0,
+  #           180.0,
+  #           210.0,
+  #           240.0,
+  #           300.0,
+  #           360.0,
+  #           420.0,
+  #           480.0,
+  #           540.0,
+  #           600.0,
+  #           900.0,
+  #           1200.0,
+  #           1800.0,
+  #           2400.0,
+  #           3000.0,
+  #           3600.0,
+  #         ]

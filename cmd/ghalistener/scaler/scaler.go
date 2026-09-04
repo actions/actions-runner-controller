@@ -30,6 +30,7 @@ type Config struct {
 	EphemeralRunnerSetName      string
 	MaxRunners                  int
 	MinRunners                  int
+	ScalerConfig                *v1alpha1.ScalerConfig
 }
 
 // The Scaler's role is to process the messages it receives from the listener.
@@ -58,8 +59,12 @@ func New(config Config, options ...Option) (*Scaler, error) {
 		return nil, err
 	}
 
-	conf.QPS = 50
-	conf.Burst = 100
+	if config.ScalerConfig == nil || config.ScalerConfig.QPS == nil || config.ScalerConfig.Burst == nil {
+		return nil, fmt.Errorf("scaler config with qps and burst is required")
+	}
+
+	conf.QPS = float32(*config.ScalerConfig.QPS)
+	conf.Burst = *config.ScalerConfig.Burst
 
 	clientset, err := kubernetes.NewForConfig(conf)
 	if err != nil {
