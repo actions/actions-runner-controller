@@ -779,6 +779,44 @@ var _ = Describe("EphemeralRunner", func() {
 			).Should(BeEquivalentTo(true))
 		})
 
+		It("It should delete an ephemeral runner whose config secret never existed", func() {
+			orphanRunner := newExampleRunner("test-runner-missing-secret", autoscalingNS.Name, "non-existent-secret")
+			err := k8sClient.Create(ctx, orphanRunner)
+			Expect(err).To(BeNil(), "failed to create ephemeral runner")
+
+			// Wait for finalizers to be added. From this point on, without the fix,
+			// deletion would try to clean up a runner that was never registered
+			// with the service and fail indefinitely because its GitHubConfigSecret
+			// does not exist.
+			Eventually(
+				func() ([]string, error) {
+					created := new(v1alpha1.EphemeralRunner)
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: orphanRunner.Name, Namespace: orphanRunner.Namespace}, created); err != nil {
+						return nil, err
+					}
+					return created.Finalizers, nil
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(ContainElements(ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName))
+
+			err = k8sClient.Delete(ctx, orphanRunner)
+			Expect(err).To(BeNil(), "failed to delete ephemeral runner")
+
+			Eventually(
+				func() (bool, error) {
+					updated := new(v1alpha1.EphemeralRunner)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: orphanRunner.Name, Namespace: orphanRunner.Namespace}, updated)
+					if err == nil {
+						return false, nil
+					}
+					return kerrors.IsNotFound(err), nil
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(BeEquivalentTo(true))
+		})
+
 		It("It should eventually have runner id set", func() {
 			Eventually(
 				func() (int, error) {

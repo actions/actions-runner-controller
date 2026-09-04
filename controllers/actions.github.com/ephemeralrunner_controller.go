@@ -104,15 +104,19 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 
 		if controllerutil.ContainsFinalizer(&ephemeralRunner, ephemeralRunnerActionsFinalizerName) {
-			log.Info("Trying to clean up runner from the service")
-			ok, err := r.cleanupRunnerFromService(ctx, &ephemeralRunner, log)
-			if err != nil {
-				log.Error(err, "Failed to clean up runner from service")
-				return ctrl.Result{}, err
-			}
-			if !ok {
-				log.Info("Runner is not finished yet, retrying in 30s")
-				return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+			if ephemeralRunner.Status.RunnerID == 0 {
+				log.Info("Runner was never registered with the service, skipping cleanup")
+			} else {
+				log.Info("Trying to clean up runner from the service")
+				ok, err := r.cleanupRunnerFromService(ctx, &ephemeralRunner, log)
+				if err != nil {
+					log.Error(err, "Failed to clean up runner from service")
+					return ctrl.Result{}, err
+				}
+				if !ok {
+					log.Info("Runner is not finished yet, retrying in 30s")
+					return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+				}
 			}
 
 			log.Info("Runner is cleaned up from the service, removing finalizer")
