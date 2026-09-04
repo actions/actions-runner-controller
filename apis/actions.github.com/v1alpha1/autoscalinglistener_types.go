@@ -89,7 +89,18 @@ func (s *AutoscalingListenerSpec) Hash() string {
 }
 
 // AutoscalingListenerStatus defines the observed state of AutoscalingListener
-type AutoscalingListenerStatus struct{}
+type AutoscalingListenerStatus struct {
+	// ObservedGeneration is the most recent generation observed by the controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Conditions describe the current state of the AutoscalingListener.
+	// The Ready condition is True when the listener pod is running.
+	// +optional
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status

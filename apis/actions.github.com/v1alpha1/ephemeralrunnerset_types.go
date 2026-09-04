@@ -40,6 +40,18 @@ type EphemeralRunnerSetSpec struct {
 
 // EphemeralRunnerSetStatus defines the observed state of EphemeralRunnerSet
 type EphemeralRunnerSetStatus struct {
+	// ObservedGeneration is the most recent generation observed by the controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Conditions describe the current state of the EphemeralRunnerSet.
+	// The Ready condition is True while the set manages runners for the
+	// current spec, and False once the set becomes outdated.
+	// +optional
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
 	// +optional
 	Phase EphemeralRunnerSetPhase `json:"phase"`
 }
