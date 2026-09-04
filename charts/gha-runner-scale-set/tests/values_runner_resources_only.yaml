@@ -1,0 +1,13 @@
+githubConfigUrl: https://github.com/actions/actions-runner-controller
+githubConfigSecret:
+  github_token: test
+template:
+  spec:
+    containers:
+    - name: runner
+      resources:
+        limits:
+          memory: "2Gi"
+        requests:
+          cpu: "50m"
+          memory: "50Mi"
