@@ -1,14 +1,160 @@
 package scaler
 
 import (
+	"context"
+	"encoding/json"
 	"log/slog"
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/scaleset"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
 var discardLogger = slog.New(slog.DiscardHandler)
+
+func TestHandleJobStarted(t *testing.T) {
+	jobInfo := &scaleset.JobStarted{
+		RunnerName: "runner-1",
+		JobMessageBase: scaleset.JobMessageBase{
+			OwnerName:       "actions",
+			RepositoryName:  "actions-runner-controller",
+			JobID:           "job-1",
+			WorkflowRunID:   456,
+			JobWorkflowRef:  "actions/actions-runner-controller/.github/workflows/ci.yaml@refs/heads/main",
+			JobDisplayName:  "build",
+			RunnerRequestID: 123,
+		},
+	}
+
+	t.Run("patches job fields and running phase together", func(t *testing.T) {
+		runner := newTestEphemeralRunner(jobInfo.RunnerName, "")
+		scaler, shutdown := newTestScaler(t, runner)
+		defer shutdown()
+
+		require.NoError(t, scaler.HandleJobStarted(context.Background(), jobInfo))
+
+		assertJobStartedStatus(t, runner, jobInfo)
+		assert.Equal(t, v1alpha1.EphemeralRunnerPhaseRunning, runner.Status.Phase)
+	})
+
+	t.Run("repeated assignment remains idempotent", func(t *testing.T) {
+		runner := newTestEphemeralRunner(jobInfo.RunnerName, v1alpha1.EphemeralRunnerPhaseRunning)
+		scaler, shutdown := newTestScaler(t, runner)
+		defer shutdown()
+
+		require.NoError(t, scaler.HandleJobStarted(context.Background(), jobInfo))
+		firstStatus := runner.Status
+		require.NoError(t, scaler.HandleJobStarted(context.Background(), jobInfo))
+
+		assert.Equal(t, firstStatus, runner.Status)
+		assertJobStartedStatus(t, runner, jobInfo)
+		assert.Equal(t, v1alpha1.EphemeralRunnerPhaseRunning, runner.Status.Phase)
+	})
+
+	for _, phase := range []v1alpha1.EphemeralRunnerPhase{
+		v1alpha1.EphemeralRunnerPhaseFailed,
+		v1alpha1.EphemeralRunnerPhaseSucceeded,
+		v1alpha1.EphemeralRunnerPhaseOutdated,
+	} {
+		t.Run("preserves "+string(phase)+" phase while patching job fields", func(t *testing.T) {
+			runner := newTestEphemeralRunner(jobInfo.RunnerName, phase)
+			scaler, shutdown := newTestScaler(t, runner)
+			defer shutdown()
+
+			require.NoError(t, scaler.HandleJobStarted(context.Background(), jobInfo))
+
+			assertJobStartedStatus(t, runner, jobInfo)
+			assert.Equal(t, phase, runner.Status.Phase)
+		})
+	}
+
+	t.Run("preserves deleting runner phase while patching job fields", func(t *testing.T) {
+		runner := newTestEphemeralRunner(jobInfo.RunnerName, v1alpha1.EphemeralRunnerPhasePending)
+		deletionTimestamp := metav1.Now()
+		runner.DeletionTimestamp = &deletionTimestamp
+		scaler, shutdown := newTestScaler(t, runner)
+		defer shutdown()
+
+		require.NoError(t, scaler.HandleJobStarted(context.Background(), jobInfo))
+
+		assertJobStartedStatus(t, runner, jobInfo)
+		assert.Equal(t, v1alpha1.EphemeralRunnerPhasePending, runner.Status.Phase)
+	})
+}
+
+func newTestEphemeralRunner(name string, phase v1alpha1.EphemeralRunnerPhase) *v1alpha1.EphemeralRunner {
+	return &v1alpha1.EphemeralRunner{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: "default",
+		},
+		Status: v1alpha1.EphemeralRunnerStatus{
+			Phase: phase,
+		},
+	}
+}
+
+func newTestScaler(t *testing.T, runner *v1alpha1.EphemeralRunner) (*Scaler, func()) {
+	t.Helper()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		switch r.Method {
+		case http.MethodGet:
+			require.NoError(t, json.NewEncoder(w).Encode(runner))
+		case http.MethodPatch:
+			var patch v1alpha1.EphemeralRunner
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&patch))
+
+			runner.Status.JobRequestID = patch.Status.JobRequestID
+			runner.Status.JobRepositoryName = patch.Status.JobRepositoryName
+			runner.Status.JobID = patch.Status.JobID
+			runner.Status.WorkflowRunID = patch.Status.WorkflowRunID
+			runner.Status.JobWorkflowRef = patch.Status.JobWorkflowRef
+			runner.Status.JobDisplayName = patch.Status.JobDisplayName
+			if patch.Status.Phase != "" {
+				runner.Status.Phase = patch.Status.Phase
+			}
+
+			require.NoError(t, json.NewEncoder(w).Encode(runner))
+		default:
+			http.Error(w, "unexpected method", http.StatusMethodNotAllowed)
+		}
+	}))
+
+	clientset, err := kubernetes.NewForConfig(&rest.Config{Host: server.URL})
+	require.NoError(t, err)
+
+	return &Scaler{
+		clientset: clientset,
+		config: Config{
+			EphemeralRunnerSetNamespace: runner.Namespace,
+		},
+		targetRunners: -1,
+		patchSeq:      -1,
+		logger:        discardLogger,
+	}, server.Close
+}
+
+func assertJobStartedStatus(t *testing.T, runner *v1alpha1.EphemeralRunner, jobInfo *scaleset.JobStarted) {
+	t.Helper()
+
+	assert.Equal(t, jobInfo.RunnerRequestID, runner.Status.JobRequestID)
+	assert.Equal(t, jobInfo.JobID, runner.Status.JobID)
+	assert.Equal(t, jobInfo.OwnerName+"/"+jobInfo.RepositoryName, runner.Status.JobRepositoryName)
+	assert.Equal(t, jobInfo.WorkflowRunID, runner.Status.WorkflowRunID)
+	assert.Equal(t, jobInfo.JobWorkflowRef, runner.Status.JobWorkflowRef)
+	assert.Equal(t, jobInfo.JobDisplayName, runner.Status.JobDisplayName)
+}
 
 func TestSetDesiredWorkerState_MinMaxDefaults(t *testing.T) {
 	newEmptyWorker := func() *Scaler {
