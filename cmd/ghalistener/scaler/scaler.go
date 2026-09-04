@@ -216,7 +216,7 @@ func (w *Scaler) HandleDesiredRunnerCount(ctx context.Context, count int) (int, 
 		Do(ctx).
 		Into(patchedEphemeralRunnerSet)
 	if err != nil {
-		return 0, fmt.Errorf("could not patch ephemeral runner set , patch JSON: %s, error: %w", string(mergePatch), err)
+		return 0, fmt.Errorf("could not patch ephemeral runner set, patch JSON: %s, error: %w", string(mergePatch), err)
 	}
 
 	w.logger.Info(
