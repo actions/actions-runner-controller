@@ -244,9 +244,7 @@ spec:
           {{- include "gha-runner-scale-set.dind-container" . | nindent 8 }}
           {{- end }}
         {{- end }}
-        {{- with .Values.template.spec.initContainers }}
-      {{- toYaml . | nindent 6 }}
-        {{- end }}
+        {{- include "gha-runner-scale-set.non-dind-init-containers" . | nindent 6 }}
       {{- end }}
       containers:
       {{- if eq $containerMode.type "dind" }}

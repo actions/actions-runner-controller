@@ -306,6 +306,11 @@ githubConfigSecret:
 ## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
 template:
   ## template.spec will be modified if you change the container mode
+  ## with containerMode.type=dind, ARC generates runner, dind, and init-dind-externals
+  ## containers automatically. You can customize them by adding entries to template.spec:
+  ##   - runner: template.spec.containers
+  ##   - dind: template.spec.containers or template.spec.initContainers (Kubernetes 1.29+)
+  ##   - init-dind-externals: template.spec.initContainers
   ## with containerMode.type=dind, we will populate the template.spec with following pod spec
   ## template:
   ##   spec:
@@ -316,6 +321,10 @@ template:
   ##       volumeMounts:
   ##         - name: dind-externals
   ##           mountPath: /home/runner/tmpDir
+  ##       resources:
+  ##         requests:
+  ##           cpu: "50m"
+  ##           memory: "128Mi"
   ##     - name: dind
   ##       image: docker:dind
   ##       args:
@@ -357,6 +366,13 @@ template:
   ##           mountPath: /home/runner/_work
   ##         - name: dind-sock
   ##           mountPath: /var/run
+  ##     - name: dind
+  ##       resources:
+  ##         requests:
+  ##           cpu: "100m"
+  ##           memory: "256Mi"
+  ##         limits:
+  ##           cpu: "500m"
   ##     volumes:
   ##     - name: work
   ##       emptyDir: {}
