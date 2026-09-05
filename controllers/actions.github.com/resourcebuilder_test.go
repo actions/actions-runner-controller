@@ -102,11 +102,13 @@ func TestMetadataPropagation(t *testing.T) {
 		},
 	}
 
+	cache := NewResourceCache()
 	b := ResourceBuilder{
 		ExcludeLabelPropagationPrefixes: []string{
 			"example.com/",
 			"directly.excluded.org/label",
 		},
+		ResourceCache: &cache,
 	}
 	ephemeralRunnerSet, err := b.newEphemeralRunnerSet(&autoscalingRunnerSet)
 	require.NoError(t, err)
@@ -171,6 +173,7 @@ func TestMetadataPropagation(t *testing.T) {
 
 	ephemeralRunner, err := b.newEphemeralRunner(ephemeralRunnerSet)
 	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName}, ephemeralRunner.Finalizers)
 
 	for _, key := range commonLabelKeys {
 		if key == LabelKeyKubernetesComponent {
@@ -257,7 +260,8 @@ func TestGitHubURLTrimLabelValues(t *testing.T) {
 			GitHubConfigUrl: fmt.Sprintf("https://github.com/%s/%s", organization, repository),
 		}
 
-		var b ResourceBuilder
+		cache := NewResourceCache()
+		b := ResourceBuilder{ResourceCache: &cache}
 		ephemeralRunnerSet, err := b.newEphemeralRunnerSet(autoscalingRunnerSet)
 		require.NoError(t, err)
 		assert.Len(t, ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise], 0)
@@ -281,7 +285,8 @@ func TestGitHubURLTrimLabelValues(t *testing.T) {
 			GitHubConfigUrl: fmt.Sprintf("https://github.com/enterprises/%s", enterprise),
 		}
 
-		var b ResourceBuilder
+		cache := NewResourceCache()
+		b := ResourceBuilder{ResourceCache: &cache}
 		ephemeralRunnerSet, err := b.newEphemeralRunnerSet(autoscalingRunnerSet)
 		require.NoError(t, err)
 		assert.Len(t, ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise], 63)
@@ -322,7 +327,8 @@ func TestOwnershipRelationships(t *testing.T) {
 	}
 
 	// Initialize ResourceBuilder
-	b := ResourceBuilder{}
+	cache := NewResourceCache()
+	b := ResourceBuilder{ResourceCache: &cache}
 
 	// Create EphemeralRunnerSet
 	ephemeralRunnerSet, err := b.newEphemeralRunnerSet(&autoscalingRunnerSet)
@@ -421,7 +427,8 @@ func TestListenerPodNodeSelector(t *testing.T) {
 		},
 	}
 
-	b := ResourceBuilder{}
+	cache := NewResourceCache()
+	b := ResourceBuilder{ResourceCache: &cache}
 	ephemeralRunnerSet, err := b.newEphemeralRunnerSet(&autoscalingRunnerSet)
 	require.NoError(t, err)
 

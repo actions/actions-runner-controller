@@ -218,6 +218,7 @@ func main() {
 	}
 
 	actionsgithubcom.SetListenerEntrypoint(os.Getenv("LISTENER_ENTRYPOINT"))
+	resourceCache := actionsgithubcom.NewResourceCache()
 
 	var webhookServer webhook.Server
 	if port != 0 {
@@ -303,6 +304,7 @@ func main() {
 			ExcludeLabelPropagationPrefixes: excludeLabelPropagationPrefixes,
 			SecretResolver:                  secretResolver,
 			Scheme:                          mgr.GetScheme(),
+			ResourceCache:                   &resourceCache,
 		}
 
 		log.Info("Resource builder initializing")
