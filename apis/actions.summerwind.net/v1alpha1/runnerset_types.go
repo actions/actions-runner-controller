@@ -69,10 +69,15 @@ type RunnerSetStatus struct {
 	// Replicas is the total number of replicas
 	// +optional
 	Replicas *int `json:"replicas"`
+
+	// Selector is the string form of the pod selector
+	// +optional
+	Selector string `json:"selector"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.replicas,selectorpath=.status.selector
 // +kubebuilder:printcolumn:JSONPath=".spec.replicas",name=Desired,type=number
 // +kubebuilder:printcolumn:JSONPath=".status.replicas",name=Current,type=number
 // +kubebuilder:printcolumn:JSONPath=".status.updatedReplicas",name=Up-To-Date,type=number
