@@ -76,7 +76,7 @@ helm upgrade --install --namespace actions-runner-system --create-namespace\
 ##### Deploy ARC
 
 ```shell
-kubectl apply -f \
+kubectl create -f \
 https://github.com/actions/actions-runner-controller/\
 releases/download/v0.22.0/actions-runner-controller.yaml
 ```
@@ -92,7 +92,7 @@ kubectl create secret generic controller-manager \
 ````
 
 <sub> *note:- Replace REPLACE_YOUR_TOKEN_HERE with your PAT that was generated previously.</sub>
-  
+
   </details>
 
 2️⃣ Create the GitHub self hosted runners and configure to run against your repository.
