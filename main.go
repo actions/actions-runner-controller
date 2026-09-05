@@ -226,6 +226,16 @@ func main() {
 		})
 	}
 
+	clientOptions := client.Options{}
+	if watchSingleNamespace == "" {
+		clientOptions.Cache = &client.CacheOptions{
+			DisableFor: []client.Object{
+				&corev1.Secret{},
+				&corev1.ConfigMap{},
+			},
+		}
+	}
+
 	cfg := ctrl.GetConfigOrDie()
 	cfg.QPS = float32(k8sClientRateLimiterQPS)
 	cfg.Burst = k8sClientRateLimiterBurst
@@ -244,14 +254,7 @@ func main() {
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       leaderElectionID,
-		Client: client.Options{
-			Cache: &client.CacheOptions{
-				DisableFor: []client.Object{
-					&corev1.Secret{},
-					&corev1.ConfigMap{},
-				},
-			},
-		},
+		Client:                 clientOptions,
 	})
 	if err != nil {
 		log.Error(err, "unable to start manager")
