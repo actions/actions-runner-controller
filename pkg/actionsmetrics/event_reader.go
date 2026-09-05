@@ -244,6 +244,22 @@ func (reader *EventReader) fetchAndParseWorkflowJobLogs(ctx context.Context, e *
 		startedTime   time.Time
 		completedTime time.Time
 	)
+	// Default these values to the timestamps contained in the event. They will
+	// be updated if the log contains more accurate values, however the
+	// "Waiting for a runner to pick up this job..." and "Job is about to start
+	// running on the runner:" lines are only present in the logs until the job
+	// has finished, at which point they are removed from the job logs by
+	// Github, so they can't be used to calculate the job duration after the
+	// job has finished.
+	if e.WorkflowJob.CreatedAt != nil {
+		queuedTime = e.WorkflowJob.CreatedAt.Time
+	}
+	if e.WorkflowJob.StartedAt != nil {
+		startedTime = e.WorkflowJob.StartedAt.Time
+	}
+	if e.WorkflowJob.CompletedAt != nil {
+		completedTime = e.WorkflowJob.CompletedAt.Time
+	}
 
 	func() {
 		// Read jobLogs.Body line by line
