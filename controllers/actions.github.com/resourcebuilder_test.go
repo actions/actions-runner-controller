@@ -102,18 +102,20 @@ func TestMetadataPropagation(t *testing.T) {
 		},
 	}
 
+	cache := NewResourceCache()
 	b := ResourceBuilder{
 		ExcludeLabelPropagationPrefixes: []string{
 			"example.com/",
 			"directly.excluded.org/label",
 		},
+		ResourceCache: &cache,
 	}
 	ephemeralRunnerSet, err := b.newEphemeralRunnerSet(&autoscalingRunnerSet)
 	require.NoError(t, err)
 	assert.Equal(t, labelValueKubernetesPartOf, ephemeralRunnerSet.Labels[LabelKeyKubernetesPartOf])
 	assert.Equal(t, "runner-set", ephemeralRunnerSet.Labels[LabelKeyKubernetesComponent])
 	assert.Equal(t, autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion], ephemeralRunnerSet.Labels[LabelKeyKubernetesVersion])
-	assert.NotEmpty(t, ephemeralRunnerSet.Annotations[annotationKeyIntegrityHash])
+	assert.NotContains(t, ephemeralRunnerSet.Annotations, "actions.github.com/integrity-hash")
 	assert.Equal(t, autoscalingRunnerSet.Name, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName])
 	assert.Equal(t, autoscalingRunnerSet.Namespace, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace])
 	assert.Equal(t, "", ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise])
@@ -130,7 +132,7 @@ func TestMetadataPropagation(t *testing.T) {
 	assert.Equal(t, labelValueKubernetesPartOf, listener.Labels[LabelKeyKubernetesPartOf])
 	assert.Equal(t, "runner-scale-set-listener", listener.Labels[LabelKeyKubernetesComponent])
 	assert.Equal(t, autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion], listener.Labels[LabelKeyKubernetesVersion])
-	assert.NotEmpty(t, ephemeralRunnerSet.Annotations[annotationKeyIntegrityHash])
+	assert.NotContains(t, listener.Annotations, "actions.github.com/integrity-hash")
 	assert.Equal(t, autoscalingRunnerSet.Name, listener.Labels[LabelKeyGitHubScaleSetName])
 	assert.Equal(t, autoscalingRunnerSet.Namespace, listener.Labels[LabelKeyGitHubScaleSetNamespace])
 	assert.Equal(t, "", listener.Labels[LabelKeyGitHubEnterprise])
@@ -171,6 +173,7 @@ func TestMetadataPropagation(t *testing.T) {
 
 	ephemeralRunner, err := b.newEphemeralRunner(ephemeralRunnerSet)
 	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName}, ephemeralRunner.Finalizers)
 
 	for _, key := range commonLabelKeys {
 		if key == LabelKeyKubernetesComponent {
@@ -203,7 +206,7 @@ func TestMetadataPropagation(t *testing.T) {
 	}
 }
 
-func TestEphemeralRunnerSetProxySecretZIdentityHash(t *testing.T) {
+func TestEphemeralRunnerSetProxySecretMetadata(t *testing.T) {
 	ephemeralRunnerSet := &v1alpha1.EphemeralRunnerSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-scale-set",
@@ -221,13 +224,11 @@ func TestEphemeralRunnerSetProxySecretZIdentityHash(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	actualHash := proxySecret.Annotations[annotationKeyIntegrityHash]
-	assert.NotEmpty(t, actualHash)
-	assert.Equal(t, ephemeralRunnerSetProxySecretZIdentityHash(proxySecret), actualHash)
-
-	changedProxySecret := proxySecret.DeepCopy()
-	changedProxySecret.Data["http_proxy"] = []byte("http://updated-proxy.example.com")
-	assert.NotEqual(t, actualHash, ephemeralRunnerSetProxySecretZIdentityHash(changedProxySecret))
+	assert.Equal(t, proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet), proxySecret.Name)
+	assert.Equal(t, ephemeralRunnerSet.Namespace, proxySecret.Namespace)
+	assert.Equal(t, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName], proxySecret.Labels[LabelKeyGitHubScaleSetName])
+	assert.Equal(t, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace], proxySecret.Labels[LabelKeyGitHubScaleSetNamespace])
+	assert.NotContains(t, proxySecret.Annotations, "actions.github.com/integrity-hash")
 }
 
 func TestGitHubURLTrimLabelValues(t *testing.T) {
@@ -257,7 +258,8 @@ func TestGitHubURLTrimLabelValues(t *testing.T) {
 			GitHubConfigUrl: fmt.Sprintf("https://github.com/%s/%s", organization, repository),
 		}
 
-		var b ResourceBuilder
+		cache := NewResourceCache()
+		b := ResourceBuilder{ResourceCache: &cache}
 		ephemeralRunnerSet, err := b.newEphemeralRunnerSet(autoscalingRunnerSet)
 		require.NoError(t, err)
 		assert.Len(t, ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise], 0)
@@ -281,7 +283,8 @@ func TestGitHubURLTrimLabelValues(t *testing.T) {
 			GitHubConfigUrl: fmt.Sprintf("https://github.com/enterprises/%s", enterprise),
 		}
 
-		var b ResourceBuilder
+		cache := NewResourceCache()
+		b := ResourceBuilder{ResourceCache: &cache}
 		ephemeralRunnerSet, err := b.newEphemeralRunnerSet(autoscalingRunnerSet)
 		require.NoError(t, err)
 		assert.Len(t, ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise], 63)
@@ -313,7 +316,6 @@ func TestOwnershipRelationships(t *testing.T) {
 				runnerScaleSetIDAnnotationKey:         "1",
 				AnnotationKeyGitHubRunnerGroupName:    "test-group",
 				AnnotationKeyGitHubRunnerScaleSetName: "test-scale-set",
-				annotationKeyIntegrityHash:            "test-hash",
 			},
 		},
 		Spec: v1alpha1.AutoscalingRunnerSetSpec{
@@ -322,7 +324,8 @@ func TestOwnershipRelationships(t *testing.T) {
 	}
 
 	// Initialize ResourceBuilder
-	b := ResourceBuilder{}
+	cache := NewResourceCache()
+	b := ResourceBuilder{ResourceCache: &cache}
 
 	// Create EphemeralRunnerSet
 	ephemeralRunnerSet, err := b.newEphemeralRunnerSet(&autoscalingRunnerSet)
@@ -421,7 +424,8 @@ func TestListenerPodNodeSelector(t *testing.T) {
 		},
 	}
 
-	b := ResourceBuilder{}
+	cache := NewResourceCache()
+	b := ResourceBuilder{ResourceCache: &cache}
 	ephemeralRunnerSet, err := b.newEphemeralRunnerSet(&autoscalingRunnerSet)
 	require.NoError(t, err)
 

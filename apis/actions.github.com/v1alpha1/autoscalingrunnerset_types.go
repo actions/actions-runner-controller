@@ -319,6 +319,10 @@ type HistogramMetric struct {
 type AutoscalingRunnerSetStatus struct {
 	// +optional
 	Phase AutoscalingRunnerSetPhase `json:"phase"`
+	// ObservedGeneration tracks the metadata.generation of this ARS at observation time,
+	// enabling detection of Pending phase when generation differs. Unset defaults to 0.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 type AutoscalingRunnerSetPhase string
