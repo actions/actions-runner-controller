@@ -25,6 +25,7 @@ func TestEffectiveRateLimiterConfig(t *testing.T) {
 		wantQPS   int
 		wantBurst int
 		wantLog   string
+		wantLevel string
 	}{
 		{
 			name: "uses configured values",
@@ -40,6 +41,7 @@ func TestEffectiveRateLimiterConfig(t *testing.T) {
 			wantQPS:   defaultQPS,
 			wantBurst: defaultBurst,
 			wantLog:   "Listener scaler configuration is missing; using defaults",
+			wantLevel: "DEBUG",
 		},
 		{
 			name:      "defaults missing qps",
@@ -47,6 +49,7 @@ func TestEffectiveRateLimiterConfig(t *testing.T) {
 			wantQPS:   defaultQPS,
 			wantBurst: burst,
 			wantLog:   "Listener scaler qps is missing; using default",
+			wantLevel: "DEBUG",
 		},
 		{
 			name:      "defaults missing burst",
@@ -54,6 +57,7 @@ func TestEffectiveRateLimiterConfig(t *testing.T) {
 			wantQPS:   qps,
 			wantBurst: defaultBurst,
 			wantLog:   "Listener scaler burst is missing; using default",
+			wantLevel: "DEBUG",
 		},
 		{
 			name:      "defaults zero qps",
@@ -61,6 +65,7 @@ func TestEffectiveRateLimiterConfig(t *testing.T) {
 			wantQPS:   defaultQPS,
 			wantBurst: burst,
 			wantLog:   "Listener scaler qps must be greater than 0; using default",
+			wantLevel: "WARN",
 		},
 		{
 			name:      "defaults negative burst",
@@ -68,13 +73,14 @@ func TestEffectiveRateLimiterConfig(t *testing.T) {
 			wantQPS:   qps,
 			wantBurst: defaultBurst,
 			wantLog:   "Listener scaler burst must be greater than 0; using default",
+			wantLevel: "WARN",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var logs bytes.Buffer
-			logger := slog.New(slog.NewTextHandler(&logs, nil))
+			logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 			qps, burst := effectiveRateLimiterConfig(tt.config, logger)
 
@@ -82,9 +88,35 @@ func TestEffectiveRateLimiterConfig(t *testing.T) {
 			assert.Equal(t, tt.wantBurst, burst)
 			if tt.wantLog == "" {
 				assert.Empty(t, logs.String())
-			} else {
-				assert.Contains(t, logs.String(), "msg="+strconv.Quote(tt.wantLog))
+				return
 			}
+			assert.Contains(t, logs.String(), "msg="+strconv.Quote(tt.wantLog))
+			// Missing values are a normal configuration, so they must not be
+			// logged as warnings; only out-of-range values are.
+			assert.Contains(t, logs.String(), "level="+tt.wantLevel)
+		})
+	}
+}
+
+// TestEffectiveRateLimiterConfig_QuietAtInfoLevel asserts that a listener which
+// does not configure the scaler produces no output at the default log level.
+func TestEffectiveRateLimiterConfig_QuietAtInfoLevel(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		config *v1alpha1.ScalerConfig
+	}{
+		{name: "nil config"},
+		{name: "empty config", config: &v1alpha1.ScalerConfig{}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var logs bytes.Buffer
+			logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+			qps, burst := effectiveRateLimiterConfig(tt.config, logger)
+
+			assert.Equal(t, defaultQPS, qps)
+			assert.Equal(t, defaultBurst, burst)
+			assert.Empty(t, logs.String())
 		})
 	}
 }

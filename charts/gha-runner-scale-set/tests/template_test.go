@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/utils/ptr"
 )
 
 func TestTemplateRenderedGitHubSecretWithGitHubToken(t *testing.T) {
@@ -162,22 +163,47 @@ func TestTemplateListenerScalerValidation(t *testing.T) {
 		{
 			name:          "zero qps",
 			setValues:     map[string]string{"listenerConfig.scaler.qps": "0"},
-			wantErrorText: ".Values.listenerConfig.scaler.qps must be greater than 0",
+			wantErrorText: "at '/listenerConfig/scaler/qps': minimum: got 0, want 1",
 		},
 		{
 			name:          "negative burst",
 			setValues:     map[string]string{"listenerConfig.scaler.burst": "-1"},
-			wantErrorText: ".Values.listenerConfig.scaler.burst must be greater than 0",
+			wantErrorText: "at '/listenerConfig/scaler/burst': minimum: got -1, want 1",
 		},
 		{
 			name:          "fractional qps",
 			setValues:     map[string]string{"listenerConfig.scaler.qps": "1.5"},
-			wantErrorText: ".Values.listenerConfig.scaler.qps must be an integer greater than 0",
+			wantErrorText: "at '/listenerConfig/scaler/qps'",
 		},
 		{
 			name:          "string burst",
 			setStrValues:  map[string]string{"listenerConfig.scaler.burst": "100"},
-			wantErrorText: ".Values.listenerConfig.scaler.burst must be an integer greater than 0",
+			wantErrorText: "at '/listenerConfig/scaler/burst': got string, want integer",
+		},
+		{
+			name:          "boolean qps",
+			setValues:     map[string]string{"listenerConfig.scaler.qps": "true"},
+			wantErrorText: "at '/listenerConfig/scaler/qps': got boolean, want integer",
+		},
+		{
+			name:          "scaler is not an object",
+			setValues:     map[string]string{"listenerConfig.scaler[0]": "a"},
+			wantErrorText: "at '/listenerConfig/scaler': got array, want null or object",
+		},
+		{
+			name:          "listenerConfig is not an object",
+			setStrValues:  map[string]string{"listenerConfig": "foo"},
+			wantErrorText: "at '/listenerConfig': got string, want null or object",
+		},
+		{
+			name:          "misspelled scaler key",
+			setValues:     map[string]string{"listenerConfig.scalar.qps": "5"},
+			wantErrorText: "at '/listenerConfig': additional properties 'scalar' not allowed",
+		},
+		{
+			name:          "unknown key under scaler",
+			setStrValues:  map[string]string{"listenerConfig.scaler.foo": "bar"},
+			wantErrorText: "at '/listenerConfig/scaler': additional properties 'foo' not allowed",
 		},
 	}
 
@@ -192,14 +218,90 @@ func TestTemplateListenerScalerValidation(t *testing.T) {
 			}
 
 			options := &helm.Options{
-				Logger:        logger.Discard,
-				SetValues:     setValues,
-				SetStrValues:  tt.setStrValues,
+				Logger:         logger.Discard,
+				SetValues:      setValues,
+				SetStrValues:   tt.setStrValues,
 				KubectlOptions: k8s.NewKubectlOptions("", "", "test"),
 			}
 			_, err := helm.RenderTemplateContextE(t, t.Context(), options, helmChartPath, "test-runners", []string{"templates/autoscalingrunnerset.yaml"})
 			require.Error(t, err)
 			assert.ErrorContains(t, err, tt.wantErrorText)
+		})
+	}
+}
+
+func TestTemplateListenerScalerConfig(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	baseValues := map[string]string{
+		"githubConfigUrl":                    "https://github.com/actions",
+		"githubConfigSecret.github_token":    "gh_token12345",
+		"controllerServiceAccount.name":      "arc",
+		"controllerServiceAccount.namespace": "arc-system",
+	}
+	tests := []struct {
+		name      string
+		setValues map[string]string
+		wantQPS   *int
+		wantBurst *int
+	}{
+		{
+			name:      "defaults from values.yaml",
+			wantQPS:   ptr.To(50),
+			wantBurst: ptr.To(100),
+		},
+		{
+			name:      "both overridden",
+			setValues: map[string]string{"listenerConfig.scaler.qps": "100", "listenerConfig.scaler.burst": "200"},
+			wantQPS:   ptr.To(100),
+			wantBurst: ptr.To(200),
+		},
+		{
+			name:      "qps overridden keeps default burst",
+			setValues: map[string]string{"listenerConfig.scaler.qps": "75"},
+			wantQPS:   ptr.To(75),
+			wantBurst: ptr.To(100),
+		},
+		{
+			name:      "listenerConfig disabled",
+			setValues: map[string]string{"listenerConfig": "null"},
+			wantQPS:   nil,
+			wantBurst: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setValues := make(map[string]string, len(baseValues)+len(tt.setValues))
+			for key, value := range baseValues {
+				setValues[key] = value
+			}
+			for key, value := range tt.setValues {
+				setValues[key] = value
+			}
+
+			options := &helm.Options{
+				Logger:         logger.Discard,
+				SetValues:      setValues,
+				KubectlOptions: k8s.NewKubectlOptions("", "", "test"),
+			}
+			output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, "test-runners", []string{"templates/autoscalingrunnerset.yaml"})
+
+			var ars v1alpha1.AutoscalingRunnerSet
+			helm.UnmarshalK8SYaml(t, output, &ars)
+
+			if tt.wantQPS == nil && tt.wantBurst == nil {
+				assert.Nil(t, ars.Spec.ListenerConfig.GetScaler())
+				return
+			}
+
+			scaler := ars.Spec.ListenerConfig.GetScaler()
+			require.NotNil(t, scaler)
+			assert.Equal(t, tt.wantQPS, scaler.QPS)
+			assert.Equal(t, tt.wantBurst, scaler.Burst)
 		})
 	}
 }

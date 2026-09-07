@@ -86,13 +86,13 @@ func New(config Config, options ...Option) (*Scaler, error) {
 
 func effectiveRateLimiterConfig(config *v1alpha1.ScalerConfig, logger *slog.Logger) (int, int) {
 	if config == nil {
-		logger.Warn("Listener scaler configuration is missing; using defaults", "qps", defaultQPS, "burst", defaultBurst)
+		logger.Debug("Listener scaler configuration is missing; using defaults", "qps", defaultQPS, "burst", defaultBurst)
 		return defaultQPS, defaultBurst
 	}
 
 	qps := defaultQPS
 	if config.QPS == nil {
-		logger.Warn("Listener scaler qps is missing; using default", "default", defaultQPS)
+		logger.Debug("Listener scaler qps is missing; using default", "default", defaultQPS)
 	} else if *config.QPS < 1 {
 		logger.Warn("Listener scaler qps must be greater than 0; using default", "configured", *config.QPS, "default", defaultQPS)
 	} else {
@@ -101,7 +101,7 @@ func effectiveRateLimiterConfig(config *v1alpha1.ScalerConfig, logger *slog.Logg
 
 	burst := defaultBurst
 	if config.Burst == nil {
-		logger.Warn("Listener scaler burst is missing; using default", "default", defaultBurst)
+		logger.Debug("Listener scaler burst is missing; using default", "default", defaultBurst)
 	} else if *config.Burst < 1 {
 		logger.Warn("Listener scaler burst must be greater than 0; using default", "configured", *config.Burst, "default", defaultBurst)
 	} else {

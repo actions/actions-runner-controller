@@ -1,48 +1,122 @@
-suite: "Test AutoscalingRunnerSet Listener Scaler Validation"
+suite: "Test AutoscalingRunnerSet Listener Validation"
 templates:
   - autoscalingrunnserset.yaml
+set: &base
+  scaleset.name: "test"
+  auth.url: "https://github.com/org"
+  auth.githubToken: "gh_token12345"
+  controllerServiceAccount.name: "arc"
+  controllerServiceAccount.namespace: "arc-system"
 tests:
   - it: rejects zero qps
     set:
-      scaleset.name: "test"
-      auth.url: "https://github.com/org"
-      auth.githubToken: "gh_token12345"
-      controllerServiceAccount.name: "arc"
-      controllerServiceAccount.namespace: "arc-system"
+      <<: *base
       listener.scaler.qps: 0
     asserts:
       - failedTemplate:
           errorMessage: ".Values.listener.scaler.qps must be greater than 0"
+
   - it: rejects negative burst
     set:
-      scaleset.name: "test"
-      auth.url: "https://github.com/org"
-      auth.githubToken: "gh_token12345"
-      controllerServiceAccount.name: "arc"
-      controllerServiceAccount.namespace: "arc-system"
+      <<: *base
       listener.scaler.burst: -1
     asserts:
       - failedTemplate:
           errorMessage: ".Values.listener.scaler.burst must be greater than 0"
+
   - it: rejects fractional qps
     set:
-      scaleset.name: "test"
-      auth.url: "https://github.com/org"
-      auth.githubToken: "gh_token12345"
-      controllerServiceAccount.name: "arc"
-      controllerServiceAccount.namespace: "arc-system"
+      <<: *base
       listener.scaler.qps: 1.5
     asserts:
       - failedTemplate:
           errorMessage: ".Values.listener.scaler.qps must be an integer greater than 0"
+
   - it: rejects a string burst
     set:
-      scaleset.name: "test"
-      auth.url: "https://github.com/org"
-      auth.githubToken: "gh_token12345"
-      controllerServiceAccount.name: "arc"
-      controllerServiceAccount.namespace: "arc-system"
+      <<: *base
       listener.scaler.burst: "100"
     asserts:
       - failedTemplate:
           errorMessage: ".Values.listener.scaler.burst must be an integer greater than 0"
+
+  - it: rejects a boolean qps
+    set:
+      <<: *base
+      listener.scaler.qps: true
+    asserts:
+      - failedTemplate:
+          errorMessage: ".Values.listener.scaler.qps must be an integer greater than 0"
+
+  - it: rejects a scaler that is not an object
+    set:
+      <<: *base
+      listener.scaler: "nope"
+    asserts:
+      - failedTemplate:
+          errorMessage: ".Values.listener.scaler must be an object"
+
+  - it: rejects a listener that is not an object
+    set:
+      <<: *base
+      listener: "nope"
+    asserts:
+      - failedTemplate:
+          errorMessage: ".Values.listener must be an object"
+
+  - it: rejects a metrics value that is not an object
+    set:
+      <<: *base
+      listener.metrics: "nope"
+    asserts:
+      - failedTemplate:
+          errorMessage: ".Values.listener.metrics must be an object"
+
+  - it: rejects a podTemplate that is not an object
+    set:
+      <<: *base
+      listener.podTemplate: "nope"
+    asserts:
+      - failedTemplate:
+          errorMessage: ".Values.listener.podTemplate must be an object"
+
+  - it: rejects a misspelled key under listener
+    set:
+      <<: *base
+      listener.metrcs.counters: {}
+    asserts:
+      - failedTemplate:
+          errorMessage: ".Values.listener.metrcs is not a supported key; supported keys are: metrics, podTemplate, scaler"
+
+  - it: rejects a misspelled key under listener.scaler
+    set:
+      <<: *base
+      listener.scaler.qbs: 10
+    asserts:
+      - failedTemplate:
+          errorMessage: ".Values.listener.scaler.qbs is not a supported key; supported keys are: burst, qps"
+
+  - it: rejects the legacy top-level listenerMetrics key
+    set:
+      <<: *base
+      listenerMetrics.counters: {}
+    asserts:
+      - failedTemplate:
+          errorMessage: ".Values.listenerMetrics has moved to .Values.listener.metrics"
+
+  - it: rejects the legacy top-level listenerPodTemplate key
+    set:
+      <<: *base
+      listenerPodTemplate.spec.restartPolicy: Always
+    asserts:
+      - failedTemplate:
+          errorMessage: ".Values.listenerPodTemplate has moved to .Values.listener.podTemplate"
+
+  - it: treats a podTemplate with neither metadata nor spec as a no-op
+    set:
+      <<: *base
+      listener.podTemplate.spec: {}
+      listener.podTemplate.metadata: {}
+    asserts:
+      - notExists:
+          path: spec.listenerTemplate

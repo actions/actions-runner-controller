@@ -5,33 +5,55 @@
 {{- $kubeDefaults := (index $kubeMode "default" | default true) }}
 {{- $kubeServiceAccountName := (index $kubeMode "serviceAccountName" | default "") }}
 {{- $usesKubernetesSecrets := or (not .Values.secretResolution) (eq .Values.secretResolution.type "kubernetes") }}
+{{- /* All listener configuration lives under .Values.listener */ -}}
+{{- if hasKey .Values "listenerMetrics" }}
+  {{- fail ".Values.listenerMetrics has moved to .Values.listener.metrics" }}
+{{- end }}
+{{- if hasKey .Values "listenerPodTemplate" }}
+  {{- fail ".Values.listenerPodTemplate has moved to .Values.listener.podTemplate" }}
+{{- end }}
 {{- $listener := .Values.listener | default dict }}
 {{- if not (kindIs "map" $listener) }}
   {{- fail ".Values.listener must be an object" }}
 {{- end }}
-{{- if hasKey $listener "scaler" }}
-  {{- $scaler := index $listener "scaler" }}
-  {{- if not (kindIs "invalid" $scaler) }}
-    {{- if not (kindIs "map" $scaler) }}
-      {{- fail ".Values.listener.scaler must be an object" }}
-    {{- end }}
-    {{- range $name := list "qps" "burst" }}
-      {{- if hasKey $scaler $name }}
-        {{- $value := index $scaler $name }}
-        {{- if not (or (kindIs "int" $value) (kindIs "int64" $value) (kindIs "float64" $value)) }}
-          {{- fail (printf ".Values.listener.scaler.%s must be an integer greater than 0" $name) }}
-        {{- else }}
-          {{- $number := float64 $value }}
-          {{- if ne $number (floor $number) }}
-            {{- fail (printf ".Values.listener.scaler.%s must be an integer greater than 0" $name) }}
-          {{- else if lt $number (float64 1) }}
-            {{- fail (printf ".Values.listener.scaler.%s must be greater than 0" $name) }}
-          {{- end }}
-        {{- end }}
+{{- $listenerKeys := list "metrics" "podTemplate" "scaler" }}
+{{- range $name, $_ := $listener }}
+  {{- if not (has $name $listenerKeys) }}
+    {{- fail (printf ".Values.listener.%s is not a supported key; supported keys are: %s" $name (join ", " $listenerKeys)) }}
+  {{- end }}
+{{- end }}
+{{- range $name := list "metrics" "podTemplate" }}
+  {{- $value := index $listener $name | default dict }}
+  {{- if not (kindIs "map" $value) }}
+    {{- fail (printf ".Values.listener.%s must be an object" $name) }}
+  {{- end }}
+{{- end }}
+{{- $scaler := $listener.scaler | default dict }}
+{{- if not (kindIs "map" $scaler) }}
+  {{- fail ".Values.listener.scaler must be an object" }}
+{{- end }}
+{{- $scalerKeys := list "burst" "qps" }}
+{{- range $name, $_ := $scaler }}
+  {{- if not (has $name $scalerKeys) }}
+    {{- fail (printf ".Values.listener.scaler.%s is not a supported key; supported keys are: %s" $name (join ", " $scalerKeys)) }}
+  {{- end }}
+{{- end }}
+{{- range $name := $scalerKeys }}
+  {{- if hasKey $scaler $name }}
+    {{- $value := index $scaler $name }}
+    {{- if not (or (kindIs "int" $value) (kindIs "int64" $value) (kindIs "float64" $value)) }}
+      {{- fail (printf ".Values.listener.scaler.%s must be an integer greater than 0" $name) }}
+    {{- else }}
+      {{- $number := float64 $value }}
+      {{- if ne $number (floor $number) }}
+        {{- fail (printf ".Values.listener.scaler.%s must be an integer greater than 0" $name) }}
+      {{- else if lt $number (float64 1) }}
+        {{- fail (printf ".Values.listener.scaler.%s must be greater than 0" $name) }}
       {{- end }}
     {{- end }}
   {{- end }}
 {{- end }}
+{{- $listenerPodTemplate := $listener.podTemplate | default dict }}
 
 {{- $runnerPod := (index $runner "pod" | default dict) -}}
 {{- if not (kindIs "map" $runnerPod) -}}
@@ -192,9 +214,9 @@ spec:
   minRunners: {{ .Values.scaleset.minRunners | int }}
   {{- end }}
 
-  {{- if and .Values.listenerPodTemplate (or .Values.listenerPodTemplate.metadata .Values.listenerPodTemplate.spec) }}
+  {{- if or $listenerPodTemplate.metadata $listenerPodTemplate.spec }}
   listenerTemplate:
-    {{- include "listener-template.pod" . | nindent 4}}
+    {{- include "listener-template.pod" $listenerPodTemplate | nindent 4}}
   {{- end }}
 
   {{- with $listener.scaler }}

@@ -75,23 +75,6 @@ secretResolution:
   #     - example.com
   #     - example.org
 
-  ## listenerTemplate is the PodSpec for each listener Pod
-  ## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
-  # listenerPodTemplate:
-  #   spec:
-  #     containers:
-  #     # Use this section to append additional configuration to the listener container.
-  #     # If you change the name of the container, the configuration will not be applied to the listener,
-  #     # and it will be treated as a side-car container.
-  #     - name: listener
-  #       securityContext:
-  #         runAsUser: 1000
-  #     # Use this section to add the configuration of a side-car container.
-  #     # Comment it out or remove it if you don't need it.
-  #     # Spec for this container will be applied as is without any modifications.
-  #     - name: side-car
-  #       image: example-sidecar
-
   ## Resource object allows modifying resources created by the chart itself
 resource:
   # Specifies metadata that will be applied to all resources managed by ARC
@@ -315,12 +298,31 @@ controllerServiceAccount:
 # listener specific configuration. This configuration is applied to the listener component of the chart.
 listener:
   # scaler is config applied to the kubernetes client component of the listener.
+  # Both values must be integers greater than 0.
   scaler:
+    # qps is the sustained rate of requests the listener may issue to the Kubernetes API server.
     qps: 50
+    # burst is the number of requests the listener may issue to the Kubernetes API server in a burst.
     burst: 100
+  ## podTemplate is the PodSpec for each listener Pod
+  ## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
+  # podTemplate:
+  #   spec:
+  #     containers:
+  #     # Use this section to append additional configuration to the listener container.
+  #     # If you change the name of the container, the configuration will not be applied to the listener,
+  #     # and it will be treated as a side-car container.
+  #     - name: listener
+  #       securityContext:
+  #         runAsUser: 1000
+  #     # Use this section to add the configuration of a side-car container.
+  #     # Comment it out or remove it if you don't need it.
+  #     # Spec for this container will be applied as is without any modifications.
+  #     - name: side-car
+  #       image: example-sidecar
   ## metrics configuration for the listener.
   ## In order to avoid helm merging these fields, we left the metrics commented out.
-  ## When configuring metrics, please uncomment the listenerMetrics object below.
+  ## When configuring metrics, please uncomment the metrics object below.
   ## You can modify the configuration to remove the label or specify custom buckets for histogram.
   ##
   ## If the buckets field is not specified, the default buckets will be applied. Default buckets are

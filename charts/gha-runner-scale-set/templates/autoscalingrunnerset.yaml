@@ -1,32 +1,6 @@
 {{- $resourceMeta := default (dict) .Values.resourceMeta }}
 {{- $hasCustomResourceMeta := (and .Values.resourceMeta .Values.resourceMeta.autoscalingRunnerSet) }}
-{{- $listenerConfig := .Values.listenerConfig | default dict }}
-{{- if not (kindIs "map" $listenerConfig) }}
-  {{- fail ".Values.listenerConfig must be an object" }}
-{{- end }}
-{{- if hasKey $listenerConfig "scaler" }}
-  {{- $scaler := index $listenerConfig "scaler" }}
-  {{- if not (kindIs "invalid" $scaler) }}
-    {{- if not (kindIs "map" $scaler) }}
-      {{- fail ".Values.listenerConfig.scaler must be an object" }}
-    {{- end }}
-    {{- range $name := list "qps" "burst" }}
-      {{- if hasKey $scaler $name }}
-        {{- $value := index $scaler $name }}
-        {{- if not (or (kindIs "int" $value) (kindIs "int64" $value) (kindIs "float64" $value)) }}
-          {{- fail (printf ".Values.listenerConfig.scaler.%s must be an integer greater than 0" $name) }}
-        {{- else }}
-          {{- $number := float64 $value }}
-          {{- if ne $number (floor $number) }}
-            {{- fail (printf ".Values.listenerConfig.scaler.%s must be an integer greater than 0" $name) }}
-          {{- else if lt $number (float64 1) }}
-            {{- fail (printf ".Values.listenerConfig.scaler.%s must be greater than 0" $name) }}
-          {{- end }}
-        {{- end }}
-      {{- end }}
-    {{- end }}
-  {{- end }}
-{{- end }}
+{{- /* .Values.listenerConfig is validated by values.schema.json */ -}}
 apiVersion: actions.github.com/v1alpha1
 kind: AutoscalingRunnerSet
 metadata:
