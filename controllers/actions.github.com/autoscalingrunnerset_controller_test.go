@@ -46,6 +46,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 	var autoscalingNS *corev1.Namespace
 	var autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet
 	var configSecret *corev1.Secret
+	var resourceCache *ResourceCache
 
 	var originalBuildVersion string
 	buildVersion := "0.1.0"
@@ -67,6 +68,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 		// Track runner group mappings for dynamic responses
 		runnerGroupMap := map[int]string{1: "testgroup"} // ID -> Name mapping
 		runnerGroupMapLock := &sync.RWMutex{}            // Thread-safe access
+		resourceCache = newTestResourceCache()
 
 		controller = &AutoscalingRunnerSetReconciler{
 			Client:                             mgr.GetClient(),
@@ -75,6 +77,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			ControllerNamespace:                autoscalingNS.Name,
 			DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
 			ResourceBuilder: ResourceBuilder{
+				ResourceCache: resourceCache,
 				SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient(
 					scalefake.WithClient(
 						scalefake.NewClient(
@@ -253,6 +256,15 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 				autoscalingRunnerSetTestInterval,
 			).Should(Succeed(), "Listener should be created")
 
+			Eventually(
+				func() bool {
+					return resourceCacheStateHasMainObjectEntries(resourceCache.ephemeralRunnerSet, created) &&
+						resourceCacheStateHasMainObjectEntries(resourceCache.autoscalingListener, created)
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(BeTrue(), "AutoScalingRunnerSet EphemeralRunnerSet and AutoScalingListener resources should be cached after reconciliation")
+
 			// Check if status is updated
 			runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
 			err := k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
@@ -272,8 +284,20 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 				autoscalingRunnerSetTestInterval,
 			).Should(Succeed(), "Listener should be created")
 
+			created := new(v1alpha1.AutoscalingRunnerSet)
+			err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, created)
+			Expect(err).NotTo(HaveOccurred(), "failed to get AutoScalingRunnerSet")
+			Eventually(
+				func() bool {
+					return resourceCacheStateHasMainObjectEntries(resourceCache.ephemeralRunnerSet, created) &&
+						resourceCacheStateHasMainObjectEntries(resourceCache.autoscalingListener, created)
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(BeTrue(), "AutoScalingRunnerSet EphemeralRunnerSet and AutoScalingListener resources should be cached before deletion")
+
 			// Delete the AutoScalingRunnerSet
-			err := k8sClient.Delete(ctx, autoscalingRunnerSet)
+			err = k8sClient.Delete(ctx, autoscalingRunnerSet)
 			Expect(err).NotTo(HaveOccurred(), "failed to delete AutoScalingRunnerSet")
 
 			// Check if the listener is deleted
@@ -322,6 +346,15 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
 			).Should(Succeed(), "AutoScalingRunnerSet should be deleted")
+
+			Eventually(
+				func() bool {
+					return resourceCacheStateHasMainObjectEntries(resourceCache.ephemeralRunnerSet, created) ||
+						resourceCacheStateHasMainObjectEntries(resourceCache.autoscalingListener, created)
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(BeFalse(), "AutoScalingRunnerSet EphemeralRunnerSet and AutoScalingListener resources should be removed from cache after deletion")
 		})
 	})
 
@@ -480,7 +513,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 				autoscalingRunnerSetTestInterval,
 			).Should(Succeed(), "EphemeralRunnerSet should be created")
 			originalRunnerSetUID := runnerSet.UID
-			originalRunnerSetHash := runnerSet.Annotations[annotationKeyIntegrityHash]
+			originalActionableRevision := runnerSet.Spec.ActionableRevision
 
 			patched := autoscalingRunnerSet.DeepCopy()
 			patched.Spec.Template.Spec.Containers[0].Image = "ghcr.io/actions/runner:updated"
@@ -493,8 +526,8 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, current)
 					g.Expect(err).NotTo(HaveOccurred(), "failed to get EphemeralRunnerSet")
 					g.Expect(current.UID).To(Equal(originalRunnerSetUID), "EphemeralRunnerSet should be updated in place")
+					g.Expect(current.Spec.ActionableRevision).To(BeNumerically(">", originalActionableRevision), "ActionableRevision should increment for actionable spec changes")
 					g.Expect(current.Spec.EphemeralRunnerSpec.PodTemplateSpec.Spec.Containers[0].Image).To(Equal("ghcr.io/actions/runner:updated"))
-					g.Expect(current.Annotations[annotationKeyIntegrityHash]).NotTo(Equal(originalRunnerSetHash), "EphemeralRunnerSet spec hash should change")
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
@@ -533,7 +566,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 				autoscalingRunnerSetTestInterval,
 			).Should(Succeed(), "EphemeralRunnerSet should be created")
 			originalRunnerSetUID := runnerSet.UID
-			originalRunnerSetHash := runnerSet.Annotations[annotationKeyIntegrityHash]
+			originalActionableRevision := runnerSet.Spec.ActionableRevision
 
 			patched := autoscalingRunnerSet.DeepCopy()
 			max := 20
@@ -559,7 +592,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, current)
 					g.Expect(err).NotTo(HaveOccurred(), "failed to get EphemeralRunnerSet")
 					g.Expect(current.UID).To(Equal(originalRunnerSetUID), "EphemeralRunnerSet should not be recreated")
-					g.Expect(current.Annotations[annotationKeyIntegrityHash]).To(Equal(originalRunnerSetHash), "EphemeralRunnerSet spec should not change")
+					g.Expect(current.Spec.ActionableRevision).To(Equal(originalActionableRevision), "ActionableRevision should not change for non-actionable updates")
 				},
 				time.Second*5,
 				autoscalingRunnerSetTestInterval,
@@ -877,10 +910,6 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 		statusUpdate := runnerSet.DeepCopy()
 		statusUpdate.Status.Phase = v1alpha1.EphemeralRunnerSetPhaseRunning
 
-		desiredStatus := v1alpha1.AutoscalingRunnerSetStatus{
-			Phase: v1alpha1.AutoscalingRunnerSetPhaseRunning,
-		}
-
 		err := k8sClient.Status().Patch(ctx, statusUpdate, client.MergeFrom(&runnerSet))
 		Expect(err).NotTo(HaveOccurred(), "Failed to patch runner set status")
 
@@ -895,7 +924,10 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			},
 			autoscalingRunnerSetTestTimeout,
 			autoscalingRunnerSetTestInterval,
-		).Should(BeEquivalentTo(desiredStatus), "AutoScalingRunnerSet status should be updated")
+		).Should(SatisfyAll(
+			WithTransform(func(s v1alpha1.AutoscalingRunnerSetStatus) v1alpha1.AutoscalingRunnerSetPhase { return s.Phase }, Equal(v1alpha1.AutoscalingRunnerSetPhaseRunning)),
+			WithTransform(func(s v1alpha1.AutoscalingRunnerSetStatus) int64 { return s.ObservedGeneration }, BeNumerically(">=", ars.Generation)),
+		), "AutoScalingRunnerSet status should be updated")
 	})
 })
 
@@ -963,6 +995,7 @@ var _ = Describe("Test AutoScalingController updates", Ordered, func() {
 				ControllerNamespace:                autoscalingNS.Name,
 				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
 				ResourceBuilder: ResourceBuilder{
+					ResourceCache:  newTestResourceCache(),
 					SecretResolver: secretresolver.New(mgr.GetClient(), multiClient),
 				},
 			}
@@ -1080,6 +1113,7 @@ var _ = Describe("Test AutoscalingController creation failures", Ordered, func()
 				ControllerNamespace:                autoscalingNS.Name,
 				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
 				ResourceBuilder: ResourceBuilder{
+					ResourceCache:  newTestResourceCache(),
 					SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient()),
 				},
 			}
@@ -1207,6 +1241,7 @@ var _ = Describe("Test client optional configuration", Ordered, func() {
 				ControllerNamespace:                autoscalingNS.Name,
 				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
 				ResourceBuilder: ResourceBuilder{
+					ResourceCache:  newTestResourceCache(),
 					SecretResolver: secretresolver.New(mgr.GetClient(), multiclient.NewScaleset()),
 				},
 			}
@@ -1402,6 +1437,7 @@ var _ = Describe("Test client optional configuration", Ordered, func() {
 				ControllerNamespace:                autoscalingNS.Name,
 				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
 				ResourceBuilder: ResourceBuilder{
+					ResourceCache: newTestResourceCache(),
 					SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient(
 						scalefake.WithClient(
 							scalefake.NewClient(
@@ -1649,6 +1685,7 @@ var _ = Describe("Test external permissions cleanup", Ordered, func() {
 			ControllerNamespace:                autoscalingNS.Name,
 			DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
 			ResourceBuilder: ResourceBuilder{
+				ResourceCache:  newTestResourceCache(),
 				SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient()),
 			},
 		}
@@ -1809,6 +1846,7 @@ var _ = Describe("Test external permissions cleanup", Ordered, func() {
 			ControllerNamespace:                autoscalingNS.Name,
 			DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
 			ResourceBuilder: ResourceBuilder{
+				ResourceCache:  newTestResourceCache(),
 				SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient()),
 			},
 		}
@@ -2019,6 +2057,7 @@ var _ = Describe("Test resource version and build version mismatch", func() {
 			ControllerNamespace:                autoscalingNS.Name,
 			DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
 			ResourceBuilder: ResourceBuilder{
+				ResourceCache:  newTestResourceCache(),
 				SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient()),
 			},
 		}

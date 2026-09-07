@@ -16541,6 +16541,12 @@ spec:
             status:
               description: AutoscalingRunnerSetStatus defines the observed state of AutoscalingRunnerSet
               properties:
+                observedGeneration:
+                  description: |-
+                    ObservedGeneration tracks the metadata.generation of this ARS at observation time,
+                    enabling detection of Pending phase when generation differs. Unset defaults to 0.
+                  format: int64
+                  type: integer
                 phase:
                   type: string
               type: object
