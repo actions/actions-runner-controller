@@ -1,14 +1,96 @@
 package scaler
 
 import (
+	"context"
+	"encoding/json"
+	"io"
 	"log/slog"
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
+	"github.com/actions/scaleset"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
 var discardLogger = slog.New(slog.DiscardHandler)
+
+func TestHandleJobCompleted_RecordsTerminalStatusForExactRunner(t *testing.T) {
+	t.Parallel()
+
+	type recordedRequest struct {
+		method string
+		path   string
+		body   []byte
+	}
+
+	requests := make(chan recordedRequest, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		requests <- recordedRequest{method: r.Method, path: r.URL.Path, body: body}
+		w.Header().Set("Content-Type", "application/json")
+		_, err = w.Write([]byte(`{"apiVersion":"actions.github.com/v1alpha1","kind":"EphemeralRunner"}`))
+		require.NoError(t, err)
+	}))
+	t.Cleanup(server.Close)
+
+	clientset, err := kubernetes.NewForConfig(&rest.Config{Host: server.URL})
+	require.NoError(t, err)
+
+	worker := &Scaler{
+		clientset: clientset,
+		config: Config{
+			EphemeralRunnerSetNamespace: "arc-runners",
+			EphemeralRunnerSetName:      "linux-x64",
+		},
+		logger: discardLogger,
+	}
+	finishedAt := time.Date(2026, time.August, 14, 0, 30, 37, 0, time.UTC)
+	completion := &scaleset.JobCompleted{
+		Result:     "failed",
+		RunnerID:   2402,
+		RunnerName: "linux-x64-runner-ctwvm",
+		JobMessageBase: scaleset.JobMessageBase{
+			JobID:         "85cb98eb-2919-5766-872c-cc997f618c1f",
+			WorkflowRunID: 31753891150,
+			FinishTime:    finishedAt,
+		},
+	}
+
+	require.NoError(t, worker.HandleJobCompleted(context.Background(), completion))
+
+	select {
+	case request := <-requests:
+		assert.Equal(t, http.MethodPatch, request.method)
+		assert.Equal(t, "/apis/actions.github.com/v1alpha1/namespaces/arc-runners/ephemeralrunners/linux-x64-runner-ctwvm/status", request.path)
+
+		var patch struct {
+			Status struct {
+				JobCompletion struct {
+					Result        string    `json:"result"`
+					RunnerID      int       `json:"runnerId"`
+					JobID         string    `json:"jobId"`
+					WorkflowRunID int64     `json:"workflowRunId"`
+					FinishedAt    time.Time `json:"finishedAt"`
+				} `json:"jobCompletion"`
+			} `json:"status"`
+		}
+		require.NoError(t, json.Unmarshal(request.body, &patch))
+		assert.Equal(t, completion.Result, patch.Status.JobCompletion.Result)
+		assert.Equal(t, completion.RunnerID, patch.Status.JobCompletion.RunnerID)
+		assert.Equal(t, completion.JobID, patch.Status.JobCompletion.JobID)
+		assert.Equal(t, completion.WorkflowRunID, patch.Status.JobCompletion.WorkflowRunID)
+		assert.Equal(t, completion.FinishTime, patch.Status.JobCompletion.FinishedAt)
+	case <-time.After(time.Second):
+		t.Fatal("JobCompleted was acknowledged without recording terminal state on the exact EphemeralRunner")
+	}
+}
 
 func TestSetDesiredWorkerState_MinMaxDefaults(t *testing.T) {
 	newEmptyWorker := func() *Scaler {

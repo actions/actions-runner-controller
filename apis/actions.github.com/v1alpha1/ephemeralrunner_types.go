@@ -183,6 +183,21 @@ type EphemeralRunnerStatus struct {
 
 	// +optional
 	JobDisplayName string `json:"jobDisplayName,omitempty"`
+
+	// JobCompletion records the terminal job event received for this runner.
+	// +optional
+	JobCompletion *EphemeralRunnerJobCompletion `json:"jobCompletion,omitempty"`
+}
+
+// EphemeralRunnerJobCompletion identifies the terminal job event received for
+// an ephemeral runner. The controller uses all identity fields before deleting
+// a runner whose process did not exit after the job became terminal.
+type EphemeralRunnerJobCompletion struct {
+	Result        string      `json:"result"`
+	RunnerID      int         `json:"runnerId"`
+	JobID         string      `json:"jobId"`
+	WorkflowRunID int64       `json:"workflowRunId"`
+	FinishedAt    metav1.Time `json:"finishedAt"`
 }
 
 // EphemeralRunnerPhase is the phase of the ephemeral runner.

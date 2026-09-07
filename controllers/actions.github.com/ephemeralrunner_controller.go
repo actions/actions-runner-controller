@@ -44,6 +44,7 @@ import (
 const (
 	ephemeralRunnerFinalizerName        = "ephemeralrunner.actions.github.com/finalizer"
 	ephemeralRunnerActionsFinalizerName = "ephemeralrunner.actions.github.com/runner-registration-finalizer"
+	completedJobRunnerGracePeriod       = 30 * time.Second
 )
 
 // EphemeralRunnerReconciler reconciles a EphemeralRunner object
@@ -184,6 +185,29 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			}
 		}
 		log.Info("Successfully added finalizers")
+	}
+
+	if completion := ephemeralRunner.Status.JobCompletion; completion != nil {
+		if !jobCompletionMatchesRunner(&ephemeralRunner) {
+			log.Info("Ignoring completed job event that does not match the ephemeral runner status",
+				"completionRunnerId", completion.RunnerID,
+				"completionJobId", completion.JobID,
+				"completionWorkflowRunId", completion.WorkflowRunID)
+		} else {
+			deleteAfter := completion.FinishedAt.Add(completedJobRunnerGracePeriod)
+			if wait := time.Until(deleteAfter); wait > 0 {
+				log.Info("Waiting briefly for the runner process to exit after job completion", "requeueAfter", wait)
+				return ctrl.Result{RequeueAfter: wait}, nil
+			}
+
+			log.Info("Job is terminal but runner is still present; issuing delete",
+				"result", completion.Result,
+				"finishedAt", completion.FinishedAt)
+			if err := r.Delete(ctx, &ephemeralRunner); client.IgnoreNotFound(err) != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to delete ephemeral runner after terminal job: %w", err)
+			}
+			return ctrl.Result{}, nil
+		}
 	}
 
 	secret := new(corev1.Secret)
@@ -969,6 +993,18 @@ func runnerContainerStatus(pod *corev1.Pod) *corev1.ContainerStatus {
 		}
 	}
 	return nil
+}
+
+func jobCompletionMatchesRunner(runner *v1alpha1.EphemeralRunner) bool {
+	completion := runner.Status.JobCompletion
+	if completion == nil || completion.Result == "" || completion.JobID == "" || completion.FinishedAt.IsZero() {
+		return false
+	}
+
+	return completion.RunnerID == runner.Status.RunnerID &&
+		runner.Status.RunnerName == runner.Name &&
+		completion.JobID == runner.Status.JobID &&
+		completion.WorkflowRunID == runner.Status.WorkflowRunID
 }
 
 func initContainerFailed(pod *corev1.Pod) bool {
