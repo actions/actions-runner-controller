@@ -485,6 +485,9 @@ func (e *exporter) RecordStatistics(stats *scaleset.RunnerScaleSetStatistic) {
 }
 
 func (e *exporter) RecordJobStarted(msg *scaleset.JobStarted) {
+	if msg.RunnerAssignTime.IsZero() || msg.ScaleSetAssignTime.IsZero() || msg.RunnerAssignTime.Before(msg.ScaleSetAssignTime) {
+		return
+	}
 	l := e.startedJobLabels(msg)
 	e.incCounter(MetricStartedJobsTotal, l)
 
@@ -493,7 +496,7 @@ func (e *exporter) RecordJobStarted(msg *scaleset.JobStarted) {
 }
 
 func (e *exporter) RecordJobCompleted(msg *scaleset.JobCompleted) {
-	if msg.RunnerAssignTime.IsZero() {
+	if msg.RunnerAssignTime.IsZero() || msg.FinishTime.Before(msg.RunnerAssignTime) {
 		return
 	}
 

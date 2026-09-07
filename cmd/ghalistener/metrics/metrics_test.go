@@ -3,9 +3,12 @@ package metrics
 import (
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/scaleset"
 	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -264,4 +267,267 @@ func TestExporterConfigDefaults(t *testing.T) {
 	}
 
 	assert.Equal(t, want, config)
+}
+
+func newTestExporter(t *testing.T, metricsConfig v1alpha1.MetricsConfig) (*exporter, *prometheus.Registry) {
+	t.Helper()
+	reg := prometheus.NewRegistry()
+	m := installMetrics(metricsConfig, reg, discardLogger)
+	e := &exporter{
+		scaleSetLabels: prometheus.Labels{
+			labelKeyEnterprise:              "test-enterprise",
+			labelKeyOrganization:            "test-org",
+			labelKeyRepository:              "test-repo",
+			labelKeyRunnerScaleSetName:      "test-scale-set",
+			labelKeyRunnerScaleSetNamespace: "test-namespace",
+		},
+		metrics: m,
+	}
+	return e, reg
+}
+
+func gatherMetrics(t *testing.T, reg *prometheus.Registry) map[string]*dto.MetricFamily {
+	t.Helper()
+	mfs, err := reg.Gather()
+	require.NoError(t, err)
+	result := make(map[string]*dto.MetricFamily, len(mfs))
+	for _, mf := range mfs {
+		result[mf.GetName()] = mf
+	}
+	return result
+}
+
+func counterValue(t *testing.T, metrics map[string]*dto.MetricFamily, name string) float64 {
+	t.Helper()
+	mf, ok := metrics[name]
+	if !ok || len(mf.GetMetric()) == 0 {
+		return 0
+	}
+	return mf.GetMetric()[0].GetCounter().GetValue()
+}
+
+func histogramSampleCount(t *testing.T, metrics map[string]*dto.MetricFamily, name string) uint64 {
+	t.Helper()
+	mf, ok := metrics[name]
+	if !ok || len(mf.GetMetric()) == 0 {
+		return 0
+	}
+	return mf.GetMetric()[0].GetHistogram().GetSampleCount()
+}
+
+func TestRecordJobStarted(t *testing.T) {
+	startedMetrics := v1alpha1.MetricsConfig{
+		Counters: map[string]*v1alpha1.CounterMetric{
+			MetricStartedJobsTotal: {
+				Labels: []string{
+					labelKeyEnterprise, labelKeyOrganization, labelKeyRepository,
+					labelKeyJobName, labelKeyJobWorkflowRef, labelKeyJobWorkflowName,
+					labelKeyJobWorkflowTarget, labelKeyEventName,
+				},
+			},
+		},
+		Histograms: map[string]*v1alpha1.HistogramMetric{
+			MetricJobStartupDurationSeconds: {
+				Labels: []string{
+					labelKeyEnterprise, labelKeyOrganization, labelKeyRepository,
+					labelKeyJobName, labelKeyJobWorkflowRef, labelKeyJobWorkflowName,
+					labelKeyJobWorkflowTarget, labelKeyEventName,
+				},
+			},
+		},
+	}
+
+	now := time.Now()
+
+	tests := []struct {
+		name             string
+		msg              scaleset.JobStarted
+		wantCounterValue float64
+		wantSampleCount  uint64
+	}{
+		{
+			name: "zero RunnerAssignTime and ScaleSetAssignTime",
+			msg: scaleset.JobStarted{
+				JobMessageBase: scaleset.JobMessageBase{
+					OwnerName:          "myorg",
+					RepositoryName:     "myrepo",
+					JobDisplayName:     "build",
+					JobWorkflowRef:     "myorg/myrepo/.github/workflows/build.yml@refs/heads/main",
+					EventName:          "push",
+					RunnerAssignTime:   time.Time{},
+					ScaleSetAssignTime: time.Time{},
+				},
+			},
+			wantCounterValue: 0,
+			wantSampleCount:  0,
+		},
+		{
+			name: "zero RunnerAssignTime",
+			msg: scaleset.JobStarted{
+				JobMessageBase: scaleset.JobMessageBase{
+					OwnerName:          "myorg",
+					RepositoryName:     "myrepo",
+					JobDisplayName:     "build",
+					JobWorkflowRef:     "myorg/myrepo/.github/workflows/build.yml@refs/heads/main",
+					EventName:          "push",
+					RunnerAssignTime:   time.Time{},
+					ScaleSetAssignTime: now,
+				},
+			},
+			wantCounterValue: 0,
+			wantSampleCount:  0,
+		},
+		{
+			name: "zero ScaleSetAssignTime",
+			msg: scaleset.JobStarted{
+				JobMessageBase: scaleset.JobMessageBase{
+					OwnerName:          "myorg",
+					RepositoryName:     "myrepo",
+					JobDisplayName:     "build",
+					JobWorkflowRef:     "myorg/myrepo/.github/workflows/build.yml@refs/heads/main",
+					EventName:          "push",
+					RunnerAssignTime:   now,
+					ScaleSetAssignTime: time.Time{},
+				},
+			},
+			wantCounterValue: 0,
+			wantSampleCount:  0,
+		},
+		{
+			name: "RunnerAssignTime before ScaleSetAssignTime",
+			msg: scaleset.JobStarted{
+				JobMessageBase: scaleset.JobMessageBase{
+					OwnerName:          "myorg",
+					RepositoryName:     "myrepo",
+					JobDisplayName:     "build",
+					JobWorkflowRef:     "myorg/myrepo/.github/workflows/build.yml@refs/heads/main",
+					EventName:          "push",
+					RunnerAssignTime:   now,
+					ScaleSetAssignTime: now.Add(10 * time.Second),
+				},
+			},
+			wantCounterValue: 0,
+			wantSampleCount:  0,
+		},
+		{
+			name: "valid timestamps",
+			msg: scaleset.JobStarted{
+				JobMessageBase: scaleset.JobMessageBase{
+					OwnerName:          "myorg",
+					RepositoryName:     "myrepo",
+					JobDisplayName:     "build",
+					JobWorkflowRef:     "myorg/myrepo/.github/workflows/build.yml@refs/heads/main",
+					EventName:          "push",
+					ScaleSetAssignTime: now,
+					RunnerAssignTime:   now.Add(10 * time.Second),
+				},
+			},
+			wantCounterValue: 1,
+			wantSampleCount:  1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, reg := newTestExporter(t, startedMetrics)
+			e.RecordJobStarted(&tt.msg)
+			metrics := gatherMetrics(t, reg)
+			assert.Equal(t, tt.wantCounterValue, counterValue(t, metrics, MetricStartedJobsTotal))
+			assert.Equal(t, tt.wantSampleCount, histogramSampleCount(t, metrics, MetricJobStartupDurationSeconds))
+		})
+	}
+}
+
+func TestRecordJobCompleted(t *testing.T) {
+	completedMetrics := v1alpha1.MetricsConfig{
+		Counters: map[string]*v1alpha1.CounterMetric{
+			MetricCompletedJobsTotal: {
+				Labels: []string{
+					labelKeyEnterprise, labelKeyOrganization, labelKeyRepository,
+					labelKeyJobName, labelKeyJobWorkflowRef, labelKeyJobWorkflowName,
+					labelKeyJobWorkflowTarget, labelKeyEventName, labelKeyJobResult,
+				},
+			},
+		},
+		Histograms: map[string]*v1alpha1.HistogramMetric{
+			MetricJobExecutionDurationSeconds: {
+				Labels: []string{
+					labelKeyEnterprise, labelKeyOrganization, labelKeyRepository,
+					labelKeyJobName, labelKeyJobWorkflowRef, labelKeyJobWorkflowName,
+					labelKeyJobWorkflowTarget, labelKeyEventName, labelKeyJobResult,
+				},
+			},
+		},
+	}
+
+	now := time.Now()
+
+	tests := []struct {
+		name             string
+		msg              scaleset.JobCompleted
+		wantCounterValue float64
+		wantSampleCount  uint64
+	}{
+		{
+			name: "zero RunnerAssignTime",
+			msg: scaleset.JobCompleted{
+				JobMessageBase: scaleset.JobMessageBase{
+					OwnerName:        "myorg",
+					RepositoryName:   "myrepo",
+					JobDisplayName:   "build",
+					JobWorkflowRef:   "myorg/myrepo/.github/workflows/build.yml@refs/heads/main",
+					EventName:        "push",
+					RunnerAssignTime: time.Time{},
+					FinishTime:       now,
+				},
+				Result: "success",
+			},
+			wantCounterValue: 0,
+			wantSampleCount:  0,
+		},
+		{
+			name: "FinishTime before RunnerAssignTime",
+			msg: scaleset.JobCompleted{
+				JobMessageBase: scaleset.JobMessageBase{
+					OwnerName:        "myorg",
+					RepositoryName:   "myrepo",
+					JobDisplayName:   "build",
+					JobWorkflowRef:   "myorg/myrepo/.github/workflows/build.yml@refs/heads/main",
+					EventName:        "push",
+					RunnerAssignTime: now.Add(20 * time.Second),
+					FinishTime:       now,
+				},
+				Result: "success",
+			},
+			wantCounterValue: 0,
+			wantSampleCount:  0,
+		},
+		{
+			name: "valid timestamps",
+			msg: scaleset.JobCompleted{
+				JobMessageBase: scaleset.JobMessageBase{
+					OwnerName:        "myorg",
+					RepositoryName:   "myrepo",
+					JobDisplayName:   "build",
+					JobWorkflowRef:   "myorg/myrepo/.github/workflows/build.yml@refs/heads/main",
+					EventName:        "push",
+					RunnerAssignTime: now,
+					FinishTime:       now.Add(10 * time.Second),
+				},
+				Result: "success",
+			},
+			wantCounterValue: 1,
+			wantSampleCount:  1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, reg := newTestExporter(t, completedMetrics)
+			e.RecordJobCompleted(&tt.msg)
+			metrics := gatherMetrics(t, reg)
+			assert.Equal(t, tt.wantCounterValue, counterValue(t, metrics, MetricCompletedJobsTotal))
+			assert.Equal(t, tt.wantSampleCount, histogramSampleCount(t, metrics, MetricJobExecutionDurationSeconds))
+		})
+	}
 }
