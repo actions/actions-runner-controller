@@ -247,9 +247,6 @@ func (k resourceCacheDependencyKey) Equal(other resourceCacheDependencyKey) bool
 func newResourceCacheObjectRef(object client.Object) ResourceCacheObjectRef {
 	resourceVersion := object.GetResourceVersion()
 	if resourceVersion == "" {
-		resourceVersion = object.GetAnnotations()[annotationKeyIntegrityHash]
-	}
-	if resourceVersion == "" {
 		resourceVersion = hash.ComputeTemplateHash(object)
 	}
 
