@@ -151,7 +151,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			}
 		}
 
-		log.Info("Successfully removed finalizer after cleanup")
+		r.ResourceCache.Delete(&ephemeralRunner)
 		return ctrl.Result{}, nil
 	}
 
