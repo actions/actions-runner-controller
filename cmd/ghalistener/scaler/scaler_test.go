@@ -1,14 +1,93 @@
 package scaler
 
 import (
+	"bytes"
 	"log/slog"
 	"math"
+	"strconv"
 	"testing"
 
+	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/stretchr/testify/assert"
 )
 
 var discardLogger = slog.New(slog.DiscardHandler)
+
+func TestEffectiveRateLimiterConfig(t *testing.T) {
+	qps := 75
+	burst := 150
+	zero := 0
+	negative := -1
+
+	tests := []struct {
+		name      string
+		config    *v1alpha1.ScalerConfig
+		wantQPS   int
+		wantBurst int
+		wantLog   string
+	}{
+		{
+			name: "uses configured values",
+			config: &v1alpha1.ScalerConfig{
+				QPS:   &qps,
+				Burst: &burst,
+			},
+			wantQPS:   qps,
+			wantBurst: burst,
+		},
+		{
+			name:      "defaults missing config",
+			wantQPS:   defaultQPS,
+			wantBurst: defaultBurst,
+			wantLog:   "Listener scaler configuration is missing; using defaults",
+		},
+		{
+			name:      "defaults missing qps",
+			config:    &v1alpha1.ScalerConfig{Burst: &burst},
+			wantQPS:   defaultQPS,
+			wantBurst: burst,
+			wantLog:   "Listener scaler qps is missing; using default",
+		},
+		{
+			name:      "defaults missing burst",
+			config:    &v1alpha1.ScalerConfig{QPS: &qps},
+			wantQPS:   qps,
+			wantBurst: defaultBurst,
+			wantLog:   "Listener scaler burst is missing; using default",
+		},
+		{
+			name:      "defaults zero qps",
+			config:    &v1alpha1.ScalerConfig{QPS: &zero, Burst: &burst},
+			wantQPS:   defaultQPS,
+			wantBurst: burst,
+			wantLog:   "Listener scaler qps must be greater than 0; using default",
+		},
+		{
+			name:      "defaults negative burst",
+			config:    &v1alpha1.ScalerConfig{QPS: &qps, Burst: &negative},
+			wantQPS:   qps,
+			wantBurst: defaultBurst,
+			wantLog:   "Listener scaler burst must be greater than 0; using default",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var logs bytes.Buffer
+			logger := slog.New(slog.NewTextHandler(&logs, nil))
+
+			qps, burst := effectiveRateLimiterConfig(tt.config, logger)
+
+			assert.Equal(t, tt.wantQPS, qps)
+			assert.Equal(t, tt.wantBurst, burst)
+			if tt.wantLog == "" {
+				assert.Empty(t, logs.String())
+			} else {
+				assert.Contains(t, logs.String(), "msg="+strconv.Quote(tt.wantLog))
+			}
+		})
+	}
+}
 
 func TestSetDesiredWorkerState_MinMaxDefaults(t *testing.T) {
 	newEmptyWorker := func() *Scaler {

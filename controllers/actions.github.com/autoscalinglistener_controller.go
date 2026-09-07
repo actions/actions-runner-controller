@@ -393,14 +393,18 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		labelsModified := !maps.Equal(listenerConfigSecret.Labels, desiredLabels)
 		desiredAnnotations := r.mergeAnnotations(listenerConfigSecret.Annotations, desiredSecret.Annotations)
 		annotationsModified := !maps.Equal(listenerConfigSecret.Annotations, desiredAnnotations)
+		dataModified := !reflect.DeepEqual(listenerConfigSecret.Data, desiredSecret.Data)
 
-		if labelsModified || annotationsModified {
+		if labelsModified || annotationsModified || dataModified {
 			updatedSecret := listenerConfigSecret.DeepCopy()
 			if labelsModified {
 				updatedSecret.Labels = desiredLabels
 			}
 			if annotationsModified {
 				updatedSecret.Annotations = desiredAnnotations
+			}
+			if dataModified {
+				updatedSecret.Data = desiredSecret.Data
 			}
 			log.Info("Updating listener config secret", "namespace", updatedSecret.Namespace, "name", updatedSecret.Name)
 			if err := r.Patch(ctx, updatedSecret, client.MergeFrom(&listenerConfigSecret)); err != nil {

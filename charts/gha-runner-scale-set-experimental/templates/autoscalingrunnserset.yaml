@@ -5,6 +5,33 @@
 {{- $kubeDefaults := (index $kubeMode "default" | default true) }}
 {{- $kubeServiceAccountName := (index $kubeMode "serviceAccountName" | default "") }}
 {{- $usesKubernetesSecrets := or (not .Values.secretResolution) (eq .Values.secretResolution.type "kubernetes") }}
+{{- $listener := .Values.listener | default dict }}
+{{- if not (kindIs "map" $listener) }}
+  {{- fail ".Values.listener must be an object" }}
+{{- end }}
+{{- if hasKey $listener "scaler" }}
+  {{- $scaler := index $listener "scaler" }}
+  {{- if not (kindIs "invalid" $scaler) }}
+    {{- if not (kindIs "map" $scaler) }}
+      {{- fail ".Values.listener.scaler must be an object" }}
+    {{- end }}
+    {{- range $name := list "qps" "burst" }}
+      {{- if hasKey $scaler $name }}
+        {{- $value := index $scaler $name }}
+        {{- if not (or (kindIs "int" $value) (kindIs "int64" $value) (kindIs "float64" $value)) }}
+          {{- fail (printf ".Values.listener.scaler.%s must be an integer greater than 0" $name) }}
+        {{- else }}
+          {{- $number := float64 $value }}
+          {{- if ne $number (floor $number) }}
+            {{- fail (printf ".Values.listener.scaler.%s must be an integer greater than 0" $name) }}
+          {{- else if lt $number (float64 1) }}
+            {{- fail (printf ".Values.listener.scaler.%s must be greater than 0" $name) }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
 
 {{- $runnerPod := (index $runner "pod" | default dict) -}}
 {{- if not (kindIs "map" $runnerPod) -}}
@@ -170,7 +197,6 @@ spec:
     {{- include "listener-template.pod" . | nindent 4}}
   {{- end }}
 
-  {{- $listener := .Values.listener | default dict }}
   {{- with $listener.scaler }}
   listenerConfig:
     scaler:

@@ -141,6 +141,69 @@ func TestTemplateRenderedGitHubSecretErrorWithMissingAppInput(t *testing.T) {
 	assert.ErrorContains(t, err, "provide .Values.githubConfigSecret.github_app_installation_id and .Values.githubConfigSecret.github_app_private_key")
 }
 
+func TestTemplateListenerScalerValidation(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	baseValues := map[string]string{
+		"githubConfigUrl":                    "https://github.com/actions",
+		"githubConfigSecret.github_token":    "gh_token12345",
+		"controllerServiceAccount.name":      "arc",
+		"controllerServiceAccount.namespace": "arc-system",
+	}
+	tests := []struct {
+		name          string
+		setValues     map[string]string
+		setStrValues  map[string]string
+		wantErrorText string
+	}{
+		{
+			name:          "zero qps",
+			setValues:     map[string]string{"listenerConfig.scaler.qps": "0"},
+			wantErrorText: ".Values.listenerConfig.scaler.qps must be greater than 0",
+		},
+		{
+			name:          "negative burst",
+			setValues:     map[string]string{"listenerConfig.scaler.burst": "-1"},
+			wantErrorText: ".Values.listenerConfig.scaler.burst must be greater than 0",
+		},
+		{
+			name:          "fractional qps",
+			setValues:     map[string]string{"listenerConfig.scaler.qps": "1.5"},
+			wantErrorText: ".Values.listenerConfig.scaler.qps must be an integer greater than 0",
+		},
+		{
+			name:          "string burst",
+			setStrValues:  map[string]string{"listenerConfig.scaler.burst": "100"},
+			wantErrorText: ".Values.listenerConfig.scaler.burst must be an integer greater than 0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setValues := make(map[string]string, len(baseValues)+len(tt.setValues))
+			for key, value := range baseValues {
+				setValues[key] = value
+			}
+			for key, value := range tt.setValues {
+				setValues[key] = value
+			}
+
+			options := &helm.Options{
+				Logger:        logger.Discard,
+				SetValues:     setValues,
+				SetStrValues:  tt.setStrValues,
+				KubectlOptions: k8s.NewKubectlOptions("", "", "test"),
+			}
+			_, err := helm.RenderTemplateContextE(t, t.Context(), options, helmChartPath, "test-runners", []string{"templates/autoscalingrunnerset.yaml"})
+			require.Error(t, err)
+			assert.ErrorContains(t, err, tt.wantErrorText)
+		})
+	}
+}
+
 func TestTemplateNotRenderedGitHubSecretWithPredefinedSecret(t *testing.T) {
 	t.Parallel()
 

@@ -1,0 +1,48 @@
+suite: "Test AutoscalingRunnerSet Listener Scaler Validation"
+templates:
+  - autoscalingrunnserset.yaml
+tests:
+  - it: rejects zero qps
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      listener.scaler.qps: 0
+    asserts:
+      - failedTemplate:
+          errorMessage: ".Values.listener.scaler.qps must be greater than 0"
+  - it: rejects negative burst
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      listener.scaler.burst: -1
+    asserts:
+      - failedTemplate:
+          errorMessage: ".Values.listener.scaler.burst must be greater than 0"
+  - it: rejects fractional qps
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      listener.scaler.qps: 1.5
+    asserts:
+      - failedTemplate:
+          errorMessage: ".Values.listener.scaler.qps must be an integer greater than 0"
+  - it: rejects a string burst
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      listener.scaler.burst: "100"
+    asserts:
+      - failedTemplate:
+          errorMessage: ".Values.listener.scaler.burst must be an integer greater than 0"
