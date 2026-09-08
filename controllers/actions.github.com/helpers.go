@@ -6,11 +6,6 @@ import (
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 )
 
-var (
-	_ = ephemeralRunnerSetActionableSpecChanged
-	_ = nextActionableRevision
-)
-
 // ephemeralRunnerSetActionableSpecChanged reports whether the runner spec the
 // EphemeralRunnerSet is running differs from the one derived from the
 // AutoscalingRunnerSet, in a way that requires re-applying it to the runners.
