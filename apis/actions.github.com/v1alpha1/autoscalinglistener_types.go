@@ -82,6 +82,9 @@ type AutoscalingListenerSpec struct {
 
 	// +optional
 	RoleBindingMetadata *ResourceMeta `json:"roleBindingMetadata,omitempty"`
+
+	// +optional
+	ListenerConfig *ListenerConfig `json:"listenerConfig,omitempty"`
 }
 
 func (s *AutoscalingListenerSpec) Hash() string {

@@ -1,5 +1,6 @@
 {{- $resourceMeta := default (dict) .Values.resourceMeta }}
 {{- $hasCustomResourceMeta := (and .Values.resourceMeta .Values.resourceMeta.autoscalingRunnerSet) }}
+{{- /* .Values.listenerConfig is validated by values.schema.json */ -}}
 apiVersion: actions.github.com/v1alpha1
 kind: AutoscalingRunnerSet
 metadata:
@@ -164,6 +165,11 @@ spec:
 
   {{- with .Values.listenerMetrics }}
   listenerMetrics:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+
+  {{- with .Values.listenerConfig }}
+  listenerConfig:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 

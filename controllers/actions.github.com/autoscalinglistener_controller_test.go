@@ -423,6 +423,63 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 			).Should(BeEquivalentTo(rulesForListenerRole([]string{updated.Spec.EphemeralRunnerSetName})), "Role should be updated")
 		})
 
+		It("updates listener scaler configuration and recreates the listener pod", func() {
+			pod := new(corev1.Pod)
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(Succeed(), "Listener pod should be created")
+			oldPodUID := pod.UID
+
+			current := new(v1alpha1.AutoscalingListener)
+			err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, current)
+			Expect(err).NotTo(HaveOccurred(), "failed to get AutoScalingListener")
+
+			qps := 75
+			burst := 150
+			updated := current.DeepCopy()
+			updated.Spec.ListenerConfig = &v1alpha1.ListenerConfig{
+				Scaler: &v1alpha1.ScalerConfig{
+					QPS:   &qps,
+					Burst: &burst,
+				},
+			}
+			err = k8sClient.Patch(ctx, updated, client.MergeFrom(current))
+			Expect(err).NotTo(HaveOccurred(), "failed to update listener scaler configuration")
+
+			secret := new(corev1.Secret)
+			Eventually(
+				func(g Gomega) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerConfigName(autoscalingListener), Namespace: autoscalingListener.Namespace}, secret)
+					g.Expect(err).NotTo(HaveOccurred(), "failed to get listener config Secret")
+
+					var config ghalistenerconfig.Config
+					err = json.Unmarshal(secret.Data["config.json"], &config)
+					g.Expect(err).NotTo(HaveOccurred(), "failed to parse listener configuration file")
+					g.Expect(config.ListenerConfig.GetScaler()).NotTo(BeNil())
+					g.Expect(config.ListenerConfig.GetScaler().QPS).NotTo(BeNil())
+					g.Expect(config.ListenerConfig.GetScaler().Burst).NotTo(BeNil())
+					g.Expect(*config.ListenerConfig.GetScaler().QPS).To(Equal(qps))
+					g.Expect(*config.ListenerConfig.GetScaler().Burst).To(Equal(burst))
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(Succeed(), "Listener config Secret should be updated")
+
+			Eventually(
+				func() (types.UID, error) {
+					pod := new(corev1.Pod)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
+					return pod.UID, err
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).ShouldNot(Equal(oldPodUID), "Listener pod should be recreated with the updated configuration")
+		})
+
 		It("propagates updated listener metadata to owned resources", func() {
 			assertPropagatedMetadata := func(expected string) {
 				Eventually(
