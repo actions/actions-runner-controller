@@ -19,18 +19,18 @@ metadata:
     {{- end }}
     {{- if $hasCustomResourceMeta }}
     {{- with .Values.resourceMeta.kubernetesModeRoleBinding.labels }}
-    {{- toYaml . | nindent 4 }}
+    {{- include "gha-runner-scale-set.stringMap" . | nindent 4 }}
     {{- end }}
     {{- end }}
     {{- include "gha-runner-scale-set.labels" . | nindent 4 }}
 
   annotations:
     {{- with .Values.annotations }}
-    {{- toYaml . | nindent 4 }}
+    {{- include "gha-runner-scale-set.stringMap" . | nindent 4 }}
     {{- end }}
     {{- if $hasCustomResourceMeta }}
     {{- with .Values.resourceMeta.kubernetesModeRoleBinding.annotations }}
-    {{- toYaml . | nindent 4 }}
+    {{- include "gha-runner-scale-set.stringMap" . | nindent 4 }}
     {{- end }}
     {{- end }}
   finalizers:

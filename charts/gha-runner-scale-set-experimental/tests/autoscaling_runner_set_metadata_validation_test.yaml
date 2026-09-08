@@ -1,0 +1,112 @@
+suite: "AutoscalingRunnerSet metadata validation"
+templates:
+  - autoscalingrunnserset.yaml
+tests:
+  - it: should fail when a runner pod label value is not a valid Kubernetes label value
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        pod:
+          metadata:
+            labels:
+              purpose: "“true”"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: '.Values.runner.pod.metadata.labels: invalid value "“true”" for label "purpose": a valid label value must be an empty string or consist of alphanumeric characters, ''-'', ''_'' or ''.'', and must start and end with an alphanumeric character'
+
+  - it: should fail when a runner pod label key is not a valid qualified name
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        pod:
+          metadata:
+            labels:
+              "Invalid.Prefix/purpose": "ci"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: '.Values.runner.pod.metadata.labels: invalid label key "Invalid.Prefix/purpose": the prefix "Invalid.Prefix" must be a DNS subdomain of no more than 253 characters'
+
+  - it: should fail when a resource label value is not a valid Kubernetes label value
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        all:
+          metadata:
+            labels:
+              team: "not valid"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: '.Values.resource.all.metadata.labels: invalid value "not valid" for label "team": a valid label value must be an empty string or consist of alphanumeric characters, ''-'', ''_'' or ''.'', and must start and end with an alphanumeric character'
+
+  - it: should fail when an annotation key is not a valid qualified name
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        all:
+          metadata:
+            annotations:
+              "invalid key": "value"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: '.Values.resource.all.metadata.annotations: invalid annotation key "invalid key": the name part must be no more than 63 characters, consist of alphanumeric characters, ''-'', ''_'' or ''.'', and must start and end with an alphanumeric character'
+
+  - it: should render scalar label and annotation values as strings
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        ephemeralRunner:
+          metadata:
+            labels:
+              sync-wave: 1
+            annotations:
+              enabled: true
+      runner:
+        pod:
+          metadata:
+            labels:
+              enabled: true
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["enabled"]
+          value: "true"
+      - equal:
+          path: spec.ephemeralRunnerMetadata.labels["sync-wave"]
+          value: "1"
+      - equal:
+          path: spec.ephemeralRunnerMetadata.annotations["enabled"]
+          value: "true"

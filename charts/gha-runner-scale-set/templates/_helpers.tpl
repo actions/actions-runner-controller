@@ -55,16 +55,102 @@ app.kubernetes.io/instance: {{ include "gha-runner-scale-set.scale-set-name" . }
 {{- end }}
 
 {{/*
+Render a labels or annotations map with all values coerced to strings.
+Kubernetes only accepts string values, so scalars such as `true` or `1` must not be
+rendered as YAML booleans or numbers.
+*/}}
+{{- define "gha-runner-scale-set.stringMap" -}}
+{{- $out := dict -}}
+{{- range $k, $v := . -}}
+{{- $_ := set $out $k (printf "%v" $v) -}}
+{{- end -}}
+{{- toYaml $out -}}
+{{- end }}
+
+{{/*
+Validate a label or annotation key against the Kubernetes qualified name rules.
+Expects a dict with "key", "kind" (label|annotation) and "path" (the values path used in the error message).
+*/}}
+{{- define "gha-runner-scale-set.validateMetadataKey" -}}
+{{- $key := .key -}}
+{{- $parts := splitList "/" $key -}}
+{{- $name := $key -}}
+{{- if gt (len $parts) 2 -}}
+{{- fail (printf "%s: invalid %s key %q: a qualified name must consist of an optional DNS subdomain prefix followed by a single '/'" .path .kind $key) -}}
+{{- end -}}
+{{- if eq (len $parts) 2 -}}
+{{- $prefix := index $parts 0 -}}
+{{- $name = index $parts 1 -}}
+{{- if or (eq $prefix "") (gt (len $prefix) 253) (not (regexMatch "^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$" $prefix)) -}}
+{{- fail (printf "%s: invalid %s key %q: the prefix %q must be a DNS subdomain of no more than 253 characters" .path .kind $key $prefix) -}}
+{{- end -}}
+{{- end -}}
+{{- if or (eq $name "") (gt (len $name) 63) (not (regexMatch "^[A-Za-z0-9]([-A-Za-z0-9_.]*[A-Za-z0-9])?$" $name)) -}}
+{{- fail (printf "%s: invalid %s key %q: the name part must be no more than 63 characters, consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character" .path .kind $key) -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Validate a map of labels. Invalid labels are only rejected once the controller creates the
+runner pod, which leaves the scale set without runners, so fail at render time instead.
+Expects a dict with "labels" and "path".
+*/}}
+{{- define "gha-runner-scale-set.validateLabels" -}}
+{{- $path := .path -}}
+{{- range $key, $value := (.labels | default dict) -}}
+{{- include "gha-runner-scale-set.validateMetadataKey" (dict "key" $key "kind" "label" "path" $path) -}}
+{{- $rendered := printf "%v" $value -}}
+{{- if gt (len $rendered) 63 -}}
+{{- fail (printf "%s: invalid value %q for label %q: a label value must be no more than 63 characters" $path $rendered $key) -}}
+{{- end -}}
+{{- if not (regexMatch "^(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?$" $rendered) -}}
+{{- fail (printf "%s: invalid value %q for label %q: a valid label value must be an empty string or consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character" $path $rendered $key) -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Validate a map of annotations. Annotation values are unconstrained, so only keys are validated.
+Expects a dict with "annotations" and "path".
+*/}}
+{{- define "gha-runner-scale-set.validateAnnotations" -}}
+{{- $path := .path -}}
+{{- range $key, $value := (.annotations | default dict) -}}
+{{- include "gha-runner-scale-set.validateMetadataKey" (dict "key" $key "kind" "annotation" "path" $path) -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Validate every label and annotation map the chart can render onto resources it manages.
+*/}}
+{{- define "gha-runner-scale-set.validateMetadata" -}}
+{{- include "gha-runner-scale-set.validateLabels" (dict "labels" .Values.labels "path" ".Values.labels") -}}
+{{- include "gha-runner-scale-set.validateAnnotations" (dict "annotations" .Values.annotations "path" ".Values.annotations") -}}
+{{- with .Values.template }}
+{{- with .metadata }}
+{{- include "gha-runner-scale-set.validateLabels" (dict "labels" .labels "path" ".Values.template.metadata.labels") -}}
+{{- include "gha-runner-scale-set.validateAnnotations" (dict "annotations" .annotations "path" ".Values.template.metadata.annotations") -}}
+{{- end }}
+{{- end }}
+{{- range $resource, $meta := (.Values.resourceMeta | default dict) }}
+{{- if kindIs "map" $meta }}
+{{- include "gha-runner-scale-set.validateLabels" (dict "labels" (index $meta "labels") "path" (printf ".Values.resourceMeta.%s.labels" $resource)) -}}
+{{- include "gha-runner-scale-set.validateAnnotations" (dict "annotations" (index $meta "annotations") "path" (printf ".Values.resourceMeta.%s.annotations" $resource)) -}}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
 Render a ResourceMeta block for AutoscalingRunnerSet spec fields.
 */}}
 {{- define "gha-runner-scale-set.resourceMetaSpec" -}}
 {{- with .labels }}
 labels:
-  {{- toYaml . | nindent 2 }}
+  {{- include "gha-runner-scale-set.stringMap" . | nindent 2 }}
 {{- end }}
 {{- with .annotations }}
 annotations:
-  {{- toYaml . | nindent 2 }}
+  {{- include "gha-runner-scale-set.stringMap" . | nindent 2 }}
 {{- end }}
 {{- end }}
 

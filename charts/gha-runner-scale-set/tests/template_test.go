@@ -2684,7 +2684,7 @@ func TestCustomLabels(t *testing.T) {
 			"controllerServiceAccount.name":                                "arc",
 			"containerMode.type":                                           "kubernetes",
 			"controllerServiceAccount.namespace":                           "arc-system",
-			`labels.argocd\.argoproj\.io/sync-wave`:                        `"1"`,
+			`labels.argocd\.argoproj\.io/sync-wave`:                        "1",
 			`labels.app\.kubernetes\.io/part-of`:                           "no-override", // this shouldn't be overwritten
 			"resourceMeta.autoscalingRunnerSet.labels.ars-custom":          "ars-custom-value",
 			"resourceMeta.githubConfigSecret.labels.gh-custom":             "gh-custom-value",
@@ -2708,7 +2708,7 @@ func TestCustomLabels(t *testing.T) {
 	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/githubsecret.yaml"})
 
 	const targetLabel = "argocd.argoproj.io/sync-wave"
-	const wantCustomValue = `"1"`
+	const wantCustomValue = "1"
 	const reservedLabel = "app.kubernetes.io/part-of"
 	const wantReservedValue = "gha-rs"
 
@@ -2783,7 +2783,7 @@ func TestCustomLabels(t *testing.T) {
 			"githubConfigSecret.github_token":                            "gh_token12345",
 			"controllerServiceAccount.name":                              "arc",
 			"controllerServiceAccount.namespace":                         "arc-system",
-			`labels.argocd\.argoproj\.io/sync-wave`:                      `"1"`,
+			`labels.argocd\.argoproj\.io/sync-wave`:                      "1",
 			"resourceMeta.noPermissionServiceAccount.labels.npsa-custom": "npsa-custom-value",
 		},
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
@@ -2815,7 +2815,7 @@ func TestCustomAnnotations(t *testing.T) {
 			"containerMode.type":                                                "kubernetes",
 			"controllerServiceAccount.name":                                     "arc",
 			"controllerServiceAccount.namespace":                                "arc-system",
-			`annotations.argocd\.argoproj\.io/sync-wave`:                        `"1"`,
+			`annotations.argocd\.argoproj\.io/sync-wave`:                        "1",
 			"resourceMeta.autoscalingRunnerSet.annotations.ars-custom":          "ars-custom-value",
 			"resourceMeta.githubConfigSecret.annotations.gh-custom":             "gh-custom-value",
 			"resourceMeta.kubernetesModeRole.annotations.kmr-custom":            "kmr-custom-value",
@@ -2836,7 +2836,7 @@ func TestCustomAnnotations(t *testing.T) {
 	}
 
 	const targetAnnotations = "argocd.argoproj.io/sync-wave"
-	const wantCustomValue = `"1"`
+	const wantCustomValue = "1"
 
 	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/githubsecret.yaml"})
 
@@ -2904,7 +2904,7 @@ func TestCustomAnnotations(t *testing.T) {
 			"githubConfigSecret.github_token":                                 "gh_token12345",
 			"controllerServiceAccount.name":                                   "arc",
 			"controllerServiceAccount.namespace":                              "arc-system",
-			`annotations.argocd\.argoproj\.io/sync-wave`:                      `"1"`,
+			`annotations.argocd\.argoproj\.io/sync-wave`:                      "1",
 			"resourceMeta.noPermissionServiceAccount.annotations.npsa-custom": "npsa-custom-value",
 		},
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
@@ -3151,4 +3151,108 @@ func TestAutoscalingRunnerSetCustomAnnotationsAndLabelsApplied(t *testing.T) {
 
 	assert.NotEqual(t, "not-propagated", autoscalingRunnerSet.Annotations["actions.github.com/cleanup-manager-role-name"])
 	assert.NotEqual(t, "not-propagated", autoscalingRunnerSet.Labels["app.kubernetes.io/component"])
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_InvalidMetadataValidationError(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	tt := map[string]struct {
+		key           string
+		value         string
+		expectedError string
+	}{
+		"runner pod label with smart quotes": {
+			key:           "template.metadata.labels.custom",
+			value:         "\u201ctrue\u201d",
+			expectedError: `.Values.template.metadata.labels: invalid value "“true”" for label "custom"`,
+		},
+		"runner pod label value too long": {
+			key:           "template.metadata.labels.custom",
+			value:         strings.Repeat("a", 64),
+			expectedError: `.Values.template.metadata.labels: invalid value "` + strings.Repeat("a", 64) + `" for label "custom": a label value must be no more than 63 characters`,
+		},
+		"runner pod label key with invalid prefix": {
+			key:           "template.metadata.labels.Invalid\\.Prefix/custom",
+			value:         "value",
+			expectedError: `.Values.template.metadata.labels: invalid label key "Invalid.Prefix/custom"`,
+		},
+		"runner pod annotation key invalid": {
+			key:           "template.metadata.annotations.invalid key",
+			value:         "value",
+			expectedError: `.Values.template.metadata.annotations: invalid annotation key "invalid key"`,
+		},
+		"chart level label invalid": {
+			key:           "labels.custom",
+			value:         "not valid",
+			expectedError: `.Values.labels: invalid value "not valid" for label "custom"`,
+		},
+		"resource meta label invalid": {
+			key:           "resourceMeta.ephemeralRunner.labels.custom",
+			value:         "not valid",
+			expectedError: `.Values.resourceMeta.ephemeralRunner.labels: invalid value "not valid" for label "custom"`,
+		},
+	}
+
+	for name, tc := range tt {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			releaseName := "test-runners"
+			namespaceName := "test-" + strings.ToLower(random.UniqueID())
+
+			options := &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"githubConfigUrl":                    "https://github.com/actions",
+					"githubConfigSecret.github_token":    "gh_token12345",
+					"controllerServiceAccount.name":      "arc",
+					"controllerServiceAccount.namespace": "arc-system",
+					tc.key:                               tc.value,
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+			}
+
+			_, err := helm.RenderTemplateContextE(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+			require.Error(t, err)
+			assert.ErrorContains(t, err, tc.expectedError)
+		})
+	}
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_ValidMetadataIsAccepted(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"githubConfigUrl":                                "https://github.com/actions",
+			"githubConfigSecret.github_token":                "gh_token12345",
+			"controllerServiceAccount.name":                  "arc",
+			"controllerServiceAccount.namespace":             "arc-system",
+			"template.metadata.labels.custom":                "true",
+			"template.metadata.labels.example\\.com/custom":  "value_1.0-rc",
+			"template.metadata.labels.empty":                 "",
+			"template.metadata.annotations.example\\.com/an": "any value is allowed: ✅",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var autoscalingRunnerSet v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &autoscalingRunnerSet)
+
+	assert.Equal(t, "true", autoscalingRunnerSet.Spec.Template.Labels["custom"])
+	assert.Equal(t, "value_1.0-rc", autoscalingRunnerSet.Spec.Template.Labels["example.com/custom"])
+	assert.Equal(t, "", autoscalingRunnerSet.Spec.Template.Labels["empty"])
+	assert.Equal(t, "any value is allowed: ✅", autoscalingRunnerSet.Spec.Template.Annotations["example.com/an"])
 }
