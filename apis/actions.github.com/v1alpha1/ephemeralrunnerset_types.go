@@ -87,11 +87,6 @@ type EphemeralRunnerSet struct {
 	Status EphemeralRunnerSetStatus `json:"status,omitempty"`
 }
 
-// EphemeralRunnerSpecHash computes the hash value of the EphemeralRunnerSpec and returns it as a string.
-func (ers *EphemeralRunnerSet) EphemeralRunnerSpecHash() string {
-	return ers.Spec.EphemeralRunnerSpec.Hash()
-}
-
 func (ers *EphemeralRunnerSet) GitHubConfigSecret() string {
 	return ers.Spec.EphemeralRunnerSpec.GitHubConfigSecret
 }
