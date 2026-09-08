@@ -38,7 +38,7 @@ tests:
       namespace: "test-namespace"
     asserts:
       - failedTemplate:
-          errorMessage: '.Values.runner.pod.metadata.labels: invalid label key "Invalid.Prefix/purpose": the prefix "Invalid.Prefix" must be a DNS subdomain of no more than 253 characters'
+          errorMessage: '.Values.runner.pod.metadata.labels: invalid label key "Invalid.Prefix/purpose": the prefix "Invalid.Prefix" must be a DNS subdomain, so each dot-separated segment must be no more than 63 characters, consist of lowercase alphanumeric characters or ''-'', and start and end with an alphanumeric character'
 
   - it: should fail when a resource label value is not a valid Kubernetes label value
     set:

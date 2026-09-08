@@ -73,24 +73,27 @@ Expects a dict with "key", "kind" (label|annotation) and "path" (the values path
 */}}
 {{- define "gha-runner-scale-set.validateMetadataKey" -}}
 {{- $key := .key -}}
+{{- $kind := .kind -}}
+{{- $path := .path -}}
 {{- $parts := splitList "/" $key -}}
 {{- $name := $key -}}
 {{- if gt (len $parts) 2 -}}
-{{- fail (printf "%s: invalid %s key %q: a qualified name must consist of an optional DNS subdomain prefix followed by a single '/'" .path .kind $key) -}}
+{{- fail (printf "%s: invalid %s key %q: a qualified name must consist of an optional DNS subdomain prefix followed by a single '/'" $path $kind $key) -}}
 {{- end -}}
 {{- if eq (len $parts) 2 -}}
 {{- $prefix := index $parts 0 -}}
 {{- $name = index $parts 1 -}}
 {{- if or (eq $prefix "") (gt (len $prefix) 253) -}}
-{{- fail (printf "%s: invalid %s key %q: the prefix %q must be a DNS subdomain of no more than 253 characters" .path .kind $key $prefix) -}}
+{{- fail (printf "%s: invalid %s key %q: the prefix %q must be a DNS subdomain of no more than 253 characters" $path $kind $key $prefix) -}}
 {{- end -}}
 {{- range $_, $seg := splitList "." $prefix -}}
 {{- if or (eq $seg "") (gt (len $seg) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $seg)) -}}
-{{- fail (printf "%s: invalid %s key %q: the prefix %q must be a DNS subdomain of no more than 253 characters" .path .kind $key $prefix) -}}
+{{- fail (printf "%s: invalid %s key %q: the prefix %q must be a DNS subdomain, so each dot-separated segment must be no more than 63 characters, consist of lowercase alphanumeric characters or '-', and start and end with an alphanumeric character" $path $kind $key $prefix) -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}
 {{- if or (eq $name "") (gt (len $name) 63) (not (regexMatch "^[A-Za-z0-9]([-A-Za-z0-9_.]*[A-Za-z0-9])?$" $name)) -}}
-{{- fail (printf "%s: invalid %s key %q: the name part must be no more than 63 characters, consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character" .path .kind $key) -}}
+{{- fail (printf "%s: invalid %s key %q: the name part must be no more than 63 characters, consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character" $path $kind $key) -}}
 {{- end -}}
 {{- end }}
 
