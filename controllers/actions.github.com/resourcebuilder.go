@@ -823,9 +823,10 @@ func (b *ResourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.Epheme
 	maps.Copy(labels, ephemeralRunnerSet.Labels)
 	labels[LabelKeyKubernetesComponent] = "runner"
 
-	annotations := make(map[string]string, len(ephemeralRunnerSet.Annotations)+1)
+	annotations := make(map[string]string, len(ephemeralRunnerSet.Annotations)+2)
 	maps.Copy(annotations, ephemeralRunnerSet.Annotations)
 	annotations[AnnotationKeyPatchID] = strconv.Itoa(ephemeralRunnerSet.Spec.PatchID)
+	annotations[AnnotationKeyActionableRevision] = strconv.FormatInt(ephemeralRunnerSet.Spec.ActionableRevision, 10)
 
 	if ephemeralRunnerSet.Spec.EphemeralRunnerMetadata != nil {
 		labels = b.filterAndMergeLabels(ephemeralRunnerSet.Spec.EphemeralRunnerMetadata.Labels, labels)

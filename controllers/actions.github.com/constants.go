@@ -50,6 +50,12 @@ const (
 	AnnotationKeyGitHubRunnerGroupName    = "actions.github.com/runner-group-name"
 	AnnotationKeyGitHubRunnerScaleSetName = "actions.github.com/runner-scale-set-name"
 	AnnotationKeyPatchID                  = "actions.github.com/patch-id"
+	// AnnotationKeyActionableRevision records the EphemeralRunnerSet
+	// Spec.ActionableRevision that was in effect when the runner was created. It
+	// lets the set tell apart a runner that reported Outdated against the current
+	// runner spec from one that reported it against a spec that has since been
+	// updated.
+	AnnotationKeyActionableRevision = "actions.github.com/actionable-revision"
 )
 
 // Labels applied to listener roles
