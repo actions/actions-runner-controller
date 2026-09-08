@@ -31,6 +31,11 @@ Labels:
   ...
 ```
 
+Note that the listener pod itself runs in the controller's namespace (`arc-systems` in the
+examples below), while the `actions.github.com/scale-set-namespace` label holds the
+namespace the scale set was installed into (`arc-runners`). Scope the scrape configuration
+to the namespace where the listener pods run.
+
 During service discovery, Prometheus exposes those pod labels as metadata labels, with
 the characters that are invalid in a label name replaced by `_`:
 
@@ -39,25 +44,39 @@ __meta_kubernetes_pod_label_actions_github_com_scale_set_name=arc-runner-set
 __meta_kubernetes_pod_label_actions_github_com_scale_set_namespace=arc-runners
 ```
 
-A common scrape configuration copies these onto the scraped metrics by stripping the
-`__meta_kubernetes_pod_label_` prefix. For example, scoped to the `arc-systems` namespace:
+The scrape configuration has to copy those metadata labels onto the scraped metrics. The
+example below copies only the two labels the dashboard needs, scoped to the `arc-systems`
+namespace:
 
 ```yaml
 scrape_configs:
   - job_name: arc-metrics
-    honor_labels: true
     kubernetes_sd_configs:
       - role: pod
         namespaces:
           names:
             - arc-systems
     relabel_configs:
-      - action: labelmap
-        regex: __meta_kubernetes_pod_label_(.+)
+      - source_labels: [__meta_kubernetes_pod_label_actions_github_com_scale_set_name]
+        target_label: actions_github_com_scale_set_name
+      - source_labels: [__meta_kubernetes_pod_label_actions_github_com_scale_set_namespace]
+        target_label: actions_github_com_scale_set_namespace
 ```
 
 If you use the Prometheus Operator, the equivalent is a `PodMonitor` (or `ServiceMonitor`)
-with a `labelmap` entry in its `relabelings`.
+with the same entries in its `relabelings`.
+
+> [!TIP]
+> A `labelmap` action with the regex `__meta_kubernetes_pod_label_(.+)` is a common
+> shorthand that copies *every* pod label onto the metrics. It works, but it increases
+> series cardinality and risks colliding with labels the listener already emits, so prefer
+> mapping only the labels you need.
+
+> [!WARNING]
+> Do not set `honor_labels: true` for this job. With `honor_labels` enabled, a label that is
+> already present on the scraped metric wins over the one produced by `relabel_configs`, so
+> an empty `actions_github_com_scale_set_namespace=""` emitted by the listener would not be
+> overwritten.
 
 > [!IMPORTANT]
 > Adding `actions_github_com_scale_set_name` or `actions_github_com_scale_set_namespace` to
@@ -74,11 +93,12 @@ likely missing from the scraped metrics. Query one of the metrics directly (for 
 `gha_job_startup_duration_seconds_bucket`) in Prometheus and check the label values. If
 `actions_github_com_scale_set_namespace` is empty or absent, you can either:
 
-- Update your scrape configuration to relabel the scraped pod labels, as shown above; or
+- Update your scrape configuration to relabel the scraped pod labels, as shown above. If the
+  listener is also emitting an empty label of the same name, remove it from
+  `listenerMetrics` so the relabeled value is the only one; or
 - Replace `actions_github_com_scale_set_name` and `actions_github_com_scale_set_namespace`
   in your copy of the dashboard with labels that your setup already produces, such as
-  `namespace`, or the raw
-  `__meta_kubernetes_pod_label_actions_github_com_scale_set_namespace` metadata label.
+  `namespace`.
 
 Both options assume that your scrape configuration is already capturing the pod's labels.
 
