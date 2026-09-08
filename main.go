@@ -151,9 +151,11 @@ func main() {
 	flag.DurationVar(&defaultScaleDownDelay, "default-scale-down-delay", actionssummerwindnet.DefaultScaleDownDelay, "The approximate delay for a scale down followed by a scale up, used to prevent flapping (down->up->down->... loop)")
 	flag.IntVar(&port, "port", 9443, "The port to which the admission webhook endpoint should bind")
 	flag.DurationVar(&syncPeriod, "sync-period", 1*time.Minute, "Determines the minimum frequency at which K8s resources managed by this controller are reconciled.")
-	flag.IntVar(&opts.RunnerMaxConcurrentReconciles, "runner-max-concurrent-reconciles", opts.RunnerMaxConcurrentReconciles, "The maximum number of concurrent reconciles which can be run by the EphemeralRunner controller. Increase this value to improve the throughput of the controller, but it may also increase the load on the API server and the external service (e.g. GitHub API).")
-	flag.IntVar(&opts.ListenerMaxConcurrentReconciles, "listener-max-concurrent-reconciles", opts.ListenerMaxConcurrentReconciles, "The maximum number of concurrent reconciles which can be run by the AutoscalingListener controller. Increase this value to improve the throughput of the controller when running many runner scale sets, but it may also increase the load on the API server.")
-	flag.IntVar(&opts.ScaleSetMaxConcurrentReconciles, "scale-set-max-concurrent-reconciles", opts.ScaleSetMaxConcurrentReconciles, "The maximum number of concurrent reconciles which can be run by the AutoscalingRunnerSet and EphemeralRunnerSet controllers. Increase this value to improve the throughput of the controller when running many runner scale sets, but it may also increase the load on the API server.")
+	flag.IntVar(&opts.DefaultMaxConcurrentReconciles, "default-max-concurrent-reconciles", opts.DefaultMaxConcurrentReconciles, "The maximum number of concurrent reconciles applied to every controller that does not set its own --<controller>-max-concurrent-reconciles flag. Increase this value to improve the throughput of the controller, but it may also increase the load on the API server and the external service (e.g. GitHub API).")
+	flag.IntVar(&opts.AutoscalingRunnerSetMaxConcurrentReconciles, "autoscaling-runner-set-max-concurrent-reconciles", 0, "The maximum number of concurrent reconciles which can be run by the AutoscalingRunnerSet controller. Defaults to --default-max-concurrent-reconciles.")
+	flag.IntVar(&opts.AutoscalingListenerMaxConcurrentReconciles, "autoscaling-listener-max-concurrent-reconciles", 0, "The maximum number of concurrent reconciles which can be run by the AutoscalingListener controller. Defaults to --default-max-concurrent-reconciles.")
+	flag.IntVar(&opts.EphemeralRunnerSetMaxConcurrentReconciles, "ephemeral-runner-set-max-concurrent-reconciles", 0, "The maximum number of concurrent reconciles which can be run by the EphemeralRunnerSet controller. Defaults to --default-max-concurrent-reconciles.")
+	flag.IntVar(&opts.EphemeralRunnerMaxConcurrentReconciles, "ephemeral-runner-max-concurrent-reconciles", 0, "The maximum number of concurrent reconciles which can be run by the EphemeralRunner controller. Defaults to --default-max-concurrent-reconciles.")
 	flag.Var(&commonRunnerLabels, "common-runner-labels", "Runner labels in the K1=V1,K2=V2,... format that are inherited all the runners created by the controller. See https://github.com/actions/actions-runner-controller/issues/321 for more information")
 	flag.StringVar(&namespace, "watch-namespace", "", "The namespace to watch for custom resources. Set to empty for letting it watch for all namespaces.")
 	flag.StringVar(&watchSingleNamespace, "watch-single-namespace", "", "Restrict to watch for custom resources in a single namespace.")
@@ -167,6 +169,7 @@ func main() {
 	flag.StringVar(&workqueueRateLimiter, "workqueue-rate-limiter", "", `The workqueue rate limiter to use. Valid values are "bucket_rate_limiter" (default) and "typed_rate_limiter" (per-item only, no global token bucket).`)
 	flag.Parse()
 
+	opts = opts.Resolve()
 	runnerPodDefaults.RunnerImagePullSecrets = runnerImagePullSecrets
 
 	log, err := logging.NewLogger(logLevel, logFormat)
@@ -177,9 +180,11 @@ func main() {
 	c.Log = &log
 
 	log.Info("Using options",
-		"runner-max-concurrent-reconciles", opts.RunnerMaxConcurrentReconciles,
-		"listener-max-concurrent-reconciles", opts.ListenerMaxConcurrentReconciles,
-		"scale-set-max-concurrent-reconciles", opts.ScaleSetMaxConcurrentReconciles,
+		"default-max-concurrent-reconciles", opts.DefaultMaxConcurrentReconciles,
+		"autoscaling-runner-set-max-concurrent-reconciles", opts.AutoscalingRunnerSetMaxConcurrentReconciles,
+		"autoscaling-listener-max-concurrent-reconciles", opts.AutoscalingListenerMaxConcurrentReconciles,
+		"ephemeral-runner-set-max-concurrent-reconciles", opts.EphemeralRunnerSetMaxConcurrentReconciles,
+		"ephemeral-runner-max-concurrent-reconciles", opts.EphemeralRunnerMaxConcurrentReconciles,
 	)
 
 	if !autoScalingRunnerSetOnly {
@@ -330,7 +335,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		scaleSetOpts := append(controllerOpts, actionsgithubcom.WithMaxConcurrentReconciles(opts.ScaleSetMaxConcurrentReconciles))
+		autoscalingRunnerSetOpts := append(controllerOpts, actionsgithubcom.WithMaxConcurrentReconciles(opts.AutoscalingRunnerSetMaxConcurrentReconciles))
 		if err = (&actionsgithubcom.AutoscalingRunnerSetReconciler{
 			Client:                             mgr.GetClient(),
 			Log:                                log.WithName("AutoscalingRunnerSet").WithValues("version", build.Version),
@@ -339,34 +344,35 @@ func main() {
 			DefaultRunnerScaleSetListenerImage: managerImage,
 			DefaultRunnerScaleSetListenerImagePullSecrets: autoScalerImagePullSecrets,
 			ResourceBuilder: rb,
-		}).SetupWithManager(mgr, scaleSetOpts...); err != nil {
+		}).SetupWithManager(mgr, autoscalingRunnerSetOpts...); err != nil {
 			log.Error(err, "unable to create controller", "controller", "AutoscalingRunnerSet")
 			os.Exit(1)
 		}
 
-		runnerOpts := append(controllerOpts, actionsgithubcom.WithMaxConcurrentReconciles(opts.RunnerMaxConcurrentReconciles))
+		ephemeralRunnerOpts := append(controllerOpts, actionsgithubcom.WithMaxConcurrentReconciles(opts.EphemeralRunnerMaxConcurrentReconciles))
 		if err = (&actionsgithubcom.EphemeralRunnerReconciler{
 			Client:          mgr.GetClient(),
 			Log:             log.WithName("EphemeralRunner").WithValues("version", build.Version),
 			Scheme:          mgr.GetScheme(),
 			PublishMetrics:  metricsAddr != "0",
 			ResourceBuilder: rb,
-		}).SetupWithManager(mgr, runnerOpts...); err != nil {
+		}).SetupWithManager(mgr, ephemeralRunnerOpts...); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunner")
 			os.Exit(1)
 		}
 
+		ephemeralRunnerSetOpts := append(controllerOpts, actionsgithubcom.WithMaxConcurrentReconciles(opts.EphemeralRunnerSetMaxConcurrentReconciles))
 		if err = (&actionsgithubcom.EphemeralRunnerSetReconciler{
 			Client:          mgr.GetClient(),
 			Log:             log.WithName("EphemeralRunnerSet").WithValues("version", build.Version),
 			Scheme:          mgr.GetScheme(),
 			ResourceBuilder: rb,
-		}).SetupWithManager(mgr, scaleSetOpts...); err != nil {
+		}).SetupWithManager(mgr, ephemeralRunnerSetOpts...); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunnerSet")
 			os.Exit(1)
 		}
 
-		listenerOpts := append(controllerOpts, actionsgithubcom.WithMaxConcurrentReconciles(opts.ListenerMaxConcurrentReconciles))
+		autoscalingListenerOpts := append(controllerOpts, actionsgithubcom.WithMaxConcurrentReconciles(opts.AutoscalingListenerMaxConcurrentReconciles))
 		if err = (&actionsgithubcom.AutoscalingListenerReconciler{
 			Client:                  mgr.GetClient(),
 			Log:                     log.WithName("AutoscalingListener").WithValues("version", build.Version),
@@ -374,7 +380,7 @@ func main() {
 			ListenerMetricsAddr:     listenerMetricsAddr,
 			ListenerMetricsEndpoint: listenerMetricsEndpoint,
 			ResourceBuilder:         rb,
-		}).SetupWithManager(mgr, listenerOpts...); err != nil {
+		}).SetupWithManager(mgr, autoscalingListenerOpts...); err != nil {
 			log.Error(err, "unable to create controller", "controller", "AutoscalingListener")
 			os.Exit(1)
 		}

@@ -366,7 +366,7 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 		"--metrics-addr=0",
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
-		"--runner-max-concurrent-reconciles=2",
+		"--ephemeral-runner-max-concurrent-reconciles=2",
 	}
 	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)
 
@@ -518,7 +518,7 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
 		"--metrics-addr=0",
-		"--runner-max-concurrent-reconciles=2",
+		"--ephemeral-runner-max-concurrent-reconciles=2",
 	}
 
 	assert.ElementsMatch(t, expectArgs, deployment.Spec.Template.Spec.Containers[0].Args)
@@ -646,7 +646,7 @@ func TestTemplate_EnableLeaderElection(t *testing.T) {
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
 		"--metrics-addr=0",
-		"--runner-max-concurrent-reconciles=2",
+		"--ephemeral-runner-max-concurrent-reconciles=2",
 	}
 
 	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)
@@ -687,7 +687,7 @@ func TestTemplate_ControllerDeployment_ForwardImagePullSecrets(t *testing.T) {
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
 		"--metrics-addr=0",
-		"--runner-max-concurrent-reconciles=2",
+		"--ephemeral-runner-max-concurrent-reconciles=2",
 	}
 
 	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)
@@ -777,7 +777,7 @@ func TestTemplate_ControllerDeployment_WatchSingleNamespace(t *testing.T) {
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
 		"--metrics-addr=0",
-		"--runner-max-concurrent-reconciles=2",
+		"--ephemeral-runner-max-concurrent-reconciles=2",
 	}
 
 	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)
@@ -809,9 +809,11 @@ func TestTemplate_ControllerDeployment_MaxConcurrentReconciles(t *testing.T) {
 	options := &helm.Options{
 		Logger: logger.Discard,
 		SetValues: map[string]string{
-			"flags.runnerMaxConcurrentReconciles":   "20",
-			"flags.listenerMaxConcurrentReconciles": "5",
-			"flags.scaleSetMaxConcurrentReconciles": "3",
+			"flags.defaultMaxConcurrentReconciles":              "4",
+			"flags.autoscalingRunnerSetMaxConcurrentReconciles": "3",
+			"flags.autoscalingListenerMaxConcurrentReconciles":  "5",
+			"flags.ephemeralRunnerSetMaxConcurrentReconciles":   "6",
+			"flags.runnerMaxConcurrentReconciles":               "20",
 		},
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
@@ -823,9 +825,11 @@ func TestTemplate_ControllerDeployment_MaxConcurrentReconciles(t *testing.T) {
 
 	assert.Len(t, deployment.Spec.Template.Spec.Containers, 1)
 	args := deployment.Spec.Template.Spec.Containers[0].Args
-	assert.Contains(t, args, "--runner-max-concurrent-reconciles=20")
-	assert.Contains(t, args, "--listener-max-concurrent-reconciles=5")
-	assert.Contains(t, args, "--scale-set-max-concurrent-reconciles=3")
+	assert.Contains(t, args, "--default-max-concurrent-reconciles=4")
+	assert.Contains(t, args, "--autoscaling-runner-set-max-concurrent-reconciles=3")
+	assert.Contains(t, args, "--autoscaling-listener-max-concurrent-reconciles=5")
+	assert.Contains(t, args, "--ephemeral-runner-set-max-concurrent-reconciles=6")
+	assert.Contains(t, args, "--ephemeral-runner-max-concurrent-reconciles=20")
 }
 
 func TestTemplate_ControllerContainerEnvironmentVariables(t *testing.T) {

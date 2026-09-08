@@ -47,14 +47,20 @@ args:
 {{- with .Values.controller.manager.config.watchSingleNamespace }}
   - "--watch-single-namespace={{ . }}"
 {{- end }}
+{{- with .Values.controller.manager.config.defaultMaxConcurrentReconciles }}
+  - "--default-max-concurrent-reconciles={{ . }}"
+{{- end }}
+{{- with .Values.controller.manager.config.autoscalingRunnerSetMaxConcurrentReconciles }}
+  - "--autoscaling-runner-set-max-concurrent-reconciles={{ . }}"
+{{- end }}
+{{- with .Values.controller.manager.config.autoscalingListenerMaxConcurrentReconciles }}
+  - "--autoscaling-listener-max-concurrent-reconciles={{ . }}"
+{{- end }}
+{{- with .Values.controller.manager.config.ephemeralRunnerSetMaxConcurrentReconciles }}
+  - "--ephemeral-runner-set-max-concurrent-reconciles={{ . }}"
+{{- end }}
 {{- with .Values.controller.manager.config.runnerMaxConcurrentReconciles }}
-  - "--runner-max-concurrent-reconciles={{ . }}"
-{{- end }}
-{{- with .Values.controller.manager.config.listenerMaxConcurrentReconciles }}
-  - "--listener-max-concurrent-reconciles={{ . }}"
-{{- end }}
-{{- with .Values.controller.manager.config.scaleSetMaxConcurrentReconciles }}
-  - "--scale-set-max-concurrent-reconciles={{ . }}"
+  - "--ephemeral-runner-max-concurrent-reconciles={{ . }}"
 {{- end }}
 {{- if .Values.controller.metrics }}
 {{- with .Values.controller.metrics }}

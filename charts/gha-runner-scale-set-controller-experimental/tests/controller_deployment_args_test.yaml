@@ -74,39 +74,53 @@ tests:
           path: spec.template.spec.containers[0].args
           content: "--listener-metrics-endpoint=/metrics"
 
-  - it: should include runner-max-concurrent-reconciles flag by default and omit listener and scale set flags
+  - it: should include ephemeral-runner-max-concurrent-reconciles flag by default and omit the other concurrency flags
     release:
       name: "test-arc"
       namespace: "test-ns"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].args
-          content: "--runner-max-concurrent-reconciles=2"
+          content: "--ephemeral-runner-max-concurrent-reconciles=2"
       - notContains:
           path: spec.template.spec.containers[0].args
-          content: "--listener-max-concurrent-reconciles=1"
+          content: "--default-max-concurrent-reconciles=1"
       - notContains:
           path: spec.template.spec.containers[0].args
-          content: "--scale-set-max-concurrent-reconciles=1"
+          content: "--autoscaling-runner-set-max-concurrent-reconciles=1"
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: "--autoscaling-listener-max-concurrent-reconciles=1"
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: "--ephemeral-runner-set-max-concurrent-reconciles=1"
 
-  - it: should include listener and scale set max-concurrent-reconciles flags when configured
+  - it: should include every max-concurrent-reconciles flag when configured
     set:
       controller:
         manager:
           config:
+            defaultMaxConcurrentReconciles: 4
+            autoscalingRunnerSetMaxConcurrentReconciles: 3
+            autoscalingListenerMaxConcurrentReconciles: 5
+            ephemeralRunnerSetMaxConcurrentReconciles: 6
             runnerMaxConcurrentReconciles: 20
-            listenerMaxConcurrentReconciles: 5
-            scaleSetMaxConcurrentReconciles: 3
     release:
       name: "test-arc"
       namespace: "test-ns"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].args
-          content: "--runner-max-concurrent-reconciles=20"
+          content: "--default-max-concurrent-reconciles=4"
       - contains:
           path: spec.template.spec.containers[0].args
-          content: "--listener-max-concurrent-reconciles=5"
+          content: "--autoscaling-runner-set-max-concurrent-reconciles=3"
       - contains:
           path: spec.template.spec.containers[0].args
-          content: "--scale-set-max-concurrent-reconciles=3"
+          content: "--autoscaling-listener-max-concurrent-reconciles=5"
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--ephemeral-runner-set-max-concurrent-reconciles=6"
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--ephemeral-runner-max-concurrent-reconciles=20"
