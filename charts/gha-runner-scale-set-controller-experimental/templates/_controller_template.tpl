@@ -50,6 +50,12 @@ args:
 {{- with .Values.controller.manager.config.runnerMaxConcurrentReconciles }}
   - "--runner-max-concurrent-reconciles={{ . }}"
 {{- end }}
+{{- with .Values.controller.manager.config.listenerMaxConcurrentReconciles }}
+  - "--listener-max-concurrent-reconciles={{ . }}"
+{{- end }}
+{{- with .Values.controller.manager.config.scaleSetMaxConcurrentReconciles }}
+  - "--scale-set-max-concurrent-reconciles={{ . }}"
+{{- end }}
 {{- if .Values.controller.metrics }}
 {{- with .Values.controller.metrics }}
   - "--listener-metrics-addr={{ .listenerAddr }}"

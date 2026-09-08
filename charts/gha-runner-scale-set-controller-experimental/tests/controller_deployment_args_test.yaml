@@ -73,3 +73,40 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].args
           content: "--listener-metrics-endpoint=/metrics"
+
+  - it: should include runner-max-concurrent-reconciles flag by default and omit listener and scale set flags
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--runner-max-concurrent-reconciles=2"
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: "--listener-max-concurrent-reconciles=1"
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: "--scale-set-max-concurrent-reconciles=1"
+
+  - it: should include listener and scale set max-concurrent-reconciles flags when configured
+    set:
+      controller:
+        manager:
+          config:
+            runnerMaxConcurrentReconciles: 20
+            listenerMaxConcurrentReconciles: 5
+            scaleSetMaxConcurrentReconciles: 3
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--runner-max-concurrent-reconciles=20"
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--listener-max-concurrent-reconciles=5"
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--scale-set-max-concurrent-reconciles=3"

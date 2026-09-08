@@ -13,6 +13,14 @@ type Options struct {
 	// RunnerMaxConcurrentReconciles is the maximum number of concurrent Reconciles which can be run
 	// by the EphemeralRunnerController.
 	RunnerMaxConcurrentReconciles int
+
+	// ListenerMaxConcurrentReconciles is the maximum number of concurrent Reconciles which can be run
+	// by the AutoscalingListenerController.
+	ListenerMaxConcurrentReconciles int
+
+	// ScaleSetMaxConcurrentReconciles is the maximum number of concurrent Reconciles which can be run
+	// by the AutoscalingRunnerSetController and the EphemeralRunnerSetController.
+	ScaleSetMaxConcurrentReconciles int
 }
 
 // OptionsWithDefault returns the default options.
@@ -20,7 +28,9 @@ type Options struct {
 // rather than having to correlate those in multiple places.
 func OptionsWithDefault() Options {
 	return Options{
-		RunnerMaxConcurrentReconciles: 2,
+		RunnerMaxConcurrentReconciles:   2,
+		ListenerMaxConcurrentReconciles: 1,
+		ScaleSetMaxConcurrentReconciles: 1,
 	}
 }
 

@@ -70,6 +70,12 @@ spec:
         {{- with .Values.flags.runnerMaxConcurrentReconciles }}
         - "--runner-max-concurrent-reconciles={{ . }}"
         {{- end }}
+        {{- with .Values.flags.listenerMaxConcurrentReconciles }}
+        - "--listener-max-concurrent-reconciles={{ . }}"
+        {{- end }}
+        {{- with .Values.flags.scaleSetMaxConcurrentReconciles }}
+        - "--scale-set-max-concurrent-reconciles={{ . }}"
+        {{- end }}
         {{- if .Values.metrics }}
         {{- with .Values.metrics }}
         - "--listener-metrics-addr={{ .listenerAddr }}"

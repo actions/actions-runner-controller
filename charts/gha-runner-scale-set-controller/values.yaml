@@ -119,6 +119,16 @@ flags:
   # It may also increase the load on the API server and the external service (e.g. GitHub API).
   runnerMaxConcurrentReconciles: 2
 
+  ## The maximum number of concurrent reconciles which can be run by the AutoscalingListener controller.
+  # Increase this value to improve the throughput of the controller when running many runner scale sets.
+  # It may also increase the load on the API server.
+  # listenerMaxConcurrentReconciles: 1
+
+  ## The maximum number of concurrent reconciles which can be run by the AutoscalingRunnerSet and EphemeralRunnerSet controllers.
+  # Increase this value to improve the throughput of the controller when running many runner scale sets.
+  # It may also increase the load on the API server.
+  # scaleSetMaxConcurrentReconciles: 1
+
   ## Defines a list of prefixes that should not be propagated to internal resources.
   ## This is useful when you have labels that are used for internal purposes and should not be propagated to internal resources.
   ## See https://github.com/actions/actions-runner-controller/issues/3533 for more information.
