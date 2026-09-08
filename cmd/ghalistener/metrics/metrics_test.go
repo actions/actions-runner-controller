@@ -390,8 +390,8 @@ func TestRecordJobStarted(t *testing.T) {
 					ScaleSetAssignTime: time.Time{},
 				},
 			},
-			wantCounterValue: 0,
-			wantSampleCount:  0,
+			wantCounterValue: 1,
+			wantSampleCount:  1,
 		},
 		{
 			name: "RunnerAssignTime before ScaleSetAssignTime",
@@ -406,8 +406,8 @@ func TestRecordJobStarted(t *testing.T) {
 					ScaleSetAssignTime: now.Add(10 * time.Second),
 				},
 			},
-			wantCounterValue: 0,
-			wantSampleCount:  0,
+			wantCounterValue: 1,
+			wantSampleCount:  1,
 		},
 		{
 			name: "valid timestamps",
@@ -499,8 +499,8 @@ func TestRecordJobCompleted(t *testing.T) {
 				},
 				Result: "success",
 			},
-			wantCounterValue: 0,
-			wantSampleCount:  0,
+			wantCounterValue: 1,
+			wantSampleCount:  1,
 		},
 		{
 			name: "valid timestamps",
