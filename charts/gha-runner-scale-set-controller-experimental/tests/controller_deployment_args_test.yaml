@@ -74,14 +74,14 @@ tests:
           path: spec.template.spec.containers[0].args
           content: "--listener-metrics-endpoint=/metrics"
 
-  - it: should include ephemeral-runner-max-concurrent-reconciles flag by default and omit the other concurrency flags
+  - it: should omit every max-concurrent-reconciles flag by default
     release:
       name: "test-arc"
       namespace: "test-ns"
     asserts:
-      - contains:
+      - notContains:
           path: spec.template.spec.containers[0].args
-          content: "--ephemeral-runner-max-concurrent-reconciles=2"
+          content: "--ephemeral-runner-max-concurrent-reconciles=1"
       - notContains:
           path: spec.template.spec.containers[0].args
           content: "--default-max-concurrent-reconciles=1"
@@ -104,7 +104,7 @@ tests:
             autoscalingRunnerSetMaxConcurrentReconciles: 3
             autoscalingListenerMaxConcurrentReconciles: 5
             ephemeralRunnerSetMaxConcurrentReconciles: 6
-            runnerMaxConcurrentReconciles: 20
+            ephemeralRunnerMaxConcurrentReconciles: 20
     release:
       name: "test-arc"
       namespace: "test-ns"

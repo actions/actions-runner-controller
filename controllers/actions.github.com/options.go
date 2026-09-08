@@ -40,10 +40,14 @@ func OptionsWithDefault() Options {
 	}
 }
 
-// Resolve returns a copy of the options where every per-controller
+// Resolve returns a copy of the options where a DefaultMaxConcurrentReconciles
+// of zero or less is replaced by 1, and every per-controller
 // MaxConcurrentReconciles that is left at zero is replaced by
 // DefaultMaxConcurrentReconciles.
 func (o Options) Resolve() Options {
+	if o.DefaultMaxConcurrentReconciles <= 0 {
+		o.DefaultMaxConcurrentReconciles = 1
+	}
 	orDefault := func(n int) int {
 		if n > 0 {
 			return n

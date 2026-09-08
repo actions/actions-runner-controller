@@ -79,7 +79,7 @@ spec:
         {{- with .Values.flags.ephemeralRunnerSetMaxConcurrentReconciles }}
         - "--ephemeral-runner-set-max-concurrent-reconciles={{ . }}"
         {{- end }}
-        {{- with .Values.flags.runnerMaxConcurrentReconciles }}
+        {{- with .Values.flags.ephemeralRunnerMaxConcurrentReconciles }}
         - "--ephemeral-runner-max-concurrent-reconciles={{ . }}"
         {{- end }}
         {{- if .Values.metrics }}

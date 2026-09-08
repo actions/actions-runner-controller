@@ -59,7 +59,7 @@ args:
 {{- with .Values.controller.manager.config.ephemeralRunnerSetMaxConcurrentReconciles }}
   - "--ephemeral-runner-set-max-concurrent-reconciles={{ . }}"
 {{- end }}
-{{- with .Values.controller.manager.config.runnerMaxConcurrentReconciles }}
+{{- with .Values.controller.manager.config.ephemeralRunnerMaxConcurrentReconciles }}
   - "--ephemeral-runner-max-concurrent-reconciles={{ . }}"
 {{- end }}
 {{- if .Values.controller.metrics }}

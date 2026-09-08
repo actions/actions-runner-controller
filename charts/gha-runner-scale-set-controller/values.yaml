@@ -123,11 +123,7 @@ flags:
   # autoscalingRunnerSetMaxConcurrentReconciles: 1
   # autoscalingListenerMaxConcurrentReconciles: 1
   # ephemeralRunnerSetMaxConcurrentReconciles: 1
-
-  ## The maximum number of concurrent reconciles which can be run by the EphemeralRunner controller.
-  # Increase this value to improve the throughput of the controller.
-  # It may also increase the load on the API server and the external service (e.g. GitHub API).
-  runnerMaxConcurrentReconciles: 2
+  # ephemeralRunnerMaxConcurrentReconciles: 1
 
   ## Defines a list of prefixes that should not be propagated to internal resources.
   ## This is useful when you have labels that are used for internal purposes and should not be propagated to internal resources.

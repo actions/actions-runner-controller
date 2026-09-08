@@ -36,9 +36,7 @@ controller:
       autoscalingRunnerSetMaxConcurrentReconciles: null
       autoscalingListenerMaxConcurrentReconciles: null
       ephemeralRunnerSetMaxConcurrentReconciles: null
-
-      # The maximum number of concurrent reconciles which can be run by the EphemeralRunner controller.
-      runnerMaxConcurrentReconciles: 2
+      ephemeralRunnerMaxConcurrentReconciles: null
 
       # List of label prefixes that should NOT be propagated to internal resources.
       excludeLabelPropagationPrefixes: []
