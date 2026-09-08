@@ -83,3 +83,20 @@ const (
 	ReasonTooManyPodFailures = "TooManyPodFailures"
 	ReasonInvalidPodFailure  = "InvalidPod"
 )
+
+// Container waiting state reasons that indicate unrecoverable pod errors.
+// These are surfaced in EphemeralRunner.Status.Message for easier diagnosis.
+var terminalContainerWaitingReasons = map[string]string{
+	"ImagePullBackOff":           "ImagePull",
+	"ErrImagePull":               "ImagePull",
+	"InvalidImageName":           "ImagePull",
+	"RegistryUnavailable":        "ImagePull",
+	"CreateContainerConfigError": "ContainerConfig",
+	"CrashLoopBackOff":           "ContainerCrash",
+	"RunContainerError":          "ContainerCrash",
+}
+
+// Container terminated reasons that indicate unrecoverable pod errors.
+var terminalContainerTerminatedReasons = map[string]string{
+	"OOMKilled": "ResourceLimit",
+}
