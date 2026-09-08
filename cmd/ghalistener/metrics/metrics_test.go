@@ -315,6 +315,15 @@ func histogramSampleCount(t *testing.T, metrics map[string]*dto.MetricFamily, na
 	return mf.GetMetric()[0].GetHistogram().GetSampleCount()
 }
 
+func histogramSampleSum(t *testing.T, metrics map[string]*dto.MetricFamily, name string) float64 {
+	t.Helper()
+	mf, ok := metrics[name]
+	if !ok || len(mf.GetMetric()) == 0 {
+		return 0
+	}
+	return mf.GetMetric()[0].GetHistogram().GetSampleSum()
+}
+
 func TestRecordJobStarted(t *testing.T) {
 	startedMetrics := v1alpha1.MetricsConfig{
 		Counters: map[string]*v1alpha1.CounterMetric{
@@ -344,6 +353,7 @@ func TestRecordJobStarted(t *testing.T) {
 		msg              scaleset.JobStarted
 		wantCounterValue float64
 		wantSampleCount  uint64
+		wantSampleSum    float64
 	}{
 		{
 			name: "zero RunnerAssignTime and ScaleSetAssignTime",
@@ -378,7 +388,7 @@ func TestRecordJobStarted(t *testing.T) {
 			wantSampleCount:  0,
 		},
 		{
-			name: "zero ScaleSetAssignTime",
+			name: "zero ScaleSetAssignTime still counts the started job but skips the duration",
 			msg: scaleset.JobStarted{
 				JobMessageBase: scaleset.JobMessageBase{
 					OwnerName:          "myorg",
@@ -391,10 +401,10 @@ func TestRecordJobStarted(t *testing.T) {
 				},
 			},
 			wantCounterValue: 1,
-			wantSampleCount:  1,
+			wantSampleCount:  0,
 		},
 		{
-			name: "RunnerAssignTime before ScaleSetAssignTime",
+			name: "RunnerAssignTime before ScaleSetAssignTime still counts the started job but skips the duration",
 			msg: scaleset.JobStarted{
 				JobMessageBase: scaleset.JobMessageBase{
 					OwnerName:          "myorg",
@@ -407,7 +417,7 @@ func TestRecordJobStarted(t *testing.T) {
 				},
 			},
 			wantCounterValue: 1,
-			wantSampleCount:  1,
+			wantSampleCount:  0,
 		},
 		{
 			name: "valid timestamps",
@@ -424,6 +434,7 @@ func TestRecordJobStarted(t *testing.T) {
 			},
 			wantCounterValue: 1,
 			wantSampleCount:  1,
+			wantSampleSum:    10,
 		},
 	}
 
@@ -434,6 +445,7 @@ func TestRecordJobStarted(t *testing.T) {
 			metrics := gatherMetrics(t, reg)
 			assert.Equal(t, tt.wantCounterValue, counterValue(t, metrics, MetricStartedJobsTotal))
 			assert.Equal(t, tt.wantSampleCount, histogramSampleCount(t, metrics, MetricJobStartupDurationSeconds))
+			assert.Equal(t, tt.wantSampleSum, histogramSampleSum(t, metrics, MetricJobStartupDurationSeconds))
 		})
 	}
 }
@@ -467,6 +479,7 @@ func TestRecordJobCompleted(t *testing.T) {
 		msg              scaleset.JobCompleted
 		wantCounterValue float64
 		wantSampleCount  uint64
+		wantSampleSum    float64
 	}{
 		{
 			name: "zero RunnerAssignTime",
@@ -486,7 +499,24 @@ func TestRecordJobCompleted(t *testing.T) {
 			wantSampleCount:  0,
 		},
 		{
-			name: "FinishTime before RunnerAssignTime",
+			name: "zero FinishTime still counts the completed job but skips the duration",
+			msg: scaleset.JobCompleted{
+				JobMessageBase: scaleset.JobMessageBase{
+					OwnerName:        "myorg",
+					RepositoryName:   "myrepo",
+					JobDisplayName:   "build",
+					JobWorkflowRef:   "myorg/myrepo/.github/workflows/build.yml@refs/heads/main",
+					EventName:        "push",
+					RunnerAssignTime: now,
+					FinishTime:       time.Time{},
+				},
+				Result: "success",
+			},
+			wantCounterValue: 1,
+			wantSampleCount:  0,
+		},
+		{
+			name: "FinishTime before RunnerAssignTime still counts the completed job but skips the duration",
 			msg: scaleset.JobCompleted{
 				JobMessageBase: scaleset.JobMessageBase{
 					OwnerName:        "myorg",
@@ -500,24 +530,29 @@ func TestRecordJobCompleted(t *testing.T) {
 				Result: "success",
 			},
 			wantCounterValue: 1,
-			wantSampleCount:  1,
+			wantSampleCount:  0,
 		},
 		{
 			name: "valid timestamps",
 			msg: scaleset.JobCompleted{
 				JobMessageBase: scaleset.JobMessageBase{
-					OwnerName:        "myorg",
-					RepositoryName:   "myrepo",
-					JobDisplayName:   "build",
-					JobWorkflowRef:   "myorg/myrepo/.github/workflows/build.yml@refs/heads/main",
-					EventName:        "push",
-					RunnerAssignTime: now,
-					FinishTime:       now.Add(10 * time.Second),
+					OwnerName:      "myorg",
+					RepositoryName: "myrepo",
+					JobDisplayName: "build",
+					JobWorkflowRef: "myorg/myrepo/.github/workflows/build.yml@refs/heads/main",
+					EventName:      "push",
+					// ScaleSetAssignTime represents queue-wait time and must not
+					// leak into the execution duration, which should only measure
+					// FinishTime - RunnerAssignTime.
+					ScaleSetAssignTime: now.Add(-1 * time.Minute),
+					RunnerAssignTime:   now,
+					FinishTime:         now.Add(10 * time.Second),
 				},
 				Result: "success",
 			},
 			wantCounterValue: 1,
 			wantSampleCount:  1,
+			wantSampleSum:    10,
 		},
 	}
 
@@ -528,6 +563,7 @@ func TestRecordJobCompleted(t *testing.T) {
 			metrics := gatherMetrics(t, reg)
 			assert.Equal(t, tt.wantCounterValue, counterValue(t, metrics, MetricCompletedJobsTotal))
 			assert.Equal(t, tt.wantSampleCount, histogramSampleCount(t, metrics, MetricJobExecutionDurationSeconds))
+			assert.Equal(t, tt.wantSampleSum, histogramSampleSum(t, metrics, MetricJobExecutionDurationSeconds))
 		})
 	}
 }

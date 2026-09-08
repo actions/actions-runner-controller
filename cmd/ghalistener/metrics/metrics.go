@@ -488,10 +488,15 @@ func (e *exporter) RecordJobStarted(msg *scaleset.JobStarted) {
 	if msg.RunnerAssignTime.IsZero() {
 		return
 	}
+
 	l := e.startedJobLabels(msg)
 	e.incCounter(MetricStartedJobsTotal, l)
 
-	startupDuration := max(msg.RunnerAssignTime.Unix()-msg.ScaleSetAssignTime.Unix(), 0)
+	if msg.ScaleSetAssignTime.IsZero() || msg.RunnerAssignTime.Before(msg.ScaleSetAssignTime) {
+		return
+	}
+
+	startupDuration := msg.RunnerAssignTime.Unix() - msg.ScaleSetAssignTime.Unix()
 	e.observeHistogram(MetricJobStartupDurationSeconds, l, float64(startupDuration))
 }
 
@@ -503,7 +508,11 @@ func (e *exporter) RecordJobCompleted(msg *scaleset.JobCompleted) {
 	l := e.completedJobLabels(msg)
 	e.incCounter(MetricCompletedJobsTotal, l)
 
-	finishDuration := max(msg.FinishTime.Unix()-msg.ScaleSetAssignTime.Unix(), 0)
+	if msg.FinishTime.IsZero() || msg.FinishTime.Before(msg.RunnerAssignTime) {
+		return
+	}
+
+	finishDuration := msg.FinishTime.Unix() - msg.RunnerAssignTime.Unix()
 	e.observeHistogram(MetricJobExecutionDurationSeconds, l, float64(finishDuration))
 }
 
