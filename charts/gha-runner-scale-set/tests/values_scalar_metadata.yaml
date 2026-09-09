@@ -1,0 +1,39 @@
+githubConfigUrl: https://github.com/actions
+githubConfigSecret:
+  github_token: gh_token12345
+controllerServiceAccount:
+  name: arc
+  namespace: arc-system
+
+# Every value below is an unquoted YAML scalar, so it parses as a bool, int or float
+# rather than a string. Kubernetes only accepts string label and annotation values, so
+# the chart has to coerce these when rendering.
+labels:
+  chart-bool: true
+  chart-int: 1
+annotations:
+  chart-bool-annotation: false
+  chart-float-annotation: 1.5
+  # Large integers must not be rendered in scientific notation. Values loaded from a file
+  # arrive as float64, so a naive "%v" would produce "1.2345678901234e+13".
+  chart-big-int-annotation: 12345678901234
+
+template:
+  metadata:
+    labels:
+      pod-bool: true
+      pod-int: 42
+    annotations:
+      pod-bool-annotation: true
+      pod-int-annotation: 7
+
+resourceMeta:
+  ephemeralRunner:
+    labels:
+      runner-bool: false
+      runner-int: 3
+    annotations:
+      runner-int-annotation: 9
+  githubConfigSecret:
+    labels:
+      secret-int: 5

@@ -11,24 +11,24 @@ metadata:
     {{- with .Values.labels }}
     {{- range $k, $v := . }}
     {{- if not (or (hasKey $reserved $k) (hasPrefix "actions.github.com/" $k)) }}
-    {{ $k }}: {{ $v | quote }}
+    {{ $k }}: {{ include "gha-runner-scale-set.metadataValue" $v | quote }}
     {{- end }}
     {{- end }}
     {{- end }}
     {{- if $hasCustomResourceMeta }}
     {{- with .Values.resourceMeta.managerRoleBinding.labels }}
-    {{- toYaml . | nindent 4 }}
+    {{- include "gha-runner-scale-set.stringMap" . | nindent 4 }}
     {{- end }}
     {{- end }}
     {{- include "gha-runner-scale-set.labels" . | nindent 4 }}
     app.kubernetes.io/component: manager-role-binding
   annotations:
     {{- with .Values.annotations }}
-    {{- toYaml . | nindent 4 }}
+    {{- include "gha-runner-scale-set.stringMap" . | nindent 4 }}
     {{- end }}
     {{- if $hasCustomResourceMeta }}
     {{- with .Values.resourceMeta.managerRoleBinding.annotations }}
-    {{- toYaml . | nindent 4 }}
+    {{- include "gha-runner-scale-set.stringMap" . | nindent 4 }}
     {{- end }}
     {{- end }}
   finalizers:

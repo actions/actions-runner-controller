@@ -1,4 +1,31 @@
 {{/*
+Render a single label or annotation value as a string.
+Values from a values file arrive as float64, so "%v" would turn large integers into
+scientific notation (12345678901234 -> 1.2345678901234e+13) and silently write a value the
+user never asked for. Integral floats are therefore formatted without an exponent.
+*/}}
+{{- define "metadata-value" -}}
+{{- if and (kindIs "float64" .) (eq . (floor .)) -}}
+{{- printf "%.0f" . -}}
+{{- else -}}
+{{- printf "%v" . -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Render a labels or annotations map with all values coerced to strings.
+Kubernetes only accepts string values, so scalars such as `true` or `1` must not be
+rendered as YAML booleans or numbers.
+*/}}
+{{- define "string-map" -}}
+{{- $out := dict -}}
+{{- range $k, $v := . -}}
+{{- $_ := set $out $k (include "metadata-value" $v) -}}
+{{- end -}}
+{{- toYaml $out -}}
+{{- end }}
+
+{{/*
 Create the labels for the GitHub auth secret.
 */}}
 {{- define "github-secret.labels" -}}
@@ -53,14 +80,16 @@ Reserved annotations are excluded from both levels.
 
 
 {{/*
-Takes a map of user labels and removes the ones with "actions.github.com/" prefix
+Takes a map of user labels and removes the ones with "actions.github.com/" prefix.
+Values are rendered as strings so that scalars such as `true` or `1.0` do not become
+non-string YAML values, which Kubernetes rejects for labels and annotations.
 */}}
 {{- define "apply-non-reserved-gha-labels-and-annotations" -}}
 {{- $userLabels := . -}}
 {{- $processed := dict -}}
 {{- range $key, $value := $userLabels -}}
   {{- if not (hasPrefix "actions.github.com/" $key) -}}
-    {{- $_ := set $processed $key $value -}}
+    {{- $_ := set $processed $key (include "metadata-value" $value) -}}
   {{- end -}}
 {{- end -}}
 {{- if not (empty $processed) -}}
