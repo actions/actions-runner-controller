@@ -38,7 +38,7 @@ tests:
       namespace: "test-namespace"
     asserts:
       - failedTemplate:
-          errorMessage: '.Values.runner.pod.metadata.labels: invalid label key "Invalid.Prefix/purpose": the prefix "Invalid.Prefix" must be a DNS subdomain, so each dot-separated segment must be no more than 63 characters, consist of lowercase alphanumeric characters or ''-'', and start and end with an alphanumeric character'
+          errorMessage: '.Values.runner.pod.metadata.labels: invalid label key "Invalid.Prefix/purpose": the prefix "Invalid.Prefix" must be a DNS subdomain, so it must consist of dot-separated segments of lowercase alphanumeric characters or ''-'', each starting and ending with an alphanumeric character'
 
   - it: should fail when a resource label value is not a valid Kubernetes label value
     set:
@@ -161,3 +161,96 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: '.Values.resource.ephemeralRunner: must be a mapping, got string'
+
+  - it: should fail when a listener pod label value is invalid
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      listener:
+        podTemplate:
+          metadata:
+            labels:
+              purpose: "“true”"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: '.Values.listener.podTemplate.metadata.labels: invalid value "“true”" for label "purpose": a valid label value must be an empty string or consist of alphanumeric characters, ''-'', ''_'' or ''.'', and must start and end with an alphanumeric character'
+
+  - it: should fail when a metadata value is a mapping instead of a scalar
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        pod:
+          metadata:
+            annotations:
+              nested:
+                inner: "value"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: '.Values.runner.pod.metadata.annotations: invalid value for annotation "nested": must be a scalar, got map. Quote the value if it is meant to be a string'
+
+  - it: should accept a prefix segment longer than 63 characters, matching Kubernetes
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        pod:
+          metadata:
+            labels:
+              ? "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.example.com/purpose"
+              : "yes"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.example.com/purpose"]
+          value: "yes"
+
+  # A listener pod template carrying both metadata and spec used to render "true" and the
+  # following "spec:" key onto the same line, producing invalid YAML.
+  - it: should render listener metadata and spec together, coercing scalar values to strings
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      listener:
+        podTemplate:
+          metadata:
+            labels:
+              listener-bool: true
+            annotations:
+              listener-int: 11
+          spec:
+            containers:
+              - name: listener
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.listenerTemplate.metadata.labels.listener-bool
+          value: "true"
+      - equal:
+          path: spec.listenerTemplate.metadata.annotations.listener-int
+          value: "11"
+      - equal:
+          path: spec.listenerTemplate.spec.containers[0].name
+          value: "listener"

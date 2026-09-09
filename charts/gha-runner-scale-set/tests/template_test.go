@@ -3289,11 +3289,18 @@ func TestTemplateRenderedAutoScalingRunnerSet_ScalarMetadataValuesAreRenderedAsS
 	assert.Equal(t, "1", autoscalingRunnerSet.Labels["chart-int"])
 	assert.Equal(t, "false", autoscalingRunnerSet.Annotations["chart-bool-annotation"])
 	assert.Equal(t, "1.5", autoscalingRunnerSet.Annotations["chart-float-annotation"])
+	assert.Equal(t, "12345678901234", autoscalingRunnerSet.Annotations["chart-big-int-annotation"])
 
 	assert.Equal(t, "true", autoscalingRunnerSet.Spec.Template.Labels["pod-bool"])
 	assert.Equal(t, "42", autoscalingRunnerSet.Spec.Template.Labels["pod-int"])
 	assert.Equal(t, "true", autoscalingRunnerSet.Spec.Template.Annotations["pod-bool-annotation"])
 	assert.Equal(t, "7", autoscalingRunnerSet.Spec.Template.Annotations["pod-int-annotation"])
+
+	require.NotNil(t, autoscalingRunnerSet.Spec.ListenerTemplate)
+	assert.Equal(t, "true", autoscalingRunnerSet.Spec.ListenerTemplate.Labels["listener-bool"])
+	assert.Equal(t, "11", autoscalingRunnerSet.Spec.ListenerTemplate.Annotations["listener-int-annotation"])
+	require.Len(t, autoscalingRunnerSet.Spec.ListenerTemplate.Spec.Containers, 1)
+	assert.Equal(t, "listener", autoscalingRunnerSet.Spec.ListenerTemplate.Spec.Containers[0].Name)
 
 	require.NotNil(t, autoscalingRunnerSet.Spec.EphemeralRunnerMetadata)
 	assert.Equal(t, "false", autoscalingRunnerSet.Spec.EphemeralRunnerMetadata.Labels["runner-bool"])
@@ -3336,6 +3343,11 @@ func TestTemplateRenderedAutoScalingRunnerSet_NonMapMetadataValidationError(t *t
 			value:         "oops",
 			expectedError: ".Values.resourceMeta.githubConfigSecret: must be a mapping, got string",
 		},
+		"listener metadata is not a map": {
+			key:           "listenerTemplate.metadata",
+			value:         "oops",
+			expectedError: ".Values.listenerTemplate.metadata: must be a mapping, got string",
+		},
 	}
 
 	for name, tc := range tt {
@@ -3362,4 +3374,92 @@ func TestTemplateRenderedAutoScalingRunnerSet_NonMapMetadataValidationError(t *t
 			assert.ErrorContains(t, err, tc.expectedError)
 		})
 	}
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_ListenerMetadataIsValidated(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"githubConfigUrl":                          "https://github.com/actions",
+			"githubConfigSecret.github_token":          "gh_token12345",
+			"controllerServiceAccount.name":            "arc",
+			"controllerServiceAccount.namespace":       "arc-system",
+			"listenerTemplate.metadata.labels.purpose": "“true”",
+			"listenerTemplate.spec.containers[0].name": "listener",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	_, err = helm.RenderTemplateE(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `.Values.listenerTemplate.metadata.labels: invalid value "“true”" for label "purpose"`)
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_NonScalarMetadataValueValidationError(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"githubConfigUrl":                    "https://github.com/actions",
+			"githubConfigSecret.github_token":    "gh_token12345",
+			"controllerServiceAccount.name":      "arc",
+			"controllerServiceAccount.namespace": "arc-system",
+		},
+		SetJsonValues: map[string]string{
+			"template.metadata.annotations": `{"nested":{"inner":"value"}}`,
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	_, err = helm.RenderTemplateE(t, options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `.Values.template.metadata.annotations: invalid value for annotation "nested": must be a scalar, got map`)
+}
+
+// Kubernetes only bounds a label key prefix at 253 characters in total, so the chart must
+// not impose the stricter per-segment 63 character limit that applies to DNS labels.
+func TestTemplateRenderedAutoScalingRunnerSet_LongPrefixSegmentIsAccepted(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
+
+	key := strings.Repeat("a", 64) + ".example.com/purpose"
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"githubConfigUrl":                                                "https://github.com/actions",
+			"githubConfigSecret.github_token":                                "gh_token12345",
+			"controllerServiceAccount.name":                                  "arc",
+			"controllerServiceAccount.namespace":                             "arc-system",
+			"template.metadata.labels." + strings.ReplaceAll(key, ".", `\.`): "yes",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var autoscalingRunnerSet v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &autoscalingRunnerSet)
+
+	assert.Equal(t, "yes", autoscalingRunnerSet.Spec.Template.Labels[key])
 }

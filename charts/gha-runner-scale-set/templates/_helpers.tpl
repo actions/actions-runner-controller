@@ -55,6 +55,20 @@ app.kubernetes.io/instance: {{ include "gha-runner-scale-set.scale-set-name" . }
 {{- end }}
 
 {{/*
+Render a single label or annotation value as a string.
+Values from a values file arrive as float64, so "%v" would turn large integers into
+scientific notation (12345678901234 -> 1.2345678901234e+13) and silently write a value the
+user never asked for. Integral floats are therefore formatted without an exponent.
+*/}}
+{{- define "gha-runner-scale-set.metadataValue" -}}
+{{- if and (kindIs "float64" .) (eq . (floor .)) -}}
+{{- printf "%.0f" . -}}
+{{- else -}}
+{{- printf "%v" . -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 Render a labels or annotations map with all values coerced to strings.
 Kubernetes only accepts string values, so scalars such as `true` or `1` must not be
 rendered as YAML booleans or numbers.
@@ -62,7 +76,7 @@ rendered as YAML booleans or numbers.
 {{- define "gha-runner-scale-set.stringMap" -}}
 {{- $out := dict -}}
 {{- range $k, $v := . -}}
-{{- $_ := set $out $k (printf "%v" $v) -}}
+{{- $_ := set $out $k (include "gha-runner-scale-set.metadataValue" $v) -}}
 {{- end -}}
 {{- toYaml $out -}}
 {{- end }}
@@ -96,17 +110,28 @@ Expects a dict with "key", "kind" (label|annotation) and "path" (the values path
 {{- if eq (len $parts) 2 -}}
 {{- $prefix := index $parts 0 -}}
 {{- $name = index $parts 1 -}}
-{{- if or (eq $prefix "") (gt (len $prefix) 253) -}}
+{{- if gt (len $prefix) 253 -}}
 {{- fail (printf "%s: invalid %s key %q: the prefix %q must be a DNS subdomain of no more than 253 characters" $path $kind $key $prefix) -}}
 {{- end -}}
-{{- range $_, $seg := splitList "." $prefix -}}
-{{- if or (eq $seg "") (gt (len $seg) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $seg)) -}}
-{{- fail (printf "%s: invalid %s key %q: the prefix %q must be a DNS subdomain, so each dot-separated segment must be no more than 63 characters, consist of lowercase alphanumeric characters or '-', and start and end with an alphanumeric character" $path $kind $key $prefix) -}}
-{{- end -}}
+{{- if not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$" $prefix) -}}
+{{- fail (printf "%s: invalid %s key %q: the prefix %q must be a DNS subdomain, so it must consist of dot-separated segments of lowercase alphanumeric characters or '-', each starting and ending with an alphanumeric character" $path $kind $key $prefix) -}}
 {{- end -}}
 {{- end -}}
 {{- if or (eq $name "") (gt (len $name) 63) (not (regexMatch "^[A-Za-z0-9]([-A-Za-z0-9_.]*[A-Za-z0-9])?$" $name)) -}}
 {{- fail (printf "%s: invalid %s key %q: the name part must be no more than 63 characters, consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character" $path $kind $key) -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Fail unless a metadata value is a scalar. A map or list would otherwise be flattened by the
+string coercion into Go's own formatting (`map[a:b]`), which is a syntactically valid but
+meaningless label or annotation, and a null would become "<nil>".
+Expects a dict with "value", "key", "kind" and "path".
+*/}}
+{{- define "gha-runner-scale-set.assertScalar" -}}
+{{- $value := .value -}}
+{{- if or (kindIs "map" $value) (kindIs "slice" $value) (kindIs "invalid" $value) -}}
+{{- fail (printf "%s: invalid value for %s %q: must be a scalar, got %s. Quote the value if it is meant to be a string" .path .kind .key (kindOf $value)) -}}
 {{- end -}}
 {{- end }}
 
@@ -120,7 +145,8 @@ Expects a dict with "labels" and "path".
 {{- include "gha-runner-scale-set.assertMap" (dict "value" .labels "path" $path) -}}
 {{- range $key, $value := (.labels | default dict) -}}
 {{- include "gha-runner-scale-set.validateMetadataKey" (dict "key" $key "kind" "label" "path" $path) -}}
-{{- $rendered := printf "%v" $value -}}
+{{- include "gha-runner-scale-set.assertScalar" (dict "value" $value "key" $key "kind" "label" "path" $path) -}}
+{{- $rendered := include "gha-runner-scale-set.metadataValue" $value -}}
 {{- if gt (len $rendered) 63 -}}
 {{- fail (printf "%s: invalid value %q for label %q: a label value must be no more than 63 characters" $path $rendered $key) -}}
 {{- end -}}
@@ -139,6 +165,7 @@ Expects a dict with "annotations" and "path".
 {{- include "gha-runner-scale-set.assertMap" (dict "value" .annotations "path" $path) -}}
 {{- range $key, $value := (.annotations | default dict) -}}
 {{- include "gha-runner-scale-set.validateMetadataKey" (dict "key" $key "kind" "annotation" "path" $path) -}}
+{{- include "gha-runner-scale-set.assertScalar" (dict "value" $value "key" $key "kind" "annotation" "path" $path) -}}
 {{- end -}}
 {{- end }}
 
@@ -154,6 +181,12 @@ Validate every label and annotation map the chart can render onto resources it m
 {{- $templateMetadata = $templateMetadata | default dict -}}
 {{- include "gha-runner-scale-set.validateLabels" (dict "labels" (index $templateMetadata "labels") "path" ".Values.template.metadata.labels") -}}
 {{- include "gha-runner-scale-set.validateAnnotations" (dict "annotations" (index $templateMetadata "annotations") "path" ".Values.template.metadata.annotations") -}}
+{{- include "gha-runner-scale-set.assertMap" (dict "value" .Values.listenerTemplate "path" ".Values.listenerTemplate") -}}
+{{- $listenerMetadata := index (.Values.listenerTemplate | default dict) "metadata" -}}
+{{- include "gha-runner-scale-set.assertMap" (dict "value" $listenerMetadata "path" ".Values.listenerTemplate.metadata") -}}
+{{- $listenerMetadata = $listenerMetadata | default dict -}}
+{{- include "gha-runner-scale-set.validateLabels" (dict "labels" (index $listenerMetadata "labels") "path" ".Values.listenerTemplate.metadata.labels") -}}
+{{- include "gha-runner-scale-set.validateAnnotations" (dict "annotations" (index $listenerMetadata "annotations") "path" ".Values.listenerTemplate.metadata.annotations") -}}
 {{- include "gha-runner-scale-set.assertMap" (dict "value" .Values.resourceMeta "path" ".Values.resourceMeta") -}}
 {{- range $resource, $meta := (.Values.resourceMeta | default dict) }}
 {{- include "gha-runner-scale-set.assertMap" (dict "value" $meta "path" (printf ".Values.resourceMeta.%s" $resource)) -}}

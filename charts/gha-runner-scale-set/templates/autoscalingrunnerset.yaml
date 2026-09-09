@@ -20,7 +20,7 @@ metadata:
     {{- with .Values.labels }}
     {{- range $k, $v := . }}
     {{- if not (or (hasKey $reserved $k) (hasPrefix "actions.github.com/" $k)) }}
-    {{ $k }}: {{ $v | quote }}
+    {{ $k }}: {{ include "gha-runner-scale-set.metadataValue" $v | quote }}
     {{- end }}
     {{- end }}
     {{- end }}
@@ -28,7 +28,7 @@ metadata:
     {{- with .Values.resourceMeta.autoscalingRunnerSet.labels }}
     {{- range $k, $v := . }}
     {{- if not (or (hasKey $reserved $k) (hasPrefix "actions.github.com/" $k)) }}
-    {{ $k }}: {{ $v | quote }}
+    {{ $k }}: {{ include "gha-runner-scale-set.metadataValue" $v | quote }}
     {{- end }}
     {{- end }}
     {{- end }}
@@ -39,7 +39,7 @@ metadata:
     {{- with .Values.annotations }}
     {{- range $k, $v := . }}
     {{- if not (or (hasPrefix "actions.github.com/cleanup-" $k) (eq $k "actions.github.com/values-hash")) }}
-    {{ $k }}: {{ $v | quote }}
+    {{ $k }}: {{ include "gha-runner-scale-set.metadataValue" $v | quote }}
     {{- end }}
     {{- end }}
     {{- end }}
@@ -47,7 +47,7 @@ metadata:
     {{- with .Values.resourceMeta.autoscalingRunnerSet.annotations }}
     {{- range $k, $v := . }}
     {{- if not (or (hasPrefix "actions.github.com/cleanup-" $k) (eq $k "actions.github.com/values-hash")) }}
-    {{ $k }}: {{ $v | quote }}
+    {{ $k }}: {{ include "gha-runner-scale-set.metadataValue" $v | quote }}
     {{- end }}
     {{- end }}
     {{- end }}
@@ -161,7 +161,23 @@ spec:
 
   {{- with .Values.listenerTemplate }}
   listenerTemplate:
+    {{- with .metadata }}
+    metadata:
+      {{- with .labels }}
+      labels:
+        {{- include "gha-runner-scale-set.stringMap" . | nindent 8 }}
+      {{- end }}
+      {{- with .annotations }}
+      annotations:
+        {{- include "gha-runner-scale-set.stringMap" . | nindent 8 }}
+      {{- end }}
+      {{- with omit . "labels" "annotations" }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+    {{- end }}
+    {{- with omit . "metadata" }}
     {{- toYaml . | nindent 4}}
+    {{- end }}
   {{- end }}
 
   {{- with .Values.listenerMetrics }}
