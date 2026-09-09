@@ -52,6 +52,12 @@ type EphemeralRunnerSetStatus struct {
 	// Unset defaults to 0.
 	// +optional
 	AppliedActionableRevision int64 `json:"appliedActionableRevision,omitempty"`
+	// FinishedRunnerCleanupPatchID records the listener patch ID for which finished
+	// ephemeral runners were cleaned up. Scale-up is suppressed for the same patch ID
+	// until the listener publishes a fresh desired-state patch.
+	// Unset defaults to 0.
+	// +optional
+	FinishedRunnerCleanupPatchID int `json:"finishedRunnerCleanupPatchID,omitempty"`
 }
 
 // EphemeralRunnerSetPhase is the phase of the ephemeral runner set resource
