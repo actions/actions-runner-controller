@@ -5,7 +5,9 @@ scientific notation (12345678901234 -> 1.2345678901234e+13) and silently write a
 user never asked for. Integral floats are therefore formatted without an exponent.
 */}}
 {{- define "metadata-value" -}}
-{{- if and (kindIs "float64" .) (eq . (floor .)) -}}
+{{- if eq . nil -}}
+{{- "" -}}
+{{- else if and (kindIs "float64" .) (eq . (floor .)) -}}
 {{- printf "%.0f" . -}}
 {{- else -}}
 {{- printf "%v" . -}}
