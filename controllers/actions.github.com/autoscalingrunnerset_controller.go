@@ -248,7 +248,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	case err != nil:
 		log.Error(err, "Failed to get ephemeral runner")
 		return ctrl.Result{}, err
-	case ephemeralRunnerSet.Status.Phase == v1alpha1.EphemeralRunnerSetPhaseOutdated && autoscalingRunnerSet.Status.Phase == v1alpha1.AutoscalingRunnerSetPhaseRunning:
+	case ephemeralRunnerSetOutdatedForAppliedRevision(&ephemeralRunnerSet) && autoscalingRunnerSet.Status.Phase == v1alpha1.AutoscalingRunnerSetPhaseRunning:
 		// Runners are outdated. We need to stop the listener so it stops getting new jobs.
 		log.Info("Ephemeral runner set is outdated. Cleaning up resources for the outdated runner set")
 		done, err := r.cleanupListener(ctx, &autoscalingRunnerSet, log)
