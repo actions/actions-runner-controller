@@ -196,17 +196,35 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, err
 	}
 
-	ephemeralRunnersByState := newEphemeralRunnersByStates(&ephemeralRunnerList)
+	ephemeralRunnersByState := newEphemeralRunnersByStates(&ephemeralRunnerList, ephemeralRunnerSet.Status.AppliedActionableRevision)
 
 	log.Info(
 		"Ephemeral runner counts",
 		"outdated", len(ephemeralRunnersByState.outdated),
+		"staleOutdated", len(ephemeralRunnersByState.staleOutdated),
 		"pending", len(ephemeralRunnersByState.pending),
 		"running", len(ephemeralRunnersByState.running),
 		"finished", len(ephemeralRunnersByState.finished),
 		"failed", len(ephemeralRunnersByState.failed),
 		"deleting", len(ephemeralRunnersByState.deleting),
 	)
+
+	// Runners that reported Outdated against a runner spec that has since been
+	// replaced are not evidence about the current spec. Drop them so the scaling
+	// logic below replaces them with runners built from the current spec, instead
+	// of letting them hold the set in the Outdated phase forever.
+	if len(ephemeralRunnersByState.staleOutdated) > 0 {
+		log.Info(
+			"Deleting outdated ephemeral runners created before the last spec update so they can be replaced",
+			"count", len(ephemeralRunnersByState.staleOutdated),
+			"appliedActionableRevision", ephemeralRunnerSet.Status.AppliedActionableRevision,
+		)
+		if err := r.deleteTerminatedEphemeralRunners(ctx, ephemeralRunnersByState.staleOutdated, log); err != nil {
+			log.Error(err, "failed to delete stale outdated ephemeral runners")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, r.updateStatus(ctx, &ephemeralRunnerSet, ephemeralRunnersByState, log)
+	}
 
 	total := ephemeralRunnersByState.scaleTotal()
 	if ephemeralRunnerSet.Spec.PatchID == 0 || ephemeralRunnerSet.Spec.PatchID != ephemeralRunnersByState.latestPatchID {
@@ -316,12 +334,31 @@ func (r *EphemeralRunnerSetReconciler) patchAppliedActionableRevisionStatus(ctx 
 			return err
 		}
 
-		if latest.Status.AppliedActionableRevision >= targetAppliedRevision {
-			return nil
-		}
-
 		original := latest.DeepCopy()
 		latest.Status.AppliedActionableRevision = targetAppliedRevision
+
+		ephemeralRunnerList := new(v1alpha1.EphemeralRunnerList)
+		if err := r.List(ctx, ephemeralRunnerList, client.InNamespace(latest.Namespace), client.MatchingFields{resourceOwnerKey: latest.Name}); err != nil {
+			return fmt.Errorf("failed to list child ephemeral runners: %w", err)
+		}
+
+		// Judge the runners against the revision being applied, not the one
+		// recorded in status: every runner created before this update is stale by
+		// definition, so its Outdated report says nothing about the new spec. This
+		// is what lets a spec update clear the Outdated phase immediately rather
+		// than waiting for the pre-update runners to be collected.
+		state := newEphemeralRunnersByStates(ephemeralRunnerList, targetAppliedRevision)
+
+		// Set the phase in both directions. This function returns early from
+		// Reconcile without reaching updateStatus, so leaving the phase untouched
+		// would let a stale value survive: a stale Running would hide genuinely
+		// outdated runners from the cleanup path, and a stale Outdated would keep
+		// the set switched off after the spec that caused it was replaced.
+		if len(state.outdated) > 0 {
+			latest.Status.Phase = v1alpha1.EphemeralRunnerSetPhaseOutdated
+		} else {
+			latest.Status.Phase = v1alpha1.EphemeralRunnerSetPhaseRunning
+		}
 
 		// The marker records a patch ID from the sequence that was current before
 		// this spec change. Applying a new revision deletes the idle and pending
@@ -332,6 +369,12 @@ func (r *EphemeralRunnerSetReconciler) patchAppliedActionableRevisionStatus(ctx 
 		// near-certainty, and would suppress the very scale up that rebuilds the
 		// pool.
 		latest.Status.FinishedRunnerCleanupPatchID = 0
+
+		// Checked after every field above has been set, so that clearing the
+		// marker alone is still enough to issue the patch.
+		if original.Status == latest.Status {
+			return nil
+		}
 
 		return r.Status().Patch(ctx, &latest, client.MergeFrom(original))
 	})
@@ -496,7 +539,7 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 		return true, nil
 	}
 
-	ephemeralRunnerState := newEphemeralRunnersByStates(ephemeralRunnerList)
+	ephemeralRunnerState := newEphemeralRunnersByStates(ephemeralRunnerList, ephemeralRunnerSet.Status.AppliedActionableRevision)
 
 	log.Info(
 		"Clean up runner counts",
@@ -871,12 +914,27 @@ type ephemeralRunnersByState struct {
 	finished []*v1alpha1.EphemeralRunner
 	failed   []*v1alpha1.EphemeralRunner
 	deleting []*v1alpha1.EphemeralRunner
+	// outdated holds runners that reported Outdated against the runner spec that
+	// is currently applied. They are evidence that the current spec is still
+	// rejected by the service, so they drive the set into the Outdated phase.
 	outdated []*v1alpha1.EphemeralRunner
+	// staleOutdated holds runners that reported Outdated against a runner spec
+	// that has since been replaced. They say nothing about the current spec, so
+	// they must not drive the set into the Outdated phase; they are deleted and
+	// replaced by runners built from the current spec instead.
+	staleOutdated []*v1alpha1.EphemeralRunner
 
 	latestPatchID int
 }
 
-func newEphemeralRunnersByStates(ephemeralRunnerList *v1alpha1.EphemeralRunnerList) *ephemeralRunnersByState {
+// newEphemeralRunnersByStates groups the child runners by state.
+//
+// appliedActionableRevision is the EphemeralRunnerSet revision the runners are
+// being judged against. A runner that reported Outdated before that revision was
+// applied is classified as stale rather than outdated, so that updating the
+// runner spec clears the Outdated phase immediately instead of waiting for the
+// pre-update runners to disappear.
+func newEphemeralRunnersByStates(ephemeralRunnerList *v1alpha1.EphemeralRunnerList, appliedActionableRevision int64) *ephemeralRunnersByState {
 	var ephemeralRunnerState ephemeralRunnersByState
 
 	for i := range ephemeralRunnerList.Items {
@@ -898,7 +956,11 @@ func newEphemeralRunnersByStates(ephemeralRunnerList *v1alpha1.EphemeralRunnerLi
 		case v1alpha1.EphemeralRunnerPhaseFailed:
 			ephemeralRunnerState.failed = append(ephemeralRunnerState.failed, r)
 		case v1alpha1.EphemeralRunnerPhaseOutdated:
-			ephemeralRunnerState.outdated = append(ephemeralRunnerState.outdated, r)
+			if ephemeralRunnerActionableRevision(r) < appliedActionableRevision {
+				ephemeralRunnerState.staleOutdated = append(ephemeralRunnerState.staleOutdated, r)
+			} else {
+				ephemeralRunnerState.outdated = append(ephemeralRunnerState.outdated, r)
+			}
 		default:
 			// Pending or no phase should be considered as pending.
 			//
@@ -910,8 +972,25 @@ func newEphemeralRunnersByStates(ephemeralRunnerList *v1alpha1.EphemeralRunnerLi
 	return &ephemeralRunnerState
 }
 
+// ephemeralRunnerActionableRevision reports the EphemeralRunnerSet revision the
+// runner was created from. Runners created before this annotation existed report
+// 0, which matches the zero value of Status.AppliedActionableRevision, so they
+// are treated as current until the spec is updated for the first time.
+func ephemeralRunnerActionableRevision(ephemeralRunner *v1alpha1.EphemeralRunner) int64 {
+	revision, err := strconv.ParseInt(ephemeralRunner.Annotations[AnnotationKeyActionableRevision], 10, 64)
+	if err != nil {
+		return 0
+	}
+	return revision
+}
+
 func (s *ephemeralRunnersByState) terminated() []*v1alpha1.EphemeralRunner {
-	return append(s.finished, append(s.failed, s.outdated...)...)
+	terminated := make([]*v1alpha1.EphemeralRunner, 0, len(s.finished)+len(s.failed)+len(s.outdated)+len(s.staleOutdated))
+	terminated = append(terminated, s.finished...)
+	terminated = append(terminated, s.failed...)
+	terminated = append(terminated, s.outdated...)
+	terminated = append(terminated, s.staleOutdated...)
+	return terminated
 }
 
 func (s *ephemeralRunnersByState) scaleTotal() int {

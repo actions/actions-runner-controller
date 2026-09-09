@@ -2696,10 +2696,16 @@ var _ = Describe("Test EphemeralRunnerSet actionable revision cleanup", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// Create a runner that will cause phase change (outdated runner).
+		// It must carry the revision the set has applied, otherwise it is an
+		// outdated report about a runner spec that has already been replaced and
+		// the set deliberately ignores it.
 		ephemeralRunner := &v1alpha1.EphemeralRunner{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-runner-outdated",
 				Namespace: autoscalingNS.Name,
+				Annotations: map[string]string{
+					AnnotationKeyActionableRevision: "5",
+				},
 				Labels: map[string]string{
 					LabelKeyGitHubScaleSetName:      ephemeralRunnerSet.Name,
 					LabelKeyGitHubScaleSetNamespace: ephemeralRunnerSet.Namespace,
@@ -2755,5 +2761,106 @@ var _ = Describe("Test EphemeralRunnerSet actionable revision cleanup", func() {
 			g.Expect(updatedSet.Status.Phase).To(Equal(v1alpha1.EphemeralRunnerSetPhaseOutdated), "phase should change to Outdated")
 			g.Expect(updatedSet.Status.AppliedActionableRevision).To(Equal(int64(5)), "AppliedActionableRevision should be preserved")
 		}, ephemeralRunnerSetTestTimeout, ephemeralRunnerSetTestInterval).Should(Succeed())
+	})
+
+	// A runner that reported Outdated against a runner spec that has since been
+	// replaced must not drag the whole set back into the Outdated phase, because
+	// that switches the scale set off and discards the update the user just made.
+	// The runner is deleted instead, so the scaling logic replaces it with one
+	// built from the current spec.
+	It("replaces outdated runners from a superseded revision instead of going Outdated", func() {
+		controller := &EphemeralRunnerSetReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+			Log:    logf.Log,
+			ResourceBuilder: ResourceBuilder{
+				ResourceCache: newTestResourceCache(),
+				SecretResolver: secretresolver.New(mgr.GetClient(), fake.NewMultiClient(
+					fake.WithClient(fake.NewClient()),
+				)),
+			},
+		}
+
+		ephemeralRunnerSet := &v1alpha1.EphemeralRunnerSet{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-stale-outdated", Namespace: autoscalingNS.Name},
+			Spec: v1alpha1.EphemeralRunnerSetSpec{
+				ActionableRevision: 2,
+				EphemeralRunnerSpec: v1alpha1.EphemeralRunnerSpec{
+					GitHubConfigURL:    "https://github.com/owner/repo",
+					GitHubConfigSecret: configSecret.Name,
+					RunnerScaleSetID:   100,
+					PodTemplateSpec:    corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "runner", Image: "ghcr.io/actions/runner:new"}}}},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, ephemeralRunnerSet)).To(Succeed())
+
+		request := ctrl.Request{NamespacedName: types.NamespacedName{Name: ephemeralRunnerSet.Name, Namespace: ephemeralRunnerSet.Namespace}}
+		_, err := controller.Reconcile(ctx, request)
+		Expect(err).NotTo(HaveOccurred())
+
+		// The set is already running revision 2.
+		current := new(v1alpha1.EphemeralRunnerSet)
+		Expect(k8sClient.Get(ctx, request.NamespacedName, current)).To(Succeed())
+		statusUpdated := current.DeepCopy()
+		statusUpdated.Status.AppliedActionableRevision = 2
+		statusUpdated.Status.Phase = v1alpha1.EphemeralRunnerSetPhaseRunning
+		Expect(k8sClient.Status().Patch(ctx, statusUpdated, client.MergeFrom(current))).To(Succeed())
+
+		// A runner left over from revision 1 reports Outdated. This happens when a
+		// runner was busy with a job while the spec was updated, so it survived the
+		// revision cleanup and only exited (with the outdated exit code) afterwards.
+		staleRunner := &v1alpha1.EphemeralRunner{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        "runner-from-old-revision",
+				Namespace:   autoscalingNS.Name,
+				Annotations: map[string]string{AnnotationKeyActionableRevision: "1"},
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion:         v1alpha1.GroupVersion.String(),
+						Kind:               "EphemeralRunnerSet",
+						Name:               ephemeralRunnerSet.Name,
+						UID:                ephemeralRunnerSet.UID,
+						Controller:         func(b bool) *bool { return &b }(true),
+						BlockOwnerDeletion: func(b bool) *bool { return &b }(true),
+					},
+				},
+			},
+			Spec: v1alpha1.EphemeralRunnerSpec{
+				GitHubConfigURL:    "https://github.com/owner/repo",
+				GitHubConfigSecret: configSecret.Name,
+				RunnerScaleSetID:   100,
+				PodTemplateSpec:    corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "runner", Image: "ghcr.io/actions/runner:old"}}}},
+			},
+		}
+		Expect(k8sClient.Create(ctx, staleRunner)).To(Succeed())
+
+		runnerStatusUpdated := staleRunner.DeepCopy()
+		runnerStatusUpdated.Status.Phase = v1alpha1.EphemeralRunnerPhaseOutdated
+		Expect(k8sClient.Status().Patch(ctx, runnerStatusUpdated, client.MergeFrom(staleRunner))).To(Succeed())
+
+		Eventually(func(g Gomega) {
+			cachedRunner := new(v1alpha1.EphemeralRunner)
+			g.Expect(controller.Get(ctx, types.NamespacedName{Namespace: autoscalingNS.Name, Name: staleRunner.Name}, cachedRunner)).To(Succeed())
+			g.Expect(cachedRunner.Status.Phase).To(Equal(v1alpha1.EphemeralRunnerPhaseOutdated))
+		}, ephemeralRunnerSetTestTimeout, ephemeralRunnerSetTestInterval).Should(Succeed())
+
+		// The stale runner is removed rather than being treated as a verdict on the
+		// current spec.
+		Eventually(func(g Gomega) {
+			_, err := controller.Reconcile(ctx, request)
+			g.Expect(err).NotTo(HaveOccurred())
+
+			runner := new(v1alpha1.EphemeralRunner)
+			err = k8sClient.Get(ctx, types.NamespacedName{Namespace: autoscalingNS.Name, Name: staleRunner.Name}, runner)
+			g.Expect(kerrors.IsNotFound(err) || !runner.DeletionTimestamp.IsZero()).To(BeTrue(), "stale outdated runner should be deleted")
+		}, ephemeralRunnerSetTestTimeout, ephemeralRunnerSetTestInterval).Should(Succeed())
+
+		// And the set never reports Outdated because of it.
+		Consistently(func(g Gomega) {
+			updatedSet := new(v1alpha1.EphemeralRunnerSet)
+			g.Expect(k8sClient.Get(ctx, request.NamespacedName, updatedSet)).To(Succeed())
+			g.Expect(updatedSet.Status.Phase).NotTo(Equal(v1alpha1.EphemeralRunnerSetPhaseOutdated))
+		}, "2s", ephemeralRunnerSetTestInterval).Should(Succeed())
 	})
 })
