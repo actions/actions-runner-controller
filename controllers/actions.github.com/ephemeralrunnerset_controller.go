@@ -52,6 +52,12 @@ type EphemeralRunnerSetReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
+	// APIReader reads straight from the API server, bypassing the manager's
+	// cache. It is needed where the controller has to observe a status field it
+	// wrote itself in an earlier reconcile, because the informer cache is not
+	// guaranteed to have caught up by the time the next reconcile runs.
+	// SetupWithManager fills this in from the manager when it is left unset.
+	APIReader client.Reader
 	ResourceBuilder
 }
 
@@ -235,7 +241,12 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 			// The gap below Spec.Replicas is the one the cleanup above opened for
 			// this patch ID, not new demand. Wait for the listener to publish a
 			// fresh desired state before acting on it.
-			if ephemeralRunnerSet.Spec.PatchID > 0 && ephemeralRunnerSet.Status.FinishedRunnerCleanupPatchID == ephemeralRunnerSet.Spec.PatchID {
+			suppressed, err := r.scaleUpServicedByFinishedRunnerCleanup(ctx, req.NamespacedName, &ephemeralRunnerSet)
+			if err != nil {
+				log.Error(err, "failed to determine whether scale up was already serviced by finished runner cleanup")
+				return ctrl.Result{}, err
+			}
+			if suppressed {
 				log.Info("Skipping scale up until listener publishes a fresh desired state after finished runner cleanup", "patchID", ephemeralRunnerSet.Spec.PatchID)
 				return ctrl.Result{}, r.updateStatus(ctx, &ephemeralRunnerSet, ephemeralRunnersByState, log)
 			}
@@ -303,6 +314,43 @@ func (r *EphemeralRunnerSetReconciler) patchAppliedActionableRevisionStatus(ctx 
 
 		return r.Status().Patch(ctx, &latest, client.MergeFrom(original))
 	})
+}
+
+// scaleUpServicedByFinishedRunnerCleanup reports whether the shortfall against
+// Spec.Replicas was created by this controller cleaning up finished runners for
+// the patch ID currently in the spec, rather than by new demand from the
+// listener.
+//
+// The marker is written by an earlier reconcile and then read back here, so the
+// cached copy handed to Reconcile cannot be trusted on its own: deleting the
+// finished runners triggers watch events that schedule the next reconcile, and
+// that reconcile can be served from an informer cache that has not yet observed
+// the controller's own status write. Reading a zero marker there would skip the
+// suppression and create exactly the unwanted runner this logic exists to
+// prevent.
+//
+// A cached hit is always safe, because nothing clears the marker, so only a miss
+// falls through to an uncached read. That confines the extra API call to
+// scale-up decisions, where the controller is about to issue creates anyway.
+func (r *EphemeralRunnerSetReconciler) scaleUpServicedByFinishedRunnerCleanup(ctx context.Context, key types.NamespacedName, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet) (bool, error) {
+	if ephemeralRunnerSet.Spec.PatchID == 0 {
+		return false, nil
+	}
+
+	if ephemeralRunnerSet.Status.FinishedRunnerCleanupPatchID == ephemeralRunnerSet.Spec.PatchID {
+		return true, nil
+	}
+
+	if r.APIReader == nil {
+		return false, errors.New("APIReader is not configured, cannot confirm the finished runner cleanup patch ID without reading through the cache")
+	}
+
+	var latest v1alpha1.EphemeralRunnerSet
+	if err := r.APIReader.Get(ctx, key, &latest); err != nil {
+		return false, fmt.Errorf("failed to read EphemeralRunnerSet without the cache: %w", err)
+	}
+
+	return latest.Status.FinishedRunnerCleanupPatchID == ephemeralRunnerSet.Spec.PatchID, nil
 }
 
 // patchFinishedRunnerCleanupPatchIDStatus records that finished runners were
@@ -723,6 +771,10 @@ func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunnerWithActionsClient(ct
 // SetupWithManager sets up the controller with the Manager.
 func (r *EphemeralRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager, opts ...Option) error {
 	r.setSchemeIfUnset(r.Scheme)
+
+	if r.APIReader == nil {
+		r.APIReader = mgr.GetAPIReader()
+	}
 
 	return builderWithOptions(
 		ctrl.NewControllerManagedBy(mgr).
