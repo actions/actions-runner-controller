@@ -1,3 +1,4 @@
+{{- include "gha-runner-scale-set.validateMetadata" . }}
 {{- $hasCustomResourceMeta := (and .Values.resourceMeta .Values.resourceMeta.managerRole) }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role

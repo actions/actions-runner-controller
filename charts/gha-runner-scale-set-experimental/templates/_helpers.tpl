@@ -12,6 +12,19 @@ rendered as YAML booleans or numbers.
 {{- end }}
 
 {{/*
+Fail unless a value is absent or a mapping. Used to turn mis-typed metadata values into an
+error that names the values path, instead of an opaque "range can't iterate over" further
+down the render.
+Expects a dict with "value" and "path".
+*/}}
+{{- define "assert-map" -}}
+{{- $value := .value -}}
+{{- if and (not (kindIs "invalid" $value)) (not (kindIs "map" $value)) -}}
+{{- fail (printf "%s: must be a mapping, got %s" .path (kindOf $value)) -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 Validate a label or annotation key against the Kubernetes qualified name rules.
 Expects a dict with "key", "kind" (label|annotation) and "path" (the values path used in the error message).
 */}}
@@ -49,9 +62,11 @@ Expects a dict with "metadata" and "path".
 */}}
 {{- define "validate-metadata" -}}
 {{- $path := .path -}}
+{{- include "assert-map" (dict "value" .metadata "path" $path) -}}
 {{- $metadata := .metadata | default dict -}}
-{{- if kindIs "map" $metadata -}}
-{{- range $key, $value := ((index $metadata "labels") | default dict) -}}
+{{- $labels := index $metadata "labels" -}}
+{{- include "assert-map" (dict "value" $labels "path" (printf "%s.labels" $path)) -}}
+{{- range $key, $value := ($labels | default dict) -}}
 {{- include "validate-metadata-key" (dict "key" $key "kind" "label" "path" (printf "%s.labels" $path)) -}}
 {{- $rendered := printf "%v" $value -}}
 {{- if gt (len $rendered) 63 -}}
@@ -61,9 +76,10 @@ Expects a dict with "metadata" and "path".
 {{- fail (printf "%s.labels: invalid value %q for label %q: a valid label value must be an empty string or consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character" $path $rendered $key) -}}
 {{- end -}}
 {{- end -}}
-{{- range $key, $value := ((index $metadata "annotations") | default dict) -}}
+{{- $annotations := index $metadata "annotations" -}}
+{{- include "assert-map" (dict "value" $annotations "path" (printf "%s.annotations" $path)) -}}
+{{- range $key, $value := ($annotations | default dict) -}}
 {{- include "validate-metadata-key" (dict "key" $key "kind" "annotation" "path" (printf "%s.annotations" $path)) -}}
-{{- end -}}
 {{- end -}}
 {{- end }}
 
@@ -71,15 +87,15 @@ Expects a dict with "metadata" and "path".
 Validate every label and annotation map the chart can render onto resources it manages.
 */}}
 {{- define "validate-all-metadata" -}}
+{{- include "assert-map" (dict "value" .Values.resource "path" ".Values.resource") -}}
 {{- range $resource, $config := (.Values.resource | default dict) }}
-{{- if kindIs "map" $config }}
-{{- include "validate-metadata" (dict "metadata" (index $config "metadata") "path" (printf ".Values.resource.%s.metadata" $resource)) -}}
+{{- include "assert-map" (dict "value" $config "path" (printf ".Values.resource.%s" $resource)) -}}
+{{- include "validate-metadata" (dict "metadata" (index ($config | default dict) "metadata") "path" (printf ".Values.resource.%s.metadata" $resource)) -}}
 {{- end }}
-{{- end }}
-{{- $runnerPod := (index (.Values.runner | default dict) "pod") | default dict }}
-{{- if kindIs "map" $runnerPod }}
-{{- include "validate-metadata" (dict "metadata" (index $runnerPod "metadata") "path" ".Values.runner.pod.metadata") -}}
-{{- end }}
+{{- include "assert-map" (dict "value" .Values.runner "path" ".Values.runner") -}}
+{{- $runnerPod := index (.Values.runner | default dict) "pod" -}}
+{{- include "assert-map" (dict "value" $runnerPod "path" ".Values.runner.pod") -}}
+{{- include "validate-metadata" (dict "metadata" (index ($runnerPod | default dict) "metadata") "path" ".Values.runner.pod.metadata") -}}
 {{- end }}
 
 {{/*

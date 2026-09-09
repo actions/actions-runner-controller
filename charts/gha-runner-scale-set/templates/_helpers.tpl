@@ -68,6 +68,19 @@ rendered as YAML booleans or numbers.
 {{- end }}
 
 {{/*
+Fail unless a value is absent or a mapping. Used to turn mis-typed metadata values into an
+error that names the values path, instead of an opaque "range can't iterate over" further
+down the render.
+Expects a dict with "value" and "path".
+*/}}
+{{- define "gha-runner-scale-set.assertMap" -}}
+{{- $value := .value -}}
+{{- if and (not (kindIs "invalid" $value)) (not (kindIs "map" $value)) -}}
+{{- fail (printf "%s: must be a mapping, got %s" .path (kindOf $value)) -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 Validate a label or annotation key against the Kubernetes qualified name rules.
 Expects a dict with "key", "kind" (label|annotation) and "path" (the values path used in the error message).
 */}}
@@ -104,6 +117,7 @@ Expects a dict with "labels" and "path".
 */}}
 {{- define "gha-runner-scale-set.validateLabels" -}}
 {{- $path := .path -}}
+{{- include "gha-runner-scale-set.assertMap" (dict "value" .labels "path" $path) -}}
 {{- range $key, $value := (.labels | default dict) -}}
 {{- include "gha-runner-scale-set.validateMetadataKey" (dict "key" $key "kind" "label" "path" $path) -}}
 {{- $rendered := printf "%v" $value -}}
@@ -122,6 +136,7 @@ Expects a dict with "annotations" and "path".
 */}}
 {{- define "gha-runner-scale-set.validateAnnotations" -}}
 {{- $path := .path -}}
+{{- include "gha-runner-scale-set.assertMap" (dict "value" .annotations "path" $path) -}}
 {{- range $key, $value := (.annotations | default dict) -}}
 {{- include "gha-runner-scale-set.validateMetadataKey" (dict "key" $key "kind" "annotation" "path" $path) -}}
 {{- end -}}
@@ -133,17 +148,18 @@ Validate every label and annotation map the chart can render onto resources it m
 {{- define "gha-runner-scale-set.validateMetadata" -}}
 {{- include "gha-runner-scale-set.validateLabels" (dict "labels" .Values.labels "path" ".Values.labels") -}}
 {{- include "gha-runner-scale-set.validateAnnotations" (dict "annotations" .Values.annotations "path" ".Values.annotations") -}}
-{{- with .Values.template }}
-{{- with .metadata }}
-{{- include "gha-runner-scale-set.validateLabels" (dict "labels" .labels "path" ".Values.template.metadata.labels") -}}
-{{- include "gha-runner-scale-set.validateAnnotations" (dict "annotations" .annotations "path" ".Values.template.metadata.annotations") -}}
-{{- end }}
-{{- end }}
+{{- include "gha-runner-scale-set.assertMap" (dict "value" .Values.template "path" ".Values.template") -}}
+{{- $templateMetadata := index (.Values.template | default dict) "metadata" -}}
+{{- include "gha-runner-scale-set.assertMap" (dict "value" $templateMetadata "path" ".Values.template.metadata") -}}
+{{- $templateMetadata = $templateMetadata | default dict -}}
+{{- include "gha-runner-scale-set.validateLabels" (dict "labels" (index $templateMetadata "labels") "path" ".Values.template.metadata.labels") -}}
+{{- include "gha-runner-scale-set.validateAnnotations" (dict "annotations" (index $templateMetadata "annotations") "path" ".Values.template.metadata.annotations") -}}
+{{- include "gha-runner-scale-set.assertMap" (dict "value" .Values.resourceMeta "path" ".Values.resourceMeta") -}}
 {{- range $resource, $meta := (.Values.resourceMeta | default dict) }}
-{{- if kindIs "map" $meta }}
+{{- include "gha-runner-scale-set.assertMap" (dict "value" $meta "path" (printf ".Values.resourceMeta.%s" $resource)) -}}
+{{- $meta = $meta | default dict -}}
 {{- include "gha-runner-scale-set.validateLabels" (dict "labels" (index $meta "labels") "path" (printf ".Values.resourceMeta.%s.labels" $resource)) -}}
 {{- include "gha-runner-scale-set.validateAnnotations" (dict "annotations" (index $meta "annotations") "path" (printf ".Values.resourceMeta.%s.annotations" $resource)) -}}
-{{- end }}
 {{- end }}
 {{- end }}
 

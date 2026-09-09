@@ -110,3 +110,54 @@ tests:
       - equal:
           path: spec.ephemeralRunnerMetadata.annotations["enabled"]
           value: "true"
+
+  - it: should fail when a metadata block is not a mapping
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        pod:
+          metadata: "oops"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: '.Values.runner.pod.metadata: must be a mapping, got string'
+
+  - it: should fail when a labels block is not a mapping
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        all:
+          metadata:
+            labels: "oops"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: '.Values.resource.all.metadata.labels: must be a mapping, got string'
+
+  - it: should fail when a resource entry is not a mapping
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        ephemeralRunner: "oops"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: '.Values.resource.ephemeralRunner: must be a mapping, got string'
