@@ -288,10 +288,11 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			return ctrl.Result{}, nil
 		}
 
-		if ephemeralRunnerSet.Annotations[annotationKeyIntegrityHash] != desired.Annotations[annotationKeyIntegrityHash] {
+		if ephemeralRunnerSetActionableSpecChanged(&ephemeralRunnerSet, desired) {
 			original := ephemeralRunnerSet.DeepCopy()
 			ephemeralRunnerSet.Spec.EphemeralRunnerMetadata = desired.Spec.EphemeralRunnerMetadata
 			ephemeralRunnerSet.Spec.EphemeralRunnerSpec = desired.Spec.EphemeralRunnerSpec
+			ephemeralRunnerSet.Spec.ActionableRevision = nextActionableRevision(&ephemeralRunnerSet)
 			ephemeralRunnerSet.Labels = r.filterAndMergeLabels(ephemeralRunnerSet.Labels, desired.Labels)
 			ephemeralRunnerSet.Annotations = r.mergeAnnotations(ephemeralRunnerSet.Annotations, desired.Annotations)
 

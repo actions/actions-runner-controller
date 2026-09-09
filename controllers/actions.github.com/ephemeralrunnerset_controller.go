@@ -35,6 +35,7 @@ import (
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -133,11 +134,15 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, nil
 	}
 
-	// If hash spec has changed, delete idle ephemeral runners
-	// in order to apply the change to the runners that did not yet receive a job.
-	ephemeralRunnerIntegrityHash := ephemeralRunnerSetIntegrityHash(&ephemeralRunnerSet)
-	if ephemeralRunnerSet.Annotations[annotationKeyIntegrityHash] != ephemeralRunnerIntegrityHash {
-		log.Info("EphemeralRunnerSpec has changed, deleting idle ephemeral runners to apply the new spec")
+	// If the runner spec revision has advanced past the one that was last
+	// successfully applied, delete idle and pending ephemeral runners so they are
+	// rebuilt from the new spec.
+	if ephemeralRunnerSet.Spec.ActionableRevision > ephemeralRunnerSet.Status.AppliedActionableRevision {
+		log.Info(
+			"EphemeralRunnerSpec revision has changed, deleting idle or pending ephemeral runners to apply the new spec",
+			"specActionableRevision", ephemeralRunnerSet.Spec.ActionableRevision,
+			"statusAppliedActionableRevision", ephemeralRunnerSet.Status.AppliedActionableRevision,
+		)
 		if _, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log); err != nil {
 			log.Error(err, "Failed to clean up EphemeralRunners")
 			return ctrl.Result{}, err
@@ -148,18 +153,12 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 			return ctrl.Result{}, err
 		}
 
-		log.Info("Updating EphemeralRunnerSet with new spec hash")
-		original := ephemeralRunnerSet.DeepCopy()
-		if ephemeralRunnerSet.Annotations == nil {
-			ephemeralRunnerSet.Annotations = make(map[string]string)
-		}
-		ephemeralRunnerSet.Annotations[annotationKeyIntegrityHash] = ephemeralRunnerIntegrityHash
-		if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
-			log.Error(err, "Failed to update ephemeral runner set with new spec hash")
+		if err := r.patchAppliedActionableRevisionStatus(ctx, req.NamespacedName, ephemeralRunnerSet.Spec.ActionableRevision); err != nil {
+			log.Error(err, "Failed to update EphemeralRunnerSet applied actionable revision status")
 			return ctrl.Result{}, err
 		}
 
-		log.Info("Updated ephemeral runner set with new spec hash")
+		log.Info("Updated EphemeralRunnerSet applied actionable revision status", "appliedActionableRevision", ephemeralRunnerSet.Spec.ActionableRevision)
 		return ctrl.Result{}, nil
 	}
 
@@ -245,6 +244,39 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 	return ctrl.Result{}, r.updateStatus(ctx, &ephemeralRunnerSet, ephemeralRunnersByState, log)
 }
 
+// patchAppliedActionableRevisionStatus records that the runner spec carried by
+// targetAppliedRevision has been fully applied.
+//
+// The marker lives in status rather than in an annotation on the spec, and it is
+// written only once the cleanup above has actually succeeded. If the controller
+// dies part-way through deleting the idle and pending runners, the applied
+// revision is still behind the spec revision when it comes back, so the work is
+// redone rather than skipped. Writing the marker first, or writing it together
+// with the spec, would let a crash leave runners alive that are running a spec
+// nobody will ever revisit.
+//
+// The object is re-fetched inside the retry rather than reusing the copy the
+// reconciler already has, because the cleanup can take long enough for that copy
+// to go stale, and a conflicting write must not be resolved by replaying an old
+// status.
+func (r *EphemeralRunnerSetReconciler) patchAppliedActionableRevisionStatus(ctx context.Context, key types.NamespacedName, targetAppliedRevision int64) error {
+	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		var latest v1alpha1.EphemeralRunnerSet
+		if err := r.Get(ctx, key, &latest); err != nil {
+			return err
+		}
+
+		if latest.Status.AppliedActionableRevision >= targetAppliedRevision {
+			return nil
+		}
+
+		original := latest.DeepCopy()
+		latest.Status.AppliedActionableRevision = targetAppliedRevision
+
+		return r.Status().Patch(ctx, &latest, client.MergeFrom(original))
+	})
+}
+
 func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, state *ephemeralRunnersByState, log logr.Logger) error {
 	original := ephemeralRunnerSet.DeepCopy()
 	var phase v1alpha1.EphemeralRunnerSetPhase
@@ -257,7 +289,8 @@ func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemer
 		phase = ephemeralRunnerSet.Status.Phase
 	}
 	desiredStatus := v1alpha1.EphemeralRunnerSetStatus{
-		Phase: phase,
+		Phase:                     phase,
+		AppliedActionableRevision: ephemeralRunnerSet.Status.AppliedActionableRevision,
 	}
 
 	// Update the status if needed.
