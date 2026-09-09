@@ -46,6 +46,10 @@ const (
 	ephemeralRunnerActionsFinalizerName = "ephemeralrunner.actions.github.com/runner-registration-finalizer"
 )
 
+// how long a deleting EphemeralRunner may stay blocked on JobStillRunning
+// before the registration finalizer is force-removed
+const defaultRegistrationFinalizerForceTimeout = 10 * time.Minute
+
 // EphemeralRunnerReconciler reconciles a EphemeralRunner object
 type EphemeralRunnerReconciler struct {
 	client.Client
@@ -53,6 +57,16 @@ type EphemeralRunnerReconciler struct {
 	Scheme         *runtime.Scheme
 	PublishMetrics bool
 	ResourceBuilder
+
+	// RegistrationFinalizerForceTimeout overrides defaultRegistrationFinalizerForceTimeout when set
+	RegistrationFinalizerForceTimeout time.Duration
+}
+
+func (r *EphemeralRunnerReconciler) registrationFinalizerForceTimeout() time.Duration {
+	if r.RegistrationFinalizerForceTimeout > 0 {
+		return r.RegistrationFinalizerForceTimeout
+	}
+	return defaultRegistrationFinalizerForceTimeout
 }
 
 var ephemeralRunnerPhaseMetrics = struct {
@@ -110,12 +124,28 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				log.Error(err, "Failed to clean up runner from service")
 				return ctrl.Result{}, err
 			}
+			forced := false
 			if !ok {
-				log.Info("Runner is not finished yet, retrying in 30s")
-				return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+				force, forceErr := r.shouldForceRegistrationFinalizerRemoval(ctx, &ephemeralRunner, log)
+				if forceErr != nil {
+					log.Error(forceErr, "Failed to evaluate registration finalizer force-removal")
+					return ctrl.Result{}, forceErr
+				}
+				if !force {
+					log.Info("Runner is not finished yet, retrying in 30s")
+					return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+				}
+				forced = true
+				log.Info(
+					"Actions service still reports the job as running, but the runner pod is gone or terminal and deletion exceeded the timeout; force-removing registration finalizer",
+					"timeout", r.registrationFinalizerForceTimeout(),
+					"deletionTimestamp", ephemeralRunner.DeletionTimestamp,
+				)
 			}
 
-			log.Info("Runner is cleaned up from the service, removing finalizer")
+			if !forced {
+				log.Info("Runner is cleaned up from the service, removing finalizer")
+			}
 			if controllerutil.RemoveFinalizer(&ephemeralRunner, ephemeralRunnerActionsFinalizerName) {
 				log.Info("Removed finalizer from ephemeral runner")
 				if err := r.Patch(ctx, &ephemeralRunner, client.MergeFrom(original)); err != nil {
@@ -467,6 +497,31 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerFromService(ctx context.Context
 	}
 
 	return true, nil
+}
+
+// shouldForceRegistrationFinalizerRemoval returns true when the registration finalizer can be removed without a successful RemoveRunner call:
+// the runner has been deleting for longer than the timeout and its pod is gone or in a terminal phase, so it can never unregister on its own.
+func (r *EphemeralRunnerReconciler) shouldForceRegistrationFinalizerRemoval(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (bool, error) {
+	if ephemeralRunner.DeletionTimestamp.IsZero() {
+		return false, nil
+	}
+	if time.Since(ephemeralRunner.DeletionTimestamp.Time) < r.registrationFinalizerForceTimeout() {
+		return false, nil
+	}
+
+	pod := new(corev1.Pod)
+	err := r.Get(ctx, types.NamespacedName{Namespace: ephemeralRunner.Namespace, Name: ephemeralRunner.Name}, pod)
+	switch {
+	case kerrors.IsNotFound(err):
+		return true, nil
+	case err != nil:
+		return false, fmt.Errorf("failed to get runner pod while evaluating finalizer force-removal: %w", err)
+	case pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed:
+		log.Info("Runner pod is in a terminal phase and cannot unregister on its own", "phase", pod.Status.Phase)
+		return true, nil
+	default:
+		return false, nil
+	}
 }
 
 func (r *EphemeralRunnerReconciler) cleanupResources(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
