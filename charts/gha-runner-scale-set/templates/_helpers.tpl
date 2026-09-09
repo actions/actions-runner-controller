@@ -183,6 +183,12 @@ Validate every label and annotation map the chart can render onto resources it m
 {{- $templateMetadata = $templateMetadata | default dict -}}
 {{- include "gha-runner-scale-set.validateLabels" (dict "labels" (index $templateMetadata "labels") "path" ".Values.template.metadata.labels") -}}
 {{- include "gha-runner-scale-set.validateAnnotations" (dict "annotations" (index $templateMetadata "annotations") "path" ".Values.template.metadata.annotations") -}}
+{{- include "gha-runner-scale-set.assertMap" (dict "value" .Values.listenerTemplate "path" ".Values.listenerTemplate") -}}
+{{- $listenerMetadata := index (.Values.listenerTemplate | default dict) "metadata" -}}
+{{- include "gha-runner-scale-set.assertMap" (dict "value" $listenerMetadata "path" ".Values.listenerTemplate.metadata") -}}
+{{- $listenerMetadata = $listenerMetadata | default dict -}}
+{{- include "gha-runner-scale-set.validateLabels" (dict "labels" (index $listenerMetadata "labels") "path" ".Values.listenerTemplate.metadata.labels") -}}
+{{- include "gha-runner-scale-set.validateAnnotations" (dict "annotations" (index $listenerMetadata "annotations") "path" ".Values.listenerTemplate.metadata.annotations") -}}
 {{- include "gha-runner-scale-set.assertMap" (dict "value" .Values.resourceMeta "path" ".Values.resourceMeta") -}}
 {{- range $resource, $meta := (.Values.resourceMeta | default dict) }}
 {{- include "gha-runner-scale-set.assertMap" (dict "value" $meta "path" (printf ".Values.resourceMeta.%s" $resource)) -}}

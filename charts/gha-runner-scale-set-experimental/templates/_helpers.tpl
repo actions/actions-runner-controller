@@ -125,6 +125,13 @@ Validate every label and annotation map the chart can render onto resources it m
 {{- $runnerPod := index (.Values.runner | default dict) "pod" -}}
 {{- include "assert-map" (dict "value" $runnerPod "path" ".Values.runner.pod") -}}
 {{- include "validate-metadata" (dict "metadata" (index ($runnerPod | default dict) "metadata") "path" ".Values.runner.pod.metadata") -}}
+{{- $listener := .Values.listener | default dict -}}
+{{- if kindIs "map" $listener -}}
+{{- $listenerPod := index $listener "podTemplate" -}}
+{{- if kindIs "map" ($listenerPod | default dict) -}}
+{{- include "validate-metadata" (dict "metadata" (index ($listenerPod | default dict) "metadata") "path" ".Values.listener.podTemplate.metadata") -}}
+{{- end -}}
+{{- end -}}
 {{- end }}
 
 {{/*

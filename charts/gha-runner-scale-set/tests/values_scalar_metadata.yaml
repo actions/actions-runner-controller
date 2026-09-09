@@ -37,3 +37,13 @@ resourceMeta:
   githubConfigSecret:
     labels:
       secret-int: 5
+
+listenerTemplate:
+  metadata:
+    labels:
+      listener-bool: true
+    annotations:
+      listener-int-annotation: 11
+  spec:
+    containers:
+      - name: listener

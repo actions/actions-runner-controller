@@ -3153,57 +3153,6 @@ func TestAutoscalingRunnerSetCustomAnnotationsAndLabelsApplied(t *testing.T) {
 	assert.NotEqual(t, "not-propagated", autoscalingRunnerSet.Labels["app.kubernetes.io/component"])
 }
 
-func TestTemplateRenderedAutoScalingRunnerSet_ScalarMetadataValuesAreRenderedAsStrings(t *testing.T) {
-	t.Parallel()
-
-	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
-	require.NoError(t, err)
-
-	testValuesPath, err := filepath.Abs("../tests/values_scalar_metadata.yaml")
-	require.NoError(t, err)
-
-	releaseName := "test-runners"
-	namespaceName := "test-" + strings.ToLower(random.UniqueID())
-
-	options := &helm.Options{
-		Logger:         logger.Discard,
-		ValuesFiles:    []string{testValuesPath},
-		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
-	}
-
-	// UnmarshalK8SYaml fails outright if a value decodes as a bool or number rather than a
-	// string, so a successful decode is itself part of the assertion.
-	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
-
-	var autoscalingRunnerSet v1alpha1.AutoscalingRunnerSet
-	helm.UnmarshalK8SYaml(t, output, &autoscalingRunnerSet)
-
-	assert.Equal(t, "true", autoscalingRunnerSet.Labels["chart-bool"])
-	assert.Equal(t, "1", autoscalingRunnerSet.Labels["chart-int"])
-	assert.Equal(t, "false", autoscalingRunnerSet.Annotations["chart-bool-annotation"])
-	assert.Equal(t, "1.5", autoscalingRunnerSet.Annotations["chart-float-annotation"])
-	assert.Equal(t, "12345678901234", autoscalingRunnerSet.Annotations["chart-big-int-annotation"])
-
-	assert.Equal(t, "true", autoscalingRunnerSet.Spec.Template.Labels["pod-bool"])
-	assert.Equal(t, "42", autoscalingRunnerSet.Spec.Template.Labels["pod-int"])
-	assert.Equal(t, "true", autoscalingRunnerSet.Spec.Template.Annotations["pod-bool-annotation"])
-	assert.Equal(t, "7", autoscalingRunnerSet.Spec.Template.Annotations["pod-int-annotation"])
-
-	require.NotNil(t, autoscalingRunnerSet.Spec.EphemeralRunnerMetadata)
-	assert.Equal(t, "false", autoscalingRunnerSet.Spec.EphemeralRunnerMetadata.Labels["runner-bool"])
-	assert.Equal(t, "3", autoscalingRunnerSet.Spec.EphemeralRunnerMetadata.Labels["runner-int"])
-	assert.Equal(t, "9", autoscalingRunnerSet.Spec.EphemeralRunnerMetadata.Annotations["runner-int-annotation"])
-
-	output = helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/githubsecret.yaml"})
-
-	var githubSecret corev1.Secret
-	helm.UnmarshalK8SYaml(t, output, &githubSecret)
-
-	assert.Equal(t, "5", githubSecret.Labels["secret-int"])
-	assert.Equal(t, "true", githubSecret.Labels["chart-bool"])
-	assert.Equal(t, "1.5", githubSecret.Annotations["chart-float-annotation"])
-}
-
 func TestTemplateRenderedAutoScalingRunnerSet_InvalidMetadataValidationError(t *testing.T) {
 	t.Parallel()
 
@@ -3308,6 +3257,66 @@ func TestTemplateRenderedAutoScalingRunnerSet_ValidMetadataIsAccepted(t *testing
 	assert.Equal(t, "any value is allowed: ✅", autoscalingRunnerSet.Spec.Template.Annotations["example.com/an"])
 }
 
+// Kubernetes only accepts string label and annotation values. Values supplied as unquoted
+// YAML scalars parse as bools/numbers, so the chart has to coerce them when rendering.
+// SetValues always yields strings, so this has to come from a values file to be meaningful.
+func TestTemplateRenderedAutoScalingRunnerSet_ScalarMetadataValuesAreRenderedAsStrings(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values_scalar_metadata.yaml")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
+
+	options := &helm.Options{
+		Logger:         logger.Discard,
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	// UnmarshalK8SYaml fails outright if a value decodes as a bool or number rather than a
+	// string, so a successful decode is itself part of the assertion.
+	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var autoscalingRunnerSet v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &autoscalingRunnerSet)
+
+	assert.Equal(t, "true", autoscalingRunnerSet.Labels["chart-bool"])
+	assert.Equal(t, "1", autoscalingRunnerSet.Labels["chart-int"])
+	assert.Equal(t, "false", autoscalingRunnerSet.Annotations["chart-bool-annotation"])
+	assert.Equal(t, "1.5", autoscalingRunnerSet.Annotations["chart-float-annotation"])
+	assert.Equal(t, "12345678901234", autoscalingRunnerSet.Annotations["chart-big-int-annotation"])
+
+	assert.Equal(t, "true", autoscalingRunnerSet.Spec.Template.Labels["pod-bool"])
+	assert.Equal(t, "42", autoscalingRunnerSet.Spec.Template.Labels["pod-int"])
+	assert.Equal(t, "true", autoscalingRunnerSet.Spec.Template.Annotations["pod-bool-annotation"])
+	assert.Equal(t, "7", autoscalingRunnerSet.Spec.Template.Annotations["pod-int-annotation"])
+
+	require.NotNil(t, autoscalingRunnerSet.Spec.ListenerTemplate)
+	assert.Equal(t, "true", autoscalingRunnerSet.Spec.ListenerTemplate.Labels["listener-bool"])
+	assert.Equal(t, "11", autoscalingRunnerSet.Spec.ListenerTemplate.Annotations["listener-int-annotation"])
+	require.Len(t, autoscalingRunnerSet.Spec.ListenerTemplate.Spec.Containers, 1)
+	assert.Equal(t, "listener", autoscalingRunnerSet.Spec.ListenerTemplate.Spec.Containers[0].Name)
+
+	require.NotNil(t, autoscalingRunnerSet.Spec.EphemeralRunnerMetadata)
+	assert.Equal(t, "false", autoscalingRunnerSet.Spec.EphemeralRunnerMetadata.Labels["runner-bool"])
+	assert.Equal(t, "3", autoscalingRunnerSet.Spec.EphemeralRunnerMetadata.Labels["runner-int"])
+	assert.Equal(t, "9", autoscalingRunnerSet.Spec.EphemeralRunnerMetadata.Annotations["runner-int-annotation"])
+
+	output = helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/githubsecret.yaml"})
+
+	var githubSecret corev1.Secret
+	helm.UnmarshalK8SYaml(t, output, &githubSecret)
+
+	assert.Equal(t, "5", githubSecret.Labels["secret-int"])
+	assert.Equal(t, "true", githubSecret.Labels["chart-bool"])
+	assert.Equal(t, "1.5", githubSecret.Annotations["chart-float-annotation"])
+}
+
 func TestTemplateRenderedAutoScalingRunnerSet_NonMapMetadataValidationError(t *testing.T) {
 	t.Parallel()
 
@@ -3333,6 +3342,11 @@ func TestTemplateRenderedAutoScalingRunnerSet_NonMapMetadataValidationError(t *t
 			key:           "resourceMeta.githubConfigSecret",
 			value:         "oops",
 			expectedError: ".Values.resourceMeta.githubConfigSecret: must be a mapping, got string",
+		},
+		"listener metadata is not a map": {
+			key:           "listenerTemplate.metadata",
+			value:         "oops",
+			expectedError: ".Values.listenerTemplate.metadata: must be a mapping, got string",
 		},
 	}
 
@@ -3360,6 +3374,33 @@ func TestTemplateRenderedAutoScalingRunnerSet_NonMapMetadataValidationError(t *t
 			assert.ErrorContains(t, err, tc.expectedError)
 		})
 	}
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_ListenerMetadataIsValidated(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
+
+	options := &helm.Options{
+		Logger: logger.Discard,
+		SetValues: map[string]string{
+			"githubConfigUrl":                          "https://github.com/actions",
+			"githubConfigSecret.github_token":          "gh_token12345",
+			"controllerServiceAccount.name":            "arc",
+			"controllerServiceAccount.namespace":       "arc-system",
+			"listenerTemplate.metadata.labels.purpose": "“true”",
+			"listenerTemplate.spec.containers[0].name": "listener",
+		},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	_, err = helm.RenderTemplateContextE(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `.Values.listenerTemplate.metadata.labels: invalid value "“true”" for label "purpose"`)
 }
 
 func TestTemplateRenderedAutoScalingRunnerSet_NonScalarMetadataValueValidationError(t *testing.T) {
