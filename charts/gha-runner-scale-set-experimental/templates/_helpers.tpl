@@ -1,7 +1,8 @@
 {{/*
-Render a labels or annotations map with all values coerced to strings.
-Kubernetes only accepts string values, so scalars such as `true` or `1` must not be
-rendered as YAML booleans or numbers.
+Render a single label or annotation value as a string.
+Values from a values file arrive as float64, so "%v" would turn large integers into
+scientific notation (12345678901234 -> 1.2345678901234e+13) and silently write a value the
+user never asked for. Integral floats are therefore formatted without an exponent.
 */}}
 {{- define "metadata-value" -}}
 {{- if and (kindIs "float64" .) (eq . (floor .)) -}}
@@ -11,6 +12,11 @@ rendered as YAML booleans or numbers.
 {{- end -}}
 {{- end }}
 
+{{/*
+Render a labels or annotations map with all values coerced to strings.
+Kubernetes only accepts string values, so scalars such as `true` or `1` must not be
+rendered as YAML booleans or numbers.
+*/}}
 {{- define "string-map" -}}
 {{- $out := dict -}}
 {{- range $k, $v := . -}}
