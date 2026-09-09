@@ -2430,6 +2430,148 @@ var _ = Describe("Test AutoscalingRunnerSet with a stale runner scale set", Orde
 				autoscalingRunnerSetTestInterval,
 			).Should(BeEquivalentTo(freshRunnerScaleSetID), "the listener should never be created with the stale runner scale set ID")
 		})
+
+		// The listener is not the only thing that has to follow a re-registration:
+		// the EphemeralRunnerSet carries the scale set ID down to every runner, so
+		// assert the propagation here rather than only on the listener.
+		It("propagates the fresh runner scale set ID to the EphemeralRunnerSet", func() {
+			runnerSet := new(v1alpha1.EphemeralRunnerSet)
+			Eventually(
+				func() (int, error) {
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, runnerSet); err != nil {
+						return 0, err
+					}
+					return runnerSet.Spec.EphemeralRunnerSpec.RunnerScaleSetID, nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(BeEquivalentTo(freshRunnerScaleSetID),
+				"the EphemeralRunnerSet must be re-pointed at the newly registered runner scale set")
+
+			// The runners themselves are still registered against the dead scale
+			// set, so the revision has to advance for them to be cleaned up.
+			Expect(runnerSet.Spec.ActionableRevision).To(BeNumerically(">", 0),
+				"re-registration must bump ActionableRevision so existing runners are replaced")
+		})
+	})
+
+	// A scale set can lose its Actions service counterpart long after it has
+	// settled, and re-registration then changes the runner scale set ID without
+	// anything in the AutoscalingRunnerSet spec changing. This exercises that
+	// full transition.
+	//
+	// It also pins down why drift detection cannot be keyed on
+	// metadata.generation: re-registration writes the ID as an annotation, and
+	// metadata changes do not bump generation. A generation-based shortcut would
+	// leave the EphemeralRunnerSet pointing at the dead scale set forever.
+	Context("When a settled runner scale set disappears from the Actions service", func() {
+		const originalRunnerScaleSetID = 77
+		const replacementRunnerScaleSetID = 78
+
+		var ctx context.Context
+		var mgr ctrl.Manager
+		var autoscalingNS *corev1.Namespace
+		var autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet
+		var scaleSetDeleted atomic.Bool
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
+			configSecret := createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
+			scaleSetDeleted.Store(false)
+
+			controller := &AutoscalingRunnerSetReconciler{
+				Client:                             mgr.GetClient(),
+				Scheme:                             mgr.GetScheme(),
+				Log:                                logf.Log,
+				ControllerNamespace:                autoscalingNS.Name,
+				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
+				ResourceBuilder: ResourceBuilder{
+					ResourceCache: newTestResourceCache(),
+					SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient(
+						scalefake.WithClient(
+							scalefake.NewClient(
+								scalefake.WithGetRunnerGroupByName(&scaleset.RunnerGroup{ID: 1, Name: "testgroup"}, nil),
+								scalefake.WithGetRunnerScaleSetByIDFunc(func(_ context.Context, runnerScaleSetID int) (*scaleset.RunnerScaleSet, error) {
+									if runnerScaleSetID == originalRunnerScaleSetID && scaleSetDeleted.Load() {
+										return nil, scaleset.NotFoundError
+									}
+									return &scaleset.RunnerScaleSet{ID: runnerScaleSetID, Name: "test-asrs", RunnerGroupID: 1, RunnerGroupName: "testgroup"}, nil
+								}),
+								scalefake.WithGetRunnerScaleSet(nil, nil),
+								scalefake.WithCreateRunnerScaleSet(&scaleset.RunnerScaleSet{ID: replacementRunnerScaleSetID, Name: "test-asrs", RunnerGroupID: 1, RunnerGroupName: "testgroup"}, nil),
+								scalefake.WithDeleteRunnerScaleSet(nil),
+							),
+						),
+					)),
+				},
+			}
+			Expect(controller.SetupWithManager(mgr)).To(Succeed(), "failed to setup controller")
+			startManagers(GinkgoT(), mgr)
+
+			autoscalingRunnerSet = newAutoscalingRunnerSet(autoscalingNS.Name, configSecret.Name, registeredAnnotations(originalRunnerScaleSetID))
+			// Set the scale set name explicitly. createRunnerScaleSet defaults an
+			// empty Spec.RunnerScaleSetName to the object name, and that spec write
+			// bumps metadata.generation, which would let a generation-based
+			// shortcut pass this test for the wrong reason.
+			autoscalingRunnerSet.Spec.RunnerScaleSetName = "test-asrs"
+			Expect(k8sClient.Create(ctx, autoscalingRunnerSet)).To(Succeed(), "failed to create AutoScalingRunnerSet")
+		})
+
+		It("re-points the EphemeralRunnerSet without any spec change on the AutoscalingRunnerSet", func() {
+			// Let the scale set settle first, so observedGeneration catches up with
+			// generation and the re-registration below is the only thing in flight.
+			var settledGeneration int64
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Status.ObservedGeneration).To(Equal(current.Generation),
+						"AutoscalingRunnerSet should reach a settled state")
+					settledGeneration = current.Generation
+
+					runnerSet := new(v1alpha1.EphemeralRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, runnerSet)).To(Succeed())
+					g.Expect(runnerSet.Spec.EphemeralRunnerSpec.RunnerScaleSetID).To(Equal(originalRunnerScaleSetID))
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+
+			// The scale set is deleted on the Actions service side. Nothing about
+			// the AutoscalingRunnerSet spec changes as a result.
+			scaleSetDeleted.Store(true)
+
+			// Re-registration is only considered when the listener has to be
+			// created, so drop the listener the way an operator or an eviction
+			// would. This deliberately does not touch the AutoscalingRunnerSet, so
+			// its generation stays put.
+			listener := new(v1alpha1.AutoscalingListener)
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingNS.Name}, listener)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, listener)).To(Succeed())
+
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.EphemeralRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, current)).To(Succeed())
+					g.Expect(current.Spec.EphemeralRunnerSpec.RunnerScaleSetID).To(Equal(replacementRunnerScaleSetID),
+						"the EphemeralRunnerSet must be re-pointed at the newly registered runner scale set even though the AutoscalingRunnerSet spec never changed")
+					g.Expect(current.Spec.ActionableRevision).To(BeNumerically(">", 0),
+						"re-registration must bump ActionableRevision so runners registered against the dead scale set are replaced")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+
+			// Guard the premise of the test: re-registration must reach the
+			// EphemeralRunnerSet purely through a spec content change. If it ever
+			// starts writing to the AutoscalingRunnerSet spec, generation would
+			// bump and this would stop demonstrating that.
+			settled := new(v1alpha1.AutoscalingRunnerSet)
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), settled)).To(Succeed())
+			Expect(settled.Generation).To(Equal(settledGeneration),
+				"re-registration must not change the AutoscalingRunnerSet spec, otherwise this test proves nothing")
+		})
 	})
 
 	Context("When the Actions service cannot confirm whether the runner scale set exists", func() {
