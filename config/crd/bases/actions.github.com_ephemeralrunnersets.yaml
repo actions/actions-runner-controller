@@ -46,6 +46,13 @@ spec:
             spec:
               description: EphemeralRunnerSetSpec defines the desired state of EphemeralRunnerSet
               properties:
+                actionableRevision:
+                  description: |-
+                    ActionableRevision is a restart-safe applied marker that increments whenever
+                    Spec.EphemeralRunnerSpec changes, enabling detection of spec updates.
+                    Unset defaults to 0.
+                  format: int64
+                  type: integer
                 ephemeralRunnerMetadata:
                   description: |-
                     EphemeralRunnerMetadata is the metadata to be applied to all ephemeral runners created by this set.
@@ -8295,6 +8302,13 @@ spec:
             status:
               description: EphemeralRunnerSetStatus defines the observed state of EphemeralRunnerSet
               properties:
+                appliedActionableRevision:
+                  description: |-
+                    AppliedActionableRevision is a restart-safe applied marker tracking the last successfully
+                    applied ActionableRevision value. Advances only after spec cleanup succeeds.
+                    Unset defaults to 0.
+                  format: int64
+                  type: integer
                 phase:
                   description: EphemeralRunnerSetPhase is the phase of the ephemeral runner set resource
                   type: string
