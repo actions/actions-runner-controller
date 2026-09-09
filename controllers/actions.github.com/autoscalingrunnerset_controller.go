@@ -143,27 +143,22 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, nil
 	}
 
-	// Something has changed, we need to re-apply the pending phase and change hash annotation to trigger the update of runner scale set and listener.
-	if targetHash := autoscalingRunnerSet.Hash(); autoscalingRunnerSet.Annotations[annotationKeyIntegrityHash] != targetHash {
-		// TODO: apply the version label
-		original := autoscalingRunnerSet.DeepCopy()
-		if autoscalingRunnerSet.Annotations == nil {
-			autoscalingRunnerSet.Annotations = map[string]string{}
-		}
-		autoscalingRunnerSet.Annotations[annotationKeyIntegrityHash] = targetHash
-		if err := r.Patch(ctx, &autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
-			log.Error(err, "Failed to update autoscaling runner set with new change hash and pending phase")
-			return ctrl.Result{}, err
-		}
-
-		original = autoscalingRunnerSet.DeepCopy()
-		autoscalingRunnerSet.Status.Phase = v1alpha1.AutoscalingRunnerSetPhasePending
-		if err := r.Status().Patch(ctx, &autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
+	// The spec changed since we last observed it, so move back to the pending
+	// phase. The observed generation is deliberately left at its old value here:
+	// it only catches up at the end of a successful reconcile, so a reconcile
+	// that fails half way through is retried as pending rather than being
+	// mistaken for settled.
+	if autoscalingRunnerSet.Generation > autoscalingRunnerSet.Status.ObservedGeneration {
+		if err := r.updateStatus(
+			ctx,
+			&autoscalingRunnerSet,
+			v1alpha1.AutoscalingRunnerSetPhasePending,
+			autoscalingRunnerSet.Status.ObservedGeneration,
+			log,
+		); err != nil {
 			log.Error(err, "Failed to update autoscaling runner set status with pending phase")
 			return ctrl.Result{}, err
 		}
-
-		return ctrl.Result{}, nil
 	}
 
 	outdated := autoscalingRunnerSet.Status.Phase == v1alpha1.AutoscalingRunnerSetPhaseOutdated
@@ -393,6 +388,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		ctx,
 		&autoscalingRunnerSet,
 		v1alpha1.AutoscalingRunnerSetPhaseRunning,
+		autoscalingRunnerSet.Generation,
 		log,
 	); err != nil {
 		log.Error(err, "Failed to update autoscaling runner set status to running")
@@ -437,14 +433,22 @@ func (r *AutoscalingRunnerSetReconciler) cleanUpResources(ctx context.Context, a
 }
 
 // Update the status of autoscaling runner set if necessary
-func (r *AutoscalingRunnerSetReconciler) updateStatus(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, phase v1alpha1.AutoscalingRunnerSetPhase, log logr.Logger) error {
+func (r *AutoscalingRunnerSetReconciler) updateStatus(
+	ctx context.Context,
+	autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet,
+	phase v1alpha1.AutoscalingRunnerSetPhase,
+	observedGeneration int64,
+	log logr.Logger,
+) error {
 	phaseDiff := phase != autoscalingRunnerSet.Status.Phase
-	if !phaseDiff {
+	observedGenerationDiff := observedGeneration != autoscalingRunnerSet.Status.ObservedGeneration
+	if !phaseDiff && !observedGenerationDiff {
 		return nil
 	}
 
 	original := autoscalingRunnerSet.DeepCopy()
 	autoscalingRunnerSet.Status.Phase = phase
+	autoscalingRunnerSet.Status.ObservedGeneration = observedGeneration
 
 	if err := r.Status().Patch(ctx, autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
 		log.Error(err, "Failed to patch autoscaling runner set status")
