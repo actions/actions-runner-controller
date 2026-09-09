@@ -66,6 +66,23 @@ func ephemeralRunnerSetOutdatedForAppliedRevision(ephemeralRunnerSet *v1alpha1.E
 // listenerPodSpecRequiresRecreation reports whether the live listener pod must be
 // deleted and rebuilt to match the desired spec.
 //
+// The config secret is checked first. The pod mounts it as a volume and the
+// listener parses it once at startup, so a change to the scale set URL, the TLS
+// certificate, the metrics configuration or the scaler tuning only reaches the
+// listener after a restart. None of that is visible in the pod spec, which
+// references the secret by name and is byte-identical before and after, so the
+// desired pod carries the secret's resource version as an annotation and drift
+// is detected by comparing it. An empty annotation on the live pod is ignored:
+// pods created before this annotation existed would otherwise all be recreated
+// on controller upgrade, and the next legitimate config change recreates them
+// anyway.
+//
+// The resource version also moves when only the secret's labels or annotations
+// change, which does not affect the listener. That is accepted rather than
+// worked around by hashing the secret data: those fields come from the
+// AutoscalingListener spec, and a change to that spec already makes the
+// AutoscalingRunnerSet controller replace the listener wholesale.
+//
 // DeepDerivative, not DeepEqual: the live pod carries a large number of fields
 // the desired pod never sets, written by the API server and by admission
 // (nodeName, dnsPolicy, schedulerName, securityContext, enableServiceLinks,
@@ -92,11 +109,24 @@ func listenerPodSpecRequiresRecreation(current, desired *corev1.Pod) bool {
 		return current != desired
 	}
 
+	if listenerConfigChanged(current, desired) {
+		return true
+	}
+
 	if listenerContainerPortsRemoved(current, desired) {
 		return true
 	}
 
 	return !apiequality.Semantic.DeepDerivative(desired.Spec, current.Spec)
+}
+
+func listenerConfigChanged(current, desired *corev1.Pod) bool {
+	currentVersion := current.Annotations[AnnotationKeyListenerConfigResourceVersion]
+	desiredVersion := desired.Annotations[AnnotationKeyListenerConfigResourceVersion]
+	if currentVersion == "" || desiredVersion == "" {
+		return false
+	}
+	return currentVersion != desiredVersion
 }
 
 func listenerContainerPortsRemoved(current, desired *corev1.Pod) bool {

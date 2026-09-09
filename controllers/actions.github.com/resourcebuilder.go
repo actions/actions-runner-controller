@@ -447,10 +447,12 @@ func (b *ResourceBuilder) newScaleSetListenerPod(
 			Kind:       "Pod",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        autoscalingListener.Name,
-			Namespace:   autoscalingListener.Namespace,
-			Labels:      labels,
-			Annotations: make(map[string]string),
+			Name:      autoscalingListener.Name,
+			Namespace: autoscalingListener.Namespace,
+			Labels:    labels,
+			Annotations: map[string]string{
+				AnnotationKeyListenerConfigResourceVersion: podConfig.ResourceVersion,
+			},
 		},
 		Spec: podSpec,
 	}

@@ -275,3 +275,57 @@ func TestListenerPodSpecRequiresRecreation_MetricsToggleUsesRealBuilder(t *testi
 	assert.False(t, listenerPodSpecRequiresRecreation(withMetrics, withMetrics),
 		"an unchanged metrics configuration must not recreate the pod")
 }
+
+// The listener pod mounts its config as a secret volume and parses it once at
+// startup, so a change to the secret contents is invisible in the pod spec but
+// still requires a restart to take effect.
+func TestListenerPodSpecRequiresRecreation_ConfigSecretChanged(t *testing.T) {
+	tests := map[string]struct {
+		liveVersion    string
+		desiredVersion string
+		want           bool
+		why            string
+	}{
+		"unchanged": {
+			liveVersion:    "100",
+			desiredVersion: "100",
+			want:           false,
+			why:            "the config the listener is running is still the desired one",
+		},
+		"changed": {
+			liveVersion:    "100",
+			desiredVersion: "101",
+			want:           true,
+			why:            "the listener only reads its config at startup, so it must be restarted",
+		},
+		"missing on live pod": {
+			liveVersion:    "",
+			desiredVersion: "101",
+			want:           false,
+			why:            "pods predating the annotation must not all be recreated on controller upgrade",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			desired := desiredListenerPod()
+			live := livePodFromDesired(desired)
+
+			setListenerConfigVersion(live, tt.liveVersion)
+			setListenerConfigVersion(desired, tt.desiredVersion)
+
+			assert.Equal(t, tt.want, listenerPodSpecRequiresRecreation(live, desired), tt.why)
+		})
+	}
+}
+
+func setListenerConfigVersion(pod *corev1.Pod, version string) {
+	if version == "" {
+		delete(pod.Annotations, AnnotationKeyListenerConfigResourceVersion)
+		return
+	}
+	if pod.Annotations == nil {
+		pod.Annotations = map[string]string{}
+	}
+	pod.Annotations[AnnotationKeyListenerConfigResourceVersion] = version
+}
