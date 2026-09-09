@@ -97,19 +97,56 @@ annotations:
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-init-container" -}}
+{{- $initContainer := dict }}
+{{- range $i, $container := .Values.template.spec.initContainers }}
+  {{- if eq $container.name "init-dind-externals" }}
+    {{- $initContainer = $container }}
+  {{- end }}
+{{- end }}
+{{- range $key, $val := $initContainer }}
+  {{- if and (ne $key "env") (ne $key "volumeMounts") (ne $key "name") (ne $key "command") (ne $key "args") (ne $key "image") }}
+{{ $key }}: {{ $val | toYaml | nindent 2 }}
+  {{- end }}
+{{- end }}
 {{- range $i, $val := .Values.template.spec.containers }}
   {{- if eq $val.name "runner" }}
 image: {{ $val.image }}
+  {{- end }}
+{{- end }}
 command: ["cp"]
 args: ["-r", "/home/runner/externals/.", "/home/runner/tmpDir/"]
 volumeMounts:
   - name: dind-externals
     mountPath: /home/runner/tmpDir
+{{- end }}
+
+{{- define "gha-runner-scale-set.dind-container-user-fields" -}}
+{{- $merged := dict }}
+{{- range $i, $container := .Values.template.spec.containers }}
+  {{- if eq $container.name "dind" }}
+    {{- range $key, $val := $container }}
+      {{- if and (ne $key "env") (ne $key "volumeMounts") (ne $key "name") (ne $key "image") }}
+        {{- $merged = mergeOverwrite $merged (dict $key $val) }}
+      {{- end }}
+    {{- end }}
   {{- end }}
+{{- end }}
+{{- range $i, $container := .Values.template.spec.initContainers }}
+  {{- if eq $container.name "dind" }}
+    {{- range $key, $val := $container }}
+      {{- if and (ne $key "env") (ne $key "volumeMounts") (ne $key "name") (ne $key "image") }}
+        {{- $merged = mergeOverwrite $merged (dict $key $val) }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- range $key, $val := $merged }}
+{{ $key }}: {{ $val | toYaml | nindent 2 }}
 {{- end }}
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-container" -}}
+{{- include "gha-runner-scale-set.dind-container-user-fields" . }}
 image: docker:dind
 args:
   - dockerd
@@ -206,6 +243,14 @@ volumeMounts:
 {{- define "gha-runner-scale-set.non-runner-non-dind-containers" -}}
   {{- range $i, $container := .Values.template.spec.containers }}
     {{- if and (ne $container.name "runner") (ne $container.name "dind") }}
+- {{ $container | toYaml | nindent 2 }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
+{{- define "gha-runner-scale-set.non-dind-init-containers" -}}
+  {{- range $i, $container := .Values.template.spec.initContainers }}
+    {{- if and (ne $container.name "init-dind-externals") (ne $container.name "dind") }}
 - {{ $container | toYaml | nindent 2 }}
     {{- end }}
   {{- end }}
