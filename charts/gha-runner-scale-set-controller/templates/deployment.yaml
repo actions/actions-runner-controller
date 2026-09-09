@@ -67,8 +67,20 @@ spec:
         {{- with .Values.flags.watchSingleNamespace }}
         - "--watch-single-namespace={{ . }}"
         {{- end }}
-        {{- with .Values.flags.runnerMaxConcurrentReconciles }}
-        - "--runner-max-concurrent-reconciles={{ . }}"
+        {{- with .Values.flags.defaultMaxConcurrentReconciles }}
+        - "--default-max-concurrent-reconciles={{ . }}"
+        {{- end }}
+        {{- with .Values.flags.autoscalingRunnerSetMaxConcurrentReconciles }}
+        - "--autoscaling-runner-set-max-concurrent-reconciles={{ . }}"
+        {{- end }}
+        {{- with .Values.flags.autoscalingListenerMaxConcurrentReconciles }}
+        - "--autoscaling-listener-max-concurrent-reconciles={{ . }}"
+        {{- end }}
+        {{- with .Values.flags.ephemeralRunnerSetMaxConcurrentReconciles }}
+        - "--ephemeral-runner-set-max-concurrent-reconciles={{ . }}"
+        {{- end }}
+        {{- with .Values.flags.ephemeralRunnerMaxConcurrentReconciles }}
+        - "--ephemeral-runner-max-concurrent-reconciles={{ . }}"
         {{- end }}
         {{- if .Values.metrics }}
         {{- with .Values.metrics }}

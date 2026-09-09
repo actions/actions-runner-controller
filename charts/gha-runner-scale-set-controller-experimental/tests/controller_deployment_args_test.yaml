@@ -73,3 +73,54 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].args
           content: "--listener-metrics-endpoint=/metrics"
+
+  - it: should omit every max-concurrent-reconciles flag by default
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: "--ephemeral-runner-max-concurrent-reconciles=1"
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: "--default-max-concurrent-reconciles=1"
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: "--autoscaling-runner-set-max-concurrent-reconciles=1"
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: "--autoscaling-listener-max-concurrent-reconciles=1"
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: "--ephemeral-runner-set-max-concurrent-reconciles=1"
+
+  - it: should include every max-concurrent-reconciles flag when configured
+    set:
+      controller:
+        manager:
+          config:
+            defaultMaxConcurrentReconciles: 4
+            autoscalingRunnerSetMaxConcurrentReconciles: 3
+            autoscalingListenerMaxConcurrentReconciles: 5
+            ephemeralRunnerSetMaxConcurrentReconciles: 6
+            ephemeralRunnerMaxConcurrentReconciles: 20
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--default-max-concurrent-reconciles=4"
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--autoscaling-runner-set-max-concurrent-reconciles=3"
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--autoscaling-listener-max-concurrent-reconciles=5"
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--ephemeral-runner-set-max-concurrent-reconciles=6"
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--ephemeral-runner-max-concurrent-reconciles=20"
