@@ -115,7 +115,7 @@ func TestMetadataPropagation(t *testing.T) {
 	assert.Equal(t, labelValueKubernetesPartOf, ephemeralRunnerSet.Labels[LabelKeyKubernetesPartOf])
 	assert.Equal(t, "runner-set", ephemeralRunnerSet.Labels[LabelKeyKubernetesComponent])
 	assert.Equal(t, autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion], ephemeralRunnerSet.Labels[LabelKeyKubernetesVersion])
-	assert.NotContains(t, ephemeralRunnerSet.Annotations, annotationKeyIntegrityHash)
+	assert.NotContains(t, ephemeralRunnerSet.Annotations, "actions.github.com/integrity-hash")
 	assert.Equal(t, autoscalingRunnerSet.Name, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName])
 	assert.Equal(t, autoscalingRunnerSet.Namespace, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace])
 	assert.Equal(t, "", ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise])
@@ -132,7 +132,7 @@ func TestMetadataPropagation(t *testing.T) {
 	assert.Equal(t, labelValueKubernetesPartOf, listener.Labels[LabelKeyKubernetesPartOf])
 	assert.Equal(t, "runner-scale-set-listener", listener.Labels[LabelKeyKubernetesComponent])
 	assert.Equal(t, autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion], listener.Labels[LabelKeyKubernetesVersion])
-	assert.NotEmpty(t, listener.Annotations[annotationKeyIntegrityHash])
+	assert.NotContains(t, listener.Annotations, "actions.github.com/integrity-hash")
 	assert.Equal(t, autoscalingRunnerSet.Name, listener.Labels[LabelKeyGitHubScaleSetName])
 	assert.Equal(t, autoscalingRunnerSet.Namespace, listener.Labels[LabelKeyGitHubScaleSetNamespace])
 	assert.Equal(t, "", listener.Labels[LabelKeyGitHubEnterprise])
@@ -206,7 +206,7 @@ func TestMetadataPropagation(t *testing.T) {
 	}
 }
 
-func TestEphemeralRunnerSetProxySecretZIdentityHash(t *testing.T) {
+func TestEphemeralRunnerSetProxySecretMetadata(t *testing.T) {
 	ephemeralRunnerSet := &v1alpha1.EphemeralRunnerSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-scale-set",
@@ -224,13 +224,11 @@ func TestEphemeralRunnerSetProxySecretZIdentityHash(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	actualHash := proxySecret.Annotations[annotationKeyIntegrityHash]
-	assert.NotEmpty(t, actualHash)
-	assert.Equal(t, ephemeralRunnerSetProxySecretZIdentityHash(proxySecret), actualHash)
-
-	changedProxySecret := proxySecret.DeepCopy()
-	changedProxySecret.Data["http_proxy"] = []byte("http://updated-proxy.example.com")
-	assert.NotEqual(t, actualHash, ephemeralRunnerSetProxySecretZIdentityHash(changedProxySecret))
+	assert.Equal(t, proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet), proxySecret.Name)
+	assert.Equal(t, ephemeralRunnerSet.Namespace, proxySecret.Namespace)
+	assert.Equal(t, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName], proxySecret.Labels[LabelKeyGitHubScaleSetName])
+	assert.Equal(t, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace], proxySecret.Labels[LabelKeyGitHubScaleSetNamespace])
+	assert.NotContains(t, proxySecret.Annotations, "actions.github.com/integrity-hash")
 }
 
 func TestGitHubURLTrimLabelValues(t *testing.T) {
@@ -318,7 +316,6 @@ func TestOwnershipRelationships(t *testing.T) {
 				runnerScaleSetIDAnnotationKey:         "1",
 				AnnotationKeyGitHubRunnerGroupName:    "test-group",
 				AnnotationKeyGitHubRunnerScaleSetName: "test-scale-set",
-				annotationKeyIntegrityHash:            "test-hash",
 			},
 		},
 		Spec: v1alpha1.AutoscalingRunnerSetSpec{

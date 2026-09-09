@@ -17,7 +17,6 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"github.com/actions/actions-runner-controller/hash"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -131,10 +130,6 @@ type EphemeralRunnerSpec struct {
 
 	// +optional
 	corev1.PodTemplateSpec `json:",inline"`
-}
-
-func (s *EphemeralRunnerSpec) Hash() string {
-	return hash.ComputeTemplateHash(s)
 }
 
 // EphemeralRunnerStatus defines the observed state of EphemeralRunner
