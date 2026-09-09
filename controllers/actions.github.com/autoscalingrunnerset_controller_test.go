@@ -492,6 +492,81 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 	})
 
 	Context("When updating a new AutoScalingRunnerSet", func() {
+		It("advances the observed generation once a spec change has been applied", func() {
+			var settledGeneration int64
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhaseRunning))
+					g.Expect(current.Status.ObservedGeneration).To(Equal(current.Generation))
+					settledGeneration = current.Generation
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "AutoscalingRunnerSet should settle with its generation observed")
+
+			patched := autoscalingRunnerSet.DeepCopy()
+			patched.Spec.Template.Spec.Containers[0].Image = "ghcr.io/actions/runner:updated"
+			Expect(k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))).To(Succeed(), "failed to patch AutoScalingRunnerSet")
+
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Generation).To(BeNumerically(">", settledGeneration), "a spec write must bump metadata.generation")
+					g.Expect(current.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhaseRunning))
+					g.Expect(current.Status.ObservedGeneration).To(Equal(current.Generation), "observed generation must catch up once the change is applied")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+		})
+
+		// metadata.generation only tracks spec writes, so a label-only edit no
+		// longer drags the scale set through the Pending phase the way the old
+		// label-inclusive hash did. Labels still propagate to the
+		// EphemeralRunnerSet, they just do not count as an update to apply.
+		It("does not re-observe a generation when only labels change", func() {
+			var settledGeneration int64
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Status.ObservedGeneration).To(Equal(current.Generation))
+					settledGeneration = current.Generation
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "AutoscalingRunnerSet should settle with its generation observed")
+
+			patched := autoscalingRunnerSet.DeepCopy()
+			patched.Labels["arc.test/label-drift"] = "updated"
+			Expect(k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))).To(Succeed(), "failed to patch AutoScalingRunnerSet labels")
+
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.EphemeralRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, current)).To(Succeed())
+					g.Expect(current.Labels).To(HaveKeyWithValue("arc.test/label-drift", "updated"), "labels should still propagate to the EphemeralRunnerSet")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+
+			Consistently(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Generation).To(Equal(settledGeneration), "a label-only edit must not bump metadata.generation")
+					g.Expect(current.Status.ObservedGeneration).To(Equal(settledGeneration))
+					g.Expect(current.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhaseRunning), "a label-only edit must not push the scale set back to Pending")
+				},
+				3*time.Second,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+		})
+
 		It("updates EphemeralRunnerSet when the runner image changes without touching the Listener", func() {
 			listener := new(v1alpha1.AutoscalingListener)
 			Eventually(
@@ -979,10 +1054,6 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 		statusUpdate := runnerSet.DeepCopy()
 		statusUpdate.Status.Phase = v1alpha1.EphemeralRunnerSetPhaseRunning
 
-		desiredStatus := v1alpha1.AutoscalingRunnerSetStatus{
-			Phase: v1alpha1.AutoscalingRunnerSetPhaseRunning,
-		}
-
 		err := k8sClient.Status().Patch(ctx, statusUpdate, client.MergeFrom(&runnerSet))
 		Expect(err).NotTo(HaveOccurred(), "Failed to patch runner set status")
 
@@ -997,7 +1068,10 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			},
 			autoscalingRunnerSetTestTimeout,
 			autoscalingRunnerSetTestInterval,
-		).Should(BeEquivalentTo(desiredStatus), "AutoScalingRunnerSet status should be updated")
+		).Should(SatisfyAll(
+			WithTransform(func(s v1alpha1.AutoscalingRunnerSetStatus) v1alpha1.AutoscalingRunnerSetPhase { return s.Phase }, Equal(v1alpha1.AutoscalingRunnerSetPhaseRunning)),
+			WithTransform(func(s v1alpha1.AutoscalingRunnerSetStatus) int64 { return s.ObservedGeneration }, BeNumerically(">=", ars.Generation)),
+		), "AutoScalingRunnerSet status should be updated")
 	})
 })
 
