@@ -2330,9 +2330,10 @@ var _ = Describe("Test EphemeralRunnerSet actionable revision cleanup", func() {
 
 	It("does not clean up runners on initial creation without an actionable revision", func() {
 		controller := &EphemeralRunnerSetReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
-			Log:    logf.Log,
+			Client:    mgr.GetClient(),
+			APIReader: mgr.GetAPIReader(),
+			Scheme:    mgr.GetScheme(),
+			Log:       logf.Log,
 			ResourceBuilder: ResourceBuilder{
 				ResourceCache: newTestResourceCache(),
 				SecretResolver: secretresolver.New(mgr.GetClient(), fake.NewMultiClient(
@@ -2383,9 +2384,10 @@ var _ = Describe("Test EphemeralRunnerSet actionable revision cleanup", func() {
 
 	It("deletes runner-a-idle, keeps runner-b-busy, and advances applied actionable revision 3 to 4", func() {
 		controller := &EphemeralRunnerSetReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
-			Log:    logf.Log,
+			Client:    mgr.GetClient(),
+			APIReader: mgr.GetAPIReader(),
+			Scheme:    mgr.GetScheme(),
+			Log:       logf.Log,
 			ResourceBuilder: ResourceBuilder{
 				ResourceCache: newTestResourceCache(),
 				SecretResolver: secretresolver.New(mgr.GetClient(), fake.NewMultiClient(
@@ -2495,9 +2497,10 @@ var _ = Describe("Test EphemeralRunnerSet actionable revision cleanup", func() {
 
 	It("keeps applied actionable revision at 3 when cleanup fails", func() {
 		controller := &EphemeralRunnerSetReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
-			Log:    logf.Log,
+			Client:    mgr.GetClient(),
+			APIReader: mgr.GetAPIReader(),
+			Scheme:    mgr.GetScheme(),
+			Log:       logf.Log,
 			ResourceBuilder: ResourceBuilder{
 				ResourceCache: newTestResourceCache(),
 				SecretResolver: secretresolver.New(mgr.GetClient(), fake.NewMultiClient(
@@ -2573,9 +2576,10 @@ var _ = Describe("Test EphemeralRunnerSet actionable revision cleanup", func() {
 
 	It("deletes unregistered pending runner during actionable revision cleanup after restart with no cache", func() {
 		controller := &EphemeralRunnerSetReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
-			Log:    logf.Log,
+			Client:    mgr.GetClient(),
+			APIReader: mgr.GetAPIReader(),
+			Scheme:    mgr.GetScheme(),
+			Log:       logf.Log,
 			ResourceBuilder: ResourceBuilder{
 				ResourceCache:  newTestResourceCache(), // fresh empty cache simulating restart
 				SecretResolver: secretresolver.New(mgr.GetClient(), fake.NewMultiClient()),
@@ -2652,9 +2656,10 @@ var _ = Describe("Test EphemeralRunnerSet actionable revision cleanup", func() {
 
 	It("preserves AppliedActionableRevision during status-only phase updates", func() {
 		controller := &EphemeralRunnerSetReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
-			Log:    logf.Log,
+			Client:    mgr.GetClient(),
+			APIReader: mgr.GetAPIReader(),
+			Scheme:    mgr.GetScheme(),
+			Log:       logf.Log,
 			ResourceBuilder: ResourceBuilder{
 				ResourceCache: newTestResourceCache(),
 				SecretResolver: secretresolver.New(mgr.GetClient(), fake.NewMultiClient(
@@ -2770,9 +2775,10 @@ var _ = Describe("Test EphemeralRunnerSet actionable revision cleanup", func() {
 	// built from the current spec.
 	It("replaces outdated runners from a superseded revision instead of going Outdated", func() {
 		controller := &EphemeralRunnerSetReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
-			Log:    logf.Log,
+			Client:    mgr.GetClient(),
+			APIReader: mgr.GetAPIReader(),
+			Scheme:    mgr.GetScheme(),
+			Log:       logf.Log,
 			ResourceBuilder: ResourceBuilder{
 				ResourceCache: newTestResourceCache(),
 				SecretResolver: secretresolver.New(mgr.GetClient(), fake.NewMultiClient(
