@@ -30,7 +30,13 @@ type Config struct {
 	EphemeralRunnerSetName      string
 	MaxRunners                  int
 	MinRunners                  int
+	ScalerConfig                *v1alpha1.ScalerConfig
 }
+
+const (
+	defaultQPS   = 50
+	defaultBurst = 100
+)
 
 // The Scaler's role is to process the messages it receives from the listener.
 // It then initiates Kubernetes API requests to carry out the necessary actions.
@@ -52,11 +58,21 @@ func New(config Config, options ...Option) (*Scaler, error) {
 		targetRunners: -1,
 		patchSeq:      -1,
 	}
+	for _, option := range options {
+		option(w)
+	}
+	if err := w.applyDefaults(); err != nil {
+		return nil, err
+	}
 
 	conf, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, err
 	}
+
+	qps, burst := effectiveRateLimiterConfig(config.ScalerConfig, w.logger)
+	conf.QPS = float32(qps)
+	conf.Burst = burst
 
 	clientset, err := kubernetes.NewForConfig(conf)
 	if err != nil {
@@ -65,15 +81,34 @@ func New(config Config, options ...Option) (*Scaler, error) {
 
 	w.clientset = clientset
 
-	for _, option := range options {
-		option(w)
-	}
-
-	if err := w.applyDefaults(); err != nil {
-		return nil, err
-	}
-
 	return w, nil
+}
+
+func effectiveRateLimiterConfig(config *v1alpha1.ScalerConfig, logger *slog.Logger) (int, int) {
+	if config == nil {
+		logger.Debug("Listener scaler configuration is missing; using defaults", "qps", defaultQPS, "burst", defaultBurst)
+		return defaultQPS, defaultBurst
+	}
+
+	qps := defaultQPS
+	if config.QPS == nil {
+		logger.Debug("Listener scaler qps is missing; using default", "default", defaultQPS)
+	} else if *config.QPS < 1 {
+		logger.Warn("Listener scaler qps must be greater than 0; using default", "configured", *config.QPS, "default", defaultQPS)
+	} else {
+		qps = *config.QPS
+	}
+
+	burst := defaultBurst
+	if config.Burst == nil {
+		logger.Debug("Listener scaler burst is missing; using default", "default", defaultBurst)
+	} else if *config.Burst < 1 {
+		logger.Warn("Listener scaler burst must be greater than 0; using default", "configured", *config.Burst, "default", defaultBurst)
+	} else {
+		burst = *config.Burst
+	}
+
+	return qps, burst
 }
 
 func (w *Scaler) applyDefaults() error {
@@ -213,10 +248,11 @@ func (w *Scaler) HandleDesiredRunnerCount(ctx context.Context, count int) (int, 
 		Do(ctx).
 		Into(patchedEphemeralRunnerSet)
 	if err != nil {
-		return 0, fmt.Errorf("could not patch ephemeral runner set , patch JSON: %s, error: %w", string(mergePatch), err)
+		return 0, fmt.Errorf("could not patch ephemeral runner set, patch JSON: %s, error: %w", string(mergePatch), err)
 	}
 
-	w.logger.Info("Ephemeral runner set scaled.",
+	w.logger.Info(
+		"Ephemeral runner set scaled.",
 		"namespace", w.config.EphemeralRunnerSetNamespace,
 		"name", w.config.EphemeralRunnerSetName,
 		"replicas", patchedEphemeralRunnerSet.Spec.Replicas,

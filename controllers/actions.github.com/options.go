@@ -10,9 +10,25 @@ import (
 // Options is the optional configuration for the controllers, which can be
 // set via command-line flags or environment variables.
 type Options struct {
-	// RunnerMaxConcurrentReconciles is the maximum number of concurrent Reconciles which can be run
-	// by the EphemeralRunnerController.
-	RunnerMaxConcurrentReconciles int
+	// DefaultMaxConcurrentReconciles is the maximum number of concurrent Reconciles
+	// applied to every controller that does not have its own value set below.
+	DefaultMaxConcurrentReconciles int
+
+	// AutoscalingRunnerSetMaxConcurrentReconciles is the maximum number of concurrent Reconciles
+	// which can be run by the AutoscalingRunnerSetController. Zero means DefaultMaxConcurrentReconciles.
+	AutoscalingRunnerSetMaxConcurrentReconciles int
+
+	// AutoscalingListenerMaxConcurrentReconciles is the maximum number of concurrent Reconciles
+	// which can be run by the AutoscalingListenerController. Zero means DefaultMaxConcurrentReconciles.
+	AutoscalingListenerMaxConcurrentReconciles int
+
+	// EphemeralRunnerSetMaxConcurrentReconciles is the maximum number of concurrent Reconciles
+	// which can be run by the EphemeralRunnerSetController. Zero means DefaultMaxConcurrentReconciles.
+	EphemeralRunnerSetMaxConcurrentReconciles int
+
+	// EphemeralRunnerMaxConcurrentReconciles is the maximum number of concurrent Reconciles
+	// which can be run by the EphemeralRunnerController. Zero means DefaultMaxConcurrentReconciles.
+	EphemeralRunnerMaxConcurrentReconciles int
 }
 
 // OptionsWithDefault returns the default options.
@@ -20,8 +36,29 @@ type Options struct {
 // rather than having to correlate those in multiple places.
 func OptionsWithDefault() Options {
 	return Options{
-		RunnerMaxConcurrentReconciles: 2,
+		DefaultMaxConcurrentReconciles: 1,
 	}
+}
+
+// Resolve returns a copy of the options where a DefaultMaxConcurrentReconciles
+// of zero or less is replaced by 1, and every per-controller
+// MaxConcurrentReconciles that is left at zero is replaced by
+// DefaultMaxConcurrentReconciles.
+func (o Options) Resolve() Options {
+	if o.DefaultMaxConcurrentReconciles <= 0 {
+		o.DefaultMaxConcurrentReconciles = 1
+	}
+	orDefault := func(n int) int {
+		if n > 0 {
+			return n
+		}
+		return o.DefaultMaxConcurrentReconciles
+	}
+	o.AutoscalingRunnerSetMaxConcurrentReconciles = orDefault(o.AutoscalingRunnerSetMaxConcurrentReconciles)
+	o.AutoscalingListenerMaxConcurrentReconciles = orDefault(o.AutoscalingListenerMaxConcurrentReconciles)
+	o.EphemeralRunnerSetMaxConcurrentReconciles = orDefault(o.EphemeralRunnerSetMaxConcurrentReconciles)
+	o.EphemeralRunnerMaxConcurrentReconciles = orDefault(o.EphemeralRunnerMaxConcurrentReconciles)
+	return o
 }
 
 type Option func(*controller.Options)

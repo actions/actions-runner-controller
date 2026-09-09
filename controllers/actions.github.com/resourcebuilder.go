@@ -161,6 +161,7 @@ func (b *ResourceBuilder) newAutoscalingListener(autoscalingRunnerSet *v1alpha1.
 		RoleMetadata:                  autoscalingRunnerSet.Spec.ListenerRoleMetadata,
 		RoleBindingMetadata:           autoscalingRunnerSet.Spec.ListenerRoleBindingMetadata,
 		ConfigSecretMetadata:          autoscalingRunnerSet.Spec.ListenerConfigSecretMetadata,
+		ListenerConfig:                autoscalingRunnerSet.Spec.ListenerConfig,
 	}
 
 	labels := b.filterAndMergeLabels(autoscalingRunnerSet.Labels, map[string]string{
@@ -258,6 +259,7 @@ func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha
 		MetricsAddr:                 metricsAddr,
 		MetricsEndpoint:             metricsEndpoint,
 		Metrics:                     autoscalingListener.Spec.Metrics,
+		ListenerConfig:              autoscalingListener.Spec.ListenerConfig,
 	}
 
 	vault := autoscalingListener.Spec.VaultConfig

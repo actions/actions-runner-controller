@@ -145,6 +145,20 @@ spec:
                           x-kubernetes-map-type: atomic
                       type: object
                   type: object
+                listenerConfig:
+                  description: ListenerConfig holds configuration for the ghalistener pod.
+                  properties:
+                    scaler:
+                      description: ScalerConfig configures the Kubernetes client used by the ghalistener scaler.
+                      properties:
+                        burst:
+                          minimum: 1
+                          type: integer
+                        qps:
+                          minimum: 1
+                          type: integer
+                      type: object
+                  type: object
                 listenerConfigSecretMetadata:
                   description: ResourceMeta carries metadata common to all internal resources
                   properties:

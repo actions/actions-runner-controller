@@ -1,8 +1,8 @@
 {{- define "listener-template.pod" -}}
-{{- $metadata := .Values.listenerPodTemplate.metadata | default dict -}}
-{{- $spec := .Values.listenerPodTemplate.spec | default dict -}}
+{{- $metadata := .metadata | default dict -}}
+{{- $spec := .spec | default dict -}}
 {{- if and (empty $metadata) (empty $spec) -}}
-  {{- fail "listenerPodTemplate must have at least metadata or spec defined" -}}
+  {{- fail ".Values.listener.podTemplate must have at least metadata or spec defined" -}}
 {{- end -}}
 {{- with $metadata -}}
 metadata:
