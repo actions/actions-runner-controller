@@ -711,9 +711,14 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			// meant nothing after it — including listener reconciliation — ever
 			// ran again. Deleting the listener makes that stall observable.
 			listener := new(v1alpha1.AutoscalingListener)
-			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)).To(Succeed())
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "listener should exist before deletion")
 			Expect(k8sClient.Delete(ctx, listener)).To(Succeed())
-
 			Eventually(
 				func(g Gomega) {
 					recreated := new(v1alpha1.AutoscalingListener)
