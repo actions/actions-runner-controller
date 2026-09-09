@@ -46,15 +46,6 @@ var commonLabelKeys = [...]string{
 	LabelKeyGitHubRepository,
 }
 
-// annotationKeyIntegrityHash is used as a hash of the important fields
-// of each resource to determine if more drastic action should be taken.
-//
-// For example, annotations/labels are not something that should modify
-// the behavior of a resource, while the change in spec is. Therefore,
-// the spec hash should contain the spec fields in order to determine
-// modifications.
-const annotationKeyIntegrityHash = "actions.github.com/integrity-hash"
-
 const labelValueKubernetesPartOf = "gha-runner-scale-set"
 
 var (
@@ -185,9 +176,7 @@ func (b *ResourceBuilder) newAutoscalingListener(autoscalingRunnerSet *v1alpha1.
 		return nil, fmt.Errorf("failed to apply GitHub URL labels: %v", err)
 	}
 
-	annotations := map[string]string{
-		annotationKeyIntegrityHash: spec.Hash(),
-	}
+	var annotations map[string]string
 
 	if autoscalingRunnerSet.Spec.AutoscalingListenerMetadata != nil {
 		labels = b.filterAndMergeLabels(autoscalingRunnerSet.Spec.AutoscalingListenerMetadata.Labels, labels)
@@ -322,25 +311,11 @@ func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha
 		},
 	}
 
-	desiredSecret.Annotations[annotationKeyIntegrityHash] = scaleSetListenerConfigIntegrityHash(desiredSecret)
-
 	if err := b.setControllerReference(autoscalingListener, desiredSecret); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for listener config secret: %w", err)
 	}
 
 	return desiredSecret, nil
-}
-
-func scaleSetListenerConfigIntegrityHash(secret *corev1.Secret) string {
-	type data struct {
-		Data map[string][]byte `json:"data,omitempty"`
-	}
-
-	d := data{
-		Data: secret.Data,
-	}
-
-	return hash.ComputeTemplateHash(&d)
 }
 
 func (b *ResourceBuilder) newScaleSetListenerPod(
@@ -643,30 +618,12 @@ func (b *ResourceBuilder) newScaleSetListenerServiceAccount(autoscalingListener 
 		base.Annotations = b.mergeAnnotations(autoscalingListener.Spec.ServiceAccountMetadata.Annotations, base.Annotations)
 	}
 
-	base.Annotations[annotationKeyIntegrityHash] = scaleSetListenerServiceAccountIntegrityHash(base)
-
 	if err := b.setControllerReference(autoscalingListener, base); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for listener service account: %w", err)
 	}
 	b.ResourceCache.listenerServiceAccount.Upsert(autoscalingListener, base)
 
 	return base, nil
-}
-
-func scaleSetListenerServiceAccountIntegrityHash(sa *corev1.ServiceAccount) string {
-	type data struct {
-		Secrets                      []corev1.ObjectReference      `json:"secrets"`
-		ImagePullSecrets             []corev1.LocalObjectReference `json:"imagePullSecrets"`
-		AutomountServiceAccountToken *bool                         `json:"automountServiceAccountToken"`
-	}
-
-	d := data{
-		Secrets:                      sa.Secrets,
-		ImagePullSecrets:             sa.ImagePullSecrets,
-		AutomountServiceAccountToken: sa.AutomountServiceAccountToken,
-	}
-
-	return hash.ComputeTemplateHash(&d)
 }
 
 func (b *ResourceBuilder) newScaleSetListenerRole(autoscalingListener *v1alpha1.AutoscalingListener) *rbacv1.Role {
@@ -707,22 +664,9 @@ func (b *ResourceBuilder) newScaleSetListenerRole(autoscalingListener *v1alpha1.
 		Rules: rulesForListenerRole([]string{autoscalingListener.Spec.EphemeralRunnerSetName}),
 	}
 
-	newRole.Annotations[annotationKeyIntegrityHash] = scaleSetRoleIntegrityHash(newRole)
 	b.ResourceCache.listenerRole.Upsert(autoscalingListener, newRole)
 
 	return newRole
-}
-
-func scaleSetRoleIntegrityHash(role *rbacv1.Role) string {
-	type data struct {
-		Rules []rbacv1.PolicyRule `json:"rules"`
-	}
-
-	d := data{
-		Rules: role.Rules,
-	}
-
-	return hash.ComputeTemplateHash(&d)
 }
 
 func (b *ResourceBuilder) newScaleSetListenerRoleBinding(autoscalingListener *v1alpha1.AutoscalingListener, listenerRole *rbacv1.Role, serviceAccount *corev1.ServiceAccount) *rbacv1.RoleBinding {
@@ -777,24 +721,9 @@ func (b *ResourceBuilder) newScaleSetListenerRoleBinding(autoscalingListener *v1
 		Subjects: subjects,
 	}
 
-	newRoleBinding.Annotations[annotationKeyIntegrityHash] = scaleSetListenerRoleBindingIntegrityHash(newRoleBinding)
 	b.ResourceCache.listenerRoleBinding.Upsert(autoscalingListener, newRoleBinding, listenerRole, serviceAccount)
 
 	return newRoleBinding
-}
-
-func scaleSetListenerRoleBindingIntegrityHash(rb *rbacv1.RoleBinding) string {
-	type data struct {
-		RoleRef  rbacv1.RoleRef   `json:"roleRef"`
-		Subjects []rbacv1.Subject `json:"subjects"`
-	}
-
-	d := data{
-		RoleRef:  rb.RoleRef,
-		Subjects: rb.Subjects,
-	}
-
-	return hash.ComputeTemplateHash(&d)
 }
 
 func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) (*v1alpha1.EphemeralRunnerSet, error) {
@@ -886,25 +815,11 @@ func (b *ResourceBuilder) newAutoscalingListenerProxySecret(autoscalingListener 
 		Data: data,
 	}
 
-	newProxySecret.Annotations[annotationKeyIntegrityHash] = autoscalingListenerProxySecretIntegrityHash(newProxySecret)
-
 	if err := b.setControllerReference(autoscalingListener, newProxySecret); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for listener proxy secret: %w", err)
 	}
 
 	return newProxySecret, nil
-}
-
-func autoscalingListenerProxySecretIntegrityHash(secret *corev1.Secret) string {
-	type data struct {
-		Data map[string][]byte `json:"data"`
-	}
-
-	d := data{
-		Data: secret.Data,
-	}
-
-	return hash.ComputeTemplateHash(&d)
 }
 
 func (b *ResourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet) (*v1alpha1.EphemeralRunner, error) {
@@ -1053,25 +968,11 @@ func (b *ResourceBuilder) newEphemeralRunnerSetProxySecret(ephemeralRunnerSet *v
 		Data: data,
 	}
 
-	runnerPodProxySecret.Annotations[annotationKeyIntegrityHash] = ephemeralRunnerSetProxySecretZIdentityHash(runnerPodProxySecret)
-
 	if err := b.setControllerReference(ephemeralRunnerSet, runnerPodProxySecret); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for ephemeral runner set proxy secret: %w", err)
 	}
 
 	return runnerPodProxySecret, nil
-}
-
-func ephemeralRunnerSetProxySecretZIdentityHash(secret *corev1.Secret) string {
-	type data struct {
-		Data map[string][]byte `json:"data"`
-	}
-
-	d := data{
-		Data: secret.Data,
-	}
-
-	return hash.ComputeTemplateHash(&d)
 }
 
 func scaleSetListenerConfigName(autoscalingListener *v1alpha1.AutoscalingListener) string {
