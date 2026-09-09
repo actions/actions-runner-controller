@@ -247,6 +247,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 				return ctrl.Result{}, err
 			}
 			if suppressed {
+				ephemeralRunnerSet.Status.FinishedRunnerCleanupPatchID = ephemeralRunnerSet.Spec.PatchID
 				log.Info("Skipping scale up until listener publishes a fresh desired state after finished runner cleanup", "patchID", ephemeralRunnerSet.Spec.PatchID)
 				return ctrl.Result{}, r.updateStatus(ctx, &ephemeralRunnerSet, ephemeralRunnersByState, log)
 			}
@@ -363,7 +364,11 @@ func (r *EphemeralRunnerSetReconciler) scaleUpServicedByFinishedRunnerCleanup(ct
 func (r *EphemeralRunnerSetReconciler) patchFinishedRunnerCleanupPatchIDStatus(ctx context.Context, key types.NamespacedName, patchID int) error {
 	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		var latest v1alpha1.EphemeralRunnerSet
-		if err := r.Get(ctx, key, &latest); err != nil {
+		reader := r.APIReader
+		if reader == nil {
+			reader = r.Client
+		}
+		if err := reader.Get(ctx, key, &latest); err != nil {
 			return err
 		}
 
