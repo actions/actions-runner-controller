@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -u
+
+if command -v forward-logs.sh >/dev/null 2>&1; then
+    exec forward-logs.sh
+else
+    echo "forward-logs.sh not found in PATH"
+    exit 1
+fi

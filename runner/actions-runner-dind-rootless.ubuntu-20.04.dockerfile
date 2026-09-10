@@ -110,7 +110,7 @@ RUN mkdir /run/user/$RUNNER_UID \
 
 # We place the scripts in `/usr/bin` so that users who extend this image can
 # override them with scripts of the same name placed in `/usr/local/bin`.
-COPY entrypoint-dind-rootless.sh startup.sh logger.sh graceful-stop.sh update-status /usr/bin/
+COPY entrypoint-dind-rootless.sh startup.sh logger.sh graceful-stop.sh update-status forward-logs.sh /usr/bin/
 RUN chmod +x /usr/bin/entrypoint-dind-rootless.sh /usr/bin/startup.sh
 
 # Copy the docker shim which propagates the docker MTU to underlying networks
