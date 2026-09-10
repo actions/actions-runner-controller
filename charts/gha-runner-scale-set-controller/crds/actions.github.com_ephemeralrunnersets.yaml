@@ -48,8 +48,9 @@ spec:
               properties:
                 actionableRevision:
                   description: |-
-                    ActionableRevision is a restart-safe applied marker that increments whenever
-                    Spec.EphemeralRunnerSpec changes, enabling detection of spec updates.
+                    ActionableRevision is the desired runner-spec revision. It increments whenever
+                    Spec.EphemeralRunnerSpec changes, enabling the EphemeralRunnerSet controller
+                    to detect spec updates.
                     Unset defaults to 0.
                   format: int64
                   type: integer
