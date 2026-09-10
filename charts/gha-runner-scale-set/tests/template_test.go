@@ -3152,3 +3152,54 @@ func TestAutoscalingRunnerSetCustomAnnotationsAndLabelsApplied(t *testing.T) {
 	assert.NotEqual(t, "not-propagated", autoscalingRunnerSet.Annotations["actions.github.com/cleanup-manager-role-name"])
 	assert.NotEqual(t, "not-propagated", autoscalingRunnerSet.Labels["app.kubernetes.io/component"])
 }
+
+func TestTemplateRenderedAutoScalingRunnerSet_ScalarMetadataValuesAreRenderedAsStrings(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values_scalar_metadata.yaml")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
+
+	options := &helm.Options{
+		Logger:         logger.Discard,
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	// UnmarshalK8SYaml fails outright if a value decodes as a bool or number rather than a
+	// string, so a successful decode is itself part of the assertion.
+	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+	var autoscalingRunnerSet v1alpha1.AutoscalingRunnerSet
+	helm.UnmarshalK8SYaml(t, output, &autoscalingRunnerSet)
+
+	assert.Equal(t, "true", autoscalingRunnerSet.Labels["chart-bool"])
+	assert.Equal(t, "1", autoscalingRunnerSet.Labels["chart-int"])
+	assert.Equal(t, "false", autoscalingRunnerSet.Annotations["chart-bool-annotation"])
+	assert.Equal(t, "1.5", autoscalingRunnerSet.Annotations["chart-float-annotation"])
+	assert.Equal(t, "12345678901234", autoscalingRunnerSet.Annotations["chart-big-int-annotation"])
+
+	assert.Equal(t, "true", autoscalingRunnerSet.Spec.Template.Labels["pod-bool"])
+	assert.Equal(t, "42", autoscalingRunnerSet.Spec.Template.Labels["pod-int"])
+	assert.Equal(t, "true", autoscalingRunnerSet.Spec.Template.Annotations["pod-bool-annotation"])
+	assert.Equal(t, "7", autoscalingRunnerSet.Spec.Template.Annotations["pod-int-annotation"])
+
+	require.NotNil(t, autoscalingRunnerSet.Spec.EphemeralRunnerMetadata)
+	assert.Equal(t, "false", autoscalingRunnerSet.Spec.EphemeralRunnerMetadata.Labels["runner-bool"])
+	assert.Equal(t, "3", autoscalingRunnerSet.Spec.EphemeralRunnerMetadata.Labels["runner-int"])
+	assert.Equal(t, "9", autoscalingRunnerSet.Spec.EphemeralRunnerMetadata.Annotations["runner-int-annotation"])
+
+	output = helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/githubsecret.yaml"})
+
+	var githubSecret corev1.Secret
+	helm.UnmarshalK8SYaml(t, output, &githubSecret)
+
+	assert.Equal(t, "5", githubSecret.Labels["secret-int"])
+	assert.Equal(t, "true", githubSecret.Labels["chart-bool"])
+	assert.Equal(t, "1.5", githubSecret.Annotations["chart-float-annotation"])
+}
