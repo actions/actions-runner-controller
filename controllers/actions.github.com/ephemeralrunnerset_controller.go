@@ -299,10 +299,20 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 // reconciler already has, because the cleanup can take long enough for that copy
 // to go stale, and a conflicting write must not be resolved by replaying an old
 // status.
+//
+// The read bypasses the cache because this also clears
+// FinishedRunnerCleanupPatchID, and the patch is computed as a diff against the
+// object that was read. A cached read that still showed the field as 0 while the
+// API server held a recorded marker would produce a patch with no entry for the
+// field, silently leaving the stale marker in place.
 func (r *EphemeralRunnerSetReconciler) patchAppliedActionableRevisionStatus(ctx context.Context, key types.NamespacedName, targetAppliedRevision int64) error {
 	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		var latest v1alpha1.EphemeralRunnerSet
-		if err := r.Get(ctx, key, &latest); err != nil {
+		reader := r.APIReader
+		if reader == nil {
+			reader = r.Client
+		}
+		if err := reader.Get(ctx, key, &latest); err != nil {
 			return err
 		}
 
@@ -312,6 +322,16 @@ func (r *EphemeralRunnerSetReconciler) patchAppliedActionableRevisionStatus(ctx 
 
 		original := latest.DeepCopy()
 		latest.Status.AppliedActionableRevision = targetAppliedRevision
+
+		// The marker records a patch ID from the sequence that was current before
+		// this spec change. Applying a new revision deletes the idle and pending
+		// runners, so the shortfall that follows belongs to the new spec and must
+		// be filled. Worse, a spec change restarts the listener, and a restarted
+		// listener numbers its patches from 0 upwards, counting through every
+		// integer. It therefore passes through a leftover marker value with
+		// near-certainty, and would suppress the very scale up that rebuilds the
+		// pool.
+		latest.Status.FinishedRunnerCleanupPatchID = 0
 
 		return r.Status().Patch(ctx, &latest, client.MergeFrom(original))
 	})
@@ -323,23 +343,34 @@ func (r *EphemeralRunnerSetReconciler) patchAppliedActionableRevisionStatus(ctx 
 // listener.
 //
 // The marker is written by an earlier reconcile and then read back here, so the
-// cached copy handed to Reconcile cannot be trusted on its own: deleting the
-// finished runners triggers watch events that schedule the next reconcile, and
-// that reconcile can be served from an informer cache that has not yet observed
-// the controller's own status write. Reading a zero marker there would skip the
-// suppression and create exactly the unwanted runner this logic exists to
-// prevent.
+// cached copy handed to Reconcile cannot be trusted: deleting the finished
+// runners triggers watch events that schedule the next reconcile, and that
+// reconcile can be served from an informer cache that has not yet observed the
+// controller's own status write. The decision is therefore always made against
+// an uncached read. That confines the extra API call to scale-up decisions,
+// where the controller is about to issue creates anyway.
 //
-// A cached hit is always safe, because nothing clears the marker, so only a miss
-// falls through to an uncached read. That confines the extra API call to
-// scale-up decisions, where the controller is about to issue creates anyway.
+// An earlier version short-circuited on a cached hit, on the reasoning that the
+// marker was only ever set and so a hit could never be a false positive. That
+// reasoning no longer holds: applying a new actionable revision clears the
+// marker, so a lagging cache can show a recorded marker that the API server has
+// already cleared, and trusting it would suppress exactly the scale up that
+// rebuilds the pool after a spec change.
+//
+// One window remains. A listener that restarts without a spec change keeps the
+// marker but starts its patch sequence again from 0 and counts up through every
+// integer, so it passes through the recorded value with near-certainty rather
+// than by coincidence. If that collision lands on a reconcile that needs to
+// scale up, that reconcile is suppressed.
+//
+// That is a hiccup rather than an outage. The listener calls back into scaling
+// on every long-poll timeout, not only when something changes, and once the set
+// is idle at its minimum with no job completed it publishes the collapsed patch
+// ID 0, which is never suppressed. So the shortfall is filled on the next
+// long-poll cycle.
 func (r *EphemeralRunnerSetReconciler) scaleUpServicedByFinishedRunnerCleanup(ctx context.Context, key types.NamespacedName, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet) (bool, error) {
 	if ephemeralRunnerSet.Spec.PatchID == 0 {
 		return false, nil
-	}
-
-	if ephemeralRunnerSet.Status.FinishedRunnerCleanupPatchID == ephemeralRunnerSet.Spec.PatchID {
-		return true, nil
 	}
 
 	if r.APIReader == nil {
