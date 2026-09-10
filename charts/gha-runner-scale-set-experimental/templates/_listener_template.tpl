@@ -5,9 +5,16 @@
   {{- fail ".Values.listener.podTemplate must have at least metadata or spec defined" -}}
 {{- end -}}
 {{- with $metadata -}}
+{{- $out := omit . "labels" "annotations" -}}
+{{- with .labels -}}
+{{- $_ := set $out "labels" (fromYaml (include "string-map" .)) -}}
+{{- end -}}
+{{- with .annotations -}}
+{{- $_ := set $out "annotations" (fromYaml (include "string-map" .)) -}}
+{{- end -}}
 metadata:
-  {{- toYaml . | nindent 2 }}
-{{- end }}
+  {{- toYaml $out | nindent 2 }}
+{{ end }}
 {{- with $spec -}}
 spec:
   {{- $containers := (index . "containers" | default (list)) -}}
