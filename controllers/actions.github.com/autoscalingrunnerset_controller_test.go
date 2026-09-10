@@ -527,12 +527,27 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 		// longer drags the scale set through the Pending phase the way the old
 		// label-inclusive hash did. Labels still propagate to the
 		// EphemeralRunnerSet, they just do not count as an update to apply.
-		It("does not re-observe a generation when only labels change", func() {
+		// A label-only edit does not bump metadata.generation, so it is not an
+		// update to apply. It does still rebuild the listener, because the
+		// desired listener labels are derived from the AutoscalingRunnerSet's,
+		// and the phase has to report that.
+		It("does not re-observe a generation when only labels change, but still reports the listener rebuild", func() {
+			listener := new(v1alpha1.AutoscalingListener)
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "Listener should be created")
+			originalListenerUID := listener.UID
+
 			var settledGeneration int64
 			Eventually(
 				func(g Gomega) {
 					current := new(v1alpha1.AutoscalingRunnerSet)
 					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhaseRunning))
 					g.Expect(current.Status.ObservedGeneration).To(Equal(current.Generation))
 					settledGeneration = current.Generation
 				},
@@ -554,13 +569,38 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 				autoscalingRunnerSetTestInterval,
 			).Should(Succeed())
 
+			// The listener is rebuilt to pick the new label up, so the scale set
+			// must not keep claiming to be running while that happens.
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, current)).To(Succeed())
+					g.Expect(current.UID).NotTo(Equal(originalListenerUID), "listener should be re-created to pick up the new label")
+					g.Expect(current.Labels).To(HaveKeyWithValue("arc.test/label-drift", "updated"), "listener should carry the new label")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+
+			// Once the listener is back, the scale set settles on Running again
+			// without the observed generation ever moving, because no spec write
+			// happened.
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhaseRunning))
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "AutoscalingRunnerSet should return to Running once the listener is rebuilt")
+
 			Consistently(
 				func(g Gomega) {
 					current := new(v1alpha1.AutoscalingRunnerSet)
 					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
 					g.Expect(current.Generation).To(Equal(settledGeneration), "a label-only edit must not bump metadata.generation")
-					g.Expect(current.Status.ObservedGeneration).To(Equal(settledGeneration))
-					g.Expect(current.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhaseRunning), "a label-only edit must not push the scale set back to Pending")
+					g.Expect(current.Status.ObservedGeneration).To(Equal(settledGeneration), "a label-only edit must not move the observed generation")
 				},
 				3*time.Second,
 				autoscalingRunnerSetTestInterval,
