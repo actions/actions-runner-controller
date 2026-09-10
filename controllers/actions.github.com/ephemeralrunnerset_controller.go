@@ -335,7 +335,24 @@ func (r *EphemeralRunnerSetReconciler) patchAppliedActionableRevisionStatus(ctx 
 		}
 
 		original := latest.DeepCopy()
-		latest.Status.AppliedActionableRevision = targetAppliedRevision
+
+		// Only an advance means the idle and pending runners were just deleted and
+		// the listener restarted. Guarding both writes on it keeps this callable
+		// as a plain "make sure status reflects revision N" without disturbing a
+		// marker that still describes the live patch sequence.
+		if latest.Status.AppliedActionableRevision < targetAppliedRevision {
+			latest.Status.AppliedActionableRevision = targetAppliedRevision
+
+			// The marker records a patch ID from the sequence that was current
+			// before this spec change. Applying a new revision deletes the idle and
+			// pending runners, so the shortfall that follows belongs to the new spec
+			// and must be filled. Worse, a spec change restarts the listener, and a
+			// restarted listener numbers its patches from 0 upwards, counting
+			// through every integer. It therefore passes through a leftover marker
+			// value with near-certainty, and would suppress the very scale up that
+			// rebuilds the pool.
+			latest.Status.FinishedRunnerCleanupPatchID = 0
+		}
 
 		ephemeralRunnerList := new(v1alpha1.EphemeralRunnerList)
 		if err := r.List(ctx, ephemeralRunnerList, client.InNamespace(latest.Namespace), client.MatchingFields{resourceOwnerKey: latest.Name}); err != nil {
@@ -359,16 +376,6 @@ func (r *EphemeralRunnerSetReconciler) patchAppliedActionableRevisionStatus(ctx 
 		} else {
 			latest.Status.Phase = v1alpha1.EphemeralRunnerSetPhaseRunning
 		}
-
-		// The marker records a patch ID from the sequence that was current before
-		// this spec change. Applying a new revision deletes the idle and pending
-		// runners, so the shortfall that follows belongs to the new spec and must
-		// be filled. Worse, a spec change restarts the listener, and a restarted
-		// listener numbers its patches from 0 upwards, counting through every
-		// integer. It therefore passes through a leftover marker value with
-		// near-certainty, and would suppress the very scale up that rebuilds the
-		// pool.
-		latest.Status.FinishedRunnerCleanupPatchID = 0
 
 		// Checked after every field above has been set, so that clearing the
 		// marker alone is still enough to issue the patch.

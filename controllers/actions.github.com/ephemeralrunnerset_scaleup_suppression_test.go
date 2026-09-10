@@ -153,6 +153,10 @@ func TestPatchAppliedActionableRevisionStatusClearsFinishedRunnerCleanupPatchID(
 			WithScheme(scheme).
 			WithObjects(object).
 			WithStatusSubresource(&v1alpha1.EphemeralRunnerSet{}).
+			// patchAppliedActionableRevisionStatus lists the child runners to
+			// recompute the phase, so the fake client needs the same index
+			// SetupIndexers registers on the manager.
+			WithIndex(&v1alpha1.EphemeralRunner{}, resourceOwnerKey, newGroupVersionOwnerKindIndexer("EphemeralRunnerSet")).
 			Build()
 	}
 
