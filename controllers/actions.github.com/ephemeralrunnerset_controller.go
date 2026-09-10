@@ -87,7 +87,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 	if err := r.Get(ctx, req.NamespacedName, &ephemeralRunnerSet); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	original := ephemeralRunnerSet.DeepCopy()
+	runnerSet := newLazyCopy(&ephemeralRunnerSet)
 
 	// Requested deletion does not need reconciled.
 	if !ephemeralRunnerSet.DeletionTimestamp.IsZero() {
@@ -117,8 +117,8 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 
 		log.Info("Removing finalizer")
-		if controllerutil.RemoveFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName) {
-			if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
+		if controllerutil.RemoveFinalizer(runnerSet.Mutate(), EphemeralRunnerSetFinalizerName) {
+			if err := r.Patch(ctx, &ephemeralRunnerSet, runnerSet.MergeFrom()); err != nil {
 				log.Error(err, "Failed to update ephemeral runner set with removed finalizer")
 				return ctrl.Result{}, err
 			}
@@ -130,9 +130,10 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	// Add finalizer if not present
-	if controllerutil.AddFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName) {
+	if !controllerutil.ContainsFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName) {
+		controllerutil.AddFinalizer(runnerSet.Mutate(), EphemeralRunnerSetFinalizerName)
 		log.Info("Adding finalizer")
-		if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
+		if err := r.Patch(ctx, &ephemeralRunnerSet, runnerSet.MergeFrom()); err != nil {
 			log.Error(err, "Failed to update ephemeral runner set with new finalizer")
 			return ctrl.Result{}, err
 		}
@@ -353,14 +354,16 @@ func (r *EphemeralRunnerSetReconciler) patchAppliedActionableRevisionStatus(ctx 
 			return err
 		}
 
-		original := latest.DeepCopy()
+		// Build the desired status as a value so no copy of the object is taken
+		// on the common path where the status already matches.
+		desiredStatus := latest.Status
 
 		// Only an advance means the idle and pending runners were just deleted and
 		// the listener restarted. Guarding both writes on it keeps this callable
 		// as a plain "make sure status reflects revision N" without disturbing a
 		// marker that still describes the live patch sequence.
 		if latest.Status.AppliedActionableRevision < targetAppliedRevision {
-			latest.Status.AppliedActionableRevision = targetAppliedRevision
+			desiredStatus.AppliedActionableRevision = targetAppliedRevision
 
 			// The marker records a patch ID from the sequence that was current
 			// before this spec change. Applying a new revision deletes the idle and
@@ -370,7 +373,7 @@ func (r *EphemeralRunnerSetReconciler) patchAppliedActionableRevisionStatus(ctx 
 			// through every integer. It therefore passes through a leftover marker
 			// value with near-certainty, and would suppress the very scale up that
 			// rebuilds the pool.
-			latest.Status.FinishedRunnerCleanupPatchID = 0
+			desiredStatus.FinishedRunnerCleanupPatchID = 0
 		}
 
 		ephemeralRunnerList := new(v1alpha1.EphemeralRunnerList)
@@ -425,16 +428,19 @@ func (r *EphemeralRunnerSetReconciler) patchAppliedActionableRevisionStatus(ctx 
 		// outdated runners from the cleanup path, and a stale Outdated would keep
 		// the set switched off after the spec that caused it was replaced.
 		if len(state.outdated) > 0 {
-			latest.Status.Phase = v1alpha1.EphemeralRunnerSetPhaseOutdated
+			desiredStatus.Phase = v1alpha1.EphemeralRunnerSetPhaseOutdated
 		} else {
-			latest.Status.Phase = v1alpha1.EphemeralRunnerSetPhaseRunning
+			desiredStatus.Phase = v1alpha1.EphemeralRunnerSetPhaseRunning
 		}
 
 		// Checked after every field above has been set, so that clearing the
 		// marker alone is still enough to issue the patch.
-		if original.Status == latest.Status {
+		if latest.Status == desiredStatus {
 			return nil
 		}
+
+		original := latest.DeepCopy()
+		latest.Status = desiredStatus
 
 		return r.Status().Patch(ctx, &latest, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{}))
 	})
@@ -551,7 +557,6 @@ func (r *EphemeralRunnerSetReconciler) patchFinishedRunnerCleanupPatchIDStatus(c
 }
 
 func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, state *ephemeralRunnersByState, log logr.Logger) error {
-	original := ephemeralRunnerSet.DeepCopy()
 	var phase v1alpha1.EphemeralRunnerSetPhase
 	switch {
 	case len(state.outdated) > 0:
@@ -569,6 +574,7 @@ func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemer
 
 	// Update the status if needed.
 	if ephemeralRunnerSet.Status != desiredStatus {
+		original := ephemeralRunnerSet.DeepCopy()
 		ephemeralRunnerSet.Status = desiredStatus
 		if err := r.Status().Patch(ctx, ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
 			log.Error(err, "Failed to update EphemeralRunnerSet status")
