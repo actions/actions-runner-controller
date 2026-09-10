@@ -467,7 +467,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			return ctrl.Result{}, err
 		}
 
-		shouldReCreate := desiredPod.Annotations[annotationKeyIntegrityHash] != listenerPod.Annotations[annotationKeyIntegrityHash]
+		shouldReCreate := listenerPodSpecRequiresRecreation(&listenerPod, desiredPod)
 		if shouldReCreate {
 			log.Info("Listener pod dependency changed, recreating listener pod")
 			if err := r.deleteListenerPod(ctx, &autoscalingListener, &listenerPod, log); err != nil {

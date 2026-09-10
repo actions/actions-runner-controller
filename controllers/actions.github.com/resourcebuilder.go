@@ -472,23 +472,15 @@ func (b *ResourceBuilder) newScaleSetListenerPod(
 			Kind:       "Pod",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        autoscalingListener.Name,
-			Namespace:   autoscalingListener.Namespace,
-			Labels:      labels,
-			Annotations: make(map[string]string),
+			Name:      autoscalingListener.Name,
+			Namespace: autoscalingListener.Namespace,
+			Labels:    labels,
+			Annotations: map[string]string{
+				AnnotationKeyListenerConfigResourceVersion: podConfig.ResourceVersion,
+			},
 		},
 		Spec: podSpec,
 	}
-
-	newRunnerScaleSetListenerPod.Annotations[annotationKeyIntegrityHash] = scaleSetListenerPodIntegrity(
-		newRunnerScaleSetListenerPod,
-		autoscalingListener,
-		podConfig,
-		serviceAccount,
-		role,
-		roleBinding,
-		metricsConfig,
-	)
 
 	if err := b.setControllerReference(autoscalingListener, newRunnerScaleSetListenerPod); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for listener pod: %w", err)
@@ -500,38 +492,6 @@ func (b *ResourceBuilder) newScaleSetListenerPod(
 	b.ResourceCache.listenerPod.Upsert(autoscalingListener, newRunnerScaleSetListenerPod, podConfig, serviceAccount, role, roleBinding)
 
 	return newRunnerScaleSetListenerPod, nil
-}
-
-func scaleSetListenerPodIntegrity(
-	pod *corev1.Pod,
-	autoscalingListener *v1alpha1.AutoscalingListener,
-	podConfig *corev1.Secret,
-	serviceAccount *corev1.ServiceAccount,
-	role *rbacv1.Role,
-	roleBinding *rbacv1.RoleBinding,
-	metricsConfig *listenerMetricsServerConfig,
-) string {
-	type data struct {
-		ListenerPodSpec                  *corev1.PodSpec              `json:"listenerPodSpec,omitempty"`
-		AutoscalingListenerIntegrityHash string                       `json:"autoscalingListenerIntegrityHash"`
-		ConfigSecretIntegrityHash        string                       `json:"configSecretIntegrityHash"`
-		ServiceAccountIntegrityHash      string                       `json:"serviceAccountIntegrityHash"`
-		RoleIntegrityHash                string                       `json:"roleIntegrityHash"`
-		RoleBindingIntegrityHash         string                       `json:"roleBindingIntegrityHash"`
-		MetricsConfig                    *listenerMetricsServerConfig `json:"metricsConfig,omitempty"`
-	}
-
-	d := data{
-		ListenerPodSpec:                  &pod.Spec,
-		AutoscalingListenerIntegrityHash: autoscalingListener.Annotations[annotationKeyIntegrityHash],
-		ConfigSecretIntegrityHash:        podConfig.Annotations[annotationKeyIntegrityHash],
-		ServiceAccountIntegrityHash:      serviceAccount.Annotations[annotationKeyIntegrityHash],
-		RoleIntegrityHash:                role.Annotations[annotationKeyIntegrityHash],
-		RoleBindingIntegrityHash:         roleBinding.Annotations[annotationKeyIntegrityHash],
-		MetricsConfig:                    metricsConfig,
-	}
-
-	return hash.ComputeTemplateHash(&d)
 }
 
 func mergeListenerPodWithTemplate(pod *corev1.Pod, tmpl *corev1.PodTemplateSpec) {

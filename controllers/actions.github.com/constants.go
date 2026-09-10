@@ -50,6 +50,13 @@ const (
 	AnnotationKeyGitHubRunnerGroupName    = "actions.github.com/runner-group-name"
 	AnnotationKeyGitHubRunnerScaleSetName = "actions.github.com/runner-scale-set-name"
 	AnnotationKeyPatchID                  = "actions.github.com/patch-id"
+	// AnnotationKeyListenerConfigResourceVersion records the resource version of
+	// the listener config secret the listener pod was created from. The pod
+	// mounts that secret and parses it once at startup, so a change to its
+	// contents only takes effect after a restart. Nothing about the change is
+	// visible in the pod spec, which references the secret by name, so the
+	// resource version is carried on the pod to make the drift observable.
+	AnnotationKeyListenerConfigResourceVersion = "actions.github.com/listener-config-resource-version"
 )
 
 // Labels applied to listener roles
