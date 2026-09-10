@@ -4,20 +4,25 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"log/slog"
 	"math"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"sync"
 	"testing"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/scaleset"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/retry"
 )
 
 var discardLogger = slog.New(slog.DiscardHandler)
@@ -198,6 +203,77 @@ func TestHandleJobStarted(t *testing.T) {
 		assertJobStartedStatus(t, runner, jobInfo)
 		assert.Equal(t, v1alpha1.EphemeralRunnerPhasePending, runner.Status.Phase)
 	})
+
+	t.Run("guards the phase transition with the observed resourceVersion", func(t *testing.T) {
+		runner := newTestEphemeralRunner(jobInfo.RunnerName, v1alpha1.EphemeralRunnerPhaseRunning)
+		scaler, api, shutdown := newTestScalerWithAPI(t, runner, nil)
+		defer shutdown()
+
+		observedResourceVersion := runner.ResourceVersion
+		require.NoError(t, scaler.HandleJobStarted(context.Background(), jobInfo))
+
+		meta, ok := api.patch()["metadata"].(map[string]any)
+		require.True(t, ok, "patch must carry a metadata precondition, got %v", api.patch())
+		assert.Equal(t, observedResourceVersion, meta["resourceVersion"])
+	})
+
+	t.Run("omits the precondition when the phase is not transitioned", func(t *testing.T) {
+		runner := newTestEphemeralRunner(jobInfo.RunnerName, v1alpha1.EphemeralRunnerPhaseFailed)
+		scaler, api, shutdown := newTestScalerWithAPI(t, runner, nil)
+		defer shutdown()
+
+		require.NoError(t, scaler.HandleJobStarted(context.Background(), jobInfo))
+
+		_, hasMetadata := api.patch()["metadata"]
+		assert.False(t, hasMetadata, "job fields alone must not be guarded, got %v", api.patch())
+	})
+
+	// A runner can reach a terminal phase between the read that decides the
+	// transition and the patch that applies it. Without a precondition the
+	// listener would resurrect it back into Running.
+	for _, phase := range []v1alpha1.EphemeralRunnerPhase{
+		v1alpha1.EphemeralRunnerPhaseFailed,
+		v1alpha1.EphemeralRunnerPhaseSucceeded,
+		v1alpha1.EphemeralRunnerPhaseOutdated,
+	} {
+		t.Run("does not resurrect a runner that became "+string(phase)+" concurrently", func(t *testing.T) {
+			runner := newTestEphemeralRunner(jobInfo.RunnerName, v1alpha1.EphemeralRunnerPhasePending)
+
+			var raced bool
+			scaler, api, shutdown := newTestScalerWithAPI(t, runner, func(runner *v1alpha1.EphemeralRunner) {
+				if raced {
+					return
+				}
+				raced = true
+				runner.Status.Phase = phase
+			})
+			defer shutdown()
+
+			require.NoError(t, scaler.HandleJobStarted(context.Background(), jobInfo))
+
+			assert.Equal(t, phase, runner.Status.Phase)
+			assertJobStartedStatus(t, runner, jobInfo)
+
+			gets, patches, conflicts := api.counts()
+			assert.Equal(t, 1, conflicts, "the stale patch must be rejected")
+			assert.Equal(t, 2, gets, "the runner must be re-read after the conflict")
+			assert.Equal(t, 2, patches)
+		})
+	}
+
+	t.Run("gives up when the runner keeps changing", func(t *testing.T) {
+		runner := newTestEphemeralRunner(jobInfo.RunnerName, v1alpha1.EphemeralRunnerPhasePending)
+		scaler, api, shutdown := newTestScalerWithAPI(t, runner, func(runner *v1alpha1.EphemeralRunner) {})
+		defer shutdown()
+
+		err := scaler.HandleJobStarted(context.Background(), jobInfo)
+		require.Error(t, err)
+		assert.True(t, kerrors.IsConflict(err), "expected a conflict error, got %v", err)
+
+		_, _, conflicts := api.counts()
+		assert.Equal(t, retry.DefaultRetry.Steps, conflicts)
+		assert.Equal(t, v1alpha1.EphemeralRunnerPhasePending, runner.Status.Phase)
+	})
 }
 
 func newTestEphemeralRunner(name string, phase v1alpha1.EphemeralRunnerPhase) *v1alpha1.EphemeralRunner {
@@ -215,15 +291,89 @@ func newTestEphemeralRunner(name string, phase v1alpha1.EphemeralRunnerPhase) *v
 func newTestScaler(t *testing.T, runner *v1alpha1.EphemeralRunner) (*Scaler, func()) {
 	t.Helper()
 
+	scaler, _, shutdown := newTestScalerWithAPI(t, runner, nil)
+	return scaler, shutdown
+}
+
+// fakeRunnerAPI records what the scaler sent to the API server.
+type fakeRunnerAPI struct {
+	mu         sync.Mutex
+	gets       int
+	patches    int
+	conflicts  int
+	lastPatch  map[string]any
+	patchedRVs []string
+}
+
+func (f *fakeRunnerAPI) counts() (gets, patches, conflicts int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.gets, f.patches, f.conflicts
+}
+
+func (f *fakeRunnerAPI) patch() map[string]any {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.lastPatch
+}
+
+// newTestScalerWithAPI serves runner over a fake API server that emulates the
+// resourceVersion precondition enforced by kube-apiserver on merge patches.
+// afterGet, when set, runs after every read is served and simulates another
+// writer mutating the runner before the scaler's patch lands.
+func newTestScalerWithAPI(t *testing.T, runner *v1alpha1.EphemeralRunner, afterGet func(runner *v1alpha1.EphemeralRunner)) (*Scaler, *fakeRunnerAPI, func()) {
+	t.Helper()
+
+	api := &fakeRunnerAPI{}
+	if runner.ResourceVersion == "" {
+		runner.ResourceVersion = "1"
+	}
+
+	bumpResourceVersion := func() {
+		rv, err := strconv.Atoi(runner.ResourceVersion)
+		require.NoError(t, err)
+		runner.ResourceVersion = strconv.Itoa(rv + 1)
+	}
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		api.mu.Lock()
+		defer api.mu.Unlock()
+
 		w.Header().Set("Content-Type", "application/json")
 
 		switch r.Method {
 		case http.MethodGet:
+			api.gets++
 			require.NoError(t, json.NewEncoder(w).Encode(runner))
+			if afterGet != nil {
+				afterGet(runner)
+				bumpResourceVersion()
+			}
 		case http.MethodPatch:
+			api.patches++
+
+			body, err := io.ReadAll(r.Body)
+			require.NoError(t, err)
+
+			var raw map[string]any
+			require.NoError(t, json.Unmarshal(body, &raw))
+			api.lastPatch = raw
+
+			// Emulate the optimistic concurrency check performed by the API
+			// server when metadata.resourceVersion is present in the patch.
+			if meta, ok := raw["metadata"].(map[string]any); ok {
+				if rv, ok := meta["resourceVersion"].(string); ok {
+					api.patchedRVs = append(api.patchedRVs, rv)
+					if rv != runner.ResourceVersion {
+						api.conflicts++
+						writeConflict(t, w, runner.Name)
+						return
+					}
+				}
+			}
+
 			var patch v1alpha1.EphemeralRunner
-			require.NoError(t, json.NewDecoder(r.Body).Decode(&patch))
+			require.NoError(t, json.Unmarshal(body, &patch))
 
 			runner.Status.JobRequestID = patch.Status.JobRequestID
 			runner.Status.JobRepositoryName = patch.Status.JobRepositoryName
@@ -234,6 +384,7 @@ func newTestScaler(t *testing.T, runner *v1alpha1.EphemeralRunner) (*Scaler, fun
 			if patch.Status.Phase != "" {
 				runner.Status.Phase = patch.Status.Phase
 			}
+			bumpResourceVersion()
 
 			require.NoError(t, json.NewEncoder(w).Encode(runner))
 		default:
@@ -252,7 +403,20 @@ func newTestScaler(t *testing.T, runner *v1alpha1.EphemeralRunner) (*Scaler, fun
 		targetRunners: -1,
 		patchSeq:      -1,
 		logger:        discardLogger,
-	}, server.Close
+	}, api, server.Close
+}
+
+func writeConflict(t *testing.T, w http.ResponseWriter, name string) {
+	t.Helper()
+
+	w.WriteHeader(http.StatusConflict)
+	require.NoError(t, json.NewEncoder(w).Encode(&metav1.Status{
+		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Status"},
+		Status:   metav1.StatusFailure,
+		Code:     http.StatusConflict,
+		Reason:   metav1.StatusReasonConflict,
+		Message:  fmt.Sprintf("Operation cannot be fulfilled on ephemeralrunners.actions.github.com %q: the object has been modified", name),
+	}))
 }
 
 func assertJobStartedStatus(t *testing.T, runner *v1alpha1.EphemeralRunner, jobInfo *scaleset.JobStarted) {
