@@ -150,7 +150,7 @@ func syncPV(ctx context.Context, c client.Client, log logr.Logger, ns string, pv
 	log.V(2).Info("Reconciling PV")
 
 	if pv.Labels[labelKeyCleanup] == "" {
-		// We assume that the pvc is shortly terminated, hence retry forever until it gets removed.
+		// We assume that the PVC is shortly terminated, hence retry forever until it gets removed.
 		retry := 10 * time.Second
 		log.V(2).Info("Retrying sync to see if this PV needs to be managed by ARC", "requeueAfter", retry)
 		return &ctrl.Result{RequeueAfter: retry}, nil
@@ -159,14 +159,20 @@ func syncPV(ctx context.Context, c client.Client, log logr.Logger, ns string, pv
 	log.V(2).Info("checking pv phase", "phase", pv.Status.Phase)
 
 	if pv.Status.Phase != corev1.VolumeReleased {
-		// We assume that the pvc is shortly terminated, hence retry forever until it gets removed.
+		// We assume that the PVC is shortly terminated, hence retry forever until it gets removed.
 		retry := 10 * time.Second
-		log.V(1).Info("Retrying sync until pvc gets released", "requeueAfter", retry)
+		log.V(1).Info("Retrying sync until PVC gets released", "requeueAfter", retry)
 		return &ctrl.Result{RequeueAfter: retry}, nil
 	}
 
-	// At this point, the PV is still Released
+	// Check if the PV has ReclaimPolicy "Delete".
+	if pv.Spec.PersistentVolumeReclaimPolicy == corev1.PersistentVolumeReclaimDelete {
+		log.Info("Skipping manipulation for PV with 'Delete' reclaim policy", "pv", pv.Name)
+		// For PVs with ReclaimPolicy "Delete", we don't need to do anything.
+		return nil, nil
+	}
 
+	// If ReclaimPolicy is not "Delete", we proceed to clean up the ClaimRef.
 	pvCopy := pv.DeepCopy()
 	delete(pvCopy.Labels, labelKeyCleanup)
 	pvCopy.Spec.ClaimRef = nil
@@ -176,10 +182,6 @@ func syncPV(ctx context.Context, c client.Client, log logr.Logger, ns string, pv
 	}
 
 	log.Info("PV should be Available now")
-
-	// At this point, the PV becomes Available, if it's reclaim policy is "Retain".
-	// I have not yet tested it with "Delete" but perhaps it's deleted automatically after the update?
-	// https://kubernetes.io/docs/concepts/storage/persistent-volumes/#retain
 
 	return nil, nil
 }
