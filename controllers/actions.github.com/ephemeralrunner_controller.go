@@ -834,6 +834,7 @@ func (r *EphemeralRunnerReconciler) createSecret(ctx context.Context, runner *v1
 
 // updateRunStatusFromPod is responsible for updating non-exiting statuses.
 // It should never update phase to Failed or Succeeded
+// It should never update phase to Running (the listener owns that transition)
 //
 // The event should not be re-queued since the termination status should be set
 // before proceeding with reconciliation logic
@@ -851,8 +852,15 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 		}
 	}
 
-	phase := v1alpha1.EphemeralRunnerPhase(pod.Status.Phase)
-	phaseChanged := ephemeralRunner.Status.Phase != phase
+	phase := ephemeralRunner.Status.Phase
+	if pod.Status.Phase == corev1.PodPending && phase == "" {
+		phase = v1alpha1.EphemeralRunnerPhasePending
+	}
+
+	// The controller no longer promotes the runner to Running. The listener owns that
+	// transition and applies it when a job is assigned to this runner. The controller
+	// still publishes the initial Pending phase while the runner pod is starting.
+	phaseChanged := phase != ephemeralRunner.Status.Phase
 	readyChanged := ready != ephemeralRunner.Status.Ready
 
 	if !phaseChanged && !readyChanged {
