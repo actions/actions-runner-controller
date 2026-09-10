@@ -46,7 +46,7 @@ jobs:
           version: ${{ env.HELM_VERSION }}
 
       # python is a requirement for the chart-testing action below (supports yamllint among other tests)
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
@@ -84,7 +84,7 @@ jobs:
           version: ${{ env.HELM_VERSION }}
 
       # python is a requirement for the chart-testing action below (supports yamllint among other tests)
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
@@ -115,7 +115,7 @@ jobs:
         run: |
           helm unittest ./charts/gha-runner-scale-set-experimental/
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: "go.mod"
           cache: false
