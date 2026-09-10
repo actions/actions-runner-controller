@@ -36,8 +36,9 @@ type EphemeralRunnerSetSpec struct {
 	// but does not apply to existing ephemeral runners.
 	// +optional
 	EphemeralRunnerMetadata *ResourceMeta `json:"ephemeralRunnerMetadata,omitempty"`
-	// ActionableRevision is a restart-safe applied marker that increments whenever
-	// Spec.EphemeralRunnerSpec changes, enabling detection of spec updates.
+	// ActionableRevision is the desired runner-spec revision. It increments whenever
+	// Spec.EphemeralRunnerSpec changes, enabling the EphemeralRunnerSet controller
+	// to detect spec updates.
 	// Unset defaults to 0.
 	// +optional
 	ActionableRevision int64 `json:"actionableRevision,omitempty"`
