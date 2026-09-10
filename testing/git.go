@@ -33,6 +33,10 @@ func (g *GitRepo) Sync(ctx context.Context) error {
 		return errors.New("missing git dir")
 	}
 
+	if g.Branch == "" {
+		return errors.New("missing git branch")
+	}
+
 	dir, err := filepath.Abs(g.Dir)
 	if err != nil {
 		return fmt.Errorf("error getting abs path for %q: %w", g.Dir, err)
