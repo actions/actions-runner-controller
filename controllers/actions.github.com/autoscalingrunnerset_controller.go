@@ -373,6 +373,25 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		if !cmp.Equal(listener.Spec, desired.Spec) ||
 			!cmp.Equal(listener.Labels, desired.Labels) ||
 			!cmp.Equal(listener.Annotations, desired.Annotations) {
+			// The listener is about to be torn down and rebuilt, which is what
+			// the pending phase means. Report it here rather than relying on the
+			// generation check above: the desired listener is derived from the
+			// AutoscalingRunnerSet's labels and annotations as well as its spec,
+			// and metadata writes do not bump metadata.generation. Without this,
+			// a label-only edit would leave the scale set claiming to be running
+			// while it has no listener at all, and it would keep claiming that
+			// if the rebuild never succeeded.
+			if err := r.updateStatus(
+				ctx,
+				&autoscalingRunnerSet,
+				v1alpha1.AutoscalingRunnerSetPhasePending,
+				autoscalingRunnerSet.Status.ObservedGeneration,
+				log,
+			); err != nil {
+				log.Error(err, "Failed to update autoscaling runner set status before re-creating the listener")
+				return ctrl.Result{}, err
+			}
+
 			log.Info("Deleting AutoscalingListener to re-create with updated spec")
 			if err := r.Delete(ctx, &listener); err != nil {
 				log.Error(err, "Failed to delete AutoscalingListener for re-creation")
