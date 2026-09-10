@@ -665,6 +665,75 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			).Should(Succeed(), "EphemeralRunnerSet should be patched with annotation-only metadata drift")
 		})
 
+		It("preserves foreign annotations and labels on the EphemeralRunnerSet", func() {
+			runnerSet := new(v1alpha1.EphemeralRunnerSet)
+			Eventually(
+				func() (string, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, runnerSet)
+					if err != nil {
+						return "", err
+					}
+					return runnerSet.Annotations["arc.test/metadata-annotation"], nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Equal("initial"), "EphemeralRunnerSet should start with the predefined annotation")
+
+			// Simulate a third party (admission webhook, another controller, a user)
+			// adding metadata the AutoscalingRunnerSet knows nothing about.
+			foreign := runnerSet.DeepCopy()
+			foreign.Annotations["thirdparty.example.com/injected"] = "keep-me"
+			foreign.Labels["thirdparty.example.com/injected"] = "keep-me"
+			err := k8sClient.Patch(ctx, foreign, client.MergeFrom(runnerSet))
+			Expect(err).NotTo(HaveOccurred(), "failed to inject foreign metadata on EphemeralRunnerSet")
+
+			// Force the controller through the metadata reconciliation path.
+			patched := autoscalingRunnerSet.DeepCopy()
+			patched.Spec.EphemeralRunnerSetMetadata.Annotations["arc.test/metadata-annotation"] = "updated"
+			err = k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))
+			Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingRunnerSet EphemeralRunnerSet metadata")
+
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.EphemeralRunnerSet)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, current)
+					g.Expect(err).NotTo(HaveOccurred(), "failed to get EphemeralRunnerSet")
+					g.Expect(current.Annotations["arc.test/metadata-annotation"]).To(Equal("updated"))
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "desired annotation should still propagate")
+
+			// The foreign keys must survive, and the controller must be able to get
+			// past the metadata block. Before the fix the comparison was made
+			// against the unmerged desired metadata, so a foreign key made the
+			// block report "modified" on every reconcile and return early, which
+			// meant nothing after it — including listener reconciliation — ever
+			// ran again. Deleting the listener makes that stall observable.
+			listener := new(v1alpha1.AutoscalingListener)
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "listener should exist before deletion")
+			Expect(k8sClient.Delete(ctx, listener)).To(Succeed())
+			Eventually(
+				func(g Gomega) {
+					recreated := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, recreated)).To(Succeed())
+
+					current := new(v1alpha1.EphemeralRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, current)).To(Succeed())
+					g.Expect(current.Annotations).To(HaveKeyWithValue("thirdparty.example.com/injected", "keep-me"), "foreign annotation must not be stripped")
+					g.Expect(current.Labels).To(HaveKeyWithValue("thirdparty.example.com/injected", "keep-me"), "foreign label must not be stripped")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "reconciliation must converge past the metadata block instead of looping on it")
+		})
+
 		It("updates EphemeralRunnerSet runner metadata when only EphemeralRunner metadata changes", func() {
 			runnerSet := new(v1alpha1.EphemeralRunnerSet)
 			Eventually(
