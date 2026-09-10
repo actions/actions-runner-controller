@@ -122,6 +122,40 @@ Hook extension ConfigMap name for kubernetes runner mode.
 If runner.kubernetesMode.extension.metadata.name is set, use it.
 Otherwise, default to a name derived from the scale set name.
 */}}
+{{/*
+Validate runner.container fields.
+
+Fails with a descriptive error if:
+- runner.container is set but is not a map/object
+- runner.container.env is set but is not a list
+- runner.container.volumeMounts is set but is not a list
+- runner.container.args is set but is not a list
+- runner.container.securityContext is set but is not a map/object
+- runner.container.volumes is set (unsupported; use runner.pod.spec.volumes)
+*/}}
+{{- define "runner.container.validate" -}}
+{{- $runner := (.Values.runner | default dict) -}}
+{{- $container := ($runner.container | default dict) -}}
+{{- if and (hasKey $runner "container") (not (kindIs "map" $container)) -}}
+  {{- fail "runner.container must be a map/object" -}}
+{{- end -}}
+{{- if and (hasKey $container "env") (not (kindIs "slice" $container.env)) -}}
+  {{- fail "runner.container.env must be a list" -}}
+{{- end -}}
+{{- if and (hasKey $container "volumeMounts") (not (kindIs "slice" $container.volumeMounts)) -}}
+  {{- fail "runner.container.volumeMounts must be a list" -}}
+{{- end -}}
+{{- if hasKey $container "volumes" -}}
+  {{- fail "runner.container.volumes is not supported; use runner.pod.spec.volumes" -}}
+{{- end -}}
+{{- if and (hasKey $container "args") (not (kindIs "slice" $container.args)) -}}
+  {{- fail "runner.container.args must be a list" -}}
+{{- end -}}
+{{- if and (hasKey $container "securityContext") (not (kindIs "map" $container.securityContext)) -}}
+  {{- fail "runner.container.securityContext must be a map/object" -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "runner-mode-kubernetes.extension-name" -}}
 {{- $runner := (.Values.runner | default dict) -}}
 {{- $kubeMode := (index $runner "kubernetesMode" | default dict) -}}
