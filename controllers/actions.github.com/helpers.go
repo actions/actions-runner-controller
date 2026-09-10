@@ -14,9 +14,17 @@ import (
 // listener after a restart. None of that is visible in the pod spec, which
 // references the secret by name and is byte-identical before and after, so the
 // desired pod carries the secret's resource version as an annotation and drift
-// is detected by comparing it. An empty annotation on the live pod is ignored:
-// pods created before this annotation existed would otherwise all be recreated
-// on controller upgrade, and the next legitimate config change recreates them
+// is detected by comparing it.
+//
+// A pod that predates this annotation counts as drift and is recreated once, on
+// the first reconcile after the controller is upgraded. Ignoring it instead is
+// tempting, to avoid that rollout, but it loses updates: the reconcile that
+// declines to recreate the pod goes on to patch the desired annotations onto it,
+// so a config change that landed while the old controller was running is
+// recorded as already applied and the listener keeps serving the configuration
+// it parsed at startup, with nothing to ever correct it. The rollout is cheap by
+// comparison - deleting a listener does not disturb the runners it started, and
+// an upgrade normally changes the listener image and so recreates the pod
 // anyway.
 //
 // The resource version also moves when only the secret's labels or annotations
@@ -63,12 +71,15 @@ func listenerPodSpecRequiresRecreation(current, desired *corev1.Pod) bool {
 }
 
 func listenerConfigChanged(current, desired *corev1.Pod) bool {
-	currentVersion := current.Annotations[AnnotationKeyListenerConfigResourceVersion]
 	desiredVersion := desired.Annotations[AnnotationKeyListenerConfigResourceVersion]
-	if currentVersion == "" || desiredVersion == "" {
+	if desiredVersion == "" {
+		// Nothing to compare against, so there is nothing this check can say.
+		// The desired pod is always built from a secret read back from the API
+		// server, so this only happens in tests.
 		return false
 	}
-	return currentVersion != desiredVersion
+
+	return current.Annotations[AnnotationKeyListenerConfigResourceVersion] != desiredVersion
 }
 
 func listenerContainerPortsRemoved(current, desired *corev1.Pod) bool {

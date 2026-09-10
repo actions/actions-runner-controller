@@ -301,8 +301,14 @@ func TestListenerPodSpecRequiresRecreation_ConfigSecretChanged(t *testing.T) {
 		"missing on live pod": {
 			liveVersion:    "",
 			desiredVersion: "101",
+			want:           true,
+			why:            "a pod predating the annotation is recreated once, because otherwise the reconcile that spares it patches the annotation on and the config change is lost for good",
+		},
+		"missing on desired pod": {
+			liveVersion:    "100",
+			desiredVersion: "",
 			want:           false,
-			why:            "pods predating the annotation must not all be recreated on controller upgrade",
+			why:            "there is nothing to compare against, so this check must not claim drift",
 		},
 	}
 
