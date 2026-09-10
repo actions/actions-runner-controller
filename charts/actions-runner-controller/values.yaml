@@ -141,6 +141,13 @@ tolerations: []
 
 affinity: {}
 
+minReadySeconds: 10
+
+# Probes
+startupProbe: {}
+livenessProbe: {}
+readinessProbe: {}
+
 # Only one of minAvailable or maxUnavailable can be set
 podDisruptionBudget:
   enabled: false
