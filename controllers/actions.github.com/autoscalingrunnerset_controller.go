@@ -163,56 +163,8 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		}
 	}
 
-	outdated := autoscalingRunnerSet.Status.Phase == v1alpha1.AutoscalingRunnerSetPhaseOutdated
-	if outdated {
-		log.Info("Autoscaling runner set is in outdated phase, removing the listener")
-		done, err := r.cleanupListener(ctx, &autoscalingRunnerSet, log)
-		if err != nil {
-			log.Error(err, "Failed to clean up listener")
-			return ctrl.Result{}, err
-		}
-		if !done {
-			log.Info("Waiting for listener to be cleaned up for the outdated runner set")
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
-		}
-
-		var ephemeralRunnerSet v1alpha1.EphemeralRunnerSet
-		err = r.Get(
-			ctx,
-			types.NamespacedName{
-				Namespace: autoscalingRunnerSet.Namespace,
-				Name:      autoscalingRunnerSet.Name,
-			},
-			&ephemeralRunnerSet,
-		)
-		switch {
-		case kerrors.IsNotFound(err):
-			// If the ephemeral runner set is not found, something removed the ephemeral runner set. The ephemeral runner set should
-			// not be removed by the controller once it is outdated. However, if the ephemeral runner set is removed, it means no ephemeral
-			// runners should be running (or at least no ephemeral runners associated with the ephemeral runner set).
-			// Therefore, this state is acceptable, because the update to the autoscaling runner set will trigger the loop
-			// that will eventually create a new ephemeral runner set.
-			log.Info("Ephemeral runner set is not found. Ignoring the state until the autoscaling runner set is updated")
-			return ctrl.Result{}, nil
-		case err != nil:
-			log.Error(err, "Failed to get ephemeral runner set for the outdated runner set")
-			return ctrl.Result{}, err
-		default:
-			if !ephemeralRunnerSet.DeletionTimestamp.IsZero() {
-				// Same as NotFound case, ignore.
-				return ctrl.Result{}, nil
-			}
-
-			original := ephemeralRunnerSet.DeepCopy()
-			ephemeralRunnerSet.Spec.Replicas = 0
-			ephemeralRunnerSet.Spec.PatchID = 0
-			if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
-				log.Error(err, "Failed to patch ephemeral runner set with 0 replicas and reset patch ID for the outdated runner set")
-				return ctrl.Result{}, err
-			}
-
-			return ctrl.Result{}, nil
-		}
+	if autoscalingRunnerSet.Status.Phase == v1alpha1.AutoscalingRunnerSetPhaseOutdated {
+		return r.reconcileOutdated(ctx, &autoscalingRunnerSet, log)
 	}
 
 	if shouldCreateScaleSet(&autoscalingRunnerSet) {
@@ -251,37 +203,24 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		log.Error(err, "Failed to get ephemeral runner")
 		return ctrl.Result{}, err
 	case ephemeralRunnerSetOutdatedForAppliedRevision(&ephemeralRunnerSet) && autoscalingRunnerSet.Status.Phase == v1alpha1.AutoscalingRunnerSetPhaseRunning:
-		// Runners are outdated. We need to stop the listener so it stops getting new jobs.
-		log.Info("Ephemeral runner set is outdated. Cleaning up resources for the outdated runner set")
-		done, err := r.cleanupListener(ctx, &autoscalingRunnerSet, log)
-		if err != nil {
-			log.Error(err, "Failed to clean up listener for outdated ephemeral runner set")
+		// The runners rejected the spec they were given, so the scale set has to
+		// stop acquiring jobs it cannot run. Record that in the phase first: it is
+		// what keeps the listener switched off across reconciles, and what stops
+		// the branches below from rebuilding it. The observed generation is carried
+		// over unchanged, so a spec update still registers as new work.
+		log.Info("Ephemeral runner set is outdated. Moving the autoscaling runner set to the outdated phase")
+		if err := r.updateStatus(
+			ctx,
+			&autoscalingRunnerSet,
+			v1alpha1.AutoscalingRunnerSetPhaseOutdated,
+			autoscalingRunnerSet.Status.ObservedGeneration,
+			log,
+		); err != nil {
+			log.Error(err, "Failed to update autoscaling runner set status with outdated phase")
 			return ctrl.Result{}, err
 		}
-		if !done {
-			log.Info("Waiting for listener to be cleaned up for the outdated ephemeral runner set")
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
-		}
 
-		// Then, we need to remove the ephemeral runner set to force scale-down. The ephemeral runner set
-		// will eventually remove all runners as soon as possible.
-		//
-		// The scale set should not be removed yet, since user did not explicitly remove the scale set (or the autoscaling runner set)
-		// Therefore, the autoscaling runner set should stay in outdated state until the spec is updated,
-		// or until the autoscaling runner set is removed.
-		done, err = r.cleanupEphemeralRunnerSet(ctx, &autoscalingRunnerSet, log)
-		if err != nil {
-			log.Error(err, "Failed to clean up ephemeral runner set for outdated runner set")
-			return ctrl.Result{}, err
-		}
-		if !done {
-			log.Info("Waiting for ephemeral runner set to be cleaned up for the outdated runner set")
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
-		}
-
-		log.Info("Successfully cleaned up resources for the outdated runner set")
-
-		return ctrl.Result{}, nil
+		return r.reconcileOutdated(ctx, &autoscalingRunnerSet, log)
 
 	default:
 		desired, err := r.newEphemeralRunnerSet(&autoscalingRunnerSet)
@@ -290,7 +229,19 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			return ctrl.Result{}, nil
 		}
 
-		if ephemeralRunnerSetActionableSpecChanged(&ephemeralRunnerSet, desired) {
+		if ephemeralRunnerSetActionableSpecChanged(&ephemeralRunnerSet, desired) ||
+			ephemeralRunnerSetOutdatedForAppliedRevision(&ephemeralRunnerSet) {
+			// The second condition is the recovery path out of the outdated phase.
+			// Reaching here at all means the AutoscalingRunnerSet is not outdated,
+			// and the case above already claimed every running set that is, so the
+			// spec must have been updated since the runners rejected it. That update
+			// is the signal to try again, and the revision has to advance even when
+			// the runner spec itself is unchanged: the revision is what tells the
+			// EphemeralRunnerSet to stop judging itself by the runners that failed,
+			// which is what clears its outdated phase and lets it scale up again.
+			// Without it a scale set could only ever be recovered by editing the
+			// runner spec, and an edit to anything else would switch the listener
+			// back on against a set that stays parked at zero.
 			original := ephemeralRunnerSet.DeepCopy()
 			ephemeralRunnerSet.Spec.EphemeralRunnerMetadata = desired.Spec.EphemeralRunnerMetadata
 			ephemeralRunnerSet.Spec.EphemeralRunnerSpec = desired.Spec.EphemeralRunnerSpec
@@ -418,6 +369,74 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// reconcileOutdated holds a scale set whose runners rejected the runner spec.
+//
+// The listener is removed so no new jobs are acquired, and the EphemeralRunnerSet
+// is pinned to zero replicas so it releases every runner that is not currently
+// executing a job. The set itself is deliberately kept: the user has not asked
+// for the scale set to go away, and deleting it would make the controller
+// immediately rebuild it from the same rejected spec, in a loop. Keeping it also
+// preserves the revision bookkeeping that decides when the scale set may run
+// again.
+//
+// This state is left only when the AutoscalingRunnerSet spec is updated, which
+// moves the phase back to pending and lets the next reconcile publish the new
+// spec to the set.
+func (r *AutoscalingRunnerSetReconciler) reconcileOutdated(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, log logr.Logger) (ctrl.Result, error) {
+	log.Info("Autoscaling runner set is in outdated phase, removing the listener")
+	done, err := r.cleanupListener(ctx, autoscalingRunnerSet, log)
+	if err != nil {
+		log.Error(err, "Failed to clean up listener")
+		return ctrl.Result{}, err
+	}
+	if !done {
+		log.Info("Waiting for listener to be cleaned up for the outdated runner set")
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
+	var ephemeralRunnerSet v1alpha1.EphemeralRunnerSet
+	err = r.Get(
+		ctx,
+		types.NamespacedName{
+			Namespace: autoscalingRunnerSet.Namespace,
+			Name:      autoscalingRunnerSet.Name,
+		},
+		&ephemeralRunnerSet,
+	)
+	switch {
+	case kerrors.IsNotFound(err):
+		// If the ephemeral runner set is not found, something removed the ephemeral runner set. The ephemeral runner set should
+		// not be removed by the controller once it is outdated. However, if the ephemeral runner set is removed, it means no ephemeral
+		// runners should be running (or at least no ephemeral runners associated with the ephemeral runner set).
+		// Therefore, this state is acceptable, because the update to the autoscaling runner set will trigger the loop
+		// that will eventually create a new ephemeral runner set.
+		log.Info("Ephemeral runner set is not found. Ignoring the state until the autoscaling runner set is updated")
+		return ctrl.Result{}, nil
+	case err != nil:
+		log.Error(err, "Failed to get ephemeral runner set for the outdated runner set")
+		return ctrl.Result{}, err
+	default:
+		if !ephemeralRunnerSet.DeletionTimestamp.IsZero() {
+			// Same as NotFound case, ignore.
+			return ctrl.Result{}, nil
+		}
+
+		if ephemeralRunnerSet.Spec.Replicas == 0 && ephemeralRunnerSet.Spec.PatchID == 0 {
+			return ctrl.Result{}, nil
+		}
+
+		original := ephemeralRunnerSet.DeepCopy()
+		ephemeralRunnerSet.Spec.Replicas = 0
+		ephemeralRunnerSet.Spec.PatchID = 0
+		if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
+			log.Error(err, "Failed to patch ephemeral runner set with 0 replicas and reset patch ID for the outdated runner set")
+			return ctrl.Result{}, err
+		}
+
+		return ctrl.Result{}, nil
+	}
 }
 
 func (r *AutoscalingRunnerSetReconciler) cleanUpResources(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, log logr.Logger) (bool, error) {
