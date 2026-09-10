@@ -218,7 +218,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		// to the next reconcile, which sees the post-cleanup state.
 		if len(ephemeralRunnersByState.finished) > 0 {
 			if err := r.deleteTerminatedEphemeralRunners(ctx, ephemeralRunnersByState.finished, log); err != nil {
-				log.Error(err, "failed to cleanup finished ephemeral runners")
+				log.Error(err, "failed to delete terminated ephemeral runners")
 				return ctrl.Result{}, err
 			}
 			if err := r.patchFinishedRunnerCleanupPatchIDStatus(ctx, req.NamespacedName, ephemeralRunnerSet.Spec.PatchID); err != nil {
