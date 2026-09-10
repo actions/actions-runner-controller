@@ -16,9 +16,11 @@ import (
 	"github.com/actions/scaleset"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/retry"
 )
 
 var discardLogger = slog.New(slog.DiscardHandler)
@@ -204,6 +206,44 @@ func TestHandleJobStarted(t *testing.T) {
 		// while the promotion to Running is abandoned rather than clobbering Failed.
 		assertJobStartedStatus(t, runner, jobInfo)
 		assert.Equal(t, v1alpha1.EphemeralRunnerPhaseFailed, runner.Status.Phase)
+	})
+
+	for _, phase := range []v1alpha1.EphemeralRunnerPhase{
+		v1alpha1.EphemeralRunnerPhaseSucceeded,
+		v1alpha1.EphemeralRunnerPhaseOutdated,
+	} {
+		t.Run("does not resurrect a runner that became "+string(phase)+" concurrently", func(t *testing.T) {
+			runner := newTestEphemeralRunner(jobInfo.RunnerName, v1alpha1.EphemeralRunnerPhasePending)
+			raceTerminalWrite := func() {
+				runner.Status.Phase = phase
+				runner.ResourceVersion = strconv.Itoa(mustAtoi(t, runner.ResourceVersion) + 1)
+			}
+			scaler, shutdown := newTestScaler(t, runner, raceTerminalWrite)
+			defer shutdown()
+
+			require.NoError(t, scaler.HandleJobStarted(context.Background(), jobInfo))
+
+			assertJobStartedStatus(t, runner, jobInfo)
+			assert.Equal(t, phase, runner.Status.Phase)
+		})
+	}
+
+	t.Run("gives up when the runner keeps changing", func(t *testing.T) {
+		runner := newTestEphemeralRunner(jobInfo.RunnerName, v1alpha1.EphemeralRunnerPhasePending)
+		raceWrite := func() {
+			runner.ResourceVersion = strconv.Itoa(mustAtoi(t, runner.ResourceVersion) + 1)
+		}
+		onPatch := make([]func(), retry.DefaultRetry.Steps)
+		for i := range onPatch {
+			onPatch[i] = raceWrite
+		}
+		scaler, shutdown := newTestScaler(t, runner, onPatch...)
+		defer shutdown()
+
+		err := scaler.HandleJobStarted(context.Background(), jobInfo)
+		require.Error(t, err)
+		assert.True(t, kerrors.IsConflict(err), "expected a conflict error, got %v", err)
+		assert.Equal(t, v1alpha1.EphemeralRunnerPhasePending, runner.Status.Phase)
 	})
 
 	t.Run("preserves deleting runner phase while patching job fields", func(t *testing.T) {
