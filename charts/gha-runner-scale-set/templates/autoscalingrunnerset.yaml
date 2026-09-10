@@ -1,6 +1,7 @@
 {{- $resourceMeta := default (dict) .Values.resourceMeta }}
 {{- $hasCustomResourceMeta := (and .Values.resourceMeta .Values.resourceMeta.autoscalingRunnerSet) }}
 {{- /* .Values.listenerConfig is validated by values.schema.json */ -}}
+{{- include "gha-runner-scale-set.validateMetadata" . }}
 apiVersion: actions.github.com/v1alpha1
 kind: AutoscalingRunnerSet
 metadata:

@@ -1,4 +1,5 @@
 {{- $runner := (.Values.runner | default dict) }}
+{{- include "validate-all-metadata" . }}
 {{- $runnerMode := (index $runner "mode" | default "") }}
 {{- $kubeMode := (index $runner "kubernetesMode" | default dict) }}
 {{- $dind := (index $runner "dind" | default dict) }}

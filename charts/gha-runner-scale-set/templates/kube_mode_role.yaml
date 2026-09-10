@@ -1,3 +1,4 @@
+{{- include "gha-runner-scale-set.validateMetadata" . }}
 {{- $containerMode := .Values.containerMode }}
 {{- $hasCustomResourceMeta := (and .Values.resourceMeta .Values.resourceMeta.kubernetesModeRole) }}
 {{- if and (or (eq $containerMode.type "kubernetes") (eq $containerMode.type "kubernetes-novolume")) (not .Values.template.spec.serviceAccountName) }}
