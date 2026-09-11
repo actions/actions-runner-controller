@@ -417,6 +417,24 @@ func (r *EphemeralRunnerSetReconciler) scaleUpServicedByFinishedRunnerCleanup(ct
 // read and the patch rather than closing it, because the decision is only as
 // fresh as the moment it was taken. The lock is what makes the write conditional
 // on that decision still holding.
+//
+// The check below is deliberately an equality test and must not be relaxed into
+// the >= monotonicity test the applied revision uses. Applied revisions derive
+// from metadata.generation and only ever climb, but listener patch IDs do not:
+// setDesiredWorkerState publishes 0 whenever the set is idle at MinRunners with
+// nothing dirty, restarts its sequence from 0 when the listener restarts, and
+// wraps explicitly at math.MaxInt32. So Spec.PatchID legitimately moves
+// backwards, and the marker has to follow it. Refusing to record a lower patch
+// ID would strand the marker above every value the listener goes on to publish,
+// and since the scale-up guard suppresses only on an exact match, suppression
+// would never fire again -- disabling the behaviour this layer exists to add.
+//
+// That is also why the lock is the right fix rather than a stricter comparison.
+// It cannot make an older patch ID unwritable, because the retry re-reads and
+// re-applies the same argument; recording the patch ID whose cleanup actually
+// happened is a true statement regardless of ordering, and the next cleanup
+// re-records. What the lock prevents is a write decided against state that has
+// since changed.
 func (r *EphemeralRunnerSetReconciler) patchFinishedRunnerCleanupPatchIDStatus(ctx context.Context, key types.NamespacedName, patchID int) error {
 	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		var latest v1alpha1.EphemeralRunnerSet
