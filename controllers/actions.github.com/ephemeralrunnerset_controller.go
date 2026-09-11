@@ -385,9 +385,16 @@ func (r *EphemeralRunnerSetReconciler) patchAppliedActionableRevisionStatus(ctx 
 		// resourceOwnerKey cannot be used here. It is a client-side index
 		// registered on the manager's cache, and the API server rejects it as an
 		// unsupported field label, so the ownership filter has to be applied in
-		// this process instead. The list is namespace-scoped, and a namespace
-		// holds the runners of one scale set, so this reads little more than the
-		// selector would have.
+		// this process instead.
+		//
+		// Narrowing server-side by label is not a safe alternative either. Label
+		// propagation is operator-configurable through
+		// --exclude-label-propagation-prefix, so the scale set labels are not
+		// guaranteed to reach the runners, and a selector that silently matched
+		// none of them would derive the phase from an empty list rather than
+		// fail. A namespace can hold more than one scale set, so this does read
+		// runners that are not ours, but it only runs when a revision actually
+		// advances rather than on every reconcile.
 		if err := reader.List(ctx, ephemeralRunnerList, client.InNamespace(latest.Namespace)); err != nil {
 			return fmt.Errorf("failed to list child ephemeral runners: %w", err)
 		}
@@ -395,12 +402,22 @@ func (r *EphemeralRunnerSetReconciler) patchAppliedActionableRevisionStatus(ctx 
 			return !isControlledBy(&runner, "EphemeralRunnerSet", latest.Name)
 		})
 
-		// Judge the runners against the revision being applied, not the one
-		// recorded in status: every runner created before this update is stale by
-		// definition, so its Outdated report says nothing about the new spec. This
-		// is what lets a spec update clear the Outdated phase immediately rather
-		// than waiting for the pre-update runners to be collected.
-		state := newEphemeralRunnersByStates(ephemeralRunnerList, targetAppliedRevision)
+		// Judge the runners against the revision the set has now applied, rather
+		// than the one this call was asked to apply: every runner created before
+		// that revision is stale by definition, so its Outdated report says
+		// nothing about the current spec. This is what lets a spec update clear
+		// the Outdated phase immediately rather than waiting for the pre-update
+		// runners to be collected.
+		//
+		// After the guard above, this field is max(live, target), and the two
+		// differ in a case that matters. The caller reads the spec from the
+		// cache while this function re-reads the status from the API server, so
+		// a lagging reconcile can arrive with a target behind the live marker.
+		// Judging against that lower target would rate a runner left over from
+		// the superseded revision as current and flip a set that has already
+		// moved on back to Outdated. That phase is deliberately absorbing, so
+		// the set would then stay switched off until the next spec change.
+		state := newEphemeralRunnersByStates(ephemeralRunnerList, latest.Status.AppliedActionableRevision)
 
 		// Set the phase in both directions. This function returns early from
 		// Reconcile without reaching updateStatus, so leaving the phase untouched
