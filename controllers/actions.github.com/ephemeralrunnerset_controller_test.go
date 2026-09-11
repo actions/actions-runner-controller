@@ -627,7 +627,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 
 			// confirm they are not deleted
 			runnerList = new(v1alpha1.EphemeralRunnerList)
-			Eventually(
+			Consistently(
 				func() (int, error) {
 					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
 					if err != nil {
