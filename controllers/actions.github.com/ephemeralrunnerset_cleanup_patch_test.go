@@ -100,6 +100,54 @@ func TestPatchFinishedRunnerCleanupPatchIDStatusUsesOptimisticLock(t *testing.T)
 	assert.Equal(t, 4, updated.Status.FinishedRunnerCleanupPatchID)
 }
 
+// TestPatchFinishedRunnerCleanupPatchIDStatusRecordsALowerPatchID pins the
+// equality check against being "tidied" into the >= monotonicity check its
+// neighbour uses.
+//
+// Applied revisions come from metadata.generation and only climb, but listener
+// patch IDs do not: the scaler publishes 0 whenever the set is idle at
+// MinRunners with nothing dirty, restarts its sequence from 0 on a listener
+// restart, and wraps explicitly at math.MaxInt32. A marker that refused to move
+// down would sit above every value the listener subsequently publishes, and
+// because the scale-up guard suppresses only on an exact match, suppression
+// would never fire again.
+func TestPatchFinishedRunnerCleanupPatchIDStatusRecordsALowerPatchID(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, v1alpha1.AddToScheme(scheme))
+
+	ephemeralRunnerSet := &v1alpha1.EphemeralRunnerSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ers",
+			Namespace: "default",
+		},
+		Status: v1alpha1.EphemeralRunnerSetStatus{
+			FinishedRunnerCleanupPatchID: 7,
+		},
+	}
+
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(ephemeralRunnerSet).
+		WithStatusSubresource(&v1alpha1.EphemeralRunnerSet{}).
+		Build()
+
+	reconciler := &EphemeralRunnerSetReconciler{
+		Client:    c,
+		APIReader: c,
+		Log:       logr.Discard(),
+		Scheme:    scheme,
+	}
+
+	key := types.NamespacedName{Namespace: ephemeralRunnerSet.Namespace, Name: ephemeralRunnerSet.Name}
+	require.NoError(t, reconciler.patchFinishedRunnerCleanupPatchIDStatus(context.Background(), key, 1))
+
+	var updated v1alpha1.EphemeralRunnerSet
+	require.NoError(t, c.Get(context.Background(), key, &updated))
+	assert.Equal(t, 1, updated.Status.FinishedRunnerCleanupPatchID,
+		"a restarted or collapsed patch sequence must be recorded, or suppression can never match Spec.PatchID again")
+}
+
 // TestPatchFinishedRunnerCleanupPatchIDStatusIsIdempotent covers the early
 // return: a marker already recording this patch ID must not be rewritten, so
 // repeated reconciles for one patch do not churn the status.
