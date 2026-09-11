@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.summerwind.net/v1alpha1"
 	"github.com/actions/actions-runner-controller/github"
@@ -13,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	ctrlclientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
@@ -434,6 +436,97 @@ func TestDetermineDesiredReplicas_RepositoryRunner(t *testing.T) {
 				t.Errorf("%d: incorrect desired replicas: want %d, got %d", i, tc.want, got)
 			}
 		})
+	}
+}
+
+// TestDetermineDesiredReplicas_PercentageRunnersBusyWithWebhookReservation reproduces
+// https://github.com/actions/actions-runner-controller/issues/1962: combining the
+// PercentageRunnersBusy metric with an active webhook CapacityReservation must not
+// double-count the reservation and compound the replica count on every reconcile.
+func TestDetermineDesiredReplicas_PercentageRunnersBusyWithWebhookReservation(t *testing.T) {
+	intPtr := func(v int) *int {
+		return &v
+	}
+
+	log := zap.New(func(o *zap.Options) {
+		o.Development = true
+	})
+
+	scheme := runtime.NewScheme()
+	_ = clientgoscheme.AddToScheme(scheme)
+	_ = v1alpha1.AddToScheme(scheme)
+
+	server := fake.NewServer(
+		fake.WithListRunnersResponse(200, fake.RunnersListBody),
+	)
+	defer server.Close()
+	ghc := newGithubClient(server)
+
+	h := &HorizontalRunnerAutoscalerReconciler{
+		Log:                   log,
+		Scheme:                scheme,
+		Client:                ctrlclientfake.NewClientBuilder().WithScheme(scheme).Build(),
+		DefaultScaleDownDelay: DefaultScaleDownDelay,
+	}
+
+	rd := v1alpha1.RunnerDeployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "testrd"},
+		Spec: v1alpha1.RunnerDeploymentSpec{
+			Template: v1alpha1.RunnerTemplate{
+				Spec: v1alpha1.RunnerSpec{
+					RunnerConfig: v1alpha1.RunnerConfig{Repository: "test/valid"},
+				},
+			},
+			Replicas: intPtr(1),
+		},
+	}
+
+	hra := v1alpha1.HorizontalRunnerAutoscaler{
+		Spec: v1alpha1.HorizontalRunnerAutoscalerSpec{
+			MinReplicas: intPtr(1),
+			MaxReplicas: intPtr(20),
+			Metrics: []v1alpha1.MetricSpec{
+				{Type: v1alpha1.AutoscalingMetricTypePercentageRunnersBusy},
+			},
+			// A webhook-triggered reservation for one queued job's worth of capacity,
+			// still active across every reconcile below.
+			CapacityReservations: []v1alpha1.CapacityReservation{
+				{
+					Name:           "queued-job",
+					Replicas:       3,
+					ExpirationTime: metav1.NewTime(time.Now().Add(time.Hour)),
+				},
+			},
+		},
+	}
+
+	now := time.Now()
+
+	// minReplicas + the reservation, counted exactly once.
+	want := *hra.Spec.MinReplicas + 3
+
+	var got int
+	for i := 0; i < 5; i++ {
+		minReplicas, _, _, err := h.getMinReplicas(log, now, hra)
+		if err != nil {
+			t.Fatalf("iteration %d: unexpected error: %v", i, err)
+		}
+
+		st := h.scaleTargetFromRD(context.Background(), rd)
+
+		got, err = h.computeReplicasWithCache(ghc, log, now, st, hra, minReplicas)
+		if err != nil {
+			t.Fatalf("iteration %d: unexpected error: %v", i, err)
+		}
+
+		if got != want {
+			t.Errorf("iteration %d: got %d desired replicas, want %d (minReplicas+reserved, stable) - a growing sequence means the reservation is being double-counted (#1962)", i, got, want)
+		}
+
+		// Simulate the controller patching the RunnerDeployment to the newly computed
+		// replica count before the next reconcile, exactly as Reconcile() does.
+		rd.Spec.Replicas = intPtr(got)
+		hra.Status.DesiredReplicas = intPtr(got)
 	}
 }
 

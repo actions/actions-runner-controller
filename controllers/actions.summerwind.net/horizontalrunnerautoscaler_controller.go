@@ -475,9 +475,18 @@ func (r *HorizontalRunnerAutoscalerReconciler) getMinReplicas(log logr.Logger, n
 }
 
 func (r *HorizontalRunnerAutoscalerReconciler) computeReplicasWithCache(ghc *arcgithub.Client, log logr.Logger, now time.Time, st scaleTarget, hra v1alpha1.HorizontalRunnerAutoscaler, minReplicas int) (int, error) {
+	var reserved int
+
+	for _, reservation := range hra.Spec.CapacityReservations {
+		if reservation.ExpirationTime.After(now) {
+			reserved += reservation.Replicas
+		}
+	}
+
+	// reserved is passed in so suggesters can exclude it from their own baseline (#1962).
 	var suggestedReplicas int
 
-	v, err := r.suggestDesiredReplicas(ghc, st, hra)
+	v, err := r.suggestDesiredReplicas(ghc, st, hra, reserved)
 	if err != nil {
 		return 0, err
 	}
@@ -486,14 +495,6 @@ func (r *HorizontalRunnerAutoscalerReconciler) computeReplicasWithCache(ghc *arc
 		suggestedReplicas = minReplicas
 	} else {
 		suggestedReplicas = *v
-	}
-
-	var reserved int
-
-	for _, reservation := range hra.Spec.CapacityReservations {
-		if reservation.ExpirationTime.After(now) {
-			reserved += reservation.Replicas
-		}
 	}
 
 	newDesiredReplicas := suggestedReplicas + reserved
