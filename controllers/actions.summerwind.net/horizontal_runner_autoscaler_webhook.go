@@ -470,7 +470,7 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) getScaleUpTargetWithF
 	})
 
 	if traverseErr != nil {
-		return nil, err
+		return nil, traverseErr
 	}
 
 	if t == nil {
