@@ -23,7 +23,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/actions/actions-runner-controller/hash"
 	"github.com/actions/actions-runner-controller/vault"
 	"golang.org/x/net/http/httpproxy"
 	corev1 "k8s.io/api/core/v1"
@@ -322,6 +321,10 @@ type HistogramMetric struct {
 type AutoscalingRunnerSetStatus struct {
 	// +optional
 	Phase AutoscalingRunnerSetPhase `json:"phase"`
+	// ObservedGeneration tracks the metadata.generation of this ARS at observation time,
+	// enabling detection of Pending phase when generation differs. Unset defaults to 0.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 type AutoscalingRunnerSetPhase string
@@ -333,26 +336,6 @@ const (
 	AutoscalingRunnerSetPhaseRunning  AutoscalingRunnerSetPhase = "Running"
 	AutoscalingRunnerSetPhaseOutdated AutoscalingRunnerSetPhase = "Outdated"
 )
-
-func (ars *AutoscalingRunnerSet) Hash() string {
-	type data struct {
-		Spec   *AutoscalingRunnerSetSpec
-		Labels map[string]string
-	}
-
-	d := &data{
-		Spec:   ars.Spec.DeepCopy(),
-		Labels: ars.Labels,
-	}
-
-	return hash.ComputeTemplateHash(d)
-}
-
-func (ars *AutoscalingRunnerSet) ListenerSpecHash() string {
-	arsSpec := ars.Spec.DeepCopy()
-	spec := arsSpec
-	return hash.ComputeTemplateHash(&spec)
-}
 
 func (ars *AutoscalingRunnerSet) GitHubConfigSecret() string {
 	return ars.Spec.GitHubConfigSecret
@@ -379,28 +362,6 @@ func (ars *AutoscalingRunnerSet) VaultProxy() *ProxyConfig {
 		return ars.Spec.VaultConfig.Proxy
 	}
 	return nil
-}
-
-func (ars *AutoscalingRunnerSet) RunnerSetSpecHash() string {
-	type runnerSetSpec struct {
-		GitHubConfigUrl    string
-		GitHubConfigSecret string
-		RunnerGroup        string
-		RunnerScaleSetName string
-		Proxy              *ProxyConfig
-		GitHubServerTLS    *TLSConfig
-		Template           corev1.PodTemplateSpec
-	}
-	spec := &runnerSetSpec{
-		GitHubConfigUrl:    ars.Spec.GitHubConfigUrl,
-		GitHubConfigSecret: ars.Spec.GitHubConfigSecret,
-		RunnerGroup:        ars.Spec.RunnerGroup,
-		RunnerScaleSetName: ars.Spec.RunnerScaleSetName,
-		Proxy:              ars.Spec.Proxy,
-		GitHubServerTLS:    ars.Spec.GitHubServerTLS,
-		Template:           ars.Spec.Template,
-	}
-	return hash.ComputeTemplateHash(&spec)
 }
 
 // +kubebuilder:object:root=true

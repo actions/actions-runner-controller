@@ -492,6 +492,236 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 	})
 
 	Context("When updating a new AutoScalingRunnerSet", func() {
+		It("advances the observed generation once a spec change has been applied", func() {
+			var settledGeneration int64
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhaseRunning))
+					g.Expect(current.Status.ObservedGeneration).To(Equal(current.Generation))
+					settledGeneration = current.Generation
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "AutoscalingRunnerSet should settle with its generation observed")
+
+			patched := autoscalingRunnerSet.DeepCopy()
+			patched.Spec.Template.Spec.Containers[0].Image = "ghcr.io/actions/runner:updated"
+			Expect(k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))).To(Succeed(), "failed to patch AutoScalingRunnerSet")
+
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Generation).To(BeNumerically(">", settledGeneration), "a spec write must bump metadata.generation")
+					g.Expect(current.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhaseRunning))
+					g.Expect(current.Status.ObservedGeneration).To(Equal(current.Generation), "observed generation must catch up once the change is applied")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+		})
+
+		// A label-only edit does not bump metadata.generation, so it never
+		// advances the observed generation. It does still rebuild the listener,
+		// because the desired listener labels are derived from the
+		// AutoscalingRunnerSet's, and the phase has to report that rebuild. So
+		// the scale set passes through Pending transiently and comes back to
+		// Running, while the observed generation stays exactly where it was.
+		It("does not re-observe a generation when only labels change, but still reports the listener rebuild", func() {
+			listener := new(v1alpha1.AutoscalingListener)
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "Listener should be created")
+			originalListenerUID := listener.UID
+
+			var settledGeneration int64
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhaseRunning))
+					g.Expect(current.Status.ObservedGeneration).To(Equal(current.Generation))
+					settledGeneration = current.Generation
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "AutoscalingRunnerSet should settle with its generation observed")
+
+			// Hold the deletion window open. Without this the listener is deleted
+			// and re-created between two polls, so an implementation that never
+			// reported Pending would look identical to one that did. The
+			// AutoscalingListener controller does not run in this suite, so
+			// nothing else is going to clear this finalizer.
+			blockDeletion(listener)
+			defer unblockDeletion(listener)
+
+			patched := autoscalingRunnerSet.DeepCopy()
+			patched.Labels["arc.test/label-drift"] = "updated"
+			Expect(k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))).To(Succeed(), "failed to patch AutoScalingRunnerSet labels")
+
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.EphemeralRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, current)).To(Succeed())
+					g.Expect(current.Labels).To(HaveKeyWithValue("arc.test/label-drift", "updated"), "labels should still propagate to the EphemeralRunnerSet")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+
+			// The listener is on its way out, so the scale set must not claim to
+			// be running. This is the assertion that fails if the Pending update
+			// before the listener delete is removed.
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, current)).To(Succeed())
+					g.Expect(current.DeletionTimestamp).NotTo(BeNil(), "listener should be marked for deletion to pick up the new label")
+
+					ars := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), ars)).To(Succeed())
+					g.Expect(ars.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhasePending), "scale set must report Pending while its listener is being rebuilt")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+
+			// It stays Pending for as long as the rebuild has not happened, and
+			// the observed generation does not drift in the meantime.
+			Consistently(
+				func(g Gomega) {
+					ars := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), ars)).To(Succeed())
+					g.Expect(ars.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhasePending), "scale set must stay Pending until the listener is back")
+					g.Expect(ars.Status.ObservedGeneration).To(Equal(settledGeneration))
+				},
+				3*time.Second,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+
+			// Let the rebuild finish.
+			unblockDeletion(listener)
+
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, current)).To(Succeed())
+					g.Expect(current.UID).NotTo(Equal(originalListenerUID), "listener should be re-created to pick up the new label")
+					g.Expect(current.Labels).To(HaveKeyWithValue("arc.test/label-drift", "updated"), "listener should carry the new label")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+
+			// Once the listener is back, the scale set settles on Running again
+			// without the observed generation ever moving, because no spec write
+			// happened.
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhaseRunning))
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "AutoscalingRunnerSet should return to Running once the listener is rebuilt")
+
+			Consistently(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Generation).To(Equal(settledGeneration), "a label-only edit must not bump metadata.generation")
+					g.Expect(current.Status.ObservedGeneration).To(Equal(settledGeneration), "a label-only edit must not move the observed generation")
+				},
+				3*time.Second,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+		})
+
+		// The observed generation is only meant to advance once a change has
+		// actually been applied. A reconcile that cannot finish must leave it
+		// behind the live generation, so the work is retried rather than being
+		// mistaken for settled.
+		It("leaves the observed generation behind until the reconcile completes", func() {
+			listener := new(v1alpha1.AutoscalingListener)
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "Listener should be created")
+
+			var settledGeneration int64
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhaseRunning))
+					g.Expect(current.Status.ObservedGeneration).To(Equal(current.Generation))
+					settledGeneration = current.Generation
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "AutoscalingRunnerSet should settle with its generation observed")
+
+			// Stall the reconcile part way through: the max runner change below
+			// forces the listener to be rebuilt, and the rebuild cannot complete
+			// while the listener is held in deletion.
+			blockDeletion(listener)
+			defer unblockDeletion(listener)
+
+			patched := autoscalingRunnerSet.DeepCopy()
+			updatedMax := 20
+			patched.Spec.MaxRunners = &updatedMax
+			Expect(k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))).To(Succeed(), "failed to patch AutoScalingRunnerSet max runners")
+
+			var liveGeneration int64
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Generation).To(BeNumerically(">", settledGeneration), "a spec write must bump metadata.generation")
+					g.Expect(current.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhasePending), "the scale set should go Pending while the change is being applied")
+					liveGeneration = current.Generation
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+
+			Consistently(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Status.ObservedGeneration).To(Equal(settledGeneration), "observed generation must not advance while the change is still being applied")
+					g.Expect(current.Status.ObservedGeneration).To(BeNumerically("<", liveGeneration))
+					g.Expect(current.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhasePending), "the scale set must stay Pending until the change is applied")
+				},
+				3*time.Second,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+
+			// Let the reconcile complete, and only now should the marker catch up.
+			unblockDeletion(listener)
+
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhaseRunning))
+					g.Expect(current.Status.ObservedGeneration).To(Equal(liveGeneration), "observed generation must catch up once the change has been applied")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+		})
+
 		It("updates EphemeralRunnerSet when the runner image changes without touching the Listener", func() {
 			listener := new(v1alpha1.AutoscalingListener)
 			Eventually(
@@ -979,10 +1209,6 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 		statusUpdate := runnerSet.DeepCopy()
 		statusUpdate.Status.Phase = v1alpha1.EphemeralRunnerSetPhaseRunning
 
-		desiredStatus := v1alpha1.AutoscalingRunnerSetStatus{
-			Phase: v1alpha1.AutoscalingRunnerSetPhaseRunning,
-		}
-
 		err := k8sClient.Status().Patch(ctx, statusUpdate, client.MergeFrom(&runnerSet))
 		Expect(err).NotTo(HaveOccurred(), "Failed to patch runner set status")
 
@@ -997,7 +1223,10 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			},
 			autoscalingRunnerSetTestTimeout,
 			autoscalingRunnerSetTestInterval,
-		).Should(BeEquivalentTo(desiredStatus), "AutoScalingRunnerSet status should be updated")
+		).Should(SatisfyAll(
+			WithTransform(func(s v1alpha1.AutoscalingRunnerSetStatus) v1alpha1.AutoscalingRunnerSetPhase { return s.Phase }, Equal(v1alpha1.AutoscalingRunnerSetPhaseRunning)),
+			WithTransform(func(s v1alpha1.AutoscalingRunnerSetStatus) int64 { return s.ObservedGeneration }, BeNumerically(">=", ars.Generation)),
+		), "AutoScalingRunnerSet status should be updated")
 	})
 })
 
@@ -2447,3 +2676,39 @@ var _ = Describe("Test AutoscalingRunnerSet with a stale runner scale set", Orde
 		})
 	})
 })
+
+// testHoldFinalizer keeps an AutoscalingListener around after it has been
+// deleted, so a test can observe the window during which the scale set has no
+// usable listener. The AutoscalingListener controller is not running in this
+// suite, so nothing else adds or removes finalizers on these objects.
+const testHoldFinalizer = "arc.test/hold-deletion"
+
+func blockDeletion(listener *v1alpha1.AutoscalingListener) {
+	GinkgoHelper()
+
+	current := new(v1alpha1.AutoscalingListener)
+	Expect(k8sClient.Get(context.Background(), client.ObjectKeyFromObject(listener), current)).To(Succeed(), "failed to get listener to block its deletion")
+
+	original := current.DeepCopy()
+	Expect(controllerutil.AddFinalizer(current, testHoldFinalizer)).To(BeTrue(), "listener should not already hold the test finalizer")
+	Expect(k8sClient.Patch(context.Background(), current, client.MergeFrom(original))).To(Succeed(), "failed to add the test finalizer to the listener")
+}
+
+// unblockDeletion is idempotent so it can be deferred as a safety net and still
+// be called explicitly at the point a test wants the rebuild to proceed.
+func unblockDeletion(listener *v1alpha1.AutoscalingListener) {
+	GinkgoHelper()
+
+	current := new(v1alpha1.AutoscalingListener)
+	err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(listener), current)
+	if errors.IsNotFound(err) {
+		return
+	}
+	Expect(err).NotTo(HaveOccurred(), "failed to get listener to unblock its deletion")
+
+	original := current.DeepCopy()
+	if !controllerutil.RemoveFinalizer(current, testHoldFinalizer) {
+		return
+	}
+	Expect(k8sClient.Patch(context.Background(), current, client.MergeFrom(original))).To(Succeed(), "failed to remove the test finalizer from the listener")
+}
