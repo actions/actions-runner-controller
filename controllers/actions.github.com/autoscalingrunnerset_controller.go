@@ -75,7 +75,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	if err := r.Get(ctx, req.NamespacedName, &autoscalingRunnerSet); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	original := autoscalingRunnerSet.DeepCopy()
+	runnerSet := newLazyCopy(&autoscalingRunnerSet)
 
 	if !autoscalingRunnerSet.DeletionTimestamp.IsZero() {
 		if !controllerutil.ContainsFinalizer(&autoscalingRunnerSet, autoscalingRunnerSetFinalizerName) {
@@ -100,9 +100,9 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			return ctrl.Result{}, err
 		}
 
-		if controllerutil.RemoveFinalizer(&autoscalingRunnerSet, autoscalingRunnerSetFinalizerName) {
+		if controllerutil.RemoveFinalizer(runnerSet.Mutate(), autoscalingRunnerSetFinalizerName) {
 			log.Info("Removing finalizer")
-			if err := r.Patch(ctx, &autoscalingRunnerSet, client.MergeFrom(original)); err != nil && !kerrors.IsNotFound(err) {
+			if err := r.Patch(ctx, &autoscalingRunnerSet, runnerSet.MergeFrom()); err != nil && !kerrors.IsNotFound(err) {
 				log.Error(err, "Failed to update autoscaling runner set without finalizer")
 				return ctrl.Result{}, err
 			}
@@ -131,10 +131,11 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, nil
 	}
 
-	if controllerutil.AddFinalizer(&autoscalingRunnerSet, autoscalingRunnerSetFinalizerName) {
+	if !controllerutil.ContainsFinalizer(&autoscalingRunnerSet, autoscalingRunnerSetFinalizerName) {
+		controllerutil.AddFinalizer(runnerSet.Mutate(), autoscalingRunnerSetFinalizerName)
 		log.Info("Adding finalizer")
 
-		if err := r.Patch(ctx, &autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
+		if err := r.Patch(ctx, &autoscalingRunnerSet, runnerSet.MergeFrom()); err != nil {
 			log.Error(err, "Failed to update autoscaling runner set with finalizer")
 			return ctrl.Result{}, err
 		}
