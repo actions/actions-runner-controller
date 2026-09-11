@@ -305,6 +305,16 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 // object that was read. A cached read that still showed the field as 0 while the
 // API server held a recorded marker would produce a patch with no entry for the
 // field, silently leaving the stale marker in place.
+//
+// The patch carries an optimistic lock so that the re-fetch actually means
+// something. A plain merge patch has no resourceVersion precondition, so the API
+// server can never reject it as conflicting: RetryOnConflict would never fire,
+// and a patch computed from a stale read could move the applied revision
+// backwards, re-satisfying the spec > applied comparison above and deleting the
+// idle runners all over again. With the lock, the server accepts the write only
+// if the re-fetched object is still the live one, so a successful patch proves
+// the monotonicity check above was evaluated against live data. A stale attempt
+// conflicts and is retried or requeued instead of regressing the marker.
 func (r *EphemeralRunnerSetReconciler) patchAppliedActionableRevisionStatus(ctx context.Context, key types.NamespacedName, targetAppliedRevision int64) error {
 	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		var latest v1alpha1.EphemeralRunnerSet
@@ -333,7 +343,7 @@ func (r *EphemeralRunnerSetReconciler) patchAppliedActionableRevisionStatus(ctx 
 		// pool.
 		latest.Status.FinishedRunnerCleanupPatchID = 0
 
-		return r.Status().Patch(ctx, &latest, client.MergeFrom(original))
+		return r.Status().Patch(ctx, &latest, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{}))
 	})
 }
 
