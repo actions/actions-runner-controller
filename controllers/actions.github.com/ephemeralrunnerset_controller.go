@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 	"sort"
 	"strconv"
 	"time"
@@ -302,8 +303,11 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 	return ctrl.Result{}, r.updateStatus(ctx, &ephemeralRunnerSet, ephemeralRunnersByState, log)
 }
 
-// patchAppliedActionableRevisionStatus records that the runner spec carried by
-// targetAppliedRevision has been fully applied.
+// patchAppliedActionableRevisionStatus brings status into line with the runner
+// spec carried by targetAppliedRevision once that spec has been fully applied.
+// It records the applied revision, clears the scale-up suppression marker when
+// the revision actually advances, and re-derives Status.Phase from the child
+// runners.
 //
 // The marker lives in status rather than in an annotation on the spec, and it is
 // written only once the cleanup above has actually succeeded. If the controller
@@ -333,6 +337,11 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 // if the re-fetched object is still the live one, so a successful patch proves
 // the monotonicity check above was evaluated against live data. A stale attempt
 // conflicts and is retried or requeued instead of regressing the marker.
+//
+// The lock covers the EphemeralRunnerSet object and nothing else. The phase is
+// derived from a separate list of the child runners, which no precondition on
+// this patch can vouch for, so that list is read through the same authoritative
+// reader rather than the cache.
 func (r *EphemeralRunnerSetReconciler) patchAppliedActionableRevisionStatus(ctx context.Context, key types.NamespacedName, targetAppliedRevision int64) error {
 	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		var latest v1alpha1.EphemeralRunnerSet
@@ -365,9 +374,26 @@ func (r *EphemeralRunnerSetReconciler) patchAppliedActionableRevisionStatus(ctx 
 		}
 
 		ephemeralRunnerList := new(v1alpha1.EphemeralRunnerList)
-		if err := r.List(ctx, ephemeralRunnerList, client.InNamespace(latest.Namespace), client.MatchingFields{resourceOwnerKey: latest.Name}); err != nil {
+		// Listed through the same authoritative reader as the Get above. The
+		// optimistic lock on the patch below covers the EphemeralRunnerSet object
+		// only, so it cannot vouch for a separately-read list: deriving the phase
+		// from the cache would let a successful, lock-protected write carry a
+		// value the lock says nothing about. The list also sits inside
+		// RetryOnConflict, and a cached list can return the same stale data on
+		// every attempt, spending the whole backoff re-deriving one wrong phase.
+		//
+		// resourceOwnerKey cannot be used here. It is a client-side index
+		// registered on the manager's cache, and the API server rejects it as an
+		// unsupported field label, so the ownership filter has to be applied in
+		// this process instead. The list is namespace-scoped, and a namespace
+		// holds the runners of one scale set, so this reads little more than the
+		// selector would have.
+		if err := reader.List(ctx, ephemeralRunnerList, client.InNamespace(latest.Namespace)); err != nil {
 			return fmt.Errorf("failed to list child ephemeral runners: %w", err)
 		}
+		ephemeralRunnerList.Items = slices.DeleteFunc(ephemeralRunnerList.Items, func(runner v1alpha1.EphemeralRunner) bool {
+			return !isControlledBy(&runner, "EphemeralRunnerSet", latest.Name)
+		})
 
 		// Judge the runners against the revision being applied, not the one
 		// recorded in status: every runner created before this update is stale by
