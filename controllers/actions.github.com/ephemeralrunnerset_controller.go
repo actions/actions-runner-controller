@@ -402,6 +402,21 @@ func (r *EphemeralRunnerSetReconciler) scaleUpServicedByFinishedRunnerCleanup(ct
 // Like the applied revision above, this is written after the deletions succeed
 // and re-fetches the object inside the retry, so a conflicting write is never
 // resolved by replaying a status that predates the cleanup.
+//
+// The patch carries an optimistic lock for the same reason, and the exposure
+// here is if anything worse: the check below is an equality test rather than a
+// monotonicity test, so this helper is willing to move the marker to whatever
+// patch ID the reconcile is carrying, including backwards. Without a
+// resourceVersion precondition the API server cannot reject the write, so
+// RetryOnConflict can never fire and a reconcile serving an older patch ID can
+// overwrite a marker recorded for a newer one. The guard would then stop
+// suppressing for the patch ID that was actually serviced, and the controller
+// would create the replacement runners this layer exists to prevent.
+//
+// Re-fetching through the API reader narrows that window to the gap between the
+// read and the patch rather than closing it, because the decision is only as
+// fresh as the moment it was taken. The lock is what makes the write conditional
+// on that decision still holding.
 func (r *EphemeralRunnerSetReconciler) patchFinishedRunnerCleanupPatchIDStatus(ctx context.Context, key types.NamespacedName, patchID int) error {
 	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		var latest v1alpha1.EphemeralRunnerSet
@@ -420,7 +435,7 @@ func (r *EphemeralRunnerSetReconciler) patchFinishedRunnerCleanupPatchIDStatus(c
 		original := latest.DeepCopy()
 		latest.Status.FinishedRunnerCleanupPatchID = patchID
 
-		return r.Status().Patch(ctx, &latest, client.MergeFrom(original))
+		return r.Status().Patch(ctx, &latest, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{}))
 	})
 }
 
