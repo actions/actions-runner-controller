@@ -39,6 +39,30 @@ func nextActionableRevision(current *v1alpha1.EphemeralRunnerSet) int64 {
 	return current.Status.AppliedActionableRevision + 1
 }
 
+// ephemeralRunnerSetOutdatedForAppliedRevision reports whether the set is
+// Outdated *because of the runner spec it is currently running*, which is the
+// only situation in which the AutoscalingRunnerSet should tear the scale set
+// down.
+//
+// The phase alone is not enough. Outdated is deliberately sticky: it survives in
+// status while the outdated runners are collected, and it is only cleared once a
+// new revision is applied. So between the moment the AutoscalingRunnerSet patches
+// a new runner spec onto the set and the moment the EphemeralRunnerSet controller
+// processes that patch, the set still reports Outdated for a spec that no longer
+// exists. Tearing down there would discard the fix the user just applied, and the
+// scale set would stay switched off until something else nudged it.
+//
+// Requiring the applied revision to have caught up with the spec revision closes
+// that window: the verdict counts only once the set is running the current spec.
+func ephemeralRunnerSetOutdatedForAppliedRevision(ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet) bool {
+	if ephemeralRunnerSet == nil {
+		return false
+	}
+
+	return ephemeralRunnerSet.Status.Phase == v1alpha1.EphemeralRunnerSetPhaseOutdated &&
+		ephemeralRunnerSet.Status.AppliedActionableRevision >= ephemeralRunnerSet.Spec.ActionableRevision
+}
+
 // listenerPodSpecRequiresRecreation reports whether the live listener pod must be
 // deleted and rebuilt to match the desired spec.
 //
