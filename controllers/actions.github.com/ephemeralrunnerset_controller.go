@@ -235,12 +235,12 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		// patch ID the cleanup belongs to and return, leaving the scaling decision
 		// to the next reconcile, which sees the post-cleanup state.
 		if len(ephemeralRunnersByState.finished) > 0 {
-			if err := r.deleteTerminatedEphemeralRunners(ctx, ephemeralRunnersByState.finished, log); err != nil {
-				log.Error(err, "failed to delete terminated ephemeral runners")
-				return ctrl.Result{}, err
-			}
 			if err := r.patchFinishedRunnerCleanupPatchIDStatus(ctx, req.NamespacedName, ephemeralRunnerSet.Spec.PatchID); err != nil {
 				log.Error(err, "failed to update finished runner cleanup patch ID status")
+				return ctrl.Result{}, err
+			}
+			if err := r.deleteTerminatedEphemeralRunners(ctx, ephemeralRunnersByState.finished, log); err != nil {
+				log.Error(err, "failed to delete terminated ephemeral runners")
 				return ctrl.Result{}, err
 			}
 			ephemeralRunnerSet.Status.FinishedRunnerCleanupPatchID = ephemeralRunnerSet.Spec.PatchID
@@ -323,6 +323,16 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 // object that was read. A cached read that still showed the field as 0 while the
 // API server held a recorded marker would produce a patch with no entry for the
 // field, silently leaving the stale marker in place.
+//
+// The patch carries an optimistic lock so that the re-fetch actually means
+// something. A plain merge patch has no resourceVersion precondition, so the API
+// server can never reject it as conflicting: RetryOnConflict would never fire,
+// and a patch computed from a stale read could move the applied revision
+// backwards, re-satisfying the spec > applied comparison above and deleting the
+// idle runners all over again. With the lock, the server accepts the write only
+// if the re-fetched object is still the live one, so a successful patch proves
+// the monotonicity check above was evaluated against live data. A stale attempt
+// conflicts and is retried or requeued instead of regressing the marker.
 func (r *EphemeralRunnerSetReconciler) patchAppliedActionableRevisionStatus(ctx context.Context, key types.NamespacedName, targetAppliedRevision int64) error {
 	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		var latest v1alpha1.EphemeralRunnerSet
@@ -383,7 +393,7 @@ func (r *EphemeralRunnerSetReconciler) patchAppliedActionableRevisionStatus(ctx 
 			return nil
 		}
 
-		return r.Status().Patch(ctx, &latest, client.MergeFrom(original))
+		return r.Status().Patch(ctx, &latest, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{}))
 	})
 }
 
@@ -442,6 +452,21 @@ func (r *EphemeralRunnerSetReconciler) scaleUpServicedByFinishedRunnerCleanup(ct
 // Like the applied revision above, this is written after the deletions succeed
 // and re-fetches the object inside the retry, so a conflicting write is never
 // resolved by replaying a status that predates the cleanup.
+//
+// The patch carries an optimistic lock for the same reason, and the exposure
+// here is if anything worse: the check below is an equality test rather than a
+// monotonicity test, so this helper is willing to move the marker to whatever
+// patch ID the reconcile is carrying, including backwards. Without a
+// resourceVersion precondition the API server cannot reject the write, so
+// RetryOnConflict can never fire and a reconcile serving an older patch ID can
+// overwrite a marker recorded for a newer one. The guard would then stop
+// suppressing for the patch ID that was actually serviced, and the controller
+// would create the replacement runners this layer exists to prevent.
+//
+// Re-fetching through the API reader narrows that window to the gap between the
+// read and the patch rather than closing it, because the decision is only as
+// fresh as the moment it was taken. The lock is what makes the write conditional
+// on that decision still holding.
 func (r *EphemeralRunnerSetReconciler) patchFinishedRunnerCleanupPatchIDStatus(ctx context.Context, key types.NamespacedName, patchID int) error {
 	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		var latest v1alpha1.EphemeralRunnerSet
@@ -460,7 +485,7 @@ func (r *EphemeralRunnerSetReconciler) patchFinishedRunnerCleanupPatchIDStatus(c
 		original := latest.DeepCopy()
 		latest.Status.FinishedRunnerCleanupPatchID = patchID
 
-		return r.Status().Patch(ctx, &latest, client.MergeFrom(original))
+		return r.Status().Patch(ctx, &latest, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{}))
 	})
 }
 
