@@ -323,15 +323,22 @@ listener:
   ## metrics configuration for the listener.
   ## In order to avoid helm merging these fields, we left the metrics commented out.
   ## When configuring metrics, please uncomment the metrics object below.
-  ## You can modify the configuration to remove the label or specify custom buckets for histogram.
+  ## You can modify the configuration to add or remove labels or specify custom buckets for histograms.
   ##
-  ## If the buckets field is not specified, the default buckets will be applied. Default buckets are
-  ## provided here for documentation purposes
+  ## The configuration below matches the built-in defaults used when listener.metrics is not set, so
+  ## uncommenting it as-is does not change the exported metrics. If the buckets field is not specified,
+  ## the default buckets will be applied.
+  ##
+  ## Counters and histograms also accept the optional labels "job_workflow_ref", "job_workflow_name"
+  ## and "job_workflow_target". "job_workflow_ref" and "job_workflow_target" contain the git ref the
+  ## workflow ran from (for example refs/heads/<branch> or refs/pull/<number>/merge), so every branch and
+  ## pull request creates a new time series per job. On histograms this is multiplied by the number of
+  ## buckets. Only add these labels when your metrics backend can handle the resulting cardinality.
   # metrics:
   #   counters:
   #     gha_started_jobs_total:
   #       labels:
-  #         ["repository", "organization", "enterprise", "job_name", "event_name", "job_workflow_ref", "job_workflow_name", "job_workflow_target"]
+  #         ["repository", "organization", "enterprise", "job_name", "event_name"]
   #     gha_completed_jobs_total:
   #       labels:
   #         [
@@ -341,9 +348,6 @@ listener:
   #           "job_name",
   #           "event_name",
   #           "job_result",
-  #           "job_workflow_ref",
-  #           "job_workflow_name",
-  #           "job_workflow_target",
   #         ]
   #   gauges:
   #     gha_assigned_jobs:
@@ -365,7 +369,7 @@ listener:
   #   histograms:
   #     gha_job_startup_duration_seconds:
   #       labels:
-  #         ["repository", "organization", "enterprise", "job_name", "event_name","job_workflow_ref", "job_workflow_name", "job_workflow_target"]
+  #         ["repository", "organization", "enterprise", "job_name", "event_name"]
   #       buckets:
   #         [
   #           0.01,
@@ -423,9 +427,6 @@ listener:
   #           "job_name",
   #           "event_name",
   #           "job_result",
-  #           "job_workflow_ref",
-  #           "job_workflow_name",
-  #           "job_workflow_target"
   #         ]
   #       buckets:
   #         [
