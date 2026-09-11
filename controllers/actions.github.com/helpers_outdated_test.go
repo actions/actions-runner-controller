@@ -6,6 +6,7 @@ import (
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -127,12 +128,29 @@ func TestEphemeralRunnersByState_TerminatedIncludesStaleOutdated(t *testing.T) {
 // TestEphemeralRunnersByState_TerminatedDoesNotAliasBackingArrays guards against
 // terminated() corrupting the slices it concatenates, which would silently
 // reclassify runners.
+//
+// A concatenation written as append(s.finished, others...) does not copy when
+// s.finished has spare capacity: it writes the other runners into that spare
+// room and hands back a slice sharing the caller's backing array. The corruption
+// only becomes visible once something appends to s.finished again, which reuses
+// the same slots and overwrites entries in the already-returned slice. So the
+// test needs a state whose finished slice has room to spare, a retained result,
+// and a subsequent append.
 func TestEphemeralRunnersByState_TerminatedDoesNotAliasBackingArrays(t *testing.T) {
-	list := &v1alpha1.EphemeralRunnerList{Items: []v1alpha1.EphemeralRunner{
-		{
-			ObjectMeta: metav1.ObjectMeta{Name: "succeeded"},
+	finished := func(name string) v1alpha1.EphemeralRunner {
+		return v1alpha1.EphemeralRunner{
+			ObjectMeta: metav1.ObjectMeta{Name: name},
 			Status:     v1alpha1.EphemeralRunnerStatus{Phase: v1alpha1.EphemeralRunnerPhaseSucceeded},
-		},
+		}
+	}
+
+	// Three finished runners, because the classifier builds the slice with
+	// append and the backing array grows 1, 2, 4: the result is length 3 with
+	// room for a fourth.
+	list := &v1alpha1.EphemeralRunnerList{Items: []v1alpha1.EphemeralRunner{
+		finished("succeeded-a"),
+		finished("succeeded-b"),
+		finished("succeeded-c"),
 		{
 			ObjectMeta: metav1.ObjectMeta{Name: "failed"},
 			Status:     v1alpha1.EphemeralRunnerStatus{Phase: v1alpha1.EphemeralRunnerPhaseFailed},
@@ -140,9 +158,25 @@ func TestEphemeralRunnersByState_TerminatedDoesNotAliasBackingArrays(t *testing.
 	}}
 
 	state := newEphemeralRunnersByStates(list, 0)
-	_ = state.terminated()
 
-	assert.Equal(t, []string{"succeeded"}, runnerNames(state.finished))
+	// Asserted rather than assumed: if the classifier ever stops leaving spare
+	// capacity, the concatenation is forced to allocate, no aliasing is possible
+	// and the rest of this test would quietly stop proving anything.
+	require.Greater(t, cap(state.finished), len(state.finished),
+		"precondition: finished needs spare capacity for aliasing to be reproducible")
+
+	terminated := state.terminated()
+	require.Contains(t, runnerNames(terminated), "failed")
+
+	// Reuses the spare slot that an aliasing concatenation would have written
+	// the failed runner into.
+	state.finished = append(state.finished, &v1alpha1.EphemeralRunner{
+		ObjectMeta: metav1.ObjectMeta{Name: "succeeded-d"},
+	})
+
+	assert.Contains(t, runnerNames(terminated), "failed",
+		"terminated() must own its backing array: appending to state.finished overwrote a runner in the slice already returned to the caller")
+	assert.Equal(t, []string{"succeeded-a", "succeeded-b", "succeeded-c"}, runnerNames(state.finished[:3]))
 	assert.Equal(t, []string{"failed"}, runnerNames(state.failed))
 }
 
