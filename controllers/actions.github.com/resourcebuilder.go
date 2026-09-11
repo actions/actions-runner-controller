@@ -864,25 +864,12 @@ func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 		Spec: spec,
 	}
 
-	newEphemeralRunnerSet.Annotations[annotationKeyIntegrityHash] = ephemeralRunnerSetIntegrityHash(newEphemeralRunnerSet)
-
 	if err := b.setControllerReference(autoscalingRunnerSet, newEphemeralRunnerSet); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for ephemeral runner set: %w", err)
 	}
 	b.ResourceCache.ephemeralRunnerSet.Upsert(autoscalingRunnerSet, newEphemeralRunnerSet)
 
 	return newEphemeralRunnerSet, nil
-}
-
-func ephemeralRunnerSetIntegrityHash(ers *v1alpha1.EphemeralRunnerSet) string {
-	type data struct {
-		EphemeralRunnerSpec v1alpha1.EphemeralRunnerSpec `json:"ephemeralRunnerSpec"`
-	}
-
-	d := data{
-		EphemeralRunnerSpec: ers.Spec.EphemeralRunnerSpec,
-	}
-	return hash.ComputeTemplateHash(&d)
 }
 
 func (b *ResourceBuilder) newAutoscalingListenerProxySecret(autoscalingListener *v1alpha1.AutoscalingListener, data map[string][]byte) (*corev1.Secret, error) {

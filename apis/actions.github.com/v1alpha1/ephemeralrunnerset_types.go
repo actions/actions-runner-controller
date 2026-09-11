@@ -36,12 +36,23 @@ type EphemeralRunnerSetSpec struct {
 	// but does not apply to existing ephemeral runners.
 	// +optional
 	EphemeralRunnerMetadata *ResourceMeta `json:"ephemeralRunnerMetadata,omitempty"`
+	// ActionableRevision is the desired runner-spec revision. It increments whenever
+	// Spec.EphemeralRunnerSpec changes, enabling the EphemeralRunnerSet controller
+	// to detect spec updates.
+	// Unset defaults to 0.
+	// +optional
+	ActionableRevision int64 `json:"actionableRevision,omitempty"`
 }
 
 // EphemeralRunnerSetStatus defines the observed state of EphemeralRunnerSet
 type EphemeralRunnerSetStatus struct {
 	// +optional
 	Phase EphemeralRunnerSetPhase `json:"phase"`
+	// AppliedActionableRevision is a restart-safe applied marker tracking the last successfully
+	// applied ActionableRevision value. Advances only after spec cleanup succeeds.
+	// Unset defaults to 0.
+	// +optional
+	AppliedActionableRevision int64 `json:"appliedActionableRevision,omitempty"`
 }
 
 // EphemeralRunnerSetPhase is the phase of the ephemeral runner set resource
@@ -69,11 +80,6 @@ type EphemeralRunnerSet struct {
 	Spec EphemeralRunnerSetSpec `json:"spec,omitempty"`
 	// +optional
 	Status EphemeralRunnerSetStatus `json:"status,omitempty"`
-}
-
-// EphemeralRunnerSpecHash computes the hash value of the EphemeralRunnerSpec and returns it as a string.
-func (ers *EphemeralRunnerSet) EphemeralRunnerSpecHash() string {
-	return ers.Spec.EphemeralRunnerSpec.Hash()
 }
 
 func (ers *EphemeralRunnerSet) GitHubConfigSecret() string {
