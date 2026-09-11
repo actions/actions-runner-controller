@@ -52,6 +52,12 @@ type EphemeralRunnerSetReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
+	// APIReader reads straight from the API server, bypassing the manager's
+	// cache. It is needed where the controller has to observe a status field it
+	// wrote itself in an earlier reconcile, because the informer cache is not
+	// guaranteed to have caught up by the time the next reconcile runs.
+	// SetupWithManager fills this in from the manager when it is left unset.
+	APIReader client.Reader
 	ResourceBuilder
 }
 
@@ -204,15 +210,49 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	total := ephemeralRunnersByState.scaleTotal()
 	if ephemeralRunnerSet.Spec.PatchID == 0 || ephemeralRunnerSet.Spec.PatchID != ephemeralRunnersByState.latestPatchID {
-		defer func() {
-			if err := r.cleanupFinishedEphemeralRunners(ctx, ephemeralRunnersByState.finished, log); err != nil {
-				log.Error(err, "failed to cleanup finished ephemeral runners")
+		// Spec.Replicas is the count the listener asked for when it published
+		// Spec.PatchID. Deleting finished runners here changes the live count that
+		// the count was computed against, so satisfying it in the same pass would
+		// create runners to replace jobs that have already completed. Record the
+		// patch ID the cleanup belongs to and return, leaving the scaling decision
+		// to the next reconcile, which sees the post-cleanup state.
+		if len(ephemeralRunnersByState.finished) > 0 {
+			if err := r.patchFinishedRunnerCleanupPatchIDStatus(ctx, req.NamespacedName, ephemeralRunnerSet.Spec.PatchID); err != nil {
+				log.Error(err, "failed to update finished runner cleanup patch ID status")
+				return ctrl.Result{}, err
 			}
-		}()
-		log.Info("Scaling comparison", "current", total, "desired", ephemeralRunnerSet.Spec.Replicas)
+			if err := r.deleteTerminatedEphemeralRunners(ctx, ephemeralRunnersByState.finished, log); err != nil {
+				log.Error(err, "failed to delete terminated ephemeral runners")
+				return ctrl.Result{}, err
+			}
+			ephemeralRunnerSet.Status.FinishedRunnerCleanupPatchID = ephemeralRunnerSet.Spec.PatchID
+
+			log.Info("Finished ephemeral runners were cleaned up, deferring scaling decision")
+			return ctrl.Result{}, r.updateStatus(ctx, &ephemeralRunnerSet, ephemeralRunnersByState, log)
+		}
+
+		// Runners that are being deleted still exist and still hold their
+		// registration, so counting only the live ones would let the controller
+		// create replacements for runners that have not gone away yet.
+		scaleUpTotal := total + len(ephemeralRunnersByState.deleting)
+		log.Info("Scaling comparison", "current", total, "deleting", len(ephemeralRunnersByState.deleting), "desired", ephemeralRunnerSet.Spec.Replicas)
 		switch {
-		case total < ephemeralRunnerSet.Spec.Replicas: // Handle scale up
-			count := ephemeralRunnerSet.Spec.Replicas - total
+		case scaleUpTotal < ephemeralRunnerSet.Spec.Replicas: // Handle scale up
+			// The gap below Spec.Replicas is the one the cleanup above opened for
+			// this patch ID, not new demand. Wait for the listener to publish a
+			// fresh desired state before acting on it.
+			suppressed, err := r.scaleUpServicedByFinishedRunnerCleanup(ctx, req.NamespacedName, &ephemeralRunnerSet)
+			if err != nil {
+				log.Error(err, "failed to determine whether scale up was already serviced by finished runner cleanup")
+				return ctrl.Result{}, err
+			}
+			if suppressed {
+				ephemeralRunnerSet.Status.FinishedRunnerCleanupPatchID = ephemeralRunnerSet.Spec.PatchID
+				log.Info("Skipping scale up until listener publishes a fresh desired state after finished runner cleanup", "patchID", ephemeralRunnerSet.Spec.PatchID)
+				return ctrl.Result{}, r.updateStatus(ctx, &ephemeralRunnerSet, ephemeralRunnersByState, log)
+			}
+
+			count := ephemeralRunnerSet.Spec.Replicas - scaleUpTotal
 			log.Info("Creating new ephemeral runners (scale up)", "count", count)
 			if err := r.createEphemeralRunners(ctx, &ephemeralRunnerSet, count, log); err != nil {
 				log.Error(err, "failed to make ephemeral runner")
@@ -260,6 +300,12 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 // to go stale, and a conflicting write must not be resolved by replaying an old
 // status.
 //
+// The read bypasses the cache because this also clears
+// FinishedRunnerCleanupPatchID, and the patch is computed as a diff against the
+// object that was read. A cached read that still showed the field as 0 while the
+// API server held a recorded marker would produce a patch with no entry for the
+// field, silently leaving the stale marker in place.
+//
 // The patch carries an optimistic lock so that the re-fetch actually means
 // something. A plain merge patch has no resourceVersion precondition, so the API
 // server can never reject it as conflicting: RetryOnConflict would never fire,
@@ -272,7 +318,11 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 func (r *EphemeralRunnerSetReconciler) patchAppliedActionableRevisionStatus(ctx context.Context, key types.NamespacedName, targetAppliedRevision int64) error {
 	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		var latest v1alpha1.EphemeralRunnerSet
-		if err := r.Get(ctx, key, &latest); err != nil {
+		reader := r.APIReader
+		if reader == nil {
+			reader = r.Client
+		}
+		if err := reader.Get(ctx, key, &latest); err != nil {
 			return err
 		}
 
@@ -282,6 +332,126 @@ func (r *EphemeralRunnerSetReconciler) patchAppliedActionableRevisionStatus(ctx 
 
 		original := latest.DeepCopy()
 		latest.Status.AppliedActionableRevision = targetAppliedRevision
+
+		// The marker records a patch ID from the sequence that was current before
+		// this spec change. Applying a new revision deletes the idle and pending
+		// runners, so the shortfall that follows belongs to the new spec and must
+		// be filled. Worse, a spec change restarts the listener, and a restarted
+		// listener numbers its patches from 0 upwards, counting through every
+		// integer. It therefore passes through a leftover marker value with
+		// near-certainty, and would suppress the very scale up that rebuilds the
+		// pool.
+		latest.Status.FinishedRunnerCleanupPatchID = 0
+
+		return r.Status().Patch(ctx, &latest, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{}))
+	})
+}
+
+// scaleUpServicedByFinishedRunnerCleanup reports whether the shortfall against
+// Spec.Replicas was created by this controller cleaning up finished runners for
+// the patch ID currently in the spec, rather than by new demand from the
+// listener.
+//
+// The marker is written by an earlier reconcile and then read back here, so the
+// cached copy handed to Reconcile cannot be trusted: deleting the finished
+// runners triggers watch events that schedule the next reconcile, and that
+// reconcile can be served from an informer cache that has not yet observed the
+// controller's own status write. The decision is therefore always made against
+// an uncached read. That confines the extra API call to scale-up decisions,
+// where the controller is about to issue creates anyway.
+//
+// An earlier version short-circuited on a cached hit, on the reasoning that the
+// marker was only ever set and so a hit could never be a false positive. That
+// reasoning no longer holds: applying a new actionable revision clears the
+// marker, so a lagging cache can show a recorded marker that the API server has
+// already cleared, and trusting it would suppress exactly the scale up that
+// rebuilds the pool after a spec change.
+//
+// One window remains. A listener that restarts without a spec change keeps the
+// marker but starts its patch sequence again from 0 and counts up through every
+// integer, so it passes through the recorded value with near-certainty rather
+// than by coincidence. If that collision lands on a reconcile that needs to
+// scale up, that reconcile is suppressed.
+//
+// That is a hiccup rather than an outage. The listener calls back into scaling
+// on every long-poll timeout, not only when something changes, and once the set
+// is idle at its minimum with no job completed it publishes the collapsed patch
+// ID 0, which is never suppressed. So the shortfall is filled on the next
+// long-poll cycle.
+func (r *EphemeralRunnerSetReconciler) scaleUpServicedByFinishedRunnerCleanup(ctx context.Context, key types.NamespacedName, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet) (bool, error) {
+	if ephemeralRunnerSet.Spec.PatchID == 0 {
+		return false, nil
+	}
+
+	if r.APIReader == nil {
+		return false, errors.New("APIReader is not configured, cannot confirm the finished runner cleanup patch ID without reading through the cache")
+	}
+
+	var latest v1alpha1.EphemeralRunnerSet
+	if err := r.APIReader.Get(ctx, key, &latest); err != nil {
+		return false, fmt.Errorf("failed to read EphemeralRunnerSet without the cache: %w", err)
+	}
+
+	return latest.Status.FinishedRunnerCleanupPatchID == ephemeralRunnerSet.Spec.PatchID, nil
+}
+
+// patchFinishedRunnerCleanupPatchIDStatus records that finished runners were
+// deleted while serving patchID, so a later reconcile can tell the resulting gap
+// below Spec.Replicas apart from genuine new demand.
+//
+// Like the applied revision above, this is written after the deletions succeed
+// and re-fetches the object inside the retry, so a conflicting write is never
+// resolved by replaying a status that predates the cleanup.
+//
+// The patch carries an optimistic lock for the same reason, and the exposure
+// here is if anything worse: the check below is an equality test rather than a
+// monotonicity test, so this helper is willing to move the marker to whatever
+// patch ID the reconcile is carrying, including backwards. Without a
+// resourceVersion precondition the API server cannot reject the write, so
+// RetryOnConflict can never fire and a reconcile serving an older patch ID can
+// overwrite a marker recorded for a newer one. The guard would then stop
+// suppressing for the patch ID that was actually serviced, and the controller
+// would create the replacement runners this layer exists to prevent.
+//
+// Re-fetching through the API reader narrows that window to the gap between the
+// read and the patch rather than closing it, because the decision is only as
+// fresh as the moment it was taken. The lock is what makes the write conditional
+// on that decision still holding.
+//
+// The check below is deliberately an equality test and must not be relaxed into
+// the >= monotonicity test the applied revision uses. Applied revisions derive
+// from metadata.generation and only ever climb, but listener patch IDs do not:
+// setDesiredWorkerState publishes 0 whenever the set is idle at MinRunners with
+// nothing dirty, restarts its sequence from 0 when the listener restarts, and
+// wraps explicitly at math.MaxInt32. So Spec.PatchID legitimately moves
+// backwards, and the marker has to follow it. Refusing to record a lower patch
+// ID would strand the marker above every value the listener goes on to publish,
+// and since the scale-up guard suppresses only on an exact match, suppression
+// would never fire again -- disabling the behaviour this layer exists to add.
+//
+// That is also why the lock is the right fix rather than a stricter comparison.
+// It cannot make an older patch ID unwritable, because the retry re-reads and
+// re-applies the same argument; recording the patch ID whose cleanup actually
+// happened is a true statement regardless of ordering, and the next cleanup
+// re-records. What the lock prevents is a write decided against state that has
+// since changed.
+func (r *EphemeralRunnerSetReconciler) patchFinishedRunnerCleanupPatchIDStatus(ctx context.Context, key types.NamespacedName, patchID int) error {
+	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		var latest v1alpha1.EphemeralRunnerSet
+		reader := r.APIReader
+		if reader == nil {
+			reader = r.Client
+		}
+		if err := reader.Get(ctx, key, &latest); err != nil {
+			return err
+		}
+
+		if latest.Status.FinishedRunnerCleanupPatchID == patchID {
+			return nil
+		}
+
+		original := latest.DeepCopy()
+		latest.Status.FinishedRunnerCleanupPatchID = patchID
 
 		return r.Status().Patch(ctx, &latest, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{}))
 	})
@@ -299,8 +469,9 @@ func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemer
 		phase = ephemeralRunnerSet.Status.Phase
 	}
 	desiredStatus := v1alpha1.EphemeralRunnerSetStatus{
-		Phase:                     phase,
-		AppliedActionableRevision: ephemeralRunnerSet.Status.AppliedActionableRevision,
+		Phase:                        phase,
+		AppliedActionableRevision:    ephemeralRunnerSet.Status.AppliedActionableRevision,
+		FinishedRunnerCleanupPatchID: ephemeralRunnerSet.Status.FinishedRunnerCleanupPatchID,
 	}
 
 	// Update the status if needed.
@@ -316,12 +487,13 @@ func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemer
 	return nil
 }
 
-func (r *EphemeralRunnerSetReconciler) cleanupFinishedEphemeralRunners(ctx context.Context, finishedEphemeralRunners []*v1alpha1.EphemeralRunner, log logr.Logger) error {
-	// cleanup finished runners and proceed
+// deleteTerminatedEphemeralRunners deletes runners that have reached a terminal
+// state and are no longer useful, so that the scaling logic can replace them.
+func (r *EphemeralRunnerSetReconciler) deleteTerminatedEphemeralRunners(ctx context.Context, ephemeralRunners []*v1alpha1.EphemeralRunner, log logr.Logger) error {
 	var errs []error
-	for i := range finishedEphemeralRunners {
-		log.Info("Deleting finished ephemeral runner", "name", finishedEphemeralRunners[i].Name)
-		if err := r.Delete(ctx, finishedEphemeralRunners[i]); err != nil {
+	for i := range ephemeralRunners {
+		log.Info("Deleting terminated ephemeral runner", "name", ephemeralRunners[i].Name, "phase", ephemeralRunners[i].Status.Phase)
+		if err := r.Delete(ctx, ephemeralRunners[i]); err != nil {
 			if !kerrors.IsNotFound(err) {
 				errs = append(errs, err)
 			}
@@ -678,6 +850,10 @@ func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunnerWithActionsClient(ct
 // SetupWithManager sets up the controller with the Manager.
 func (r *EphemeralRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager, opts ...Option) error {
 	r.setSchemeIfUnset(r.Scheme)
+
+	if r.APIReader == nil {
+		r.APIReader = mgr.GetAPIReader()
+	}
 
 	return builderWithOptions(
 		ctrl.NewControllerManagedBy(mgr).
