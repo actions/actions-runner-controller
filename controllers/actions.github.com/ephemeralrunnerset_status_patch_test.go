@@ -34,9 +34,15 @@ import (
 // and it has now been read the wrong way round twice in review -- once as
 // updateStatus clobbering the marker with a stale zero, once as it restoring a
 // stale marker over a newer one. Neither is possible while the field is copied
-// rather than computed, so this test asserts on the emitted bytes. Computing the
-// marker inside updateStatus instead of copying it would make both readings
-// real, and must fail here.
+// rather than computed, so this test asserts on the emitted bytes.
+//
+// Two independent changes would make both readings real, and the test is
+// written to fail on each of them. Taking original before the assignment rather
+// than after puts the field in the diff. Computing the marker inside
+// updateStatus, for instance from Spec.PatchID since the marker means "cleanup
+// ran for this patch ID", puts a value in the diff that the caller never
+// approved. The second is only detectable if the fixture gives Spec.PatchID a
+// value distinct from the marker, which is why run refuses to accept equal ones.
 func TestUpdateStatusNeverRepublishesTheCleanupMarker(t *testing.T) {
 	scheme := runtime.NewScheme()
 	require.NoError(t, clientgoscheme.AddToScheme(scheme))
@@ -44,15 +50,25 @@ func TestUpdateStatusNeverRepublishesTheCleanupMarker(t *testing.T) {
 
 	key := types.NamespacedName{Namespace: "default", Name: "test-ers"}
 
-	// serverMarker is what the API server holds by the time updateStatus runs;
-	// carriedMarker is what the cached object in Reconcile carries, including the
-	// assignment made after the authoritative write.
-	run := func(t *testing.T, serverMarker, carriedMarker int) ([]byte, int) {
+	// specPatchID is the patch ID the listener has published; serverMarker is what
+	// the API server holds by the time updateStatus runs; carriedMarker is what the
+	// cached object in Reconcile carries, including the assignment made after the
+	// authoritative write.
+	//
+	// All three have to be distinct. The marker is assigned from Spec.PatchID on
+	// the cleanup path, so it is tempting to reuse one value for the spec and the
+	// carried marker, but then copying the marker out of the status and computing
+	// it from the spec produce the same number and no assertion can tell them
+	// apart -- which is exactly the substitution this test exists to catch. The
+	// require below keeps that from being reintroduced quietly.
+	run := func(t *testing.T, specPatchID, serverMarker, carriedMarker int) ([]byte, int) {
 		t.Helper()
+		require.NotEqual(t, specPatchID, carriedMarker, "spec patch ID must differ from the carried marker or compute-from-spec is indistinguishable from copy-from-status")
+		require.NotEqual(t, specPatchID, serverMarker, "spec patch ID must differ from the server marker or a republished value is indistinguishable from an untouched one")
 
 		stored := &v1alpha1.EphemeralRunnerSet{
 			ObjectMeta: metav1.ObjectMeta{Namespace: key.Namespace, Name: key.Name},
-			Spec:       v1alpha1.EphemeralRunnerSetSpec{PatchID: carriedMarker},
+			Spec:       v1alpha1.EphemeralRunnerSetSpec{PatchID: specPatchID},
 			Status: v1alpha1.EphemeralRunnerSetStatus{
 				Phase:                        v1alpha1.EphemeralRunnerSetPhaseRunning,
 				FinishedRunnerCleanupPatchID: serverMarker,
@@ -117,7 +133,7 @@ func TestUpdateStatusNeverRepublishesTheCleanupMarker(t *testing.T) {
 		// An actionable revision advanced and cleared the marker between the
 		// authoritative write and this patch. Restoring it here would suppress the
 		// scale up that rebuilds the pool for the new spec.
-		patch, marker := run(t, 0, 4)
+		patch, marker := run(t, 7, 0, 4)
 
 		assertMarkerAbsent(t, patch)
 		assert.Zero(t, marker, "a cleared marker must stay cleared")
@@ -126,7 +142,7 @@ func TestUpdateStatusNeverRepublishesTheCleanupMarker(t *testing.T) {
 	t.Run("does not lower a marker another reconcile has advanced", func(t *testing.T) {
 		// A concurrent cleanup recorded a newer patch ID. Lowering it back would
 		// stop suppression matching the patch that was actually serviced.
-		patch, marker := run(t, 9, 4)
+		patch, marker := run(t, 7, 9, 4)
 
 		assertMarkerAbsent(t, patch)
 		assert.Equal(t, 9, marker, "a newer marker must not be overwritten by a cached one")
