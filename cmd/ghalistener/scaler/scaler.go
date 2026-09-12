@@ -144,7 +144,7 @@ func (w *Scaler) HandleJobStarted(ctx context.Context, jobInfo *scaleset.JobStar
 		Get().
 		Prefix("apis", v1alpha1.GroupVersion.Group, v1alpha1.GroupVersion.Version).
 		Namespace(w.config.EphemeralRunnerSetNamespace).
-		Resource("EphemeralRunners").
+		Resource("ephemeralrunners"),
 		Name(jobInfo.RunnerName).
 		Do(ctx).
 		Into(currentRunner)
