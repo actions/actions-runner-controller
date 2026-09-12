@@ -141,6 +141,8 @@ tolerations: []
 
 affinity: {}
 
+topologySpreadConstraints: []
+
 # Only one of minAvailable or maxUnavailable can be set
 podDisruptionBudget:
   enabled: false
@@ -246,6 +248,7 @@ githubWebhookServer:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  topologySpreadConstraints: []
   priorityClassName: ""
   service:
     type: ClusterIP
@@ -382,6 +385,7 @@ actionsMetricsServer:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  topologySpreadConstraints: []
   priorityClassName: ""
   service:
     type: ClusterIP
