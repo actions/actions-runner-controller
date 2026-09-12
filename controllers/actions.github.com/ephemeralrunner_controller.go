@@ -860,6 +860,8 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 	// The controller no longer promotes the runner to Running. The listener owns that
 	// transition and applies it when a job is assigned to this runner. The controller
 	// still publishes the initial Pending phase while the runner pod is starting.
+	// The patch below is optimistically locked so a stale cached copy of this runner
+	// cannot undo the listener's transition to Running.
 	phaseChanged := phase != ephemeralRunner.Status.Phase
 	readyChanged := ready != ephemeralRunner.Status.Ready
 
@@ -880,7 +882,7 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 	ephemeralRunner.Status.Reason = pod.Status.Reason
 	ephemeralRunner.Status.Message = pod.Status.Message
 
-	if err := r.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
+	if err := r.Status().Patch(ctx, ephemeralRunner, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{})); err != nil {
 		return fmt.Errorf("failed to update runner status for Phase/Reason/Message/Ready: %w", err)
 	}
 	r.publishEphemeralRunnerPhaseMetric(ephemeralRunner, ephemeralRunner.Status.Phase, log)
