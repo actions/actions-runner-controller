@@ -36,6 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -843,14 +844,7 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 		return nil
 	}
 
-	var ready bool
-	var lastTransitionTime time.Time
-	for _, condition := range pod.Status.Conditions {
-		if condition.Type == corev1.PodReady && condition.LastTransitionTime.After(lastTransitionTime) {
-			ready = condition.Status == corev1.ConditionTrue
-			lastTransitionTime = condition.LastTransitionTime.Time
-		}
-	}
+	ready := podReady(pod)
 
 	phase := ephemeralRunner.Status.Phase
 	if pod.Status.Phase == corev1.PodPending && phase == "" {
@@ -963,7 +957,7 @@ func (r *EphemeralRunnerReconciler) SetupWithManager(mgr ctrl.Manager, opts ...O
 	return builderWithOptions(
 		ctrl.NewControllerManagedBy(mgr).
 			For(&v1alpha1.EphemeralRunner{}).
-			Owns(&corev1.Pod{}).
+			Owns(&corev1.Pod{}, builder.WithPredicates(ephemeralRunnerOwnedPodPredicate())).
 			WithEventFilter(predicate.ResourceVersionChangedPredicate{}),
 		opts,
 	).Complete(r)
