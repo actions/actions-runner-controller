@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/retry"
 )
 
 type Option func(*Scaler)
@@ -138,6 +139,15 @@ func (w *Scaler) HandleJobStarted(ctx context.Context, jobInfo *scaleset.JobStar
 
 	w.dirty = true
 
+	// The promotion to Running is guarded by an optimistic lock on the resource version
+	// observed by the GET below, so a terminal phase written between the read and the
+	// patch is never clobbered. Conflicts are retried against freshly read state.
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		return w.patchJobStarted(ctx, jobInfo)
+	})
+}
+
+func (w *Scaler) patchJobStarted(ctx context.Context, jobInfo *scaleset.JobStarted) error {
 	// Fetch current EphemeralRunner to check phase and deletion status
 	currentRunner := &v1alpha1.EphemeralRunner{}
 	err := w.clientset.RESTClient().
@@ -179,6 +189,8 @@ func (w *Scaler) HandleJobStarted(ctx context.Context, jobInfo *scaleset.JobStar
 		currentRunner.Status.Phase != v1alpha1.EphemeralRunnerPhaseSucceeded &&
 		currentRunner.Status.Phase != v1alpha1.EphemeralRunnerPhaseOutdated {
 		patchRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
+		// Optimistic lock: reject the promotion if the runner changed since the GET.
+		patchRunner.ResourceVersion = currentRunner.ResourceVersion
 	}
 
 	patch, err := json.Marshal(patchRunner)
@@ -208,6 +220,10 @@ func (w *Scaler) HandleJobStarted(ctx context.Context, jobInfo *scaleset.JobStar
 		if kerrors.IsNotFound(err) {
 			w.logger.Info("Ephemeral runner not found, skipping patching of ephemeral runner status", "runnerName", jobInfo.RunnerName)
 			return nil
+		}
+		if kerrors.IsConflict(err) {
+			w.logger.Info("Ephemeral runner changed while patching job info, retrying", "runnerName", jobInfo.RunnerName)
+			return err
 		}
 		return fmt.Errorf("could not patch ephemeral runner status, patch JSON: %s, error: %w", string(mergePatch), err)
 	}
