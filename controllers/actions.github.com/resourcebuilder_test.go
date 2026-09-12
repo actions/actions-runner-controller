@@ -546,3 +546,52 @@ func TestListenerPodNodeSelector(t *testing.T) {
 			"explicitly empty nodeSelector should override the linux default")
 	})
 }
+
+// TestNewEphemeralRunnerStampsActionableRevision pins the annotation the
+// Outdated lifecycle is built on. The controller compares a runner's actionable
+// revision against the set's applied revision to decide whether an Outdated
+// report concerns the current runner spec or one that has since been replaced.
+// A runner that lost this annotation would parse as revision 0 and be treated as
+// stale, so it would be deleted and replaced instead of holding the set
+// Outdated, and the set would never stop scaling.
+func TestNewEphemeralRunnerStampsActionableRevision(t *testing.T) {
+	newSet := func(revision int64, metadata *v1alpha1.ResourceMeta) *v1alpha1.EphemeralRunnerSet {
+		return &v1alpha1.EphemeralRunnerSet{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-ers", Namespace: "test-ns"},
+			Spec: v1alpha1.EphemeralRunnerSetSpec{
+				ActionableRevision:      revision,
+				EphemeralRunnerMetadata: metadata,
+			},
+		}
+	}
+
+	var b ResourceBuilder
+
+	t.Run("stamps the set's actionable revision", func(t *testing.T) {
+		runner, err := b.newEphemeralRunner(newSet(7, nil))
+		require.NoError(t, err)
+		assert.Equal(t, "7", runner.Annotations[AnnotationKeyActionableRevision])
+	})
+
+	// The zero value is what an unupgraded set carries, and it has to round-trip
+	// as "0" rather than being omitted: the classifier parses a missing
+	// annotation as 0 too, so an absent stamp would be indistinguishable from a
+	// genuine revision 0 and upgrades would silently rely on that coincidence.
+	t.Run("stamps the zero revision explicitly", func(t *testing.T) {
+		runner, err := b.newEphemeralRunner(newSet(0, nil))
+		require.NoError(t, err)
+		assert.Equal(t, "0", runner.Annotations[AnnotationKeyActionableRevision])
+	})
+
+	// User-supplied runner annotations are merged underneath the controller's
+	// own, so they cannot forge a revision. If this inverted, a user annotation
+	// could make every runner look stale and the set would delete and recreate
+	// runners forever.
+	t.Run("user metadata cannot override it", func(t *testing.T) {
+		runner, err := b.newEphemeralRunner(newSet(7, &v1alpha1.ResourceMeta{
+			Annotations: map[string]string{AnnotationKeyActionableRevision: "1"},
+		}))
+		require.NoError(t, err)
+		assert.Equal(t, "7", runner.Annotations[AnnotationKeyActionableRevision])
+	})
+}
