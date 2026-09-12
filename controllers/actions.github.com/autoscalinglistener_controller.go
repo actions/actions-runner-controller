@@ -78,7 +78,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 	if err := r.Get(ctx, req.NamespacedName, &autoscalingListener); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	original := autoscalingListener.DeepCopy()
+	listener := newLazyCopy(&autoscalingListener)
 
 	if !autoscalingListener.DeletionTimestamp.IsZero() {
 		if !controllerutil.ContainsFinalizer(&autoscalingListener, autoscalingListenerFinalizerName) {
@@ -97,8 +97,8 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 
 		log.Info("Removing finalizer")
-		if controllerutil.RemoveFinalizer(&autoscalingListener, autoscalingListenerFinalizerName) {
-			if err := r.Patch(ctx, &autoscalingListener, client.MergeFrom(original)); err != nil && !kerrors.IsNotFound(err) {
+		if controllerutil.RemoveFinalizer(listener.Mutate(), autoscalingListenerFinalizerName) {
+			if err := r.Patch(ctx, &autoscalingListener, listener.MergeFrom()); err != nil && !kerrors.IsNotFound(err) {
 				log.Error(err, "Failed to remove finalizer")
 				return ctrl.Result{}, err
 			}
@@ -109,8 +109,9 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, nil
 	}
 
-	if controllerutil.AddFinalizer(&autoscalingListener, autoscalingListenerFinalizerName) {
-		if err := r.Patch(ctx, &autoscalingListener, client.MergeFrom(original)); err != nil {
+	if !controllerutil.ContainsFinalizer(&autoscalingListener, autoscalingListenerFinalizerName) {
+		controllerutil.AddFinalizer(listener.Mutate(), autoscalingListenerFinalizerName)
+		if err := r.Patch(ctx, &autoscalingListener, listener.MergeFrom()); err != nil {
 			log.Error(err, "Failed to add finalizer")
 			return ctrl.Result{}, err
 		}
