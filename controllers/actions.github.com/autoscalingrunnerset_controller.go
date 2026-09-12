@@ -36,6 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -888,7 +889,7 @@ func (r *AutoscalingRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager, opts
 	return builderWithOptions(
 		ctrl.NewControllerManagedBy(mgr).
 			For(&v1alpha1.AutoscalingRunnerSet{}).
-			Owns(&v1alpha1.EphemeralRunnerSet{}).
+			Owns(&v1alpha1.EphemeralRunnerSet{}, builder.WithPredicates(autoscalingRunnerSetOwnedEphemeralRunnerSetPredicate())).
 			Watches(&v1alpha1.AutoscalingListener{}, handler.EnqueueRequestsFromMapFunc(
 				func(_ context.Context, o client.Object) []reconcile.Request {
 					autoscalingListener := o.(*v1alpha1.AutoscalingListener)
