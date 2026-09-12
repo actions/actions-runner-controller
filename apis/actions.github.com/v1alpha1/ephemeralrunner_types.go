@@ -188,8 +188,8 @@ const (
 	// EphemeralRunnerPhasePending is a phase set when the ephemeral runner is
 	// being provisioned and is not yet online.
 	EphemeralRunnerPhasePending EphemeralRunnerPhase = "Pending"
-	// EphemeralRunnerPhaseRunning is a phase set when the ephemeral runner is online and
-	// waiting for a job to execute.
+	// EphemeralRunnerPhaseRunning is a phase set by the listener when a job has been
+	// assigned to this ephemeral runner and the runner is executing it.
 	EphemeralRunnerPhaseRunning EphemeralRunnerPhase = "Running"
 	// EphemeralRunnerPhaseSucceeded is a phase set when the ephemeral runner
 	// successfully executed the job and has been removed from the service.
