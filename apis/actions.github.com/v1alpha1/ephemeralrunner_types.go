@@ -189,8 +189,9 @@ type EphemeralRunnerStatus struct {
 type EphemeralRunnerPhase string
 
 const (
-	// EphemeralRunnerPhasePending is a phase set when the ephemeral runner is
-	// being provisioned and is not yet online.
+	// EphemeralRunnerPhasePending is a phase set while no job has been assigned to
+	// the ephemeral runner. It covers both a runner that is still being provisioned
+	// and one that is already online and registered but idle.
 	EphemeralRunnerPhasePending EphemeralRunnerPhase = "Pending"
 	// EphemeralRunnerPhaseRunning is a phase set by the listener when a job has been
 	// assigned to this ephemeral runner and the runner is executing it.
