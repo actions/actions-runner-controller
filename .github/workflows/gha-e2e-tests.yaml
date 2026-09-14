@@ -135,8 +135,8 @@ jobs:
           application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
           application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
           organization: ${{ env.TARGET_ORG }}
-      - name: Run single namespace setup test
-        run: hack/e2e-test.sh single-namespace-setup
+      - name: Run auth proxy setup test
+        run: hack/e2e-test.sh auth-proxy-setup
         env:
           GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
