@@ -57,9 +57,10 @@ func autoscalingRunnerSetOwnedEphemeralRunnerSetPredicate() predicate.Predicate 
 // EphemeralRunners owned by an EphemeralRunnerSet.
 //
 // Besides object metadata and spec, the EphemeralRunnerSet reconciler reads
-// Status.Phase, to group runners by state, and Status.RunnerID, to decide
-// whether a runner still has to be removed from the service. The rest of the
-// runner status (readiness, failure bookkeeping, reason, message and the job
+// Status.Phase, to group runners by state, Status.RunnerID, to decide whether a
+// runner still has to be removed from the service, and Status.JobID, through
+// HasJob, to skip runners that are busy serving a job. The rest of the runner
+// status (readiness, failure bookkeeping, reason, message and the remaining job
 // details written by the listener) is never read, and it is by far the noisiest
 // part of the object.
 func ephemeralRunnerSetOwnedEphemeralRunnerPredicate() predicate.Predicate {
@@ -77,7 +78,8 @@ func ephemeralRunnerSetOwnedEphemeralRunnerPredicate() predicate.Predicate {
 			}
 
 			return oldRunner.Status.Phase != newRunner.Status.Phase ||
-				oldRunner.Status.RunnerID != newRunner.Status.RunnerID
+				oldRunner.Status.RunnerID != newRunner.Status.RunnerID ||
+				oldRunner.Status.JobID != newRunner.Status.JobID
 		},
 	}
 }

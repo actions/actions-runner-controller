@@ -1,6 +1,8 @@
 package actionsgithubcom
 
 import (
+	"reflect"
+	"sort"
 	"testing"
 	"time"
 
@@ -52,6 +54,12 @@ func TestAutoscalingRunnerSetOwnedEphemeralRunnerSetPredicate(t *testing.T) {
 		"deletion timestamp": func(s *v1alpha1.EphemeralRunnerSet) { s.DeletionTimestamp = &metav1.Time{Time: time.Now()} },
 		"generation":         func(s *v1alpha1.EphemeralRunnerSet) { s.Generation = 2 },
 		"owner references":   func(s *v1alpha1.EphemeralRunnerSet) { s.OwnerReferences = []metav1.OwnerReference{{Name: "owner"}} },
+		"phase": func(s *v1alpha1.EphemeralRunnerSet) {
+			s.Status.Phase = v1alpha1.EphemeralRunnerSetPhaseOutdated
+		},
+		"applied actionable revision": func(s *v1alpha1.EphemeralRunnerSet) {
+			s.Status.AppliedActionableRevision = 9
+		},
 	} {
 		t.Run("reconciles on "+name, func(t *testing.T) {
 			old, updated := base(), base()
@@ -108,6 +116,7 @@ func TestEphemeralRunnerSetOwnedEphemeralRunnerPredicate(t *testing.T) {
 	for name, mutate := range map[string]func(*v1alpha1.EphemeralRunner){
 		"phase":               func(r *v1alpha1.EphemeralRunner) { r.Status.Phase = v1alpha1.EphemeralRunnerPhaseSucceeded },
 		"runner id":           func(r *v1alpha1.EphemeralRunner) { r.Status.RunnerID = 43 },
+		"job id":              func(r *v1alpha1.EphemeralRunner) { r.Status.JobID = "job" },
 		"patch id annotation": func(r *v1alpha1.EphemeralRunner) { r.Annotations[AnnotationKeyPatchID] = "2" },
 		"actionable revision": func(r *v1alpha1.EphemeralRunner) { r.Annotations[AnnotationKeyActionableRevision] = "2" },
 		"labels":              func(r *v1alpha1.EphemeralRunner) { r.Labels = map[string]string{"a": "b"} },
@@ -131,7 +140,6 @@ func TestEphemeralRunnerSetOwnedEphemeralRunnerPredicate(t *testing.T) {
 		updated.Status.RunnerName = "runner-name"
 		updated.Status.Failures = map[string]metav1.Time{"pod": metav1.Now()}
 		updated.Status.JobRequestID = 7
-		updated.Status.JobID = "job"
 		updated.Status.JobDisplayName = "display"
 		updated.Status.JobRepositoryName = "org/repo"
 		updated.Status.JobWorkflowRef = "ref"
@@ -239,5 +247,52 @@ func TestEphemeralRunnerOwnedPodPredicate(t *testing.T) {
 			ObjectOld: &v1alpha1.EphemeralRunner{},
 			ObjectNew: &v1alpha1.EphemeralRunner{},
 		}))
+	})
+}
+
+// The predicates above are projections of the status fields their reconcilers
+// read, so a field added to either status has to be classified: either it wakes
+// the reconciler up and belongs in the tables above, or it is deliberately
+// ignored. Nothing else forces that decision, so the field names are pinned
+// here and adding one fails until somebody updates this list and the tables.
+//
+// The pin is a tripwire on the type, not a proof of correspondence: it cannot
+// tell whether a reconciler started branching on a field the matching predicate
+// still drops. Only the tables above assert the behaviour.
+func TestPredicateProjectionsCoverEveryStatusField(t *testing.T) {
+	fieldNames := func(v any) []string {
+		typ := reflect.TypeOf(v)
+		names := make([]string, 0, typ.NumField())
+		for i := 0; i < typ.NumField(); i++ {
+			names = append(names, typ.Field(i).Name)
+		}
+		sort.Strings(names)
+		return names
+	}
+
+	t.Run("ephemeral runner set status", func(t *testing.T) {
+		assert.Equal(t, []string{
+			"AppliedActionableRevision",
+			"FinishedRunnerCleanupPatchID",
+			"Phase",
+		}, fieldNames(v1alpha1.EphemeralRunnerSetStatus{}))
+	})
+
+	t.Run("ephemeral runner status", func(t *testing.T) {
+		assert.Equal(t, []string{
+			"Failures",
+			"JobDisplayName",
+			"JobID",
+			"JobRepositoryName",
+			"JobRequestID",
+			"JobWorkflowRef",
+			"Message",
+			"Phase",
+			"Ready",
+			"Reason",
+			"RunnerID",
+			"RunnerName",
+			"WorkflowRunID",
+		}, fieldNames(v1alpha1.EphemeralRunnerStatus{}))
 	})
 }
