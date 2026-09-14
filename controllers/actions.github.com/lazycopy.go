@@ -40,6 +40,20 @@ type deepCopyObject[T any] interface {
 // So the invariant is: read through the original as much as you like, but make
 // every mutation that the patch should carry go through Mutate.
 //
+// "The patch" is the qualifier that matters for a type with a status
+// subresource, because there the object is two independently patchable
+// surfaces. A write to status cannot go missing from a patch that does not
+// carry status: the API server ignores status in the body of a merge patch to
+// the main resource, so a status write made outside Mutate is neither captured
+// by nor dropped from that patch. EphemeralRunnerSetReconciler.updateStatus
+// relies on this, writing Status directly while Reconcile holds a lazyCopy over
+// the same object and persisting it through its own Status().Patch. That reads
+// like a violation of the rule above and is not one.
+//
+// The reverse is not true. A lazyCopy guarding a status patch has the same
+// exposure to metadata writes, so the rule holds surface by surface rather than
+// object by object.
+//
 // A lazyCopy is not safe for concurrent use.
 type lazyCopy[T deepCopyObject[T]] struct {
 	obj      T
