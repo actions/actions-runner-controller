@@ -47,7 +47,7 @@ var (
 		prometheus.GaugeOpts{
 			Subsystem: githubScaleSetControllerSubsystem,
 			Name:      "running_ephemeral_runners",
-			Help:      "Number of ephemeral runners in a running state.",
+			Help:      "Number of ephemeral runners that have been assigned a job.",
 		},
 		labels,
 	)
