@@ -400,6 +400,171 @@ tests:
             name: cache
             mountPath: /cache
 
+  - it: should pass extra fields from runner.container to the runner container in dind mode
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "dind"
+        container:
+          securityContext:
+            runAsUser: 1000
+          resources:
+            limits:
+              cpu: "250m"
+              memory: "64Mi"
+          imagePullPolicy: Always
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: runner
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsUser
+          value: 1000
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 250m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 64Mi
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: Always
+
+  - it: should silently ignore runner.container.name in dind mode
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "dind"
+        container:
+          name: not-runner
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: runner
+
+  - it: should fail when runner.container is not a map in dind mode
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "dind"
+        container: "invalid"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: runner.container must be a map/object
+
+  - it: should fail when runner.container.env is not a list in dind mode
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "dind"
+        container:
+          env: "not-a-list"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: runner.container.env must be a list
+
+  - it: should fail when runner.container.volumeMounts is not a list in dind mode
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "dind"
+        container:
+          volumeMounts: "not-a-list"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: runner.container.volumeMounts must be a list
+
+  - it: should fail when runner.container.volumes is set in dind mode
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "dind"
+        container:
+          volumes:
+            - name: cache
+              emptyDir: {}
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: runner.container.volumes is not supported; use runner.pod.spec.volumes
+
+  - it: should fail when runner.container.args is not a list in dind mode
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "dind"
+        container:
+          args: "not-a-list"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: runner.container.args must be a list
+
+  - it: should fail when runner.container.securityContext is not a map in dind mode
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "dind"
+        container:
+          securityContext: "not-a-map"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: runner.container.securityContext must be a map/object
+
   - it: should fail when runner.dind.container.volumes is provided
     set:
       scaleset.name: "test"
