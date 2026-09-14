@@ -120,3 +120,64 @@ func TestPatchAppliedActionableRevisionStatusClassifiesAgainstTheAdvancedRevisio
 		"the leftover runner reported Outdated against revision 1, which this call has just superseded, so it must be classified against the advanced revision and ignored: counting it against the pre-advance revision saves the Outdated phase alongside revision 2, and nothing recomputes the phase from there",
 	)
 }
+
+// TestPatchAppliedActionableRevisionStatusDoesNotPatchWhenNothingChanges pins
+// the other half of that contract: the call must issue no patch at all when the
+// status already says what it would set.
+//
+// This is the reason the object is not deep copied up front, and it is decided
+// by whether any mutation was actually made rather than by comparing a
+// separately built status value. Losing it would send an empty patch on every
+// reconcile that reaches this function, and each write bumps the resourceVersion
+// and wakes every watcher, so the regression is invisible in behaviour and
+// visible only in load.
+func TestPatchAppliedActionableRevisionStatusDoesNotPatchWhenNothingChanges(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, v1alpha1.AddToScheme(scheme))
+
+	// Already applied revision 3, already Running, marker already clear, and no
+	// child runners to move the phase. Every write below is therefore a no-op.
+	ephemeralRunnerSet := &v1alpha1.EphemeralRunnerSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ers",
+			Namespace: "default",
+		},
+		Status: v1alpha1.EphemeralRunnerSetStatus{
+			AppliedActionableRevision: 3,
+			Phase:                     v1alpha1.EphemeralRunnerSetPhaseRunning,
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(ephemeralRunnerSet).
+		WithStatusSubresource(&v1alpha1.EphemeralRunnerSet{}).
+		WithIndex(&v1alpha1.EphemeralRunner{}, resourceOwnerKey, newGroupVersionOwnerKindIndexer("EphemeralRunnerSet")).
+		Build()
+
+	reconciler := &EphemeralRunnerSetReconciler{
+		Client:    fakeClient,
+		APIReader: fakeClient,
+		Log:       logr.Discard(),
+		Scheme:    scheme,
+	}
+
+	key := types.NamespacedName{Namespace: "default", Name: "test-ers"}
+
+	var before v1alpha1.EphemeralRunnerSet
+	require.NoError(t, fakeClient.Get(context.Background(), key, &before))
+
+	require.NoError(t, reconciler.patchAppliedActionableRevisionStatus(context.Background(), key, 3))
+
+	var after v1alpha1.EphemeralRunnerSet
+	require.NoError(t, fakeClient.Get(context.Background(), key, &after))
+
+	assert.Equal(
+		t,
+		before.ResourceVersion,
+		after.ResourceVersion,
+		"the status already matched, so no patch should have been sent: the resourceVersion moving means an empty patch was written anyway",
+	)
+	assert.Equal(t, before.Status, after.Status)
+}

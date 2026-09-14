@@ -71,13 +71,14 @@ func (l *lazyCopy[T]) Modified() bool {
 }
 
 // MergeFrom returns a merge patch against the snapshot taken by the first
-// Mutate call. It panics when called on an unmodified lazyCopy, because there
-// is no snapshot to diff against and the caller would otherwise silently issue
-// a patch computed from the live object against itself. Guard it with
-// Modified.
-func (l *lazyCopy[T]) MergeFrom() client.Patch {
+// Mutate call, with any of controller-runtime's merge options applied, such as
+// client.MergeFromWithOptimisticLock{}. It panics when called on an unmodified
+// lazyCopy, because there is no snapshot to diff against and the caller would
+// otherwise silently issue a patch computed from the live object against
+// itself. Guard it with Modified.
+func (l *lazyCopy[T]) MergeFrom(opts ...client.MergeFromOption) client.Patch {
 	if !l.copied {
 		panic("lazyCopy: MergeFrom called before Mutate")
 	}
-	return client.MergeFrom(l.original)
+	return client.MergeFromWithOptions(l.original, opts...)
 }

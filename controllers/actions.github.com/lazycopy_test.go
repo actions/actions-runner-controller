@@ -86,3 +86,28 @@ func TestLazyCopyDropsWritesMadeBeforeTheFirstMutate(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"metadata":{"annotations":{"declared":"new"}}}`, string(data))
 }
+
+// The status patch in patchAppliedActionableRevisionStatus relies on being able
+// to attach an optimistic lock, so that a patch computed from a stale read is
+// rejected by the API server rather than silently moving the applied revision
+// backwards. Without the precondition the patch can never conflict, so the
+// surrounding RetryOnConflict would never fire.
+func TestLazyCopyMergeFromForwardsMergeOptions(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "pod",
+			ResourceVersion: "42",
+		},
+	}
+	lazy := newLazyCopy(pod)
+	lazy.Mutate().Labels = map[string]string{"key": "value"}
+
+	data, err := lazy.MergeFrom(client.MergeFromWithOptimisticLock{}).Data(pod)
+	require.NoError(t, err)
+	assert.JSONEq(
+		t,
+		`{"metadata":{"labels":{"key":"value"},"resourceVersion":"42"}}`,
+		string(data),
+		"the lock is carried as a resourceVersion precondition in the patch body, taken from the snapshot rather than the mutated object",
+	)
+}
