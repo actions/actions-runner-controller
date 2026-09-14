@@ -19,8 +19,7 @@ type deepCopyObject[T any] interface {
 //
 // The snapshot must be taken before the first mutation, otherwise the merge
 // patch is computed against the already mutated object and comes out empty.
-// Mutate is the only way to reach the object, which makes that ordering
-// impossible to get wrong:
+// Routing a mutation through Mutate is what guarantees that ordering:
 //
 //	runner := newLazyCopy(&ephemeralRunner)
 //	if !controllerutil.ContainsFinalizer(&ephemeralRunner, name) {
@@ -29,6 +28,17 @@ type deepCopyObject[T any] interface {
 //	if runner.Modified() {
 //		err := r.Patch(ctx, &ephemeralRunner, runner.MergeFrom())
 //	}
+//
+// Callers must uphold that ordering themselves, because lazyCopy cannot
+// enforce it. The caller keeps the pointer it passed to newLazyCopy, and as the
+// example shows it goes on using that pointer to read the object and to address
+// the patch. Nothing stops it from writing through it as well. A write that
+// lands before the first Mutate is already present in the snapshot, so the
+// merge patch against that snapshot is empty and the write is silently dropped
+// rather than sent to the API server.
+//
+// So the invariant is: read through the original as much as you like, but make
+// every mutation that the patch should carry go through Mutate.
 //
 // A lazyCopy is not safe for concurrent use.
 type lazyCopy[T deepCopyObject[T]] struct {

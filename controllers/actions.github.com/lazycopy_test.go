@@ -61,3 +61,28 @@ func TestLazyCopyMergeFromIsAMergePatch(t *testing.T) {
 
 	assert.Equal(t, client.MergeFrom(pod).Type(), lazy.MergeFrom().Type())
 }
+
+// Pins the hazard documented on lazyCopy: the caller keeps the pointer it
+// handed to newLazyCopy, so it can write through it without going via Mutate.
+// A write that lands before the first Mutate is already in the snapshot, so it
+// is absent from the patch and never reaches the API server. The type cannot
+// prevent this, which is why the ordering is a caller invariant rather than a
+// guarantee.
+func TestLazyCopyDropsWritesMadeBeforeTheFirstMutate(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "pod",
+			Annotations: map[string]string{"smuggled": "old", "declared": "old"},
+		},
+	}
+	lazy := newLazyCopy(pod)
+
+	// Bypasses Mutate, so it is captured by the snapshot taken below.
+	pod.Annotations["smuggled"] = "new"
+
+	lazy.Mutate().Annotations["declared"] = "new"
+
+	data, err := lazy.MergeFrom().Data(pod)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"metadata":{"annotations":{"declared":"new"}}}`, string(data))
+}
