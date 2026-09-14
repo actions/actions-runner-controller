@@ -56,7 +56,30 @@ spec:
 
 > Note that you'd need to patch the below Dockerfile if you need a graceful termination.
 > See https://github.com/actions/actions-runner-controller/pull/1608/files#r917319574 for more information.
+  
+  
+I would like to propose in Dockerfile, instead of lines:
 
+RUN Invoke-WebRequest -Uri https://github.com/actions/runner/releases/download/v2.292.0/actions-runner-win-x64-2.292.0.zip -OutFile actions-runner-win-x64-2.292.0.zip
+RUN if((Get-FileHash -Path actions-runner-win-x64-2.292.0.zip -Algorithm SHA256).Hash.ToUpper() -ne 'f27dae1413263e43f7416d719e0baf338c8d80a366fed849ecf5fffcec1e941f'.ToUpper()){ throw 'Computed checksum did not match' }
+RUN Add-Type -AssemblyName System.IO.Compression.FileSystem ; [System.IO.Compression.ZipFile]::ExtractToDirectory('actions-runner-win-x64-2.292.0.zip', $PWD)
+
+To add the following after the powershell installation step:
+
+COPY get-latestrunnerversion.ps1 
+RUN ./get-latestrunnerversion.ps1 
+  
+Where the get-latestrunnerversion.ps1 script looks like this:  
+  
+$URI="https://api.github.com/repos/actions/runner/releases/latest"
+$Version=(Invoke-Webrequest $URI)
+$latest=($Version | ConvertFrom-Json).name
+$vnum=($latest).Substring(1)
+Invoke-WebRequest -Uri "https://github.com/actions/runner/releases/download/$latest/actions-runner-win-x64-$vnum.zip" -OutFile "actions-runner-win-x64-latest.zip"
+Expand-Archive -Path $PWD\actions-runner-win-x64-latest.zip -DestinationPath "$PWD" -Force
+Remove-Item -Path $PWD\actions-runner-win-x64-latest.zip -Force
+  
+  
 ```Dockerfile
 FROM mcr.microsoft.com/windows/servercore:ltsc2019
 
