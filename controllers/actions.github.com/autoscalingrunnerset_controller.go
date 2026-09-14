@@ -229,19 +229,18 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			return ctrl.Result{}, nil
 		}
 
-		if ephemeralRunnerSetActionableSpecChanged(&ephemeralRunnerSet, desired) ||
-			ephemeralRunnerSetOutdatedForAppliedRevision(&ephemeralRunnerSet) {
-			// The second condition is the recovery path out of the outdated phase.
-			// Reaching here at all means the AutoscalingRunnerSet is not outdated,
-			// and the case above already claimed every running set that is, so the
-			// spec must have been updated since the runners rejected it. That update
-			// is the signal to try again, and the revision has to advance even when
-			// the runner spec itself is unchanged: the revision is what tells the
-			// EphemeralRunnerSet to stop judging itself by the runners that failed,
-			// which is what clears its outdated phase and lets it scale up again.
-			// Without it a scale set could only ever be recovered by editing the
-			// runner spec, and an edit to anything else would switch the listener
-			// back on against a set that stays parked at zero.
+		recoveringFromOutdated := ephemeralRunnerSetOutdatedForAppliedRevision(&ephemeralRunnerSet) &&
+			autoscalingRunnerSet.Generation > autoscalingRunnerSet.Status.ObservedGeneration
+		if ephemeralRunnerSetActionableSpecChanged(&ephemeralRunnerSet, desired) || recoveringFromOutdated {
+			// A real AutoscalingRunnerSet spec update leaves its observed generation
+			// behind until reconciliation succeeds. Require that signal before
+			// recovering an outdated set: Pending can also mean a metadata-only
+			// listener rebuild, which must not retry the same rejected runner spec.
+			//
+			// The revision has to advance even when the runner spec itself is
+			// unchanged. It tells the EphemeralRunnerSet to stop judging itself by
+			// the runners that failed, clearing its outdated phase and allowing it
+			// to scale up again.
 			original := ephemeralRunnerSet.DeepCopy()
 			ephemeralRunnerSet.Spec.EphemeralRunnerMetadata = desired.Spec.EphemeralRunnerMetadata
 			ephemeralRunnerSet.Spec.EphemeralRunnerSpec = desired.Spec.EphemeralRunnerSpec

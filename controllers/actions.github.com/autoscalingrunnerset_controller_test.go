@@ -3084,5 +3084,54 @@ var _ = Describe("Test AutoscalingRunnerSet outdated lifecycle", Ordered, func()
 
 			expectRecovered(outdatedRevision)
 		})
+
+		It("does not retry an outdated runner spec during a metadata-only listener rebuild", func() {
+			listener := new(v1alpha1.AutoscalingListener)
+			Expect(k8sClient.Get(ctx, listenerKey(), listener)).To(Succeed())
+			blockDeletion(listener)
+			defer unblockDeletion(listener)
+
+			runnerSet := getEphemeralRunnerSet()
+			rejectedRevision := runnerSet.Spec.ActionableRevision
+
+			updated := new(v1alpha1.AutoscalingRunnerSet)
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), updated)).To(Succeed())
+			original := updated.DeepCopy()
+			if updated.Labels == nil {
+				updated.Labels = map[string]string{}
+			}
+			updated.Labels["arc.test/listener-rebuild"] = "true"
+			Expect(k8sClient.Patch(ctx, updated, client.MergeFrom(original))).To(Succeed(), "failed to trigger a metadata-only listener rebuild")
+
+			Eventually(
+				func(g Gomega) {
+					currentListener := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, listenerKey(), currentListener)).To(Succeed())
+					g.Expect(currentListener.DeletionTimestamp).NotTo(BeNil(), "listener deletion should remain blocked")
+
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhasePending))
+					g.Expect(current.Generation).To(Equal(current.Status.ObservedGeneration), "metadata-only updates must not look like spec recovery")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+
+			markRunnersOutdated()
+
+			Consistently(
+				func(g Gomega) {
+					current := getEphemeralRunnerSet()
+					g.Expect(current.Spec.ActionableRevision).To(Equal(rejectedRevision), "the rejected runner spec must not be retried without an AutoscalingRunnerSet spec update")
+
+					currentListener := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, listenerKey(), currentListener)).To(Succeed())
+					g.Expect(currentListener.DeletionTimestamp).NotTo(BeNil(), "the metadata-only listener rebuild should remain blocked")
+				},
+				3*time.Second,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+		})
 	})
 })
