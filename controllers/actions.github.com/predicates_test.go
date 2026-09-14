@@ -143,6 +143,7 @@ func TestEphemeralRunnerSetOwnedEphemeralRunnerPredicate(t *testing.T) {
 		updated.Status.JobDisplayName = "display"
 		updated.Status.JobRepositoryName = "org/repo"
 		updated.Status.JobWorkflowRef = "ref"
+		updated.Status.WorkflowRunID = 12
 		updated.ResourceVersion = "2"
 		assert.False(t, ephemeralRunnerSetOwnedEphemeralRunnerPredicate().Update(event.UpdateEvent{ObjectOld: old, ObjectNew: updated}))
 	})
@@ -246,6 +247,152 @@ func TestEphemeralRunnerOwnedPodPredicate(t *testing.T) {
 		assert.True(t, ephemeralRunnerOwnedPodPredicate().Update(event.UpdateEvent{
 			ObjectOld: &v1alpha1.EphemeralRunner{},
 			ObjectNew: &v1alpha1.EphemeralRunner{},
+		}))
+	})
+}
+
+func TestAutoscalingListenerOwnedPodPredicate(t *testing.T) {
+	base := func() *corev1.Pod {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        "listener",
+				Namespace:   "default",
+				Generation:  1,
+				Labels:      map[string]string{"app": "listener"},
+				Annotations: map[string]string{AnnotationKeyListenerConfigResourceVersion: "1"},
+			},
+			Spec: corev1.PodSpec{
+				ServiceAccountName: "listener",
+				Containers: []corev1.Container{
+					{
+						Name:  autoscalingListenerContainerName,
+						Image: "listener:1",
+					},
+				},
+			},
+			Status: corev1.PodStatus{
+				Phase: corev1.PodRunning,
+				ContainerStatuses: []corev1.ContainerStatus{
+					{
+						Name:  autoscalingListenerContainerName,
+						State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+					},
+				},
+			},
+		}
+	}
+
+	// Every listener pod field the AutoscalingListener reconciler branches on has
+	// to wake it up.
+	for name, mutate := range map[string]func(*corev1.Pod){
+		"phase":   func(p *corev1.Pod) { p.Status.Phase = corev1.PodFailed },
+		"reason":  func(p *corev1.Pod) { p.Status.Reason = "Evicted" },
+		"message": func(p *corev1.Pod) { p.Status.Message = "evicted" },
+		"labels":  func(p *corev1.Pod) { p.Labels["app"] = "changed" },
+		"listener config resource version": func(p *corev1.Pod) {
+			p.Annotations[AnnotationKeyListenerConfigResourceVersion] = "2"
+		},
+		"deletion timestamp": func(p *corev1.Pod) {
+			p.DeletionTimestamp = &metav1.Time{Time: time.Now()}
+		},
+		"generation":       func(p *corev1.Pod) { p.Generation = 2 },
+		"owner references": func(p *corev1.Pod) { p.OwnerReferences = []metav1.OwnerReference{{Name: "owner"}} },
+		"finalizers":       func(p *corev1.Pod) { p.Finalizers = []string{"finalizer"} },
+		"image":            func(p *corev1.Pod) { p.Spec.Containers[0].Image = "listener:2" },
+		"container ports": func(p *corev1.Pod) {
+			p.Spec.Containers[0].Ports = []corev1.ContainerPort{{ContainerPort: 8080}}
+		},
+		"service account name": func(p *corev1.Pod) { p.Spec.ServiceAccountName = "other" },
+		"listener container terminated": func(p *corev1.Pod) {
+			p.Status.ContainerStatuses[0].State = corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 1}}
+		},
+	} {
+		t.Run("reconciles on "+name, func(t *testing.T) {
+			old, updated := base(), base()
+			mutate(updated)
+			assert.True(t, autoscalingListenerOwnedPodPredicate().Update(event.UpdateEvent{ObjectOld: old, ObjectNew: updated}))
+		})
+	}
+
+	t.Run("ignores pod noise the listener never reads", func(t *testing.T) {
+		old, updated := base(), base()
+		updated.ResourceVersion = "2"
+		updated.Status.PodIP = "10.0.0.1"
+		updated.Status.PodIPs = []corev1.PodIP{{IP: "10.0.0.1"}}
+		updated.Status.HostIP = "10.0.0.2"
+		updated.Status.StartTime = &metav1.Time{Time: time.Now()}
+		updated.Status.NominatedNodeName = "node"
+		updated.Status.QOSClass = corev1.PodQOSBestEffort
+		updated.Status.Conditions = []corev1.PodCondition{
+			{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+			{Type: corev1.PodScheduled, Status: corev1.ConditionTrue},
+		}
+		updated.Status.InitContainerStatuses = []corev1.ContainerStatus{
+			{Name: "init", State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 0}}},
+		}
+		assert.False(t, autoscalingListenerOwnedPodPredicate().Update(event.UpdateEvent{ObjectOld: old, ObjectNew: updated}))
+	})
+
+	t.Run("reconciles on unexpected types", func(t *testing.T) {
+		assert.True(t, autoscalingListenerOwnedPodPredicate().Update(event.UpdateEvent{
+			ObjectOld: &v1alpha1.AutoscalingListener{},
+			ObjectNew: &v1alpha1.AutoscalingListener{},
+		}))
+	})
+
+	t.Run("does not filter create, delete or generic events", func(t *testing.T) {
+		p := autoscalingListenerOwnedPodPredicate()
+		assert.True(t, p.Create(event.CreateEvent{Object: base()}))
+		assert.True(t, p.Delete(event.DeleteEvent{Object: base()}))
+		assert.True(t, p.Generic(event.GenericEvent{Object: base()}))
+	})
+}
+
+func TestAutoscalingListenerOwnedServiceAccountPredicate(t *testing.T) {
+	base := func() *corev1.ServiceAccount {
+		return &corev1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        "listener",
+				Namespace:   "default",
+				Generation:  1,
+				Labels:      map[string]string{"app": "listener"},
+				Annotations: map[string]string{"annotation": "1"},
+			},
+		}
+	}
+
+	// The reconciler merges labels and annotations back onto the service account,
+	// so a change to either has to wake it up.
+	for name, mutate := range map[string]func(*corev1.ServiceAccount){
+		"labels":      func(sa *corev1.ServiceAccount) { sa.Labels["app"] = "changed" },
+		"annotations": func(sa *corev1.ServiceAccount) { sa.Annotations["annotation"] = "2" },
+		"deletion timestamp": func(sa *corev1.ServiceAccount) {
+			sa.DeletionTimestamp = &metav1.Time{Time: time.Now()}
+		},
+		"finalizers":       func(sa *corev1.ServiceAccount) { sa.Finalizers = []string{"finalizer"} },
+		"owner references": func(sa *corev1.ServiceAccount) { sa.OwnerReferences = []metav1.OwnerReference{{Name: "owner"}} },
+	} {
+		t.Run("reconciles on "+name, func(t *testing.T) {
+			old, updated := base(), base()
+			mutate(updated)
+			assert.True(t, autoscalingListenerOwnedServiceAccountPredicate().Update(event.UpdateEvent{ObjectOld: old, ObjectNew: updated}))
+		})
+	}
+
+	t.Run("ignores service account noise the listener never reads", func(t *testing.T) {
+		old, updated := base(), base()
+		updated.ResourceVersion = "2"
+		updated.Secrets = []corev1.ObjectReference{{Name: "listener-token"}}
+		updated.ImagePullSecrets = []corev1.LocalObjectReference{{Name: "pull"}}
+		automount := true
+		updated.AutomountServiceAccountToken = &automount
+		assert.False(t, autoscalingListenerOwnedServiceAccountPredicate().Update(event.UpdateEvent{ObjectOld: old, ObjectNew: updated}))
+	})
+
+	t.Run("reconciles on unexpected types", func(t *testing.T) {
+		assert.True(t, autoscalingListenerOwnedServiceAccountPredicate().Update(event.UpdateEvent{
+			ObjectOld: &corev1.Pod{},
+			ObjectNew: &corev1.Pod{},
 		}))
 	})
 }

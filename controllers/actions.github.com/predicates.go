@@ -123,10 +123,64 @@ func ephemeralRunnerOwnedPodPredicate() predicate.Predicate {
 	}
 }
 
-// equalReconciledObjectMeta compares the metadata fields the controllers in this
-// package branch on. Bookkeeping the API server owns, such as the resource
-// version, the managed fields and the timestamps outside of deletion, is
-// deliberately left out.
+// autoscalingListenerOwnedPodPredicate filters updates of the listener pod
+// owned by an AutoscalingListener.
+//
+// The AutoscalingListener reconciler reads the pod's object metadata, because it
+// merges labels and annotations back onto the pod and compares the listener
+// config resource version annotation, and its whole spec, through
+// listenerPodSpecRequiresRecreation. Off the status it reads only the phase,
+// reason and message, to detect eviction, and the container statuses, to find
+// the listener container and branch on whether it is running or terminated. The
+// rest of the pod status is never read: assigned IPs, the node the pod landed
+// on, start time, the conditions and the init container statuses.
+func autoscalingListenerOwnedPodPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldPod, oldOk := e.ObjectOld.(*corev1.Pod)
+			newPod, newOk := e.ObjectNew.(*corev1.Pod)
+			if !oldOk || !newOk {
+				return true
+			}
+
+			if !equalReconciledObjectMeta(&oldPod.ObjectMeta, &newPod.ObjectMeta) ||
+				!equality.Semantic.DeepEqual(&oldPod.Spec, &newPod.Spec) {
+				return true
+			}
+
+			oldStatus, newStatus := &oldPod.Status, &newPod.Status
+			if oldStatus.Phase != newStatus.Phase ||
+				oldStatus.Reason != newStatus.Reason ||
+				oldStatus.Message != newStatus.Message {
+				return true
+			}
+
+			return !equality.Semantic.DeepEqual(oldStatus.ContainerStatuses, newStatus.ContainerStatuses)
+		},
+	}
+}
+
+// autoscalingListenerOwnedServiceAccountPredicate filters updates of the service
+// account owned by an AutoscalingListener.
+//
+// The AutoscalingListener reconciler only ever reads the service account's
+// labels and annotations, which it merges back onto the object. Everything else
+// the API server and the token controller write to it, the mounted secrets
+// above all, is never read.
+func autoscalingListenerOwnedServiceAccountPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldServiceAccount, oldOk := e.ObjectOld.(*corev1.ServiceAccount)
+			newServiceAccount, newOk := e.ObjectNew.(*corev1.ServiceAccount)
+			if !oldOk || !newOk {
+				return true
+			}
+
+			return !equalReconciledObjectMeta(&oldServiceAccount.ObjectMeta, &newServiceAccount.ObjectMeta)
+		},
+	}
+}
+
 // podReady reports whether the pod advertises the Ready condition. It is the
 // single source of truth for both the reconciler, which mirrors the result into
 // EphemeralRunner.Status.Ready, and the pod predicate, which has to wake the
@@ -143,6 +197,10 @@ func podReady(pod *corev1.Pod) bool {
 	return ready
 }
 
+// equalReconciledObjectMeta compares the metadata fields the controllers in this
+// package branch on. Bookkeeping the API server owns, such as the resource
+// version, the managed fields and the timestamps outside of deletion, is
+// deliberately left out.
 func equalReconciledObjectMeta(old, new *metav1.ObjectMeta) bool {
 	return old.Generation == new.Generation &&
 		equalTime(old.DeletionTimestamp, new.DeletionTimestamp) &&
