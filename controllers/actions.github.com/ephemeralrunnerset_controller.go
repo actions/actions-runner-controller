@@ -420,7 +420,18 @@ func (r *EphemeralRunnerSetReconciler) patchAppliedActionableRevisionStatus(ctx 
 		// the superseded revision as current and flip a set that has already
 		// moved on back to Outdated. That phase is deliberately absorbing, so
 		// the set would then stay switched off until the next spec change.
-		state := newEphemeralRunnersByStates(ephemeralRunnerList, latest.Status.AppliedActionableRevision)
+		//
+		// It has to be read from desiredStatus rather than latest.Status. The
+		// guard writes the advance to the copy, so latest.Status still holds the
+		// pre-advance value and is only max(live, target) in the case where the
+		// guard did not fire. Reading it there would judge the runners against a
+		// revision this call is in the middle of superseding, and then save the
+		// resulting phase alongside the new revision: a leftover runner missed by
+		// the cleanup would be counted Outdated against the old revision and
+		// persisted next to the advanced marker. Nothing recomputes it afterwards,
+		// because the Outdated path returns before reaching updateStatus, so the
+		// set stays switched off until the next spec change.
+		state := newEphemeralRunnersByStates(ephemeralRunnerList, desiredStatus.AppliedActionableRevision)
 
 		// Set the phase in both directions. This function returns early from
 		// Reconcile without reaching updateStatus, so leaving the phase untouched
