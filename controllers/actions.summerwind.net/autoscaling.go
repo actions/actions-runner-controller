@@ -23,7 +23,7 @@ const (
 	defaultScaleDownFactor    = 0.7
 )
 
-func (r *HorizontalRunnerAutoscalerReconciler) suggestDesiredReplicas(ghc *arcgithub.Client, st scaleTarget, hra v1alpha1.HorizontalRunnerAutoscaler) (*int, error) {
+func (r *HorizontalRunnerAutoscalerReconciler) suggestDesiredReplicas(ghc *arcgithub.Client, st scaleTarget, hra v1alpha1.HorizontalRunnerAutoscaler, reserved int) (*int, error) {
 	if hra.Spec.MinReplicas == nil {
 		return nil, fmt.Errorf("horizontalrunnerautoscaler %s/%s is missing minReplicas", hra.Namespace, hra.Name)
 	} else if hra.Spec.MaxReplicas == nil {
@@ -52,7 +52,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestDesiredReplicas(ghc *arcgi
 	case v1alpha1.AutoscalingMetricTypeTotalNumberOfQueuedAndInProgressWorkflowRuns:
 		suggested, err = r.suggestReplicasByQueuedAndInProgressWorkflowRuns(ghc, st, hra, &primaryMetric)
 	case v1alpha1.AutoscalingMetricTypePercentageRunnersBusy:
-		suggested, err = r.suggestReplicasByPercentageRunnersBusy(ghc, st, hra, primaryMetric)
+		suggested, err = r.suggestReplicasByPercentageRunnersBusy(ghc, st, hra, primaryMetric, reserved)
 	default:
 		return nil, fmt.Errorf("validating autoscaling metrics: unsupported metric type %q", primaryMetric.Type)
 	}
@@ -242,7 +242,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByQueuedAndInProgr
 	return &necessaryReplicas, nil
 }
 
-func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunnersBusy(ghc *arcgithub.Client, st scaleTarget, hra v1alpha1.HorizontalRunnerAutoscaler, metrics v1alpha1.MetricSpec) (*int, error) {
+func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunnersBusy(ghc *arcgithub.Client, st scaleTarget, hra v1alpha1.HorizontalRunnerAutoscaler, metrics v1alpha1.MetricSpec, reserved int) (*int, error) {
 	ctx := context.Background()
 	scaleUpThreshold := defaultScaleUpThreshold
 	scaleDownThreshold := defaultScaleDownThreshold
@@ -328,6 +328,12 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunner
 		desiredReplicasBefore = *v
 	}
 
+	// Exclude reserved capacity: the caller re-adds it, so leaving it in double-counts (#1962).
+	desiredReplicasBefore -= reserved
+	if desiredReplicasBefore < 1 {
+		desiredReplicasBefore = 1
+	}
+
 	var (
 		numRunners           int
 		numRunnersRegistered int
@@ -376,8 +382,14 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunner
 		numTerminatingBusy++
 	}
 
+	// Same reasoning as desiredReplicasBefore above.
+	busy := numRunnersBusy + numTerminatingBusy - reserved
+	if busy < 0 {
+		busy = 0
+	}
+
 	var desiredReplicas int
-	fractionBusy := float64(numRunnersBusy+numTerminatingBusy) / float64(desiredReplicasBefore)
+	fractionBusy := float64(busy) / float64(desiredReplicasBefore)
 	if fractionBusy >= scaleUpThreshold {
 		if scaleUpAdjustment > 0 {
 			desiredReplicas = desiredReplicasBefore + scaleUpAdjustment
@@ -391,7 +403,7 @@ func (r *HorizontalRunnerAutoscalerReconciler) suggestReplicasByPercentageRunner
 			desiredReplicas = int(float64(desiredReplicasBefore) * scaleDownFactor)
 		}
 	} else {
-		desiredReplicas = *st.replicas
+		desiredReplicas = desiredReplicasBefore
 	}
 
 	// NOTES for operators:
