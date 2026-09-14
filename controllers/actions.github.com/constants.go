@@ -50,6 +50,12 @@ const (
 	AnnotationKeyGitHubRunnerGroupName    = "actions.github.com/runner-group-name"
 	AnnotationKeyGitHubRunnerScaleSetName = "actions.github.com/runner-scale-set-name"
 	AnnotationKeyPatchID                  = "actions.github.com/patch-id"
+	// AnnotationKeyActionableRevision records the EphemeralRunnerSet
+	// Spec.ActionableRevision that was in effect when the runner was created. It
+	// lets the set tell apart a runner that reported Outdated against the current
+	// runner spec from one that reported it against a spec that has since been
+	// updated.
+	AnnotationKeyActionableRevision = "actions.github.com/actionable-revision"
 	// AnnotationKeyListenerConfigResourceVersion records the resource version of
 	// the listener config secret the listener pod was created from. The pod
 	// mounts that secret and parses it once at startup, so a change to its
