@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"math"
 	"net/http"
@@ -186,6 +187,25 @@ func TestHandleJobStarted(t *testing.T) {
 		})
 	}
 
+	t.Run("retries against fresh state when a terminal write wins the race", func(t *testing.T) {
+		runner := newTestEphemeralRunner(jobInfo.RunnerName, v1alpha1.EphemeralRunnerPhasePending)
+		// A terminal update lands between the scaler's GET and its first patch, so
+		// the patch carries a stale resource version and is rejected with 409.
+		raceTerminalWrite := func() {
+			runner.Status.Phase = v1alpha1.EphemeralRunnerPhaseFailed
+			runner.ResourceVersion = strconv.Itoa(mustAtoi(t, runner.ResourceVersion) + 1)
+		}
+		scaler, shutdown := newTestScaler(t, runner, raceTerminalWrite)
+		defer shutdown()
+
+		require.NoError(t, scaler.HandleJobStarted(context.Background(), jobInfo))
+
+		// The retry re-reads the now-terminal runner, so the job fields are recorded
+		// while the promotion to Running is abandoned rather than clobbering Failed.
+		assertJobStartedStatus(t, runner, jobInfo)
+		assert.Equal(t, v1alpha1.EphemeralRunnerPhaseFailed, runner.Status.Phase)
+	})
+
 	t.Run("preserves deleting runner phase while patching job fields", func(t *testing.T) {
 		runner := newTestEphemeralRunner(jobInfo.RunnerName, v1alpha1.EphemeralRunnerPhasePending)
 		deletionTimestamp := metav1.Now()
@@ -203,8 +223,9 @@ func TestHandleJobStarted(t *testing.T) {
 func newTestEphemeralRunner(name string, phase v1alpha1.EphemeralRunnerPhase) *v1alpha1.EphemeralRunner {
 	return &v1alpha1.EphemeralRunner{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: "default",
+			Name:            name,
+			Namespace:       "default",
+			ResourceVersion: "1",
 		},
 		Status: v1alpha1.EphemeralRunnerStatus{
 			Phase: phase,
@@ -212,8 +233,15 @@ func newTestEphemeralRunner(name string, phase v1alpha1.EphemeralRunnerPhase) *v
 	}
 }
 
-func newTestScaler(t *testing.T, runner *v1alpha1.EphemeralRunner) (*Scaler, func()) {
+// newTestScaler serves the runner over a stub API server that enforces the
+// metadata.resourceVersion precondition the way the API server does, so that a
+// patch carrying a stale resource version is rejected with 409 Conflict.
+// Each onPatch hook runs before the corresponding patch is applied, which lets a
+// test interleave a competing write between the scaler's GET and its patch.
+func newTestScaler(t *testing.T, runner *v1alpha1.EphemeralRunner, onPatch ...func()) (*Scaler, func()) {
 	t.Helper()
+
+	var patches int
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -225,6 +253,24 @@ func newTestScaler(t *testing.T, runner *v1alpha1.EphemeralRunner) (*Scaler, fun
 			var patch v1alpha1.EphemeralRunner
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&patch))
 
+			if patches < len(onPatch) {
+				onPatch[patches]()
+			}
+			patches++
+
+			if patch.ResourceVersion != "" && patch.ResourceVersion != runner.ResourceVersion {
+				w.WriteHeader(http.StatusConflict)
+				require.NoError(t, json.NewEncoder(w).Encode(&metav1.Status{
+					TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Status"},
+					Status:   metav1.StatusFailure,
+					Code:     http.StatusConflict,
+					Reason:   metav1.StatusReasonConflict,
+					Message: fmt.Sprintf("Operation cannot be fulfilled on ephemeralrunners.actions.github.com %q: the object has been modified",
+						runner.Name),
+				}))
+				return
+			}
+
 			runner.Status.JobRequestID = patch.Status.JobRequestID
 			runner.Status.JobRepositoryName = patch.Status.JobRepositoryName
 			runner.Status.JobID = patch.Status.JobID
@@ -234,6 +280,7 @@ func newTestScaler(t *testing.T, runner *v1alpha1.EphemeralRunner) (*Scaler, fun
 			if patch.Status.Phase != "" {
 				runner.Status.Phase = patch.Status.Phase
 			}
+			runner.ResourceVersion = strconv.Itoa(mustAtoi(t, runner.ResourceVersion) + 1)
 
 			require.NoError(t, json.NewEncoder(w).Encode(runner))
 		default:
@@ -253,6 +300,14 @@ func newTestScaler(t *testing.T, runner *v1alpha1.EphemeralRunner) (*Scaler, fun
 		patchSeq:      -1,
 		logger:        discardLogger,
 	}, server.Close
+}
+
+func mustAtoi(t *testing.T, s string) int {
+	t.Helper()
+
+	n, err := strconv.Atoi(s)
+	require.NoError(t, err)
+	return n
 }
 
 func assertJobStartedStatus(t *testing.T, runner *v1alpha1.EphemeralRunner, jobInfo *scaleset.JobStarted) {
