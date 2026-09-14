@@ -57,6 +57,7 @@ func TestPatchAppliedActionableRevisionStatusUsesOptimisticLock(t *testing.T) {
 		WithScheme(scheme).
 		WithObjects(ephemeralRunnerSet).
 		WithStatusSubresource(&v1alpha1.EphemeralRunnerSet{}).
+		WithIndex(&v1alpha1.EphemeralRunner{}, resourceOwnerKey, newGroupVersionOwnerKindIndexer("EphemeralRunnerSet")).
 		WithInterceptorFuncs(interceptor.Funcs{
 			SubResourcePatch: func(ctx context.Context, clt client.Client, subResourceName string, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
 				data, err := patch.Data(obj)
@@ -125,6 +126,7 @@ func TestPatchAppliedActionableRevisionStatusDoesNotMoveBackwards(t *testing.T) 
 		WithScheme(scheme).
 		WithObjects(ephemeralRunnerSet).
 		WithStatusSubresource(&v1alpha1.EphemeralRunnerSet{}).
+		WithIndex(&v1alpha1.EphemeralRunner{}, resourceOwnerKey, newGroupVersionOwnerKindIndexer("EphemeralRunnerSet")).
 		Build()
 
 	reconciler := &EphemeralRunnerSetReconciler{
