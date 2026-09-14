@@ -852,8 +852,16 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 		}
 	}
 
+	// Publish Pending as soon as the runner is observed non-terminal, regardless of
+	// the pod phase. The controller only reaches this point once the runner
+	// container status exists, and by then the pod has usually already advanced to
+	// Running, so keying the initial phase off PodPending would leave a runner
+	// phase-empty for its whole life -- omitted from the phase metrics, and in
+	// breach of the documented contract that Pending means "created, no job yet".
+	// Guarding on the empty phase alone is sufficient: every terminal phase, and
+	// Running itself, is non-empty, so this can never overwrite one.
 	phase := ephemeralRunner.Status.Phase
-	if pod.Status.Phase == corev1.PodPending && phase == "" {
+	if phase == "" {
 		phase = v1alpha1.EphemeralRunnerPhasePending
 	}
 

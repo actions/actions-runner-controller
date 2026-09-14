@@ -1255,6 +1255,25 @@ var _ = Describe("EphemeralRunner", func() {
 			err := k8sClient.Status().Update(ctx, pod)
 			Expect(err).To(BeNil())
 
+			// Two-stage on purpose. Eventually establishes that the controller does
+			// publish Pending even though the pod was first observed already Running
+			// -- the common case once the image is cached, and the only chance the
+			// controller gets to publish an initial phase. Consistently then holds
+			// that it never advances to Running, which is the listener's transition
+			// to make. Asserting Pending is strictly stronger than asserting empty,
+			// because empty is also what a controller that never ran would leave.
+			updated := new(v1alpha1.EphemeralRunner)
+			Eventually(
+				func() (v1alpha1.EphemeralRunnerPhase, error) {
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated); err != nil {
+						return "Unknown", err
+					}
+					return updated.Status.Phase, nil
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(BeEquivalentTo(v1alpha1.EphemeralRunnerPhasePending), "controller must publish the initial Pending phase")
+
 			Consistently(
 				func() (v1alpha1.EphemeralRunnerPhase, error) {
 					updated := new(v1alpha1.EphemeralRunner)
@@ -1264,9 +1283,8 @@ var _ = Describe("EphemeralRunner", func() {
 					return updated.Status.Phase, nil
 				},
 				ephemeralRunnerTimeout,
-			).Should(BeEquivalentTo(""))
+			).Should(BeEquivalentTo(v1alpha1.EphemeralRunnerPhasePending), "controller must not set Running from pod status")
 
-			updated := new(v1alpha1.EphemeralRunner)
 			Eventually(
 				func() (bool, error) {
 					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated); err != nil {
