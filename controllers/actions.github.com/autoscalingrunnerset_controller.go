@@ -145,6 +145,44 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, nil
 	}
 
+	// The outdated phase is sticky. It means the runners rejected the runner
+	// spec they were given, so the only edit worth retrying is one that changes
+	// that spec. Every other edit - replica bounds, runner group, scale set
+	// name - bumps metadata.generation without changing anything the runners
+	// objected to, and acting on it would switch the listener back on to acquire
+	// jobs for runners that will reject the spec exactly as before.
+	//
+	// This is therefore checked before the generation comparison below, which
+	// would otherwise move the phase to pending for any spec edit at all and
+	// undo the teardown.
+	if autoscalingRunnerSet.Status.Phase == v1alpha1.AutoscalingRunnerSetPhaseOutdated {
+		corrected, err := r.outdatedRunnerSpecCorrected(ctx, &autoscalingRunnerSet, log)
+		if err != nil {
+			log.Error(err, "Failed to compare the outdated runner spec with the desired one")
+			return ctrl.Result{}, err
+		}
+
+		if !corrected {
+			return r.reconcileOutdated(ctx, &autoscalingRunnerSet, log)
+		}
+
+		// The runner spec changed, so the scale set may run again. Move to
+		// pending and let the reconcile below publish the new spec: that patch
+		// also advances the actionable revision, which is what tells the
+		// EphemeralRunnerSet to stop judging itself by the runners that failed.
+		log.Info("Runner spec of an outdated autoscaling runner set changed. Recovering from the outdated phase")
+		if err := r.updateStatus(
+			ctx,
+			&autoscalingRunnerSet,
+			v1alpha1.AutoscalingRunnerSetPhasePending,
+			autoscalingRunnerSet.Status.ObservedGeneration,
+			log,
+		); err != nil {
+			log.Error(err, "Failed to update autoscaling runner set status with pending phase")
+			return ctrl.Result{}, err
+		}
+	}
+
 	// The spec changed since we last observed it, so move back to the pending
 	// phase. The observed generation is deliberately left at its old value here:
 	// it only catches up at the end of a successful reconcile, so a reconcile
@@ -161,10 +199,6 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			log.Error(err, "Failed to update autoscaling runner set status with pending phase")
 			return ctrl.Result{}, err
 		}
-	}
-
-	if autoscalingRunnerSet.Status.Phase == v1alpha1.AutoscalingRunnerSetPhaseOutdated {
-		return r.reconcileOutdated(ctx, &autoscalingRunnerSet, log)
 	}
 
 	if shouldCreateScaleSet(&autoscalingRunnerSet) {
@@ -203,14 +237,14 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		log.Error(err, "Failed to get ephemeral runner")
 		return ctrl.Result{}, err
 	case ephemeralRunnerSetOutdatedForAppliedRevision(&ephemeralRunnerSet) &&
-		!ephemeralRunnerSetNeedsOutdatedRecovery(&ephemeralRunnerSet, &autoscalingRunnerSet):
+		!r.runnerSpecChanged(&autoscalingRunnerSet, &ephemeralRunnerSet, log):
 		// The runners rejected the spec they were given, so the scale set has to
 		// stop acquiring jobs it cannot run. Record that in the phase first: it is
 		// what keeps the listener switched off across reconciles, and what stops
 		// the branches below from rebuilding it. This also covers Pending during a
-		// metadata-only listener rebuild; only an unobserved spec generation is a
-		// recovery signal. The observed generation is carried over unchanged, so a
-		// spec update still registers as new work.
+		// metadata-only listener rebuild, which leaves the runner spec untouched
+		// and so is not a recovery signal. The observed generation is carried over
+		// unchanged, so a spec update still registers as new work.
 		log.Info("Ephemeral runner set is outdated. Moving the autoscaling runner set to the outdated phase")
 		if err := r.updateStatus(
 			ctx,
@@ -232,18 +266,14 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			return ctrl.Result{}, nil
 		}
 
-		recoveringFromOutdated := ephemeralRunnerSetOutdatedForAppliedRevision(&ephemeralRunnerSet) &&
-			ephemeralRunnerSetNeedsOutdatedRecovery(&ephemeralRunnerSet, &autoscalingRunnerSet)
-		if ephemeralRunnerSetActionableSpecChanged(&ephemeralRunnerSet, desired) || recoveringFromOutdated {
-			// A real AutoscalingRunnerSet spec update leaves its observed generation
-			// behind until reconciliation succeeds. Require that signal before
-			// recovering an outdated set: Pending can also mean a metadata-only
-			// listener rebuild, which must not retry the same rejected runner spec.
+		if ephemeralRunnerSetActionableSpecChanged(&ephemeralRunnerSet, desired) {
+			// Reaching here with an outdated set means the runner spec itself
+			// changed, which is the only thing that recovers one.
 			//
-			// The revision has to advance even when the runner spec itself is
-			// unchanged. It tells the EphemeralRunnerSet to stop judging itself by
-			// the runners that failed, clearing its outdated phase and allowing it
-			// to scale up again.
+			// The revision advances along with the spec. It tells the
+			// EphemeralRunnerSet to stop judging itself by the runners that
+			// failed, clearing its outdated phase and allowing it to scale up
+			// again.
 			original := ephemeralRunnerSet.DeepCopy()
 			ephemeralRunnerSet.Spec.EphemeralRunnerMetadata = desired.Spec.EphemeralRunnerMetadata
 			ephemeralRunnerSet.Spec.EphemeralRunnerSpec = desired.Spec.EphemeralRunnerSpec
@@ -373,6 +403,55 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	return ctrl.Result{}, nil
 }
 
+// outdatedRunnerSpecCorrected reports whether the runner spec that the runners
+// rejected has since been changed, which is the only thing that takes a scale
+// set out of the outdated phase.
+//
+// Keying recovery on metadata.generation instead would recover on any spec edit
+// at all, including ones that leave the runner spec untouched, and hand the
+// listener back to a scale set whose runners will reject the very same spec
+// again.
+//
+// A missing EphemeralRunnerSet counts as corrected. There is nothing left to
+// compare against, and the set is only absent because something outside the
+// controller removed it, so the reconcile is allowed to rebuild it from the
+// current spec rather than sitting in a phase it could never leave.
+func (r *AutoscalingRunnerSetReconciler) outdatedRunnerSpecCorrected(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, log logr.Logger) (bool, error) {
+	var ephemeralRunnerSet v1alpha1.EphemeralRunnerSet
+	err := r.Get(
+		ctx,
+		types.NamespacedName{
+			Namespace: autoscalingRunnerSet.Namespace,
+			Name:      autoscalingRunnerSet.Name,
+		},
+		&ephemeralRunnerSet,
+	)
+	switch {
+	case kerrors.IsNotFound(err):
+		return true, nil
+	case err != nil:
+		return false, err
+	}
+
+	return r.runnerSpecChanged(autoscalingRunnerSet, &ephemeralRunnerSet, log), nil
+}
+
+// runnerSpecChanged compares the runner spec the EphemeralRunnerSet is running
+// with the one the AutoscalingRunnerSet currently describes.
+//
+// A spec that cannot be built counts as unchanged. The comparison is used to
+// decide whether a rejected runner spec may be retried, and an unusable desired
+// spec is no evidence that it was corrected.
+func (r *AutoscalingRunnerSetReconciler) runnerSpecChanged(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) bool {
+	desired, err := r.newEphemeralRunnerSet(autoscalingRunnerSet)
+	if err != nil {
+		log.Error(err, "Failed to generate ephemeral runner set spec to compare against the rejected runner spec")
+		return false
+	}
+
+	return ephemeralRunnerSetActionableSpecChanged(ephemeralRunnerSet, desired)
+}
+
 // reconcileOutdated holds a scale set whose runners rejected the runner spec.
 //
 // The listener is removed so no new jobs are acquired, and the EphemeralRunnerSet
@@ -383,9 +462,9 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 // preserves the revision bookkeeping that decides when the scale set may run
 // again.
 //
-// This state is left only when the AutoscalingRunnerSet spec is updated, which
-// moves the phase back to pending and lets the next reconcile publish the new
-// spec to the set.
+// This state is left only when the runner spec the runners rejected is changed,
+// which moves the phase back to pending and lets the next reconcile publish the
+// new spec to the set.
 func (r *AutoscalingRunnerSetReconciler) reconcileOutdated(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, log logr.Logger) (ctrl.Result, error) {
 	log.Info("Autoscaling runner set is in outdated phase, removing the listener")
 	done, err := r.cleanupListener(ctx, autoscalingRunnerSet, log)
