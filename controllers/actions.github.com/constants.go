@@ -51,9 +51,11 @@ const (
 	AnnotationKeyGitHubRunnerScaleSetName = "actions.github.com/runner-scale-set-name"
 	AnnotationKeyPatchID                  = "actions.github.com/patch-id"
 	// AnnotationKeyAutoscalingRunnerSetGeneration records the AutoscalingRunnerSet
-	// generation that published the current EphemeralRunnerSet actionable
-	// revision. It prevents a rejected revision from being retried more than once
-	// for the same AutoscalingRunnerSet spec update.
+	// generation the current EphemeralRunnerSet spec was derived from. It is
+	// informational: it makes it possible to tell, by looking at the set alone,
+	// how far behind the AutoscalingRunnerSet it is. Nothing keys behaviour off
+	// it - in particular, recovery from the outdated phase is decided by
+	// comparing the runner spec itself, not generations.
 	AnnotationKeyAutoscalingRunnerSetGeneration = "actions.github.com/autoscaling-runner-set-generation"
 	// AnnotationKeyActionableRevision records the EphemeralRunnerSet
 	// Spec.ActionableRevision that was in effect when the runner was created. It

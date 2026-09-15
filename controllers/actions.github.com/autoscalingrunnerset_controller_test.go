@@ -2960,6 +2960,32 @@ var _ = Describe("Test AutoscalingRunnerSet outdated lifecycle", Ordered, func()
 			return runnerSet.Spec.ActionableRevision
 		}
 
+		// expectStaysOutdated asserts that an edit did not resurrect the scale
+		// set. Consistently rather than Eventually: the failure being guarded
+		// against is a spurious transition out of the outdated phase, which a
+		// single sample taken at the wrong moment would miss entirely.
+		expectStaysOutdated := func(outdatedRevision int64) {
+			GinkgoHelper()
+
+			Consistently(
+				func(g Gomega) {
+					phase, err := autoscalingRunnerSetPhase()
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(phase).To(BeEquivalentTo(v1alpha1.AutoscalingRunnerSetPhaseOutdated), "an edit outside the runner spec must not move the scale set out of the outdated phase")
+
+					g.Expect(errors.IsNotFound(k8sClient.Get(ctx, listenerKey(), new(v1alpha1.AutoscalingListener)))).
+						To(BeTrue(), "the listener must stay switched off so no further jobs are acquired")
+
+					current := getEphemeralRunnerSet()
+					g.Expect(current.Spec.ActionableRevision).To(Equal(outdatedRevision), "the rejected runner spec must not be retried")
+					g.Expect(current.Spec.Replicas).To(BeZero())
+					g.Expect(current.Spec.PatchID).To(BeZero())
+				},
+				3*time.Second,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+		}
+
 		expectRecovered := func(outdatedRevision int64) {
 			GinkgoHelper()
 
@@ -3073,12 +3099,43 @@ var _ = Describe("Test AutoscalingRunnerSet outdated lifecycle", Ordered, func()
 			expectRecovered(outdatedRevision)
 		})
 
-		// The runner spec is not the only reason a scale set can be stuck: the
-		// runners may have been rejected because of the scale set registration
-		// rather than the pod template. Any spec edit therefore has to be enough
-		// to retry, otherwise the scale set can only be recovered by touching a
-		// field that has nothing to do with the failure.
-		It("recovers when a field outside the runner spec is updated", func() {
+		// The runner spec is not the only part of the EphemeralRunnerSet spec the
+		// AutoscalingRunnerSet owns: the metadata stamped onto the runners it
+		// creates is published the same way and changes what the next runner
+		// looks like. It therefore recovers the scale set too.
+		It("recovers when the runner metadata is corrected", func() {
+			markRunnersOutdated()
+			outdatedRevision := expectSwitchedOff()
+
+			updated := new(v1alpha1.AutoscalingRunnerSet)
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), updated)).To(Succeed())
+			original := updated.DeepCopy()
+			updated.Spec.EphemeralRunnerMetadata = &v1alpha1.ResourceMeta{
+				Labels: map[string]string{"arc.test/runner": "corrected"},
+			}
+			Expect(k8sClient.Patch(ctx, updated, client.MergeFrom(original))).To(Succeed(), "failed to correct the runner metadata")
+
+			expectRecovered(outdatedRevision)
+
+			Eventually(
+				func() map[string]string {
+					current := getEphemeralRunnerSet()
+					if current.Spec.EphemeralRunnerMetadata == nil {
+						return nil
+					}
+					return current.Spec.EphemeralRunnerMetadata.Labels
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(HaveKeyWithValue("arc.test/runner", "corrected"), "the corrected runner metadata should be published to the set")
+		})
+
+		// The outdated phase is sticky. Only a change to what the runners would
+		// be handed next - the runner spec or the metadata stamped onto them -
+		// is evidence that retrying is worth anything. Any other edit would
+		// otherwise switch the listener back on and start acquiring jobs against
+		// runners that will reject the spec exactly as before.
+		It("stays outdated when the replica bounds are updated", func() {
 			markRunnersOutdated()
 			outdatedRevision := expectSwitchedOff()
 
@@ -3089,7 +3146,33 @@ var _ = Describe("Test AutoscalingRunnerSet outdated lifecycle", Ordered, func()
 			updated.Spec.MaxRunners = &max
 			Expect(k8sClient.Patch(ctx, updated, client.MergeFrom(original))).To(Succeed(), "failed to update the autoscaling runner set")
 
-			expectRecovered(outdatedRevision)
+			expectStaysOutdated(outdatedRevision)
+		})
+
+		It("stays outdated when the runner group is updated", func() {
+			markRunnersOutdated()
+			outdatedRevision := expectSwitchedOff()
+
+			updated := new(v1alpha1.AutoscalingRunnerSet)
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), updated)).To(Succeed())
+			original := updated.DeepCopy()
+			updated.Spec.RunnerGroup = "othergroup"
+			Expect(k8sClient.Patch(ctx, updated, client.MergeFrom(original))).To(Succeed(), "failed to update the runner group")
+
+			expectStaysOutdated(outdatedRevision)
+		})
+
+		It("stays outdated when the runner scale set name is updated", func() {
+			markRunnersOutdated()
+			outdatedRevision := expectSwitchedOff()
+
+			updated := new(v1alpha1.AutoscalingRunnerSet)
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), updated)).To(Succeed())
+			original := updated.DeepCopy()
+			updated.Spec.RunnerScaleSetName = "renamed-scale-set"
+			Expect(k8sClient.Patch(ctx, updated, client.MergeFrom(original))).To(Succeed(), "failed to update the runner scale set name")
+
+			expectStaysOutdated(outdatedRevision)
 		})
 
 		It("does not retry an outdated runner spec during a metadata-only listener rebuild", func() {

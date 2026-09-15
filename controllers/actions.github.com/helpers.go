@@ -1,34 +1,18 @@
 package actionsgithubcom
 
 import (
-	"strconv"
-
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 )
 
-func ephemeralRunnerSetNeedsOutdatedRecovery(ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) bool {
-	if ephemeralRunnerSet == nil || autoscalingRunnerSet == nil ||
-		autoscalingRunnerSet.Generation <= autoscalingRunnerSet.Status.ObservedGeneration {
-		return false
-	}
-
-	publishedGeneration, err := strconv.ParseInt(
-		ephemeralRunnerSet.Annotations[AnnotationKeyAutoscalingRunnerSetGeneration],
-		10,
-		64,
-	)
-	if err != nil {
-		return true
-	}
-
-	return publishedGeneration < autoscalingRunnerSet.Generation
-}
-
 // ephemeralRunnerSetActionableSpecChanged reports whether the runner spec the
 // EphemeralRunnerSet is running differs from the one derived from the
 // AutoscalingRunnerSet, in a way that requires re-applying it to the runners.
+//
+// It is also the sole signal that recovers a scale set from the outdated phase:
+// the runners rejected this spec, so nothing short of changing it is reason to
+// retry.
 //
 // Semantic.DeepEqual is used rather than cmp.Equal or reflect.DeepEqual because
 // it treats a nil slice/map as equal to an empty one. That matters here: most
@@ -45,6 +29,31 @@ func ephemeralRunnerSetActionableSpecChanged(current, desired *v1alpha1.Ephemera
 	}
 
 	return !apiequality.Semantic.DeepEqual(current.Spec.EphemeralRunnerSpec, desired.Spec.EphemeralRunnerSpec)
+}
+
+// ephemeralRunnerSetDesiredSpecChanged reports whether anything the
+// AutoscalingRunnerSet owns in the EphemeralRunnerSet spec differs from what the
+// set is running: the runner spec itself, plus the metadata stamped onto the
+// runners the set creates.
+//
+// This is the question that decides whether a scale set may leave the outdated
+// phase. The runners rejected the spec they were handed, so only a change to
+// what they would be handed next is reason to retry.
+//
+// Replicas, PatchID and ActionableRevision are deliberately excluded. They are
+// scaling bookkeeping written by the listener and by this controller, and while
+// the set is outdated they are pinned to zero, so comparing them would report
+// drift that has nothing to do with what the runners rejected.
+func ephemeralRunnerSetDesiredSpecChanged(current, desired *v1alpha1.EphemeralRunnerSet) bool {
+	if current == nil || desired == nil {
+		return current != desired
+	}
+
+	if ephemeralRunnerSetActionableSpecChanged(current, desired) {
+		return true
+	}
+
+	return !apiequality.Semantic.DeepEqual(current.Spec.EphemeralRunnerMetadata, desired.Spec.EphemeralRunnerMetadata)
 }
 
 func nextActionableRevision(current *v1alpha1.EphemeralRunnerSet) int64 {
