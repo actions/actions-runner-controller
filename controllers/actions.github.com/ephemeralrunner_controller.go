@@ -834,6 +834,7 @@ func (r *EphemeralRunnerReconciler) createSecret(ctx context.Context, runner *v1
 
 // updateRunStatusFromPod is responsible for updating non-exiting statuses.
 // It should never update phase to Failed or Succeeded
+// It should never update phase to Running (the listener owns that transition)
 //
 // The event should not be re-queued since the termination status should be set
 // before proceeding with reconciliation logic
@@ -851,8 +852,25 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 		}
 	}
 
-	phase := v1alpha1.EphemeralRunnerPhase(pod.Status.Phase)
-	phaseChanged := ephemeralRunner.Status.Phase != phase
+	// Publish Pending as soon as the runner is observed non-terminal, regardless of
+	// the pod phase. The controller only reaches this point once the runner
+	// container status exists, and by then the pod has usually already advanced to
+	// Running, so keying the initial phase off PodPending would leave a runner
+	// phase-empty for its whole life -- omitted from the phase metrics, and in
+	// breach of the documented contract that Pending means "created, no job yet".
+	// Guarding on the empty phase alone is sufficient: every terminal phase, and
+	// Running itself, is non-empty, so this can never overwrite one.
+	phase := ephemeralRunner.Status.Phase
+	if phase == "" {
+		phase = v1alpha1.EphemeralRunnerPhasePending
+	}
+
+	// The controller no longer promotes the runner to Running. The listener owns that
+	// transition and applies it when a job is assigned to this runner. The controller
+	// still publishes the initial Pending phase while the runner pod is starting.
+	// The patch below is optimistically locked so a stale cached copy of this runner
+	// cannot undo the listener's transition to Running.
+	phaseChanged := phase != ephemeralRunner.Status.Phase
 	readyChanged := ready != ephemeralRunner.Status.Ready
 
 	if !phaseChanged && !readyChanged {
@@ -872,7 +890,7 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 	ephemeralRunner.Status.Reason = pod.Status.Reason
 	ephemeralRunner.Status.Message = pod.Status.Message
 
-	if err := r.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
+	if err := r.Status().Patch(ctx, ephemeralRunner, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{})); err != nil {
 		return fmt.Errorf("failed to update runner status for Phase/Reason/Message/Ready: %w", err)
 	}
 	r.publishEphemeralRunnerPhaseMetric(ephemeralRunner, ephemeralRunner.Status.Phase, log)
