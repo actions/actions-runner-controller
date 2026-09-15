@@ -2909,6 +2909,12 @@ var _ = Describe("Test AutoscalingRunnerSet outdated lifecycle", Ordered, func()
 
 			runnerSet := getEphemeralRunnerSet()
 			original := runnerSet.DeepCopy()
+			runnerSet.Spec.Replicas = 3
+			runnerSet.Spec.PatchID = 7
+			Expect(k8sClient.Patch(ctx, runnerSet, client.MergeFrom(original))).To(Succeed(), "failed to seed a nonzero ephemeral runner set")
+
+			runnerSet = getEphemeralRunnerSet()
+			original = runnerSet.DeepCopy()
 			runnerSet.Status.Phase = v1alpha1.EphemeralRunnerSetPhaseOutdated
 			runnerSet.Status.AppliedActionableRevision = runnerSet.Spec.ActionableRevision
 			Expect(k8sClient.Status().Patch(ctx, runnerSet, client.MergeFrom(original))).To(Succeed(), "failed to mark the ephemeral runner set outdated")

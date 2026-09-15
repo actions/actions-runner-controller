@@ -1,10 +1,30 @@
 package actionsgithubcom
 
 import (
+	"strconv"
+
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 )
+
+func ephemeralRunnerSetNeedsOutdatedRecovery(ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet) bool {
+	if ephemeralRunnerSet == nil || autoscalingRunnerSet == nil ||
+		autoscalingRunnerSet.Generation <= autoscalingRunnerSet.Status.ObservedGeneration {
+		return false
+	}
+
+	publishedGeneration, err := strconv.ParseInt(
+		ephemeralRunnerSet.Annotations[AnnotationKeyAutoscalingRunnerSetGeneration],
+		10,
+		64,
+	)
+	if err != nil {
+		return true
+	}
+
+	return publishedGeneration < autoscalingRunnerSet.Generation
+}
 
 // ephemeralRunnerSetActionableSpecChanged reports whether the runner spec the
 // EphemeralRunnerSet is running differs from the one derived from the

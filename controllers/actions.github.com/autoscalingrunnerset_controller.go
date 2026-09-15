@@ -203,7 +203,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		log.Error(err, "Failed to get ephemeral runner")
 		return ctrl.Result{}, err
 	case ephemeralRunnerSetOutdatedForAppliedRevision(&ephemeralRunnerSet) &&
-		autoscalingRunnerSet.Generation <= autoscalingRunnerSet.Status.ObservedGeneration:
+		!ephemeralRunnerSetNeedsOutdatedRecovery(&ephemeralRunnerSet, &autoscalingRunnerSet):
 		// The runners rejected the spec they were given, so the scale set has to
 		// stop acquiring jobs it cannot run. Record that in the phase first: it is
 		// what keeps the listener switched off across reconciles, and what stops
@@ -233,7 +233,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		}
 
 		recoveringFromOutdated := ephemeralRunnerSetOutdatedForAppliedRevision(&ephemeralRunnerSet) &&
-			autoscalingRunnerSet.Generation > autoscalingRunnerSet.Status.ObservedGeneration
+			ephemeralRunnerSetNeedsOutdatedRecovery(&ephemeralRunnerSet, &autoscalingRunnerSet)
 		if ephemeralRunnerSetActionableSpecChanged(&ephemeralRunnerSet, desired) || recoveringFromOutdated {
 			// A real AutoscalingRunnerSet spec update leaves its observed generation
 			// behind until reconciliation succeeds. Require that signal before

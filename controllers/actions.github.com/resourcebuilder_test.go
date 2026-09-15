@@ -16,8 +16,9 @@ import (
 func TestMetadataPropagation(t *testing.T) {
 	autoscalingRunnerSet := v1alpha1.AutoscalingRunnerSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-scale-set",
-			Namespace: "test-ns",
+			Name:       "test-scale-set",
+			Namespace:  "test-ns",
+			Generation: 7,
 			Labels: map[string]string{
 				LabelKeyKubernetesPartOf:          labelValueKubernetesPartOf,
 				LabelKeyKubernetesVersion:         "0.2.0",
@@ -123,6 +124,7 @@ func TestMetadataPropagation(t *testing.T) {
 	assert.Equal(t, "repo", ephemeralRunnerSet.Labels[LabelKeyGitHubRepository])
 	assert.Equal(t, autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName], ephemeralRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName])
 	assert.Equal(t, autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName], ephemeralRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName])
+	assert.Equal(t, "7", ephemeralRunnerSet.Annotations[AnnotationKeyAutoscalingRunnerSetGeneration])
 	assert.Equal(t, autoscalingRunnerSet.Labels["arbitrary-label"], ephemeralRunnerSet.Labels["arbitrary-label"])
 	assert.Equal(t, "ephemeral-runner-set-label", ephemeralRunnerSet.Labels["test.com/ephemeral-runner-set-label"])
 	assert.Equal(t, "ephemeral-runner-set-annotation", ephemeralRunnerSet.Annotations["test.com/ephemeral-runner-set-annotation"])

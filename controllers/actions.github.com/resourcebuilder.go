@@ -770,8 +770,9 @@ func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 	}
 
 	annotations := map[string]string{
-		AnnotationKeyGitHubRunnerGroupName:    autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName],
-		AnnotationKeyGitHubRunnerScaleSetName: autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName],
+		AnnotationKeyGitHubRunnerGroupName:          autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName],
+		AnnotationKeyGitHubRunnerScaleSetName:       autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName],
+		AnnotationKeyAutoscalingRunnerSetGeneration: strconv.FormatInt(autoscalingRunnerSet.Generation, 10),
 	}
 
 	if autoscalingRunnerSet.Spec.EphemeralRunnerSetMetadata != nil {
