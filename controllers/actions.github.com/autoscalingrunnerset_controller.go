@@ -147,8 +147,9 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 
 	// The outdated phase is sticky. It means the runners rejected the runner
 	// spec they were given, so the only edit worth retrying is one that changes
-	// that spec. Every other edit - replica bounds, runner group, scale set
-	// name - bumps metadata.generation without changing anything the runners
+	// what the next runner would be handed: the runner spec, or the metadata
+	// stamped onto it. Every other edit - replica bounds, runner group, scale
+	// set name - bumps metadata.generation without changing anything the runners
 	// objected to, and acting on it would switch the listener back on to acquire
 	// jobs for runners that will reject the spec exactly as before.
 	//
@@ -266,14 +267,15 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			return ctrl.Result{}, nil
 		}
 
-		if ephemeralRunnerSetActionableSpecChanged(&ephemeralRunnerSet, desired) {
-			// Reaching here with an outdated set means the runner spec itself
-			// changed, which is the only thing that recovers one.
-			//
-			// The revision advances along with the spec. It tells the
-			// EphemeralRunnerSet to stop judging itself by the runners that
-			// failed, clearing its outdated phase and allowing it to scale up
-			// again.
+		// Recovering from the outdated phase has to advance the revision even
+		// when only the runner metadata changed. The revision is what tells the
+		// EphemeralRunnerSet to stop judging itself by the runners that failed,
+		// clearing its outdated phase and allowing it to scale up again; without
+		// it the metadata patch below would land and the set would be pushed
+		// straight back to outdated.
+		recoveringFromOutdated := ephemeralRunnerSetOutdatedForAppliedRevision(&ephemeralRunnerSet) &&
+			ephemeralRunnerSetDesiredSpecChanged(&ephemeralRunnerSet, desired)
+		if ephemeralRunnerSetActionableSpecChanged(&ephemeralRunnerSet, desired) || recoveringFromOutdated {
 			original := ephemeralRunnerSet.DeepCopy()
 			ephemeralRunnerSet.Spec.EphemeralRunnerMetadata = desired.Spec.EphemeralRunnerMetadata
 			ephemeralRunnerSet.Spec.EphemeralRunnerSpec = desired.Spec.EphemeralRunnerSpec
@@ -436,8 +438,9 @@ func (r *AutoscalingRunnerSetReconciler) outdatedRunnerSpecCorrected(ctx context
 	return r.runnerSpecChanged(autoscalingRunnerSet, &ephemeralRunnerSet, log), nil
 }
 
-// runnerSpecChanged compares the runner spec the EphemeralRunnerSet is running
-// with the one the AutoscalingRunnerSet currently describes.
+// runnerSpecChanged compares the part of the EphemeralRunnerSet spec the
+// AutoscalingRunnerSet owns - the runner spec and the metadata stamped onto the
+// runners - with what the set is currently running.
 //
 // A spec that cannot be built counts as unchanged. The comparison is used to
 // decide whether a rejected runner spec may be retried, and an unusable desired
@@ -449,7 +452,7 @@ func (r *AutoscalingRunnerSetReconciler) runnerSpecChanged(autoscalingRunnerSet 
 		return false
 	}
 
-	return ephemeralRunnerSetActionableSpecChanged(ephemeralRunnerSet, desired)
+	return ephemeralRunnerSetDesiredSpecChanged(ephemeralRunnerSet, desired)
 }
 
 // reconcileOutdated holds a scale set whose runners rejected the runner spec.

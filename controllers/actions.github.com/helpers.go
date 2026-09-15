@@ -31,6 +31,31 @@ func ephemeralRunnerSetActionableSpecChanged(current, desired *v1alpha1.Ephemera
 	return !apiequality.Semantic.DeepEqual(current.Spec.EphemeralRunnerSpec, desired.Spec.EphemeralRunnerSpec)
 }
 
+// ephemeralRunnerSetDesiredSpecChanged reports whether anything the
+// AutoscalingRunnerSet owns in the EphemeralRunnerSet spec differs from what the
+// set is running: the runner spec itself, plus the metadata stamped onto the
+// runners the set creates.
+//
+// This is the question that decides whether a scale set may leave the outdated
+// phase. The runners rejected the spec they were handed, so only a change to
+// what they would be handed next is reason to retry.
+//
+// Replicas, PatchID and ActionableRevision are deliberately excluded. They are
+// scaling bookkeeping written by the listener and by this controller, and while
+// the set is outdated they are pinned to zero, so comparing them would report
+// drift that has nothing to do with what the runners rejected.
+func ephemeralRunnerSetDesiredSpecChanged(current, desired *v1alpha1.EphemeralRunnerSet) bool {
+	if current == nil || desired == nil {
+		return current != desired
+	}
+
+	if ephemeralRunnerSetActionableSpecChanged(current, desired) {
+		return true
+	}
+
+	return !apiequality.Semantic.DeepEqual(current.Spec.EphemeralRunnerMetadata, desired.Spec.EphemeralRunnerMetadata)
+}
+
 func nextActionableRevision(current *v1alpha1.EphemeralRunnerSet) int64 {
 	if current == nil {
 		return 1

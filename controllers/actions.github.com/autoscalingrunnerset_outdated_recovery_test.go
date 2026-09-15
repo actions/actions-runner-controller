@@ -38,10 +38,16 @@ import (
 // outdatedFixture builds an AutoscalingRunnerSet whose EphemeralRunnerSet has
 // reported that its runners rejected the runner spec, together with a client and
 // a reconciler wired to them.
+// publishedGeneration is the AutoscalingRunnerSet generation recorded on the
+// EphemeralRunnerSet. Lagging behind the live generation is what a
+// generation-based recovery signal reads as "retry the spec the runners
+// rejected"; matching it is what such a signal reads as "never retry", even when
+// the runner spec itself has changed.
 func outdatedFixture(
 	t *testing.T,
 	runnerSetPhase v1alpha1.AutoscalingRunnerSetPhase,
 	generation int64,
+	publishedGeneration int64,
 	desiredImage string,
 ) (*v1alpha1.AutoscalingRunnerSet, *AutoscalingRunnerSetReconciler, client.Client) {
 	t.Helper()
@@ -90,7 +96,7 @@ func outdatedFixture(
 			Name:      name,
 			Namespace: namespace,
 			Annotations: map[string]string{
-				AnnotationKeyAutoscalingRunnerSetGeneration: strconv.FormatInt(generation, 10),
+				AnnotationKeyAutoscalingRunnerSetGeneration: strconv.FormatInt(publishedGeneration, 10),
 			},
 		},
 		Spec: v1alpha1.EphemeralRunnerSetSpec{
@@ -142,7 +148,7 @@ func reconcileOutdatedFixture(t *testing.T, reconciler *AutoscalingRunnerSetReco
 // though the AutoscalingRunnerSet still has an unobserved generation. The
 // generation says nothing about the spec the runners objected to.
 func TestAutoscalingRunnerSetParksFirstRejection(t *testing.T) {
-	autoscalingRunnerSet, reconciler, c := outdatedFixture(t, v1alpha1.AutoscalingRunnerSetPhasePending, 2, "runner:rejected")
+	autoscalingRunnerSet, reconciler, c := outdatedFixture(t, v1alpha1.AutoscalingRunnerSetPhasePending, 2, 1, "runner:rejected")
 	key := client.ObjectKeyFromObject(autoscalingRunnerSet)
 
 	reconcileOutdatedFixture(t, reconciler, key)
@@ -161,7 +167,7 @@ func TestAutoscalingRunnerSetParksFirstRejection(t *testing.T) {
 // An already outdated scale set stays outdated while the runner spec is the one
 // that was rejected, no matter how far its generation has moved on.
 func TestAutoscalingRunnerSetStaysOutdatedWithoutRunnerSpecChange(t *testing.T) {
-	autoscalingRunnerSet, reconciler, c := outdatedFixture(t, v1alpha1.AutoscalingRunnerSetPhaseOutdated, 5, "runner:rejected")
+	autoscalingRunnerSet, reconciler, c := outdatedFixture(t, v1alpha1.AutoscalingRunnerSetPhaseOutdated, 5, 4, "runner:rejected")
 	key := client.ObjectKeyFromObject(autoscalingRunnerSet)
 
 	reconcileOutdatedFixture(t, reconciler, key)
@@ -179,7 +185,7 @@ func TestAutoscalingRunnerSetStaysOutdatedWithoutRunnerSpecChange(t *testing.T) 
 // phase leaves outdated and the new spec is published with a higher revision, so
 // the EphemeralRunnerSet stops judging itself by the runners that failed.
 func TestAutoscalingRunnerSetRecoversOnRunnerSpecChange(t *testing.T) {
-	autoscalingRunnerSet, reconciler, c := outdatedFixture(t, v1alpha1.AutoscalingRunnerSetPhaseOutdated, 5, "runner:fixed")
+	autoscalingRunnerSet, reconciler, c := outdatedFixture(t, v1alpha1.AutoscalingRunnerSetPhaseOutdated, 5, 4, "runner:fixed")
 	key := client.ObjectKeyFromObject(autoscalingRunnerSet)
 
 	reconcileOutdatedFixture(t, reconciler, key)
@@ -191,5 +197,54 @@ func TestAutoscalingRunnerSetRecoversOnRunnerSpecChange(t *testing.T) {
 	gotERS := new(v1alpha1.EphemeralRunnerSet)
 	require.NoError(t, c.Get(context.Background(), key, gotERS))
 	require.Equal(t, "runner:fixed", gotERS.Spec.EphemeralRunnerSpec.Spec.Containers[0].Image)
+	require.Greater(t, gotERS.Spec.ActionableRevision, outdatedFixtureRevision, "the revision must advance so the failed runners are treated as stale")
+}
+
+// The mirror image of over-parking: the runner spec changed, but the generation
+// recorded on the EphemeralRunnerSet is already current, which is what happens
+// whenever the derived runner spec moves without metadata.generation moving with
+// it. A generation-based signal refuses the recovery; comparing the spec does
+// not.
+func TestAutoscalingRunnerSetRecoversWithoutAnUnobservedGeneration(t *testing.T) {
+	autoscalingRunnerSet, reconciler, c := outdatedFixture(t, v1alpha1.AutoscalingRunnerSetPhaseOutdated, 5, 5, "runner:fixed")
+	key := client.ObjectKeyFromObject(autoscalingRunnerSet)
+
+	reconcileOutdatedFixture(t, reconciler, key)
+
+	gotARS := new(v1alpha1.AutoscalingRunnerSet)
+	require.NoError(t, c.Get(context.Background(), key, gotARS))
+	require.Equal(t, v1alpha1.AutoscalingRunnerSetPhasePending, gotARS.Status.Phase)
+
+	gotERS := new(v1alpha1.EphemeralRunnerSet)
+	require.NoError(t, c.Get(context.Background(), key, gotERS))
+	require.Equal(t, "runner:fixed", gotERS.Spec.EphemeralRunnerSpec.Spec.Containers[0].Image)
+	require.Greater(t, gotERS.Spec.ActionableRevision, outdatedFixtureRevision)
+}
+
+// Runner metadata is published to the set the same way the runner spec is, and
+// changes what the next runner looks like, so it recovers the scale set too. The
+// revision must advance with it: without that the EphemeralRunnerSet would keep
+// judging itself by the runners that failed and push the scale set straight back
+// to outdated.
+func TestAutoscalingRunnerSetRecoversOnRunnerMetadataChange(t *testing.T) {
+	// Published generation deliberately current, so the recovery can only come
+	// from the metadata comparison and not from a generation that lags.
+	autoscalingRunnerSet, reconciler, c := outdatedFixture(t, v1alpha1.AutoscalingRunnerSetPhaseOutdated, 5, 5, "runner:rejected")
+	autoscalingRunnerSet.Spec.EphemeralRunnerMetadata = &v1alpha1.ResourceMeta{
+		Labels: map[string]string{"arc.test/runner": "corrected"},
+	}
+	key := client.ObjectKeyFromObject(autoscalingRunnerSet)
+	require.NoError(t, c.Update(context.Background(), autoscalingRunnerSet))
+
+	reconcileOutdatedFixture(t, reconciler, key)
+
+	gotARS := new(v1alpha1.AutoscalingRunnerSet)
+	require.NoError(t, c.Get(context.Background(), key, gotARS))
+	require.Equal(t, v1alpha1.AutoscalingRunnerSetPhasePending, gotARS.Status.Phase)
+
+	gotERS := new(v1alpha1.EphemeralRunnerSet)
+	require.NoError(t, c.Get(context.Background(), key, gotERS))
+	require.NotNil(t, gotERS.Spec.EphemeralRunnerMetadata)
+	require.Equal(t, "corrected", gotERS.Spec.EphemeralRunnerMetadata.Labels["arc.test/runner"])
 	require.Greater(t, gotERS.Spec.ActionableRevision, outdatedFixtureRevision, "the revision must advance so the failed runners are treated as stale")
 }

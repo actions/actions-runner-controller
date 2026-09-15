@@ -3099,11 +3099,42 @@ var _ = Describe("Test AutoscalingRunnerSet outdated lifecycle", Ordered, func()
 			expectRecovered(outdatedRevision)
 		})
 
-		// The outdated phase is sticky. Only a change to the runner spec - the
-		// thing the runners actually rejected - is evidence that retrying is
-		// worth anything. Any other edit would otherwise switch the listener
-		// back on and start acquiring jobs against runners that will reject the
-		// spec exactly as before.
+		// The runner spec is not the only part of the EphemeralRunnerSet spec the
+		// AutoscalingRunnerSet owns: the metadata stamped onto the runners it
+		// creates is published the same way and changes what the next runner
+		// looks like. It therefore recovers the scale set too.
+		It("recovers when the runner metadata is corrected", func() {
+			markRunnersOutdated()
+			outdatedRevision := expectSwitchedOff()
+
+			updated := new(v1alpha1.AutoscalingRunnerSet)
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), updated)).To(Succeed())
+			original := updated.DeepCopy()
+			updated.Spec.EphemeralRunnerMetadata = &v1alpha1.ResourceMeta{
+				Labels: map[string]string{"arc.test/runner": "corrected"},
+			}
+			Expect(k8sClient.Patch(ctx, updated, client.MergeFrom(original))).To(Succeed(), "failed to correct the runner metadata")
+
+			expectRecovered(outdatedRevision)
+
+			Eventually(
+				func() map[string]string {
+					current := getEphemeralRunnerSet()
+					if current.Spec.EphemeralRunnerMetadata == nil {
+						return nil
+					}
+					return current.Spec.EphemeralRunnerMetadata.Labels
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(HaveKeyWithValue("arc.test/runner", "corrected"), "the corrected runner metadata should be published to the set")
+		})
+
+		// The outdated phase is sticky. Only a change to what the runners would
+		// be handed next - the runner spec or the metadata stamped onto them -
+		// is evidence that retrying is worth anything. Any other edit would
+		// otherwise switch the listener back on and start acquiring jobs against
+		// runners that will reject the spec exactly as before.
 		It("stays outdated when the replica bounds are updated", func() {
 			markRunnersOutdated()
 			outdatedRevision := expectSwitchedOff()
