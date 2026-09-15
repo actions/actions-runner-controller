@@ -22,6 +22,17 @@ template:
         limits:
           memory: "64Mi"
           cpu: "250m"
+        requests:
+          cpu: "32Mi"
+          memory: "100Mi"
+    - name: dind
+      resources:
+        limits:
+          memory: "64Mi"
+          cpu: "250m"
+        requests:
+          cpu: "32Mi"
+          memory: "100Mi"
     volumes:
     - name: work
       hostPath:
