@@ -2,6 +2,7 @@ package actionssummerwindnet
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -360,6 +361,69 @@ func TestWebhookWorkflowJobWithSelfHostedLabel(t *testing.T) {
 			initObjs,
 		)
 	})
+}
+
+// TestGetScaleUpTargetWithFunctionPropagatesTraverseError ensures that an error hit while
+// resolving a candidate organization/enterprise runner group is returned to the caller
+// instead of being silently swallowed. Previously the error from visibleGroups.Traverse
+// was discarded because it was checked via a shadowed `err` variable, causing the webhook
+// to respond as if no matching HorizontalRunnerAutoscaler existed instead of surfacing the
+// real error.
+func TestGetScaleUpTargetWithFunctionPropagatesTraverseError(t *testing.T) {
+	hra := &actionsv1alpha1.HorizontalRunnerAutoscaler{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-name",
+		},
+		Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
+			ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
+				Name: "test-name",
+			},
+		},
+	}
+
+	rd := &actionsv1alpha1.RunnerDeployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-name",
+		},
+		Spec: actionsv1alpha1.RunnerDeploymentSpec{
+			Template: actionsv1alpha1.RunnerTemplate{
+				Spec: actionsv1alpha1.RunnerSpec{
+					RunnerConfig: actionsv1alpha1.RunnerConfig{
+						Organization: "MYORG",
+					},
+				},
+			},
+		},
+	}
+
+	client := fake.NewClientBuilder().
+		WithScheme(sc).
+		WithRuntimeObjects(hra, rd).
+		Build()
+
+	autoscaler := &HorizontalRunnerAutoscalerGitHubWebhook{
+		Client: client,
+		Log:    logr.Discard(),
+	}
+
+	wantErr := fmt.Errorf("boom: transient error while resolving runner group")
+
+	// Simulate a repo-scoped lookup miss followed by a failure while resolving the
+	// organization-scoped runner group candidate found via getManagedRunnerGroupsFromHRAs.
+	scaleTarget := func(value string) (*ScaleTarget, error) {
+		if value == "MYORG/myrepo" {
+			return nil, nil
+		}
+		return nil, wantErr
+	}
+
+	_, err := autoscaler.getScaleUpTargetWithFunction(context.Background(), logr.Discard(), "myrepo", "MYORG", "Organization", "", scaleTarget)
+	if err == nil {
+		t.Fatal("expected the error raised while resolving a candidate runner group to propagate, got nil")
+	}
+	if err.Error() != wantErr.Error() {
+		t.Fatalf("expected error %v to propagate unchanged, got %v", wantErr, err)
+	}
 }
 
 func TestGetRequest(t *testing.T) {
