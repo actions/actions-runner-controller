@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/watch"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/build"
@@ -3118,6 +3119,25 @@ var _ = Describe("Test AutoscalingRunnerSet outdated lifecycle", Ordered, func()
 				autoscalingRunnerSetTestInterval,
 			).Should(Succeed())
 
+			watchClient, err := client.NewWithWatch(cfg, client.Options{Scheme: mgr.GetScheme()})
+			Expect(err).NotTo(HaveOccurred())
+			listenerWatch, err := watchClient.Watch(ctx, new(v1alpha1.AutoscalingListenerList), client.InNamespace(autoscalingRunnerSet.Namespace))
+			Expect(err).NotTo(HaveOccurred())
+			defer listenerWatch.Stop()
+
+			var listenerRecreated atomic.Bool
+			go func() {
+				for event := range listenerWatch.ResultChan() {
+					if event.Type != watch.Added {
+						continue
+					}
+					added, ok := event.Object.(*v1alpha1.AutoscalingListener)
+					if ok && added.Name == listenerKey().Name && added.UID != listener.UID {
+						listenerRecreated.Store(true)
+					}
+				}
+			}()
+
 			markRunnersOutdated()
 
 			Consistently(
@@ -3132,6 +3152,22 @@ var _ = Describe("Test AutoscalingRunnerSet outdated lifecycle", Ordered, func()
 				3*time.Second,
 				autoscalingRunnerSetTestInterval,
 			).Should(Succeed())
+
+			unblockDeletion(listener)
+
+			Eventually(autoscalingRunnerSetPhase, autoscalingRunnerSetTestTimeout, autoscalingRunnerSetTestInterval).
+				Should(BeEquivalentTo(v1alpha1.AutoscalingRunnerSetPhaseOutdated), "the metadata-only rebuild should transition directly to outdated")
+
+			Eventually(
+				func() bool {
+					return errors.IsNotFound(k8sClient.Get(ctx, listenerKey(), new(v1alpha1.AutoscalingListener)))
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(BeTrue(), "the outdated scale set should stay switched off")
+
+			Consistently(listenerRecreated.Load, time.Second, autoscalingRunnerSetTestInterval).
+				Should(BeFalse(), "the listener must not be recreated for a rejected runner spec")
 		})
 	})
 })

@@ -202,12 +202,15 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	case err != nil:
 		log.Error(err, "Failed to get ephemeral runner")
 		return ctrl.Result{}, err
-	case ephemeralRunnerSetOutdatedForAppliedRevision(&ephemeralRunnerSet) && autoscalingRunnerSet.Status.Phase == v1alpha1.AutoscalingRunnerSetPhaseRunning:
+	case ephemeralRunnerSetOutdatedForAppliedRevision(&ephemeralRunnerSet) &&
+		autoscalingRunnerSet.Generation <= autoscalingRunnerSet.Status.ObservedGeneration:
 		// The runners rejected the spec they were given, so the scale set has to
 		// stop acquiring jobs it cannot run. Record that in the phase first: it is
 		// what keeps the listener switched off across reconciles, and what stops
-		// the branches below from rebuilding it. The observed generation is carried
-		// over unchanged, so a spec update still registers as new work.
+		// the branches below from rebuilding it. This also covers Pending during a
+		// metadata-only listener rebuild; only an unobserved spec generation is a
+		// recovery signal. The observed generation is carried over unchanged, so a
+		// spec update still registers as new work.
 		log.Info("Ephemeral runner set is outdated. Moving the autoscaling runner set to the outdated phase")
 		if err := r.updateStatus(
 			ctx,
