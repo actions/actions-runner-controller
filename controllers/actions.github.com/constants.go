@@ -50,6 +50,11 @@ const (
 	AnnotationKeyGitHubRunnerGroupName    = "actions.github.com/runner-group-name"
 	AnnotationKeyGitHubRunnerScaleSetName = "actions.github.com/runner-scale-set-name"
 	AnnotationKeyPatchID                  = "actions.github.com/patch-id"
+	// AnnotationKeyAutoscalingRunnerSetGeneration records the AutoscalingRunnerSet
+	// generation that published the current EphemeralRunnerSet actionable
+	// revision. It prevents a rejected revision from being retried more than once
+	// for the same AutoscalingRunnerSet spec update.
+	AnnotationKeyAutoscalingRunnerSetGeneration = "actions.github.com/autoscaling-runner-set-generation"
 	// AnnotationKeyActionableRevision records the EphemeralRunnerSet
 	// Spec.ActionableRevision that was in effect when the runner was created. It
 	// lets the set tell apart a runner that reported Outdated against the current
