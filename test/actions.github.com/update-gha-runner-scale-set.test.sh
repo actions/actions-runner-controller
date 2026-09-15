@@ -11,7 +11,7 @@ source "${DIR}/helper.sh" || {
     exit 1
 }
 
-export VERSION="$(chart_version "${ROOT_DIR}/charts/gha-runner-scale-set-controller/Chart.yaml")"
+export VERSION="$(chart_version "${ROOT_DIR}/charts/gha-runner-scale-set-controller-experimental/Chart.yaml")"
 
 SCALE_SET_NAME="update-strategy-$(date '+%M%S')$(((RANDOM + 100) % 100 + 1))"
 SCALE_SET_NAMESPACE="arc-runners"
@@ -26,9 +26,8 @@ function install_arc() {
     helm install "${ARC_NAME}" \
         --namespace "${ARC_NAMESPACE}" \
         --create-namespace \
-        --set image.repository="${IMAGE_NAME}" \
-        --set image.tag="${IMAGE_TAG}" \
-        "${ROOT_DIR}/charts/gha-runner-scale-set-controller" \
+        --set controller.manager.container.image="${IMAGE_NAME}:${IMAGE_TAG}" \
+        "${ROOT_DIR}/charts/gha-runner-scale-set-controller-experimental" \
         --debug
 
     if ! NAME="${ARC_NAME}" NAMESPACE="${ARC_NAMESPACE}" wait_for_arc; then
@@ -42,10 +41,14 @@ function install_scale_set() {
     helm install "${SCALE_SET_NAME}" \
         --namespace "${SCALE_SET_NAMESPACE}" \
         --create-namespace \
-        --set githubConfigUrl="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
-        --set githubConfigSecret.github_token="${GITHUB_TOKEN}" \
-        --set minRunners=1 \
-        "${ROOT_DIR}/charts/gha-runner-scale-set" \
+        --set controllerServiceAccount.name="${ARC_NAME}-gha-rs-controller" \
+        --set controllerServiceAccount.namespace="${ARC_NAMESPACE}" \
+        --set auth.url="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
+        --set auth.githubToken="${GITHUB_TOKEN}" \
+        --set scaleset.name="${SCALE_SET_NAME}" \
+        --set scaleset.minRunners=5 \
+        "${ROOT_DIR}/charts/gha-runner-scale-set-experimental" \
+        --version="${VERSION}" \
         --debug
 
     if ! NAME="${SCALE_SET_NAME}" NAMESPACE="${ARC_NAMESPACE}" wait_for_scale_set; then
@@ -59,21 +62,19 @@ function upgrade_scale_set() {
 
     echo "Generated upgrade marker: ${UPGRADE_MARKER}"
 
-    PATCH_APPLIED_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    echo "Captured PATCH_APPLIED_TIME: ${PATCH_APPLIED_TIME}"
-
     helm upgrade "${SCALE_SET_NAME}" \
         --namespace "${SCALE_SET_NAMESPACE}" \
-        --set githubConfigUrl="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
-        --set githubConfigSecret.github_token="${GITHUB_TOKEN}" \
-        --set minRunners=1 \
-        --set template.spec.containers[0].name="runner" \
-        --set template.spec.containers[0].image="ghcr.io/actions/actions-runner:latest" \
-        --set template.spec.containers[0].command={"/home/runner/run.sh"} \
-        --set template.spec.containers[0].env[0].name="TEST" \
-        --set template.spec.containers[0].env[0].value="E2E TESTS" \
-        --set "template.metadata.labels.e2e\.arc/upgrade-marker=${UPGRADE_MARKER}" \
-        "${ROOT_DIR}/charts/gha-runner-scale-set" \
+        --set controllerServiceAccount.name="${ARC_NAME}-gha-rs-controller" \
+        --set controllerServiceAccount.namespace="${ARC_NAMESPACE}" \
+        --set auth.url="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
+        --set auth.githubToken="${GITHUB_TOKEN}" \
+        --set scaleset.name="${SCALE_SET_NAME}" \
+        --set runner.container.image="ghcr.io/actions/actions-runner:latest" \
+        --set runner.container.command={"/home/runner/run.sh"} \
+        --set runner.container.env[0].name="TEST" \
+        --set runner.container.env[0].value="E2E TESTS" \
+        --set "runner.pod.metadata.labels.e2e\.arc/upgrade-marker=${UPGRADE_MARKER}" \
+        "${ROOT_DIR}/charts/gha-runner-scale-set-experimental" \
         --version="${VERSION}" \
         --debug
 
