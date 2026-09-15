@@ -2854,3 +2854,122 @@ func unblockDeletion(listener *v1alpha1.AutoscalingListener) {
 	}
 	Expect(k8sClient.Patch(context.Background(), current, client.MergeFrom(original))).To(Succeed(), "failed to remove the test finalizer from the listener")
 }
+
+var _ = Describe("Test AutoscalingRunnerSet with a listener left behind by a previous controller version", Ordered, func() {
+	var originalBuildVersion string
+	buildVersion := "0.1.0"
+
+	BeforeAll(func() {
+		originalBuildVersion = build.Version
+		build.Version = buildVersion
+	})
+
+	AfterAll(func() {
+		build.Version = originalBuildVersion
+	})
+
+	var ctx context.Context
+	var mgr ctrl.Manager
+	var autoscalingNS *corev1.Namespace
+	var autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet
+	var staleListener *v1alpha1.AutoscalingListener
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
+		configSecret := createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
+
+		controller := &AutoscalingRunnerSetReconciler{
+			Client:                             mgr.GetClient(),
+			Scheme:                             mgr.GetScheme(),
+			Log:                                logf.Log,
+			ControllerNamespace:                autoscalingNS.Name,
+			DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
+			ResourceBuilder: ResourceBuilder{
+				ResourceCache: newTestResourceCache(),
+				SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient(
+					scalefake.WithClient(
+						scalefake.NewClient(
+							scalefake.WithGetRunnerGroupByName(&scaleset.RunnerGroup{ID: 1, Name: "testgroup"}, nil),
+							scalefake.WithGetRunnerScaleSet(nil, nil),
+							scalefake.WithCreateRunnerScaleSet(&scaleset.RunnerScaleSet{ID: 1, Name: "test-asrs", RunnerGroupID: 1, RunnerGroupName: "testgroup"}, nil),
+							scalefake.WithDeleteRunnerScaleSet(nil),
+						),
+					),
+				)),
+			},
+		}
+		Expect(controller.SetupWithManager(mgr)).To(Succeed(), "failed to setup controller")
+		startManagers(GinkgoT(), mgr)
+
+		min := 1
+		max := 10
+		autoscalingRunnerSet = &v1alpha1.AutoscalingRunnerSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-asrs",
+				Namespace: autoscalingNS.Name,
+				Labels:    map[string]string{LabelKeyKubernetesVersion: buildVersion},
+			},
+			Spec: v1alpha1.AutoscalingRunnerSetSpec{
+				GitHubConfigUrl:    "https://github.com/owner/repo",
+				GitHubConfigSecret: configSecret.Name,
+				MaxRunners:         &max,
+				MinRunners:         &min,
+				RunnerGroup:        "testgroup",
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "runner",
+								Image: "ghcr.io/actions/runner",
+							},
+						},
+					},
+				},
+			},
+		}
+
+		// A listener created by an older controller release carries the same
+		// scale set identity labels and points at the same AutoscalingRunnerSet,
+		// but its name was derived with a different hash and its runner scale
+		// set ID no longer exists.
+		staleListener = &v1alpha1.AutoscalingListener{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      autoscalingRunnerSet.Name + "-deadbeef-listener",
+				Namespace: autoscalingNS.Name,
+				Labels: map[string]string{
+					LabelKeyGitHubScaleSetNamespace: autoscalingRunnerSet.Namespace,
+					LabelKeyGitHubScaleSetName:      autoscalingRunnerSet.Name,
+				},
+			},
+			Spec: v1alpha1.AutoscalingListenerSpec{
+				GitHubConfigURL:               autoscalingRunnerSet.Spec.GitHubConfigUrl,
+				GitHubConfigSecret:            configSecret.Name,
+				RunnerScaleSetID:              42,
+				AutoscalingRunnerSetNamespace: autoscalingRunnerSet.Namespace,
+				AutoscalingRunnerSetName:      autoscalingRunnerSet.Name,
+				EphemeralRunnerSetName:        autoscalingRunnerSet.Name + "-deadbeef",
+				MaxRunners:                    max,
+				MinRunners:                    min,
+				Image:                         "ghcr.io/actions/arc",
+			},
+		}
+		Expect(k8sClient.Create(ctx, staleListener)).To(Succeed(), "failed to create stale AutoscalingListener")
+		Expect(k8sClient.Create(ctx, autoscalingRunnerSet)).To(Succeed(), "failed to create AutoScalingRunnerSet")
+	})
+
+	It("deletes the stale listener and keeps only the one it derives for the scale set", func() {
+		Eventually(
+			func(g Gomega) {
+				listeners := new(v1alpha1.AutoscalingListenerList)
+				g.Expect(k8sClient.List(ctx, listeners, client.InNamespace(autoscalingNS.Name))).To(Succeed())
+				g.Expect(listeners.Items).To(HaveLen(1), "exactly one listener should exist for the scale set")
+				g.Expect(listeners.Items[0].Name).To(Equal(scaleSetListenerName(autoscalingRunnerSet)))
+			},
+			autoscalingRunnerSetTestTimeout,
+			autoscalingRunnerSetTestInterval,
+		).Should(Succeed(), "the listener left behind by the previous controller version should be deleted")
+
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(staleListener), new(v1alpha1.AutoscalingListener))).To(MatchError(errors.IsNotFound, "IsNotFound"))
+	})
+})

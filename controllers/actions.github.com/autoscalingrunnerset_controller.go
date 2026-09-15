@@ -334,6 +334,15 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		}
 	}
 
+	// The listener name embeds a hash whose inputs have changed between
+	// releases, so a listener created by a previous controller version is not
+	// found by the lookup below and would otherwise be left running forever
+	// against a runner scale set ID that no longer exists.
+	if err := r.deleteStaleListeners(ctx, &autoscalingRunnerSet, log); err != nil {
+		log.Error(err, "Failed to delete stale AutoscalingListeners")
+		return ctrl.Result{}, err
+	}
+
 	var listener v1alpha1.AutoscalingListener
 	err = r.Get(
 		ctx,
@@ -475,6 +484,40 @@ func (r *AutoscalingRunnerSetReconciler) updateStatus(
 	if err := r.Status().Patch(ctx, autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
 		log.Error(err, "Failed to patch autoscaling runner set status")
 		return err
+	}
+
+	return nil
+}
+
+// deleteStaleListeners deletes every listener that belongs to the
+// AutoscalingRunnerSet, identified by the scale set labels, but does not
+// carry the name this controller derives for it.
+func (r *AutoscalingRunnerSetReconciler) deleteStaleListeners(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) error {
+	var listeners v1alpha1.AutoscalingListenerList
+	err := r.List(
+		ctx,
+		&listeners,
+		client.InNamespace(r.ControllerNamespace),
+		client.MatchingLabels{
+			LabelKeyGitHubScaleSetNamespace: autoscalingRunnerSet.Namespace,
+			LabelKeyGitHubScaleSetName:      autoscalingRunnerSet.Name,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to list listeners: %w", err)
+	}
+
+	desiredName := scaleSetListenerName(autoscalingRunnerSet)
+	for i := range listeners.Items {
+		listener := &listeners.Items[i]
+		if listener.Name == desiredName || !listener.DeletionTimestamp.IsZero() {
+			continue
+		}
+
+		logger.Info("Deleting AutoscalingListener that no longer matches the derived listener name", "listener", listener.Name)
+		if err := r.Delete(ctx, listener); err != nil && !kerrors.IsNotFound(err) {
+			return fmt.Errorf("failed to delete listener %q: %w", listener.Name, err)
+		}
 	}
 
 	return nil
