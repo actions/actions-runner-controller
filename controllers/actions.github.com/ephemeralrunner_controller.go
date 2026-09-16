@@ -959,7 +959,9 @@ func (r *EphemeralRunnerReconciler) safeToEvictFor(runner *v1alpha1.EphemeralRun
 }
 
 // reconcileSafeToEvictAnnotation keeps the runner pod's safe-to-evict annotation
-// in sync with whether the runner has a job assigned. It patches only when the
+// in sync with whether the runner has a job assigned. Status.JobID is written
+// once and never cleared, so the annotation makes a single true -> false
+// transition and the pod dies with the job it ran. It patches only when the
 // value actually changes, so a runner that never picks up a job costs a single
 // write at pod creation.
 func (r *EphemeralRunnerReconciler) reconcileSafeToEvictAnnotation(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, pod *corev1.Pod, log logr.Logger) error {
