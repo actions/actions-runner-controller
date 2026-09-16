@@ -918,32 +918,36 @@ func (r *AutoscalingRunnerSetReconciler) updateStatus(
 	return nil
 }
 
+// Every listener the scale set owns is waited on, not just the one answering to
+// the name derived from it now. This gates the removal of the scale set's
+// finalizer, and a listener left behind under a previous name still has a pod:
+// reporting it gone would tear the scale set down while it is still acquiring
+// jobs.
 func (r *AutoscalingRunnerSetReconciler) cleanupListener(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (done bool, err error) {
 	logger.Info("Cleaning up the listener")
-	var listener v1alpha1.AutoscalingListener
-	err = r.Get(
-		ctx,
-		client.ObjectKey{
-			Namespace: r.ControllerNamespace,
-			Name:      scaleSetListenerName(autoscalingRunnerSet),
-		},
-		&listener,
-	)
-	switch {
-	case err == nil:
-		if listener.DeletionTimestamp.IsZero() {
-			logger.Info("Deleting the listener")
-			if err := r.Delete(ctx, &listener); err != nil {
-				return false, fmt.Errorf("failed to delete listener: %w", err)
-			}
-		}
-		return false, nil
-	case !kerrors.IsNotFound(err):
-		return false, fmt.Errorf("failed to get listener: %w", err)
+	listeners, err := r.listenersForAutoscalingRunnerSet(ctx, autoscalingRunnerSet)
+	if err != nil {
+		return false, err
 	}
 
-	logger.Info("Listener is deleted")
-	return true, nil
+	if len(listeners) == 0 {
+		logger.Info("Listener is deleted")
+		return true, nil
+	}
+
+	for i := range listeners {
+		listener := &listeners[i]
+		if !listener.DeletionTimestamp.IsZero() {
+			continue
+		}
+
+		logger.Info("Deleting the listener", "listener", listener.Name)
+		if err := r.Delete(ctx, listener); err != nil && !kerrors.IsNotFound(err) {
+			return false, fmt.Errorf("failed to delete listener %q: %w", listener.Name, err)
+		}
+	}
+
+	return false, nil
 }
 
 func (r *AutoscalingRunnerSetReconciler) cleanupEphemeralRunnerSet(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, logger logr.Logger) (done bool, err error) {

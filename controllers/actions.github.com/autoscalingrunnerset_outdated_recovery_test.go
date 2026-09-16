@@ -486,3 +486,40 @@ func TestPropagateToStoppedListenerDeletesARenamedListenerRatherThanUpdatingIt(t
 	err = c.Get(ctx, client.ObjectKeyFromObject(listener), new(v1alpha1.AutoscalingListener))
 	require.True(t, kerrors.IsNotFound(err), "the listener under the previous name should be gone, got %v", err)
 }
+
+// Teardown is gated on the listener being gone, and reporting that while one
+// still exists lets the AutoscalingRunnerSet's finalizer be removed out from
+// under a listener that still has a pod and is still acquiring jobs.
+func TestCleanupListenerWaitsForAListenerLeftUnderAPreviousName(t *testing.T) {
+	autoscalingRunnerSet, reconciler, c := outdatedFixture(t, v1alpha1.AutoscalingRunnerSetPhaseRunning, 5, 5, "runner:rejected")
+	ctx := context.Background()
+
+	ephemeralRunnerSet := new(v1alpha1.EphemeralRunnerSet)
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), ephemeralRunnerSet))
+
+	listener, err := reconciler.newAutoscalingListener(
+		autoscalingRunnerSet,
+		ephemeralRunnerSet,
+		reconciler.ControllerNamespace,
+		"listener:image",
+		nil,
+	)
+	require.NoError(t, err)
+	require.NoError(t, c.Create(ctx, listener))
+
+	autoscalingRunnerSet.Spec.RunnerGroup = "moved-to-another-group"
+	require.NoError(t, c.Update(ctx, autoscalingRunnerSet))
+	require.NotEqual(
+		t,
+		listener.Name,
+		scaleSetListenerName(autoscalingRunnerSet),
+		"this test is only meaningful while the runner group renames the listener",
+	)
+
+	done, err := reconciler.cleanupListener(ctx, autoscalingRunnerSet, logr.Discard())
+	require.NoError(t, err)
+	require.False(t, done, "teardown must not report the listener gone while one still exists under a previous name")
+
+	err = c.Get(ctx, client.ObjectKeyFromObject(listener), new(v1alpha1.AutoscalingListener))
+	require.True(t, kerrors.IsNotFound(err), "the listener should have been deleted, got %v", err)
+}
