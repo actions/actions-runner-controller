@@ -118,6 +118,8 @@ func outdatedFixture(
 
 	c := fake.NewClientBuilder().
 		WithScheme(scheme).
+		// SetupIndexers registers this on the manager's cache.
+		WithIndex(&v1alpha1.AutoscalingListener{}, autoscalingRunnerSetOwnerKey, autoscalingListenerRunnerSetIndexer).
 		WithStatusSubresource(autoscalingRunnerSet, ephemeralRunnerSet).
 		WithObjects(autoscalingRunnerSet, ephemeralRunnerSet).
 		Build()
@@ -446,4 +448,41 @@ func TestStopListenerSwitchesOffAListenerThatTheRunnerGroupRenamed(t *testing.T)
 			got.Name,
 		)
 	}
+}
+
+// A listener left behind under a previous name can never be started again: every
+// path that starts one looks it up by the name derived now. Keeping it in step
+// with the desired spec would only maintain a permanent orphan, so the parked
+// path deletes it instead, and recovery builds the listener fresh.
+func TestPropagateToStoppedListenerDeletesARenamedListenerRatherThanUpdatingIt(t *testing.T) {
+	autoscalingRunnerSet, reconciler, c := outdatedFixture(t, v1alpha1.AutoscalingRunnerSetPhaseOutdated, 5, 4, "runner:rejected")
+	ctx := context.Background()
+
+	ephemeralRunnerSet := new(v1alpha1.EphemeralRunnerSet)
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), ephemeralRunnerSet))
+
+	listener, err := reconciler.newAutoscalingListener(
+		autoscalingRunnerSet,
+		ephemeralRunnerSet,
+		reconciler.ControllerNamespace,
+		"listener:image",
+		nil,
+	)
+	require.NoError(t, err)
+	listener.Spec.Phase = v1alpha1.AutoscalingListenerPhaseStopped
+	require.NoError(t, c.Create(ctx, listener))
+
+	autoscalingRunnerSet.Spec.RunnerGroup = "moved-to-another-group"
+	require.NoError(t, c.Update(ctx, autoscalingRunnerSet))
+	require.NotEqual(
+		t,
+		listener.Name,
+		scaleSetListenerName(autoscalingRunnerSet),
+		"this test is only meaningful while the runner group renames the listener",
+	)
+
+	require.NoError(t, reconciler.propagateToStoppedListener(ctx, autoscalingRunnerSet, ephemeralRunnerSet, logr.Discard()))
+
+	err = c.Get(ctx, client.ObjectKeyFromObject(listener), new(v1alpha1.AutoscalingListener))
+	require.True(t, kerrors.IsNotFound(err), "the listener under the previous name should be gone, got %v", err)
 }

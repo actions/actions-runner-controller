@@ -98,6 +98,12 @@ const DefaultScaleSetListenerLogFormat = string(logging.LogFormatText)
 // ownerKey is field selector matching the owner name of a particular resource
 const resourceOwnerKey = ".metadata.controller"
 
+// autoscalingRunnerSetOwnerKey indexes an AutoscalingListener by the scale set
+// it names as its own. Listeners live in the controller namespace while the
+// scale set lives in its own, so they cannot carry an owner reference across
+// that boundary and the resourceOwnerKey index does not apply to them.
+const autoscalingRunnerSetOwnerKey = ".spec.autoscalingRunnerSet"
+
 // EphemeralRunner pod creation failure reasons
 const (
 	ReasonTooManyPodFailures = "TooManyPodFailures"

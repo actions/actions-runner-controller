@@ -319,6 +319,18 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		}
 	}
 
+	// Renamed listeners are dropped before the lookup below, which is by the
+	// current name and so cannot see them. Leaving one in place would let the
+	// scale set run two listeners at once: the replacement created here, and the
+	// one still holding a pod under the name the scale set used to derive.
+	switch deleted, err := r.deleteRenamedListeners(ctx, &autoscalingRunnerSet, log); {
+	case err != nil:
+		log.Error(err, "Failed to delete the listeners left behind under a previous name")
+		return ctrl.Result{}, err
+	case deleted:
+		return ctrl.Result{}, nil
+	}
+
 	var listener v1alpha1.AutoscalingListener
 	err = r.Get(
 		ctx,
@@ -550,19 +562,62 @@ func (r *AutoscalingRunnerSetReconciler) listenersForAutoscalingRunnerSet(
 	autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet,
 ) ([]v1alpha1.AutoscalingListener, error) {
 	var list v1alpha1.AutoscalingListenerList
-	if err := r.List(ctx, &list, client.InNamespace(r.ControllerNamespace)); err != nil {
+	if err := r.List(
+		ctx,
+		&list,
+		client.InNamespace(r.ControllerNamespace),
+		client.MatchingFields{
+			autoscalingRunnerSetOwnerKey: autoscalingRunnerSetOwnerIndexValue(
+				autoscalingRunnerSet.Namespace,
+				autoscalingRunnerSet.Name,
+			),
+		},
+	); err != nil {
 		return nil, fmt.Errorf("failed to list listeners: %w", err)
 	}
 
-	var owned []v1alpha1.AutoscalingListener
-	for _, listener := range list.Items {
-		if listener.Spec.AutoscalingRunnerSetName == autoscalingRunnerSet.Name &&
-			listener.Spec.AutoscalingRunnerSetNamespace == autoscalingRunnerSet.Namespace {
-			owned = append(owned, listener)
+	return list.Items, nil
+}
+
+// deleteRenamedListeners removes the listeners a scale set owns that no longer
+// answer to the name derived from it.
+//
+// That name is a hash over the runner group and the config URL, so editing
+// either renames the listener the rest of the lifecycle looks for, and the
+// listener created under the previous name becomes unreachable: nothing gets,
+// updates or deletes it again while the scale set lives. It is not inert,
+// though - it keeps its pod, and so keeps acquiring jobs alongside whatever
+// replaces it. Deleting it here is what makes a rename a replacement rather than
+// an addition.
+func (r *AutoscalingRunnerSetReconciler) deleteRenamedListeners(
+	ctx context.Context,
+	autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet,
+	log logr.Logger,
+) (deleted bool, err error) {
+	listeners, err := r.listenersForAutoscalingRunnerSet(ctx, autoscalingRunnerSet)
+	if err != nil {
+		return false, err
+	}
+
+	currentName := scaleSetListenerName(autoscalingRunnerSet)
+	for i := range listeners {
+		listener := &listeners[i]
+		if listener.Name == currentName {
+			continue
+		}
+
+		deleted = true
+		if !listener.DeletionTimestamp.IsZero() {
+			continue
+		}
+
+		log.Info("Deleting a listener left behind under a previous name", "listener", listener.Name)
+		if err := r.Delete(ctx, listener); err != nil && !kerrors.IsNotFound(err) {
+			return true, fmt.Errorf("failed to delete renamed listener %q: %w", listener.Name, err)
 		}
 	}
 
-	return owned, nil
+	return deleted, nil
 }
 
 // propagateToStoppedListener brings a switched-off listener's spec up to date.
@@ -577,30 +632,66 @@ func (r *AutoscalingRunnerSetReconciler) listenersForAutoscalingRunnerSet(
 // handled on the running path. Replacing exists to rebuild the pod; a stopped
 // listener has no pod, and re-creating the object would bring it back with the
 // phase unset, which means running.
+//
+// Listeners left behind under a previous name are deleted rather than updated.
+// Every path that could start one looks it up by the name derived now, so a
+// stale-named listener can never run again: updating it would only keep a
+// permanent orphan in step with a spec it will never use. Deleting it also means
+// recovery builds the listener fresh, from the name and spec as they stand then.
 func (r *AutoscalingRunnerSetReconciler) propagateToStoppedListener(
 	ctx context.Context,
 	autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet,
 	ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet,
 	log logr.Logger,
 ) error {
-	var listener v1alpha1.AutoscalingListener
-	err := r.Get(
-		ctx,
-		client.ObjectKey{
-			Namespace: r.ControllerNamespace,
-			Name:      scaleSetListenerName(autoscalingRunnerSet),
-		},
-		&listener,
-	)
-	switch {
-	case kerrors.IsNotFound(err):
-		return nil
-	case err != nil:
+	listeners, err := r.listenersForAutoscalingRunnerSet(ctx, autoscalingRunnerSet)
+	if err != nil {
 		return err
 	}
 
-	if !listener.DeletionTimestamp.IsZero() {
+	currentName := scaleSetListenerName(autoscalingRunnerSet)
+	var current *v1alpha1.AutoscalingListener
+	renamed := false
+	for i := range listeners {
+		if listeners[i].Name == currentName {
+			current = &listeners[i]
+			continue
+		}
+		renamed = true
+	}
+
+	switch {
+	case current == nil && !renamed:
+		// The scale set has no listener at all, which is not something an edit
+		// caused: a rejected runner spec is never rebuilt into a listener, so
+		// there is nothing here to bring up to date.
 		return nil
+	case current == nil:
+		// The listener the scale set does have answers to a previous name, so an
+		// edit renamed it. Create the replacement stopped rather than waiting
+		// for recovery to do it: a parked scale set is meant to be visible as a
+		// listener that exists and is switched off, and that should not stop
+		// being true because the user edited the runner group.
+		//
+		// The replacement is created before the listener under the previous name
+		// is deleted, which is the opposite order to the running path. Here the
+		// risk being avoided is a parked scale set that momentarily has no
+		// listener at all; overlapping briefly costs nothing, because both
+		// objects are stopped and a stopped listener has no pod. On the running
+		// path the order is reversed for the same reason read the other way:
+		// overlapping there would mean two listeners acquiring jobs at once.
+		if err := r.createStoppedListener(ctx, autoscalingRunnerSet, ephemeralRunnerSet, log); err != nil {
+			return err
+		}
+
+		_, err := r.deleteRenamedListeners(ctx, autoscalingRunnerSet, log)
+		return err
+	}
+
+	listener := *current
+	if !listener.DeletionTimestamp.IsZero() {
+		_, err := r.deleteRenamedListeners(ctx, autoscalingRunnerSet, log)
+		return err
 	}
 
 	desired, err := r.newAutoscalingListener(
@@ -619,7 +710,8 @@ func (r *AutoscalingRunnerSetReconciler) propagateToStoppedListener(
 	if !listenerSpecChanged(&listener, desired) &&
 		maps.Equal(listener.Labels, desiredLabels) &&
 		maps.Equal(listener.Annotations, desiredAnnotations) {
-		return nil
+		_, err := r.deleteRenamedListeners(ctx, autoscalingRunnerSet, log)
+		return err
 	}
 
 	log.Info("Updating the stopped listener to match the desired spec")
@@ -641,6 +733,36 @@ func (r *AutoscalingRunnerSetReconciler) propagateToStoppedListener(
 	}
 
 	log.Info("Updated the stopped listener")
+
+	_, err = r.deleteRenamedListeners(ctx, autoscalingRunnerSet, log)
+	return err
+}
+
+// createStoppedListener creates the listener a parked scale set should have, in
+// the stopped phase, so it never runs a pod.
+func (r *AutoscalingRunnerSetReconciler) createStoppedListener(
+	ctx context.Context,
+	autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet,
+	ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet,
+	log logr.Logger,
+) error {
+	desired, err := r.newAutoscalingListener(
+		autoscalingRunnerSet,
+		ephemeralRunnerSet,
+		r.ControllerNamespace,
+		r.DefaultRunnerScaleSetListenerImage,
+		nil, // TODO: remove
+	)
+	if err != nil {
+		return err
+	}
+
+	desired.Spec.Phase = v1alpha1.AutoscalingListenerPhaseStopped
+	log.Info("Creating the listener of a parked scale set in the stopped phase", "listener", desired.Name)
+	if err := r.Create(ctx, desired); err != nil && !kerrors.IsAlreadyExists(err) {
+		return fmt.Errorf("failed to create the stopped listener: %w", err)
+	}
+
 	return nil
 }
 

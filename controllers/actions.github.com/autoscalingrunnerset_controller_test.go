@@ -1169,6 +1169,35 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
 			).Should(BeEquivalentTo("testgroup2"), "AutoScalingRunnerSet should have the runner group in its annotation")
+
+			// The listener name is a hash over the runner group, so renaming the
+			// group renames the listener. Every lookup is by that derived name,
+			// so the listener created under the previous name is invisible to
+			// the controller from here on: nothing deletes it while the scale
+			// set lives, and it keeps acquiring jobs alongside its replacement.
+			Eventually(
+				func(g Gomega) {
+					var listeners v1alpha1.AutoscalingListenerList
+					g.Expect(k8sClient.List(ctx, &listeners, client.InNamespace(autoscalingRunnerSet.Namespace))).To(Succeed())
+
+					var live []string
+					for _, listener := range listeners.Items {
+						if listener.Spec.AutoscalingRunnerSetName != autoscalingRunnerSet.Name ||
+							listener.Spec.AutoscalingRunnerSetNamespace != autoscalingRunnerSet.Namespace ||
+							!listener.DeletionTimestamp.IsZero() {
+							continue
+						}
+						live = append(live, listener.Name)
+					}
+
+					g.Expect(live).To(
+						ConsistOf(scaleSetListenerName(updated)),
+						"a renamed scale set should be left with exactly one listener, under the current name",
+					)
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
 		})
 	})
 
@@ -2879,8 +2908,16 @@ var _ = Describe("Test AutoscalingRunnerSet outdated lifecycle", Ordered, func()
 			return client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}
 		}
 
+		// The listener name is derived from the scale set as it stands now, not
+		// as the test declared it: the name is a hash over the runner group, so
+		// an edit to the group renames the listener the scale set should have.
 		listenerKey := func() client.ObjectKey {
-			return client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}
+			GinkgoHelper()
+
+			current := new(v1alpha1.AutoscalingRunnerSet)
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed(), "failed to get the autoscaling runner set")
+
+			return client.ObjectKey{Name: scaleSetListenerName(current), Namespace: autoscalingRunnerSet.Namespace}
 		}
 
 		getEphemeralRunnerSet := func() *v1alpha1.EphemeralRunnerSet {
