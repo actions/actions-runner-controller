@@ -440,3 +440,26 @@ jobs:
         env:
           GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
         shell: bash
+
+  outdated-runner-lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.id == github.repository_id
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{github.head_ref}}
+
+      - name: Get configure token
+        id: config-token
+        uses: peter-murray/workflow-application-token-action@dad2b81e50ce3edeb5f3b7ffbd79f731368bd668
+        with:
+          application_id: ${{ secrets.E2E_TESTS_ACCESS_APP_ID }}
+          application_private_key: ${{ secrets.E2E_TESTS_ACCESS_PK }}
+          organization: ${{ env.TARGET_ORG }}
+      - name: Run outdated runner lifecycle test
+        run: hack/e2e-test.sh outdated-runner-lifecycle
+        env:
+          GITHUB_TOKEN: "${{steps.config-token.outputs.token}}"
+        shell: bash
