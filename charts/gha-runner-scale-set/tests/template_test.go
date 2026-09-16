@@ -2144,6 +2144,19 @@ func TestTemplate_CreateManagerRole(t *testing.T) {
 	assert.Equal(t, "actions.github.com/cleanup-protection", managerRole.Finalizers[0])
 	assert.Equal(t, 6, len(managerRole.Rules))
 
+	// The controller patches the runner pod to keep the safe-to-evict annotation
+	// in sync with job assignment, so create/delete/get is not enough. A verb
+	// missing here fails only at runtime, as a forbidden error in the reconcile.
+	var podVerbs []string
+	for _, rule := range managerRole.Rules {
+		for _, resource := range rule.Resources {
+			if resource == "pods" {
+				podVerbs = rule.Verbs
+			}
+		}
+	}
+	assert.ElementsMatch(t, []string{"create", "delete", "get", "patch"}, podVerbs)
+
 	var ars v1alpha1.AutoscalingRunnerSet
 	helm.UnmarshalK8SYaml(t, output, &ars)
 }
