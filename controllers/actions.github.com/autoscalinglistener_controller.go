@@ -641,24 +641,29 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 		return false, fmt.Errorf("failed to get listener config secret: %w", err)
 	}
 
-	if autoscalingListener.Spec.Proxy != nil {
-		logger.Info("Cleaning up the listener proxy secret")
-		proxySecret := new(corev1.Secret)
-		err = r.Get(ctx, types.NamespacedName{Name: proxyListenerSecretName(autoscalingListener), Namespace: autoscalingListener.Namespace}, proxySecret)
-		switch {
-		case err == nil:
-			if proxySecret.DeletionTimestamp.IsZero() {
-				logger.Info("Deleting the listener proxy secret")
-				if err := r.Delete(ctx, proxySecret); err != nil {
-					return false, fmt.Errorf("failed to delete listener proxy secret: %w", err)
-				}
+	// The proxy secret is deleted whatever the current spec says about a proxy.
+	// Its name is derived from the listener rather than from the spec, and the
+	// spec of a stopped listener is updated in place as the AutoscalingRunnerSet
+	// is edited, so asking the spec would let a user who removes the proxy while
+	// the scale set is switched off erase the only signal that the old secret is
+	// there. It holds credentials, and a stopped listener is never deleted, so
+	// nothing else would ever collect it.
+	logger.Info("Cleaning up the listener proxy secret")
+	proxySecret := new(corev1.Secret)
+	err = r.Get(ctx, types.NamespacedName{Name: proxyListenerSecretName(autoscalingListener), Namespace: autoscalingListener.Namespace}, proxySecret)
+	switch {
+	case err == nil:
+		if proxySecret.DeletionTimestamp.IsZero() {
+			logger.Info("Deleting the listener proxy secret")
+			if err := r.Delete(ctx, proxySecret); err != nil {
+				return false, fmt.Errorf("failed to delete listener proxy secret: %w", err)
 			}
-			requeue = true
-		case !kerrors.IsNotFound(err):
-			return false, fmt.Errorf("failed to get listener proxy secret: %w", err)
 		}
-		logger.Info("Listener proxy secret is deleted")
+		requeue = true
+	case !kerrors.IsNotFound(err):
+		return false, fmt.Errorf("failed to get listener proxy secret: %w", err)
 	}
+	logger.Info("Listener proxy secret is deleted")
 
 	listenerRoleBinding := new(rbacv1.RoleBinding)
 	err = r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace, Name: autoscalingListener.Name}, listenerRoleBinding)

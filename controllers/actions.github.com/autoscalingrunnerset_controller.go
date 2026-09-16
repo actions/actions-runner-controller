@@ -509,38 +509,60 @@ func listenerSpecChanged(current, desired *v1alpha1.AutoscalingListener) bool {
 // itself, with its spec and finalizer, so a parked scale set stays visible as
 // Phase: Stopped rather than as a listener that silently does not exist, and the
 // custom resource is not churned every time a scale set is parked and recovered.
+// Listeners are found by their back-reference to the scale set rather than by
+// the name derived from it. The derived name is a hash over the runner group and
+// the config URL, so editing either renames the listener the controller looks
+// for - and a parked scale set accepts exactly those edits. Looking the listener
+// up by name would miss the one still running under the previous name and leave
+// it acquiring jobs for a scale set that is supposed to be switched off.
 func (r *AutoscalingRunnerSetReconciler) stopListener(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, log logr.Logger) error {
-	var listener v1alpha1.AutoscalingListener
-	err := r.Get(
-		ctx,
-		client.ObjectKey{
-			Namespace: r.ControllerNamespace,
-			Name:      scaleSetListenerName(autoscalingRunnerSet),
-		},
-		&listener,
-	)
-	switch {
-	case kerrors.IsNotFound(err):
-		// Nothing to switch off. A scale set that is switched off never creates
-		// a listener, so this is the normal state after a restart.
-		return nil
-	case err != nil:
+	listeners, err := r.listenersForAutoscalingRunnerSet(ctx, autoscalingRunnerSet)
+	if err != nil {
 		return err
 	}
 
-	if !listener.DeletionTimestamp.IsZero() || listener.Spec.Phase.Stopped() {
-		return nil
+	// Nothing to switch off. A scale set that is switched off never creates a
+	// listener, so this is the normal state after a restart.
+	for i := range listeners {
+		listener := &listeners[i]
+		if !listener.DeletionTimestamp.IsZero() || listener.Spec.Phase.Stopped() {
+			continue
+		}
+
+		log.Info("Stopping the listener so no further jobs are acquired", "listener", listener.Name)
+		original := listener.DeepCopy()
+		listener.Spec.Phase = v1alpha1.AutoscalingListenerPhaseStopped
+		if err := r.Patch(ctx, listener, client.MergeFrom(original)); err != nil {
+			return err
+		}
+
+		log.Info("Stopped the listener", "listener", listener.Name)
 	}
 
-	log.Info("Stopping the listener so no further jobs are acquired")
-	original := listener.DeepCopy()
-	listener.Spec.Phase = v1alpha1.AutoscalingListenerPhaseStopped
-	if err := r.Patch(ctx, &listener, client.MergeFrom(original)); err != nil {
-		return err
-	}
-
-	log.Info("Stopped the listener")
 	return nil
+}
+
+// listenersForAutoscalingRunnerSet returns every listener that names this scale
+// set as its own, which is the same back-reference the controller's watch uses
+// to map a listener back to the set that owns it.
+func (r *AutoscalingRunnerSetReconciler) listenersForAutoscalingRunnerSet(
+	ctx context.Context,
+	autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet,
+) ([]v1alpha1.AutoscalingListener, error) {
+	var list v1alpha1.AutoscalingListenerList
+	if err := r.List(ctx, &list, client.InNamespace(r.ControllerNamespace)); err != nil {
+		return nil, fmt.Errorf("failed to list listeners: %w", err)
+	}
+
+	var owned []v1alpha1.AutoscalingListener
+	for _, listener := range list.Items {
+		if listener.Spec.AutoscalingRunnerSetName == autoscalingRunnerSet.Name &&
+			listener.Spec.AutoscalingRunnerSetNamespace == autoscalingRunnerSet.Namespace {
+			owned = append(owned, listener)
+		}
+	}
+
+	return owned, nil
 }
 
 // propagateToStoppedListener brings a switched-off listener's spec up to date.
@@ -602,13 +624,16 @@ func (r *AutoscalingRunnerSetReconciler) propagateToStoppedListener(
 
 	log.Info("Updating the stopped listener to match the desired spec")
 	original := listener.DeepCopy()
-	phase := listener.Spec.Phase
 	listener.Spec = desired.Spec
-	// The phase is the one field the desired listener says nothing about: it is
+	// The phase is forced rather than carried over from the live object. This
+	// helper only runs on the parked path, immediately after stopListener has
+	// patched the phase, and the read above goes through the cache: it can still
+	// return the pre-patch object. Preserving what it reported would write
+	// Running back onto a listener this same reconcile has just switched off.
+	// The desired listener says nothing about the phase either, since it is
 	// written onto the live object rather than derived from the
-	// AutoscalingRunnerSet. Taking it from the desired spec would start the
-	// listener the caller has just switched off.
-	listener.Spec.Phase = phase
+	// AutoscalingRunnerSet.
+	listener.Spec.Phase = v1alpha1.AutoscalingListenerPhaseStopped
 	listener.Labels = desiredLabels
 	listener.Annotations = desiredAnnotations
 	if err := r.Patch(ctx, &listener, client.MergeFrom(original)); err != nil {

@@ -180,6 +180,14 @@ func TestAutoscalingRunnerSetStaysOutdatedWithoutRunnerSpecChange(t *testing.T) 
 	gotERS := new(v1alpha1.EphemeralRunnerSet)
 	require.NoError(t, c.Get(context.Background(), key, gotERS))
 	require.Equal(t, outdatedFixtureRevision, gotERS.Spec.ActionableRevision, "the rejected runner spec must not be retried")
+
+	// The fixture carries a nonzero target, which is what a listener that was
+	// still draining when the set was parked would have left behind. Re-pinning
+	// it is what makes that harmless: the AutoscalingRunnerSet owns the
+	// EphemeralRunnerSet, so a target published while parked re-enqueues it and
+	// is taken straight back to zero.
+	require.Zero(t, gotERS.Spec.Replicas, "a target published while parked must be taken back to zero")
+	require.Zero(t, gotERS.Spec.PatchID)
 }
 
 // Correcting the runner spec is the one edit that recovers the scale set: the
@@ -348,4 +356,94 @@ func TestAutoscalingRunnerSetPropagatesUnrelatedEditsWhileOutdated(t *testing.T)
 	require.Equal(t, outdatedFixtureRevision, gotERS.Spec.ActionableRevision, "the rejected runner spec must not be retried")
 	require.Zero(t, gotERS.Spec.Replicas, "the set must stay pinned at zero replicas")
 	require.Zero(t, gotERS.Spec.PatchID)
+}
+
+// propagateToStoppedListener runs immediately after stopListener has patched the
+// phase, and reads the listener back through the cache. That read can still hold
+// the pre-patch object, so the live phase is not a value this helper can trust:
+// carrying it over would write Running back onto a listener the same reconcile
+// has just switched off, while the scale set stays outdated.
+//
+// The helper only ever runs on the parked path, so the phase it writes is not in
+// question. It is Stopped.
+func TestPropagateToStoppedListenerNeverRestartsTheListener(t *testing.T) {
+	autoscalingRunnerSet, reconciler, c := outdatedFixture(t, v1alpha1.AutoscalingRunnerSetPhaseOutdated, 5, 4, "runner:rejected")
+	ctx := context.Background()
+
+	maxRunners := 20
+	autoscalingRunnerSet.Spec.MaxRunners = &maxRunners
+	require.NoError(t, c.Update(ctx, autoscalingRunnerSet))
+
+	ephemeralRunnerSet := new(v1alpha1.EphemeralRunnerSet)
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), ephemeralRunnerSet))
+
+	listener, err := reconciler.newAutoscalingListener(
+		autoscalingRunnerSet,
+		ephemeralRunnerSet,
+		reconciler.ControllerNamespace,
+		"listener:image",
+		nil,
+	)
+	require.NoError(t, err)
+	// The listener as a stale cached read returns it: still running, and still
+	// carrying the spec it was parked with, so there is drift to propagate.
+	listener.Spec.MaxRunners = 0
+	listener.Spec.Phase = v1alpha1.AutoscalingListenerPhaseRunning
+	require.NoError(t, c.Create(ctx, listener))
+
+	require.NoError(t, reconciler.propagateToStoppedListener(ctx, autoscalingRunnerSet, ephemeralRunnerSet, logr.Discard()))
+
+	got := new(v1alpha1.AutoscalingListener)
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(listener), got))
+	require.Equal(t, maxRunners, got.Spec.MaxRunners, "the edit should still be propagated")
+	require.True(
+		t,
+		got.Spec.Phase.Stopped(),
+		"propagating an edit must never restart a listener the same reconcile switched off, whatever phase the cached read reported",
+	)
+}
+
+// A parked scale set now accepts edits, and the listener's name is a hash over
+// the runner group and the config URL, so an edit to either renames the listener
+// the controller looks for. Every lookup is by that derived name, so the running
+// listener created under the old name is invisible to the parked path: it would
+// keep acquiring jobs for a scale set that is supposed to be switched off.
+func TestStopListenerSwitchesOffAListenerThatTheRunnerGroupRenamed(t *testing.T) {
+	autoscalingRunnerSet, reconciler, c := outdatedFixture(t, v1alpha1.AutoscalingRunnerSetPhaseOutdated, 5, 4, "runner:rejected")
+	ctx := context.Background()
+
+	ephemeralRunnerSet := new(v1alpha1.EphemeralRunnerSet)
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), ephemeralRunnerSet))
+
+	listener, err := reconciler.newAutoscalingListener(
+		autoscalingRunnerSet,
+		ephemeralRunnerSet,
+		reconciler.ControllerNamespace,
+		"listener:image",
+		nil,
+	)
+	require.NoError(t, err)
+	require.NoError(t, c.Create(ctx, listener))
+
+	autoscalingRunnerSet.Spec.RunnerGroup = "moved-to-another-group"
+	require.NoError(t, c.Update(ctx, autoscalingRunnerSet))
+	require.NotEqual(
+		t,
+		listener.Name,
+		scaleSetListenerName(autoscalingRunnerSet),
+		"this test is only meaningful while the runner group renames the listener",
+	)
+
+	require.NoError(t, reconciler.stopListener(ctx, autoscalingRunnerSet, logr.Discard()))
+
+	var listeners v1alpha1.AutoscalingListenerList
+	require.NoError(t, c.List(ctx, &listeners, client.InNamespace(reconciler.ControllerNamespace)))
+	for _, got := range listeners.Items {
+		require.True(
+			t,
+			got.Spec.Phase.Stopped(),
+			"listener %q kept acquiring jobs for a switched-off scale set",
+			got.Name,
+		)
+	}
 }
