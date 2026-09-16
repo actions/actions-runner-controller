@@ -10,10 +10,10 @@ import (
 // EphemeralRunnerSet is running differs from the one derived from the
 // AutoscalingRunnerSet, in a way that requires re-applying it to the runners.
 //
-	// A change reported here is one of the signals that recovers a scale set from
-	// the outdated phase: changing the runner spec gives the runners a different
-	// input to retry. The encompassing ephemeralRunnerSetDesiredSpecChanged helper
-	// also considers EphemeralRunnerMetadata changes.
+// A change reported here is one of the signals that recovers a scale set from
+// the outdated phase: changing the runner spec gives the runners a different
+// input to retry. The encompassing ephemeralRunnerSetDesiredSpecChanged helper
+// also considers EphemeralRunnerMetadata changes.
 //
 // Semantic.DeepEqual is used rather than cmp.Equal or reflect.DeepEqual because
 // it treats a nil slice/map as equal to an empty one. That matters here: most
