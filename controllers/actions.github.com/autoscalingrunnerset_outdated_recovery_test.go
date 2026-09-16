@@ -298,3 +298,54 @@ func TestAutoscalingRunnerSetReplacesAStoppedListenerWithADriftedSpec(t *testing
 		"a stopped listener whose spec has drifted must be replaced rather than started, so it is never running with the spec the scale set was parked with",
 	)
 }
+
+// A parked scale set still accepts edits that are not a recovery signal. They
+// must reach the objects they belong to: the scale set stays switched off, but
+// switched off is not the same as frozen, and an edit that silently never lands
+// would come back as a surprise whenever the set eventually recovers.
+func TestAutoscalingRunnerSetPropagatesUnrelatedEditsWhileOutdated(t *testing.T) {
+	autoscalingRunnerSet, reconciler, c := outdatedFixture(t, v1alpha1.AutoscalingRunnerSetPhaseOutdated, 5, 4, "runner:rejected")
+	ctx := context.Background()
+	key := client.ObjectKeyFromObject(autoscalingRunnerSet)
+
+	// Neither edit touches the runner spec, so neither recovers the scale set.
+	maxRunners := 20
+	autoscalingRunnerSet.Spec.MaxRunners = &maxRunners
+	autoscalingRunnerSet.Labels["arc.test/edited-while-parked"] = "yes"
+	require.NoError(t, c.Update(ctx, autoscalingRunnerSet))
+
+	listener, err := reconciler.newAutoscalingListener(
+		autoscalingRunnerSet,
+		&v1alpha1.EphemeralRunnerSet{ObjectMeta: metav1.ObjectMeta{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}},
+		reconciler.ControllerNamespace,
+		"listener:image",
+		nil,
+	)
+	require.NoError(t, err)
+	// The listener as it was when the scale set was parked: no max runners.
+	listener.Spec.MaxRunners = 0
+	listener.Spec.Phase = v1alpha1.AutoscalingListenerPhaseStopped
+	require.NoError(t, c.Create(ctx, listener))
+
+	// More than one reconcile, because the edits land on different objects and
+	// the controller returns after each patch.
+	for range 4 {
+		reconcileOutdatedFixture(t, reconciler, key)
+	}
+
+	gotARS := new(v1alpha1.AutoscalingRunnerSet)
+	require.NoError(t, c.Get(ctx, key, gotARS))
+	require.Equal(t, v1alpha1.AutoscalingRunnerSetPhaseOutdated, gotARS.Status.Phase, "an edit outside the runner spec must not un-park the scale set")
+
+	gotListener := new(v1alpha1.AutoscalingListener)
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(listener), gotListener))
+	require.Equal(t, v1alpha1.AutoscalingListenerPhaseStopped, gotListener.Spec.Phase, "the listener must stay switched off")
+	require.Equal(t, maxRunners, gotListener.Spec.MaxRunners, "the edit must reach the listener even though it is switched off")
+
+	gotERS := new(v1alpha1.EphemeralRunnerSet)
+	require.NoError(t, c.Get(ctx, key, gotERS))
+	require.Equal(t, "yes", gotERS.Labels["arc.test/edited-while-parked"], "the edit must reach the ephemeral runner set even though it is switched off")
+	require.Equal(t, outdatedFixtureRevision, gotERS.Spec.ActionableRevision, "the rejected runner spec must not be retried")
+	require.Zero(t, gotERS.Spec.Replicas, "the set must stay pinned at zero replicas")
+	require.Zero(t, gotERS.Spec.PatchID)
+}

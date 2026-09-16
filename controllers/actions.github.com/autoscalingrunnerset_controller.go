@@ -543,6 +543,82 @@ func (r *AutoscalingRunnerSetReconciler) stopListener(ctx context.Context, autos
 	return nil
 }
 
+// propagateToStoppedListener brings a switched-off listener's spec up to date.
+//
+// Switched off is not the same as frozen. A parked scale set still accepts edits
+// that are not a recovery signal - replica bounds, labels, annotations - and
+// those belong to the listener even though it is not running. Landing them now
+// means the listener that eventually starts is built from the spec as it stands
+// then, rather than from the spec it was parked with.
+//
+// The spec is patched in place rather than being replaced the way drift is
+// handled on the running path. Replacing exists to rebuild the pod; a stopped
+// listener has no pod, and re-creating the object would bring it back with the
+// phase unset, which means running.
+func (r *AutoscalingRunnerSetReconciler) propagateToStoppedListener(
+	ctx context.Context,
+	autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet,
+	ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet,
+	log logr.Logger,
+) error {
+	var listener v1alpha1.AutoscalingListener
+	err := r.Get(
+		ctx,
+		client.ObjectKey{
+			Namespace: r.ControllerNamespace,
+			Name:      scaleSetListenerName(autoscalingRunnerSet),
+		},
+		&listener,
+	)
+	switch {
+	case kerrors.IsNotFound(err):
+		return nil
+	case err != nil:
+		return err
+	}
+
+	if !listener.DeletionTimestamp.IsZero() {
+		return nil
+	}
+
+	desired, err := r.newAutoscalingListener(
+		autoscalingRunnerSet,
+		ephemeralRunnerSet,
+		r.ControllerNamespace,
+		r.DefaultRunnerScaleSetListenerImage,
+		nil, // TODO: remove
+	)
+	if err != nil {
+		return err
+	}
+
+	desiredLabels := r.filterAndMergeLabels(listener.Labels, desired.Labels)
+	desiredAnnotations := r.mergeAnnotations(listener.Annotations, desired.Annotations)
+	if !listenerSpecChanged(&listener, desired) &&
+		maps.Equal(listener.Labels, desiredLabels) &&
+		maps.Equal(listener.Annotations, desiredAnnotations) {
+		return nil
+	}
+
+	log.Info("Updating the stopped listener to match the desired spec")
+	original := listener.DeepCopy()
+	phase := listener.Spec.Phase
+	listener.Spec = desired.Spec
+	// The phase is the one field the desired listener says nothing about: it is
+	// written onto the live object rather than derived from the
+	// AutoscalingRunnerSet. Taking it from the desired spec would start the
+	// listener the caller has just switched off.
+	listener.Spec.Phase = phase
+	listener.Labels = desiredLabels
+	listener.Annotations = desiredAnnotations
+	if err := r.Patch(ctx, &listener, client.MergeFrom(original)); err != nil {
+		return err
+	}
+
+	log.Info("Updated the stopped listener")
+	return nil
+}
+
 // reconcileOutdated holds a scale set whose runners rejected the runner spec.
 //
 // The listener is stopped so no new jobs are acquired, and the EphemeralRunnerSet
@@ -555,6 +631,11 @@ func (r *AutoscalingRunnerSetReconciler) stopListener(ctx context.Context, autos
 // This state is left only when the runner spec the runners rejected is changed,
 // which moves the phase back to pending and lets the next reconcile publish the
 // new spec to the set and start the listener again.
+//
+// Switched off is not frozen, though. Edits that are not a recovery signal are
+// still propagated to both objects while they are parked, so the scale set that
+// eventually recovers is the one the user has been editing rather than the one
+// it was parked as.
 func (r *AutoscalingRunnerSetReconciler) reconcileOutdated(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, log logr.Logger) (ctrl.Result, error) {
 	log.Info("Autoscaling runner set is in outdated phase, stopping the listener")
 	if err := r.stopListener(ctx, autoscalingRunnerSet, log); err != nil {
@@ -589,13 +670,38 @@ func (r *AutoscalingRunnerSetReconciler) reconcileOutdated(ctx context.Context, 
 			return ctrl.Result{}, nil
 		}
 
-		if ephemeralRunnerSet.Spec.Replicas == 0 && ephemeralRunnerSet.Spec.PatchID == 0 {
+		if err := r.propagateToStoppedListener(ctx, autoscalingRunnerSet, &ephemeralRunnerSet, log); err != nil {
+			log.Error(err, "Failed to update the stopped listener for the outdated runner set")
+			return ctrl.Result{}, err
+		}
+
+		// Labels and annotations are all that can differ here. The runner spec
+		// and the runner metadata are recovery signals, so if either had changed
+		// this reconcile would have taken the recovery path instead of this one,
+		// and publishing them from here would hand the runners a new spec without
+		// the revision bump that tells the set to stop judging itself by the
+		// runners that failed.
+		desired, err := r.newEphemeralRunnerSet(autoscalingRunnerSet)
+		if err != nil {
+			log.Error(err, "Failed to generate ephemeral runner set spec for the outdated runner set")
+			return ctrl.Result{}, err
+		}
+
+		desiredLabels := r.filterAndMergeLabels(ephemeralRunnerSet.Labels, desired.Labels)
+		desiredAnnotations := r.mergeAnnotations(ephemeralRunnerSet.Annotations, desired.Annotations)
+
+		pinned := ephemeralRunnerSet.Spec.Replicas == 0 && ephemeralRunnerSet.Spec.PatchID == 0
+		if pinned &&
+			maps.Equal(ephemeralRunnerSet.Labels, desiredLabels) &&
+			maps.Equal(ephemeralRunnerSet.Annotations, desiredAnnotations) {
 			return ctrl.Result{}, nil
 		}
 
 		original := ephemeralRunnerSet.DeepCopy()
 		ephemeralRunnerSet.Spec.Replicas = 0
 		ephemeralRunnerSet.Spec.PatchID = 0
+		ephemeralRunnerSet.Labels = desiredLabels
+		ephemeralRunnerSet.Annotations = desiredAnnotations
 		if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
 			log.Error(err, "Failed to patch ephemeral runner set with 0 replicas and reset patch ID for the outdated runner set")
 			return ctrl.Result{}, err

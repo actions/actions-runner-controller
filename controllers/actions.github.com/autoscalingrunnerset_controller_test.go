@@ -3113,7 +3113,7 @@ var _ = Describe("Test AutoscalingRunnerSet outdated lifecycle", Ordered, func()
 		// configuration until the next reconcile replaces it - is too short to
 		// observe here, and is covered deterministically by
 		// TestAutoscalingRunnerSetReplacesAStoppedListenerWithADriftedSpec.
-		It("starts the listener from the current spec after an edit made while outdated", func() {
+		It("propagates an edit made while outdated and keeps it on recovery", func() {
 			markRunnersOutdated()
 			outdatedRevision := expectSwitchedOff()
 
@@ -3125,6 +3125,19 @@ var _ = Describe("Test AutoscalingRunnerSet outdated lifecycle", Ordered, func()
 			Expect(k8sClient.Patch(ctx, updated, client.MergeFrom(original))).To(Succeed(), "failed to update the replica bounds")
 
 			expectStaysOutdated(outdatedRevision)
+
+			// Switched off is not frozen: the edit lands on the listener while it
+			// is still stopped, rather than waiting for the scale set to recover.
+			Eventually(
+				func(g Gomega) {
+					listener := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, listenerKey(), listener)).To(Succeed())
+					g.Expect(listener.Spec.Phase).To(Equal(v1alpha1.AutoscalingListenerPhaseStopped), "the listener must stay switched off")
+					g.Expect(listener.Spec.MaxRunners).To(Equal(max), "the edit should reach the listener while it is stopped")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
 
 			updated = new(v1alpha1.AutoscalingRunnerSet)
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), updated)).To(Succeed())
