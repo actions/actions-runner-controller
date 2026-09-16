@@ -1,0 +1,241 @@
+package actionsgithubcom
+
+import (
+	"context"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient"
+	scalefake "github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient/fake"
+	"github.com/go-logr/logr"
+	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+)
+
+// serviceLatencies are the round trip times the Actions service is stood up
+// with. Zero is not a latency anyone observes; it is there to separate the cost
+// of the call itself from the cost of waiting for it.
+var serviceLatencies = []time.Duration{0, 1 * time.Millisecond, 25 * time.Millisecond}
+
+// benchmarkActionsClient returns a client whose RemoveRunner takes latency to
+// answer.
+func benchmarkActionsClient(latency time.Duration) multiclient.Client {
+	return scalefake.NewClient(scalefake.WithRemoveRunnerFunc(func(context.Context, int64) error {
+		if latency > 0 {
+			time.Sleep(latency)
+		}
+		return nil
+	}))
+}
+
+// newFinalizeBenchmarkReconciler builds a reconciler over an in-memory API
+// server holding nothing but one runner, its pod and its secret. queue may be
+// nil, which makes the push a no-op.
+//
+// One of these per iteration. The fake client scans every object it holds on
+// every read, so a store built up across iterations would charge the reconcile
+// for how many runners the benchmark happens to have finalized already.
+func newFinalizeBenchmarkReconciler(b *testing.B, scheme *runtime.Scheme, queue *RunnerUnregistrationQueue, phase v1alpha1.EphemeralRunnerPhase) (*EphemeralRunnerReconciler, types.NamespacedName) {
+	b.Helper()
+
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.EphemeralRunner{}).
+		Build()
+
+	reconciler := &EphemeralRunnerReconciler{
+		Client:              c,
+		Scheme:              scheme,
+		Log:                 logr.Discard(),
+		UnregistrationQueue: queue,
+		ResourceBuilder: ResourceBuilder{
+			ResourceCache: newTestResourceCache(),
+		},
+	}
+
+	return reconciler, createFinalizeBenchmarkRunner(b, c, phase)
+}
+
+// benchmarkScheme registers only the types the finalizer path touches. The fake
+// client walks the scheme on every operation, and the full client-go scheme
+// puts more time into that bookkeeping than into the reconcile being measured.
+func benchmarkScheme(b *testing.B) *runtime.Scheme {
+	b.Helper()
+
+	scheme := runtime.NewScheme()
+	require.NoError(b, corev1.AddToScheme(scheme))
+	require.NoError(b, v1alpha1.AddToScheme(scheme))
+	return scheme
+}
+
+// createFinalizeBenchmarkRunner puts a deleted EphemeralRunner, its pod and its
+// jitconfig secret in front of the reconciler, which is the state the finalizer
+// path runs against.
+func createFinalizeBenchmarkRunner(b *testing.B, c client.Client, phase v1alpha1.EphemeralRunnerPhase) types.NamespacedName {
+	b.Helper()
+
+	const name = "runner"
+	ctx := context.Background()
+	ephemeralRunner := newExampleRunner(name, "default", "config-secret")
+	ephemeralRunner.Finalizers = []string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName}
+	ephemeralRunner.Status.RunnerID = 42
+	ephemeralRunner.Status.Phase = phase
+	require.NoError(b, c.Create(ctx, ephemeralRunner))
+
+	require.NoError(b, c.Create(ctx, &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: v1alpha1.EphemeralRunnerContainerName, Image: "ghcr.io/actions/actions-runner"}},
+		},
+	}))
+	require.NoError(b, c.Create(ctx, &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+		Data:       map[string][]byte{jitTokenKey: []byte("jit")},
+	}))
+
+	require.NoError(b, c.Delete(ctx, ephemeralRunner))
+
+	return types.NamespacedName{Namespace: "default", Name: name}
+}
+
+// BenchmarkEphemeralRunnerFinalize measures one pass of the finalizer path: the
+// work that stands between a completed job and its pod being collected.
+//
+// The variants are the three ways that pass can go:
+//
+//   - skipped: the runner exited cleanly, so its registration is already gone
+//     and nothing is queued. This is the path every completed job takes.
+//   - queued: the registration is handed to the workers. Present behaviour for
+//     a runner that may still be registered.
+//   - synchronous: the removal is issued inline before the local cleanup, which
+//     is the behaviour this replaced.
+//
+// The API server behind it is the controller runtime fake, which costs
+// milliseconds per reconcile and sets a floor well above what queueing or
+// skipping saves on a single deletion. So read this as the shape rather than
+// the size: queued is flat across service latencies and synchronous is not.
+// What a deletion pays to queue is BenchmarkRunnerUnregistrationQueuePush, and
+// what it saves by skipping is that same figure.
+func BenchmarkEphemeralRunnerFinalize(b *testing.B) {
+	b.Run("skipped", func(b *testing.B) {
+		queue := NewRunnerUnregistrationQueue(log.Log, nil, 0)
+		benchmarkFinalize(b, queue, v1alpha1.EphemeralRunnerPhaseSucceeded, nil)
+	})
+
+	for _, latency := range serviceLatencies {
+		b.Run(fmt.Sprintf("queued/latency=%s", latency), func(b *testing.B) {
+			queue := NewRunnerUnregistrationQueue(log.Log, &stubSecretResolver{client: benchmarkActionsClient(latency)}, 0)
+			benchmarkFinalize(b, queue, v1alpha1.EphemeralRunnerPhaseRunning, nil)
+		})
+	}
+
+	for _, latency := range serviceLatencies {
+		b.Run(fmt.Sprintf("synchronous/latency=%s", latency), func(b *testing.B) {
+			actionsClient := benchmarkActionsClient(latency)
+			// The removal ran before any of the local cleanup, so the reconcile
+			// carried it. Issued here in front of a reconcile that queues nothing,
+			// which is the same two pieces of work in the same order.
+			benchmarkFinalize(b, nil, v1alpha1.EphemeralRunnerPhaseRunning, func(ctx context.Context, runner *v1alpha1.EphemeralRunner) {
+				_ = actionsClient.RemoveRunner(ctx, int64(runner.Status.RunnerID))
+			})
+		})
+	}
+}
+
+func benchmarkFinalize(b *testing.B, queue *RunnerUnregistrationQueue, phase v1alpha1.EphemeralRunnerPhase, before func(context.Context, *v1alpha1.EphemeralRunner)) {
+	scheme := benchmarkScheme(b)
+	ctx := context.Background()
+
+	runner := &v1alpha1.EphemeralRunner{
+		Spec:   v1alpha1.EphemeralRunnerSpec{GitHubConfigURL: "https://github.com/owner/repo"},
+		Status: v1alpha1.EphemeralRunnerStatus{RunnerID: 42},
+	}
+
+	// One untimed pass first. Everything here is measured in fractions of a
+	// millisecond against a cold heap, and whichever variant runs first should
+	// not be charged for warming the process up.
+	warmup, key := newFinalizeBenchmarkReconciler(b, scheme, queue, phase)
+	if _, err := warmup.Reconcile(ctx, ctrl.Request{NamespacedName: key}); err != nil {
+		b.Fatalf("reconcile: %v", err)
+	}
+
+	b.ResetTimer()
+	b.StopTimer()
+	for range b.N {
+		reconciler, key := newFinalizeBenchmarkReconciler(b, scheme, queue, phase)
+
+		b.StartTimer()
+		if before != nil {
+			before(ctx, runner)
+		}
+		_, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: key})
+		b.StopTimer()
+
+		if err != nil {
+			b.Fatalf("reconcile: %v", err)
+		}
+		if err := reconciler.Get(ctx, key, new(v1alpha1.EphemeralRunner)); err == nil {
+			b.Fatal("runner was not finalized")
+		}
+	}
+}
+
+// BenchmarkRunnerUnregistrationQueuePush measures what the reconciler pays to
+// hand a removal over. It is the whole cost the Actions service imposes on the
+// finalizer path now, and it must stay flat: Push is called under no lock the
+// reconciler holds, but every deletion goes through it.
+func BenchmarkRunnerUnregistrationQueuePush(b *testing.B) {
+	q := NewRunnerUnregistrationQueue(log.Log, nil, 0)
+	runner := newUnregistrationTestRunner("runner", 42, v1alpha1.EphemeralRunnerPhaseRunning)
+
+	b.ReportAllocs()
+	for b.Loop() {
+		q.Push(runner)
+	}
+	b.StopTimer()
+
+	// Nothing drains it here, so the queue holds every push. Reported so the
+	// number above is read as the cost of a push into a queue that deep.
+	b.ReportMetric(float64(q.len()), "queued")
+}
+
+// BenchmarkRunnerUnregistrationQueueDrain measures taking a burst back off the
+// queue, which is what the workers do when a scale set finishes.
+//
+// Reported per request. A burst arrives all at once and is drained in order, so
+// this has to stay flat as the burst grows: taking from the front by resliding
+// the tail down would make it climb with the size of the burst, and it climbs
+// while holding the lock that Push needs.
+func BenchmarkRunnerUnregistrationQueueDrain(b *testing.B) {
+	for _, burst := range []int{100, 1_000, 10_000} {
+		b.Run(fmt.Sprintf("burst=%d", burst), func(b *testing.B) {
+			q := NewRunnerUnregistrationQueue(log.Log, nil, 0)
+			runner := newUnregistrationTestRunner("runner", 42, v1alpha1.EphemeralRunnerPhaseRunning)
+			now := time.Now()
+
+			for b.Loop() {
+				b.StopTimer()
+				for range burst {
+					q.push(runnerUnregistration{runner: runner})
+				}
+				b.StartTimer()
+
+				for range burst {
+					if _, _, ok := q.next(now); !ok {
+						b.Fatal("queue ran dry before the burst was drained")
+					}
+				}
+			}
+			b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N*burst), "ns/request")
+		})
+	}
+}
