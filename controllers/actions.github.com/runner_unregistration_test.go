@@ -14,9 +14,13 @@ import (
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient/fake"
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/object"
 	"github.com/actions/scaleset"
+	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	ctrlfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -46,6 +50,13 @@ func (q *RunnerUnregistrationQueue) queued() []runnerUnregistration {
 	queued := make([]runnerUnregistration, 0, len(q.ready)-q.readyHead+len(q.delayed))
 	queued = append(queued, q.ready[q.readyHead:]...)
 	return append(queued, q.delayed...)
+}
+
+// pushTestRunner queues a runner under the ID its own status reports, which is
+// the case everywhere except a runner deleted before the controller recorded
+// one.
+func pushTestRunner(q *RunnerUnregistrationQueue, runner *v1alpha1.EphemeralRunner) {
+	q.Push(runner, runner.Status.RunnerID)
 }
 
 func newTestUnregistrationQueue(t *testing.T, client multiclient.Client) *RunnerUnregistrationQueue {
@@ -93,57 +104,83 @@ func newUnregistrationTestRunner(name string, runnerID int, phase v1alpha1.Ephem
 	}
 }
 
-func TestRunnerMayBeRegistered(t *testing.T) {
+func TestRegisteredRunnerID(t *testing.T) {
 	tt := map[string]struct {
 		runnerID int
 		phase    v1alpha1.EphemeralRunnerPhase
-		want     bool
+		secret   map[string][]byte
+		want     int
 	}{
 		"succeeded runner deregistered itself": {
 			runnerID: 1,
 			phase:    v1alpha1.EphemeralRunnerPhaseSucceeded,
-			want:     false,
+			want:     0,
 		},
-		"runner without an ID was never registered": {
-			runnerID: 0,
-			phase:    v1alpha1.EphemeralRunnerPhaseRunning,
-			want:     false,
-		},
-		"succeeded runner without an ID": {
-			runnerID: 0,
-			phase:    v1alpha1.EphemeralRunnerPhaseSucceeded,
-			want:     false,
+		"succeeded runner is not looked up in the secret": {
+			phase:  v1alpha1.EphemeralRunnerPhaseSucceeded,
+			secret: map[string][]byte{"runnerId": []byte("7")},
+			want:   0,
 		},
 		"running runner never got to deregister": {
 			runnerID: 1,
 			phase:    v1alpha1.EphemeralRunnerPhaseRunning,
-			want:     true,
+			want:     1,
 		},
 		"pending runner is registered but idle": {
 			runnerID: 1,
 			phase:    v1alpha1.EphemeralRunnerPhasePending,
-			want:     true,
+			want:     1,
 		},
 		"failed runner never got to deregister": {
 			runnerID: 1,
 			phase:    v1alpha1.EphemeralRunnerPhaseFailed,
-			want:     true,
+			want:     1,
 		},
 		"outdated runner never got to deregister": {
 			runnerID: 1,
 			phase:    v1alpha1.EphemeralRunnerPhaseOutdated,
-			want:     true,
+			want:     1,
 		},
 		"runner with no phase yet": {
 			runnerID: 1,
-			want:     true,
+			want:     1,
+		},
+		// Registration happens before the status records the ID, so a runner
+		// deleted in between is registered under an ID only the secret knows.
+		"runner deleted before its ID was recorded": {
+			phase:  v1alpha1.EphemeralRunnerPhaseRunning,
+			secret: map[string][]byte{"runnerId": []byte("7")},
+			want:   7,
+		},
+		"runner without an ID or a secret was never registered": {
+			phase: v1alpha1.EphemeralRunnerPhaseRunning,
+			want:  0,
+		},
+		"runner whose secret cannot name a registration": {
+			phase:  v1alpha1.EphemeralRunnerPhaseRunning,
+			secret: map[string][]byte{"runnerId": []byte("not-a-number")},
+			want:   0,
 		},
 	}
 
 	for name, tc := range tt {
 		t.Run(name, func(t *testing.T) {
 			runner := newUnregistrationTestRunner("test-runner", tc.runnerID, tc.phase)
-			assert.Equal(t, tc.want, runnerMayBeRegistered(runner))
+
+			scheme := runtime.NewScheme()
+			require.NoError(t, corev1.AddToScheme(scheme))
+			require.NoError(t, v1alpha1.AddToScheme(scheme))
+
+			builder := ctrlfake.NewClientBuilder().WithScheme(scheme)
+			if tc.secret != nil {
+				builder = builder.WithObjects(&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: runner.Name, Namespace: runner.Namespace},
+					Data:       tc.secret,
+				})
+			}
+
+			reconciler := &EphemeralRunnerReconciler{Client: builder.Build()}
+			assert.Equal(t, tc.want, reconciler.registeredRunnerID(t.Context(), runner, logr.Discard()))
 		})
 	}
 }
@@ -178,7 +215,7 @@ func TestRunnerUnregistrationQueueRemovesRunner(t *testing.T) {
 	q := newTestUnregistrationQueue(t, client)
 	startTestUnregistrationQueue(t, q)
 
-	q.Push(newUnregistrationTestRunner("test-runner", 42, v1alpha1.EphemeralRunnerPhaseRunning))
+	pushTestRunner(q, newUnregistrationTestRunner("test-runner", 42, v1alpha1.EphemeralRunnerPhaseRunning))
 
 	select {
 	case runnerID := <-removed:
@@ -211,7 +248,7 @@ func TestRunnerUnregistrationQueuePushIsIndependentOfTheService(t *testing.T) {
 	go func() {
 		defer close(done)
 		for i := range runners {
-			q.Push(newUnregistrationTestRunner(fmt.Sprintf("test-runner-%d", i), i+1, v1alpha1.EphemeralRunnerPhaseRunning))
+			pushTestRunner(q, newUnregistrationTestRunner(fmt.Sprintf("test-runner-%d", i), i+1, v1alpha1.EphemeralRunnerPhaseRunning))
 		}
 	}()
 
@@ -246,7 +283,7 @@ func TestRunnerUnregistrationQueueRetriesWhileTheJobIsStillRunning(t *testing.T)
 	q := newTestUnregistrationQueue(t, client)
 	startTestUnregistrationQueue(t, q)
 
-	q.Push(newUnregistrationTestRunner("test-runner", 42, v1alpha1.EphemeralRunnerPhaseRunning))
+	pushTestRunner(q, newUnregistrationTestRunner("test-runner", 42, v1alpha1.EphemeralRunnerPhaseRunning))
 
 	select {
 	case <-succeeded:
@@ -279,7 +316,7 @@ func TestRunnerUnregistrationQueueDropsFailedRemovals(t *testing.T) {
 			q := newTestUnregistrationQueue(t, client)
 			startTestUnregistrationQueue(t, q)
 
-			q.Push(newUnregistrationTestRunner("test-runner", 42, v1alpha1.EphemeralRunnerPhaseRunning))
+			pushTestRunner(q, newUnregistrationTestRunner("test-runner", 42, v1alpha1.EphemeralRunnerPhaseRunning))
 
 			select {
 			case <-called:
@@ -299,7 +336,7 @@ func TestRunnerUnregistrationQueueSurvivesAnUnresolvableRunner(t *testing.T) {
 	q := NewRunnerUnregistrationQueue(log.Log, &stubSecretResolver{err: errors.New("no such secret")}, 0)
 	startTestUnregistrationQueue(t, q)
 
-	q.Push(newUnregistrationTestRunner("test-runner", 42, v1alpha1.EphemeralRunnerPhaseRunning))
+	pushTestRunner(q, newUnregistrationTestRunner("test-runner", 42, v1alpha1.EphemeralRunnerPhaseRunning))
 
 	assert.Eventually(t, func() bool { return q.len() == 0 }, 10*time.Second, 10*time.Millisecond)
 }
@@ -317,8 +354,8 @@ func TestRunnerUnregistrationQueueNext(t *testing.T) {
 
 	t.Run("takes requests in order", func(t *testing.T) {
 		q := NewRunnerUnregistrationQueue(log.Log, &stubSecretResolver{}, 0)
-		q.Push(newUnregistrationTestRunner("first", 1, v1alpha1.EphemeralRunnerPhaseRunning))
-		q.Push(newUnregistrationTestRunner("second", 2, v1alpha1.EphemeralRunnerPhaseRunning))
+		pushTestRunner(q, newUnregistrationTestRunner("first", 1, v1alpha1.EphemeralRunnerPhaseRunning))
+		pushTestRunner(q, newUnregistrationTestRunner("second", 2, v1alpha1.EphemeralRunnerPhaseRunning))
 
 		request, _, ok := q.next(now)
 		require.True(t, ok)
@@ -335,7 +372,7 @@ func TestRunnerUnregistrationQueueNext(t *testing.T) {
 	t.Run("drained requests are not kept alive by the queue", func(t *testing.T) {
 		q := NewRunnerUnregistrationQueue(log.Log, &stubSecretResolver{}, 0)
 		for i := range 10 {
-			q.Push(newUnregistrationTestRunner(fmt.Sprintf("runner-%d", i), i+1, v1alpha1.EphemeralRunnerPhaseRunning))
+			pushTestRunner(q, newUnregistrationTestRunner(fmt.Sprintf("runner-%d", i), i+1, v1alpha1.EphemeralRunnerPhaseRunning))
 		}
 		for range 10 {
 			_, _, ok := q.next(now)
@@ -357,7 +394,7 @@ func TestRunnerUnregistrationQueueNext(t *testing.T) {
 		q.pushAfter(runnerUnregistration{
 			runner: newUnregistrationTestRunner("delayed", 1, v1alpha1.EphemeralRunnerPhaseRunning),
 		}, time.Hour)
-		q.Push(newUnregistrationTestRunner("ready", 2, v1alpha1.EphemeralRunnerPhaseRunning))
+		pushTestRunner(q, newUnregistrationTestRunner("ready", 2, v1alpha1.EphemeralRunnerPhaseRunning))
 
 		request, _, ok := q.next(now)
 		require.True(t, ok)
@@ -375,7 +412,7 @@ func TestRunnerUnregistrationQueueNext(t *testing.T) {
 		q.pushAfter(runnerUnregistration{
 			runner: newUnregistrationTestRunner("retried", 1, v1alpha1.EphemeralRunnerPhaseRunning),
 		}, time.Minute)
-		q.Push(newUnregistrationTestRunner("ready", 2, v1alpha1.EphemeralRunnerPhaseRunning))
+		pushTestRunner(q, newUnregistrationTestRunner("ready", 2, v1alpha1.EphemeralRunnerPhaseRunning))
 
 		later := now.Add(2 * time.Minute)
 		for _, want := range []string{"ready", "retried"} {
@@ -386,6 +423,38 @@ func TestRunnerUnregistrationQueueNext(t *testing.T) {
 
 		// A promoted request loses its delay, so it is not held back again.
 		assert.Equal(t, 0, q.len())
+	})
+
+	t.Run("promoting a burst keeps the ones still waiting", func(t *testing.T) {
+		q := NewRunnerUnregistrationQueue(log.Log, &stubSecretResolver{}, 0)
+		// Interleaved, so promoting the due ones has to compact around the rest
+		// rather than just cut a prefix off.
+		for i := range 10 {
+			delay := time.Minute
+			if i%2 == 0 {
+				delay = time.Hour
+			}
+			q.pushAfter(runnerUnregistration{
+				runner: newUnregistrationTestRunner(fmt.Sprintf("runner-%d", i), i+1, v1alpha1.EphemeralRunnerPhaseRunning),
+			}, delay)
+		}
+
+		later := now.Add(2 * time.Minute)
+		for i := 1; i < 10; i += 2 {
+			request, _, ok := q.next(later)
+			require.True(t, ok)
+			assert.Equal(t, fmt.Sprintf("runner-%d", i), request.runner.Name)
+		}
+
+		_, _, ok := q.next(later)
+		assert.False(t, ok, "the requests due in an hour were promoted early")
+		assert.Equal(t, 5, q.len())
+
+		q.mu.Lock()
+		defer q.mu.Unlock()
+		for _, request := range q.delayed[len(q.delayed):cap(q.delayed)] {
+			assert.Nil(t, request.runner, "a promoted request is still referenced by the delayed list")
+		}
 	})
 
 	t.Run("waits only until the earliest request is ready", func(t *testing.T) {
@@ -422,7 +491,7 @@ func TestRunnerUnregistrationQueuePushCopiesTheRunner(t *testing.T) {
 	q := NewRunnerUnregistrationQueue(log.Log, &stubSecretResolver{}, 0)
 
 	runner := newUnregistrationTestRunner("test-runner", 42, v1alpha1.EphemeralRunnerPhaseRunning)
-	q.Push(runner)
+	pushTestRunner(q, runner)
 	runner.Status.RunnerID = 0
 	runner.Name = "mutated"
 

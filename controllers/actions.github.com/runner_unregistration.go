@@ -19,7 +19,6 @@ package actionsgithubcom
 import (
 	"context"
 	"errors"
-	"slices"
 	"sync"
 	"time"
 
@@ -44,31 +43,25 @@ const (
 	unregistrationMaxIdleWait = 30 * time.Second
 )
 
-// runnerMayBeRegistered reports whether the runner may still hold a registration
-// with the Actions service at the point its EphemeralRunner is being deleted.
+// runnerSelfDeregistered reports whether the runner removed its own
+// registration from the Actions service before its EphemeralRunner was deleted.
 //
 // It is an inference drawn from state the controller already has, not a lookup,
 // because the whole point is to avoid the API call. It is deliberately
 // conservative in the direction that costs an API call rather than the one that
-// leaks a registration: it only reports false for the two cases where the
-// controller knows there is nothing on the other side to remove.
-func runnerMayBeRegistered(ephemeralRunner *v1alpha1.EphemeralRunner) bool {
-	// Without a runner ID, the JIT configuration was never created, so the runner
-	// was never registered in the first place.
-	if ephemeralRunner.Status.RunnerID == 0 {
-		return false
-	}
-
-	// The Succeeded phase is set from a single observation: the runner container
-	// terminated with exit code 0. Runners are configured as ephemeral, so a
-	// runner that reaches a clean exit has already removed its own registration
-	// on the way out, and asking the service to remove it again is a wasted
-	// round trip on the hottest path the controller has.
-	//
-	// Every other phase is reachable with the registration still in place. A
-	// runner that never started, was killed, exited non-zero, or was found to be
-	// outdated did not get to deregister itself.
-	return ephemeralRunner.Status.Phase != v1alpha1.EphemeralRunnerPhaseSucceeded
+// leaks a registration.
+//
+// The Succeeded phase is set from a single observation: the runner container
+// terminated with exit code 0. Runners are configured as ephemeral, so a runner
+// that reaches a clean exit has already removed its own registration on the way
+// out, and asking the service to remove it again is a wasted round trip on the
+// hottest path the controller has.
+//
+// Every other phase is reachable with the registration still in place. A runner
+// that never started, was killed, exited non-zero, or was found to be outdated
+// did not get to deregister itself.
+func runnerSelfDeregistered(ephemeralRunner *v1alpha1.EphemeralRunner) bool {
+	return ephemeralRunner.Status.Phase == v1alpha1.EphemeralRunnerPhaseSucceeded
 }
 
 // runnerUnregistration is a single queued attempt to remove one runner from the
@@ -80,6 +73,12 @@ type runnerUnregistration struct {
 	// to needs its GitHub configuration, and by the time a worker gets to it the
 	// object is usually gone from the API server.
 	runner *v1alpha1.EphemeralRunner
+
+	// runnerID identifies the registration to remove. It is carried separately
+	// because it is not always the one the runner's status reports: a runner
+	// deleted before the controller recorded the ID has its registration
+	// identified from the jitconfig secret instead.
+	runnerID int
 
 	// readyAt is the earliest time this request may be attempted. The zero value
 	// means it is ready immediately.
@@ -154,8 +153,8 @@ func NewRunnerUnregistrationQueue(log logr.Logger, secretResolver SecretResolver
 	}
 }
 
-// Push queues the removal of the runner's registration from the Actions
-// service.
+// Push queues the removal of runnerID, the registration held by the given
+// runner, from the Actions service.
 //
 // It copies what the workers need and returns. It never blocks, never fails and
 // never touches the network, so no caller can be delayed by how far behind the
@@ -164,11 +163,11 @@ func NewRunnerUnregistrationQueue(log logr.Logger, secretResolver SecretResolver
 // Pushing to a nil queue drops the request. The only way to get one is to build
 // an EphemeralRunnerReconciler by hand and never call SetupWithManager, which
 // wires a queue up when the field is left unset.
-func (q *RunnerUnregistrationQueue) Push(ephemeralRunner *v1alpha1.EphemeralRunner) {
+func (q *RunnerUnregistrationQueue) Push(ephemeralRunner *v1alpha1.EphemeralRunner, runnerID int) {
 	if q == nil {
 		return
 	}
-	q.push(runnerUnregistration{runner: ephemeralRunner.DeepCopy()})
+	q.push(runnerUnregistration{runner: ephemeralRunner.DeepCopy(), runnerID: runnerID})
 }
 
 // Start drains the queue until ctx is cancelled.
@@ -234,7 +233,7 @@ func (q *RunnerUnregistrationQueue) unregister(ctx context.Context, request runn
 	runner := request.runner
 	log := q.log.WithValues(
 		"ephemeralRunner", types.NamespacedName{Namespace: runner.Namespace, Name: runner.Name},
-		"runnerId", runner.Status.RunnerID,
+		"runnerId", request.runnerID,
 	)
 
 	actionsClient, err := q.secretResolver.GetActionsService(ctx, runner)
@@ -243,7 +242,7 @@ func (q *RunnerUnregistrationQueue) unregister(ctx context.Context, request runn
 		return
 	}
 
-	err = actionsClient.RemoveRunner(ctx, int64(runner.Status.RunnerID))
+	err = actionsClient.RemoveRunner(ctx, int64(request.runnerID))
 	switch {
 	case err == nil:
 		log.Info("Removed runner from the service")
@@ -305,19 +304,31 @@ func (q *RunnerUnregistrationQueue) next(now time.Time) (runnerUnregistration, t
 // list and returns how long to wait for the earliest of the ones that have not,
 // capped at unregistrationMaxIdleWait.
 func (q *RunnerUnregistrationQueue) promoteLocked(now time.Time) time.Duration {
+	if len(q.delayed) == 0 {
+		return unregistrationMaxIdleWait
+	}
+
+	// Partitioned in a single pass. A burst of runners refused together comes
+	// due together, and removing them one at a time would shift the rest of the
+	// list on every promotion, under the lock Push needs.
 	wait := unregistrationMaxIdleWait
-	for i := 0; i < len(q.delayed); {
-		request := q.delayed[i]
+	kept := q.delayed[:0]
+	for _, request := range q.delayed {
 		if request.readyAt.After(now) {
 			wait = min(wait, request.readyAt.Sub(now))
-			i++
+			kept = append(kept, request)
 			continue
 		}
 
-		q.delayed = slices.Delete(q.delayed, i, i+1)
 		request.readyAt = time.Time{}
 		q.ready = append(q.ready, request)
 	}
+
+	// Compacting leaves the promoted requests duplicated in the tail, where they
+	// would keep their copy of the runner alive until the slice is reused.
+	clear(q.delayed[len(kept):])
+	q.delayed = kept
+
 	return wait
 }
 
