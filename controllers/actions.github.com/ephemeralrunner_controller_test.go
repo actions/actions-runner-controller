@@ -1719,6 +1719,19 @@ var _ = Describe("EphemeralRunner", func() {
 			Expect(finalizeRunner("succeeded-runner", 1, v1alpha1.EphemeralRunnerPhaseSucceeded)).To(BeEmpty())
 		})
 
+		It("skips the service for a runner that exited successfully before recording its ID", func() {
+			// The skip is decided on the exit alone. A succeeded runner is not
+			// chased through the jitconfig secret looking for a registration to
+			// remove, because it already removed its own.
+			name := "succeeded-unrecorded-runner"
+			Expect(k8sClient.Create(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: autoscalingNS.Name},
+				Data:       map[string][]byte{"runnerId": []byte("7"), "runnerName": []byte(name)},
+			})).To(Succeed())
+
+			Expect(finalizeRunner(name, 0, v1alpha1.EphemeralRunnerPhaseSucceeded)).To(BeEmpty())
+		})
+
 		It("skips the service for a runner that was never registered", func() {
 			Expect(finalizeRunner("unregistered-runner", 0, v1alpha1.EphemeralRunnerPhaseRunning)).To(BeEmpty())
 		})

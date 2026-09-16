@@ -111,12 +111,21 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 
 		if controllerutil.ContainsFinalizer(&ephemeralRunner, ephemeralRunnerActionsFinalizerName) {
-			// Removing the runner from the Actions service is handed to background
-			// workers rather than done here, so that deleting the pod and the
-			// secret below is never held up by an external API. See
-			// RunnerUnregistrationQueue for what that costs.
+			// This finalizer exists to release the runner's registration with the
+			// Actions service. There are two ways that happens.
 			//
-			// This is also what stops holding the pod alive when the service
+			// A runner that exited with code 0 already removed its own
+			// registration on the way out. Runners are ephemeral, so a clean exit
+			// means the agent deregistered itself before it stopped, and there is
+			// nothing left to ask the service to remove. That is the path every
+			// completed job takes, and it costs no API call at all.
+			//
+			// Every other runner may still hold a registration. Removing it is
+			// handed to background workers rather than done here, so that deleting
+			// the pod and the secret below is never held up by an external API.
+			// See RunnerUnregistrationQueue for what that costs.
+			//
+			// Queueing is also what stops holding the pod alive when the service
 			// reports that the runner is still executing a job. That used to keep
 			// the runner pod of a job that is still running from being deleted out
 			// from under it, but only for deletions that reach this branch
@@ -126,11 +135,16 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			// an EphemeralRunner deleted by hand, and there the deletion is taken
 			// at face value: the pod goes now, and the workers keep retrying the
 			// removal until the service accepts it.
-			//
-			// Resolved before the finalizer goes, because recovering an ID the
-			// status never recorded reads the jitconfig secret, which the cleanup
-			// below deletes.
-			runnerID := r.registeredRunnerID(ctx, &ephemeralRunner, log)
+			var runnerID int
+			if runnerSelfDeregistered(&ephemeralRunner) {
+				log.Info("Runner exited successfully and deregistered itself, skipping its removal from the service")
+			} else {
+				// Resolved before the finalizer goes, because recovering an ID the
+				// status never recorded reads the jitconfig secret, which the
+				// cleanup below deletes.
+				runnerID = r.registeredRunnerID(ctx, &ephemeralRunner, log)
+			}
+
 			log.Info(
 				"Removing the runner registration finalizer",
 				"unregisterFromService", runnerID != 0,
@@ -458,8 +472,9 @@ func (r *EphemeralRunnerReconciler) deleteEphemeralRunnerOrPod(ctx context.Conte
 			return err
 		}
 
-		// Nothing to do about the registration here. The delete above runs the
-		// finalizer, which queues the removal.
+		// The runner is gone, and its pod failed with a job assigned, so the
+		// registration is still held. The delete above runs the finalizer, which
+		// queues its removal.
 		log.Info("Deleted the ephemeral runner that has a job assigned but the pod has failed")
 		return nil
 	}
@@ -612,12 +627,38 @@ func (r *EphemeralRunnerReconciler) markAsFailed(ctx context.Context, ephemeralR
 	r.publishEphemeralRunnerPhaseMetric(ephemeralRunner, ephemeralRunner.Status.Phase, log)
 
 	// A failed runner is not deleted here; it stays until the EphemeralRunnerSet
-	// cleans it up, which can be a long time. So the registration is released
-	// now rather than waiting for the finalizer, but through the queue, because
-	// nothing about recording the failure depends on the service answering.
-	r.UnregistrationQueue.Push(ephemeralRunner, ephemeralRunner.Status.RunnerID)
+	// cleans it up, which can be a long time, so the registration is released now
+	// rather than waiting for the finalizer.
+	if err := r.queueUnregistration(ctx, ephemeralRunner, log); err != nil {
+		return err
+	}
 
 	log.Info("EphemeralRunner is marked as Failed and queued for removal from the service")
+	return nil
+}
+
+// queueUnregistration hands the runner's registration to the background workers
+// and drops the finalizer that exists to release it.
+//
+// Dropping the finalizer is what keeps this to a single removal. Without it the
+// deletion that eventually follows would queue the same runner again, and the
+// service would be asked twice to remove a registration that is already on its
+// way out.
+func (r *EphemeralRunnerReconciler) queueUnregistration(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
+	runnerID := r.registeredRunnerID(ctx, ephemeralRunner, log)
+
+	original := ephemeralRunner.DeepCopy()
+	if controllerutil.RemoveFinalizer(ephemeralRunner, ephemeralRunnerActionsFinalizerName) {
+		if err := r.Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
+			return fmt.Errorf("failed to remove the runner registration finalizer: %w", err)
+		}
+	}
+
+	// Queued only once the finalizer is actually gone, so a failed patch above
+	// leaves the removal to the retry rather than queueing it twice.
+	if runnerID != 0 {
+		r.UnregistrationQueue.Push(ephemeralRunner, runnerID)
+	}
 	return nil
 }
 
@@ -637,7 +678,9 @@ func (r *EphemeralRunnerReconciler) markAsOutdated(ctx context.Context, ephemera
 	// Queued rather than removed here, for the same reason as markAsFailed: an
 	// outdated runner waits on the EphemeralRunnerSet to delete it, and the
 	// phase transition has no reason to wait on the service.
-	r.UnregistrationQueue.Push(ephemeralRunner, ephemeralRunner.Status.RunnerID)
+	if err := r.queueUnregistration(ctx, ephemeralRunner, log); err != nil {
+		return err
+	}
 
 	log.Info("EphemeralRunner is marked as Outdated and queued for removal from the service")
 	return nil
@@ -949,10 +992,14 @@ func ephemeralRunnerMetricLabels(ephemeralRunner *v1alpha1.EphemeralRunner) (met
 	}, nil
 }
 
-// registeredRunnerID returns the ID of the registration the runner may still
-// hold with the Actions service, or 0 when there is nothing left to remove.
+// registeredRunnerID returns the ID of the registration the runner holds with
+// the Actions service, or 0 when it never got one.
 //
-// The common answers come from the runner's own status and cost nothing. The
+// Callers decide whether a removal is needed at all; this only names the
+// registration to remove. See runnerSelfDeregistered for the runners that do
+// not need one.
+//
+// The common answer comes from the runner's own status and costs nothing. The
 // exception is a runner whose status never recorded an ID: the registration is
 // created by GenerateJitRunnerConfig, and the ID it returns reaches the
 // jitconfig secret before the status patch that publishes it. A runner deleted
@@ -960,10 +1007,6 @@ func ephemeralRunnerMetricLabels(ephemeralRunner *v1alpha1.EphemeralRunner) (met
 // read to recover it. That read only happens for a runner that got that far and
 // no further, never on the path a finishing job takes.
 func (r *EphemeralRunnerReconciler) registeredRunnerID(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) int {
-	if runnerSelfDeregistered(ephemeralRunner) {
-		return 0
-	}
-
 	if ephemeralRunner.Status.RunnerID != 0 {
 		return ephemeralRunner.Status.RunnerID
 	}

@@ -104,60 +104,54 @@ func newUnregistrationTestRunner(name string, runnerID int, phase v1alpha1.Ephem
 	}
 }
 
+// TestRunnerSelfDeregistered pins the decision the whole change rests on: a
+// runner that exited with code 0 is not asked to be removed from the service.
+func TestRunnerSelfDeregistered(t *testing.T) {
+	tt := map[string]struct {
+		phase v1alpha1.EphemeralRunnerPhase
+		want  bool
+	}{
+		"succeeded runner deregistered itself":    {phase: v1alpha1.EphemeralRunnerPhaseSucceeded, want: true},
+		"running runner never got to deregister":  {phase: v1alpha1.EphemeralRunnerPhaseRunning, want: false},
+		"pending runner is registered but idle":   {phase: v1alpha1.EphemeralRunnerPhasePending, want: false},
+		"failed runner never got to deregister":   {phase: v1alpha1.EphemeralRunnerPhaseFailed, want: false},
+		"outdated runner never got to deregister": {phase: v1alpha1.EphemeralRunnerPhaseOutdated, want: false},
+		"runner with no phase yet":                {want: false},
+	}
+
+	for name, tc := range tt {
+		t.Run(name, func(t *testing.T) {
+			runner := newUnregistrationTestRunner("test-runner", 1, tc.phase)
+			assert.Equal(t, tc.want, runnerSelfDeregistered(runner))
+		})
+	}
+}
+
 func TestRegisteredRunnerID(t *testing.T) {
 	tt := map[string]struct {
 		runnerID int
-		phase    v1alpha1.EphemeralRunnerPhase
 		secret   map[string][]byte
 		want     int
 	}{
-		"succeeded runner deregistered itself": {
+		"runner reports its own ID": {
 			runnerID: 1,
-			phase:    v1alpha1.EphemeralRunnerPhaseSucceeded,
-			want:     0,
-		},
-		"succeeded runner is not looked up in the secret": {
-			phase:  v1alpha1.EphemeralRunnerPhaseSucceeded,
-			secret: map[string][]byte{"runnerId": []byte("7")},
-			want:   0,
-		},
-		"running runner never got to deregister": {
-			runnerID: 1,
-			phase:    v1alpha1.EphemeralRunnerPhaseRunning,
 			want:     1,
 		},
-		"pending runner is registered but idle": {
+		"the status is preferred over the secret": {
 			runnerID: 1,
-			phase:    v1alpha1.EphemeralRunnerPhasePending,
-			want:     1,
-		},
-		"failed runner never got to deregister": {
-			runnerID: 1,
-			phase:    v1alpha1.EphemeralRunnerPhaseFailed,
-			want:     1,
-		},
-		"outdated runner never got to deregister": {
-			runnerID: 1,
-			phase:    v1alpha1.EphemeralRunnerPhaseOutdated,
-			want:     1,
-		},
-		"runner with no phase yet": {
-			runnerID: 1,
+			secret:   map[string][]byte{"runnerId": []byte("7")},
 			want:     1,
 		},
 		// Registration happens before the status records the ID, so a runner
 		// deleted in between is registered under an ID only the secret knows.
 		"runner deleted before its ID was recorded": {
-			phase:  v1alpha1.EphemeralRunnerPhaseRunning,
 			secret: map[string][]byte{"runnerId": []byte("7")},
 			want:   7,
 		},
 		"runner without an ID or a secret was never registered": {
-			phase: v1alpha1.EphemeralRunnerPhaseRunning,
-			want:  0,
+			want: 0,
 		},
 		"runner whose secret cannot name a registration": {
-			phase:  v1alpha1.EphemeralRunnerPhaseRunning,
 			secret: map[string][]byte{"runnerId": []byte("not-a-number")},
 			want:   0,
 		},
@@ -165,7 +159,7 @@ func TestRegisteredRunnerID(t *testing.T) {
 
 	for name, tc := range tt {
 		t.Run(name, func(t *testing.T) {
-			runner := newUnregistrationTestRunner("test-runner", tc.runnerID, tc.phase)
+			runner := newUnregistrationTestRunner("test-runner", tc.runnerID, v1alpha1.EphemeralRunnerPhaseRunning)
 
 			scheme := runtime.NewScheme()
 			require.NoError(t, corev1.AddToScheme(scheme))
