@@ -24,6 +24,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -247,4 +248,53 @@ func TestAutoscalingRunnerSetRecoversOnRunnerMetadataChange(t *testing.T) {
 	require.NotNil(t, gotERS.Spec.EphemeralRunnerMetadata)
 	require.Equal(t, "corrected", gotERS.Spec.EphemeralRunnerMetadata.Labels["arc.test/runner"])
 	require.Greater(t, gotERS.Spec.ActionableRevision, outdatedFixtureRevision, "the revision must advance so the failed runners are treated as stale")
+}
+
+// A parked scale set still accepts edits that are not a recovery signal, and
+// reconcileOutdated returns before any of them reach the listener. Starting the
+// listener again therefore has to reckon with a spec that has moved on since it
+// was stopped: it is replaced, not simply switched back on, so it never runs for
+// a moment under the configuration the scale set was parked with.
+func TestAutoscalingRunnerSetReplacesAStoppedListenerWithADriftedSpec(t *testing.T) {
+	autoscalingRunnerSet, reconciler, c := outdatedFixture(t, v1alpha1.AutoscalingRunnerSetPhaseRunning, 5, 5, "runner:rejected")
+	ctx := context.Background()
+	key := client.ObjectKeyFromObject(autoscalingRunnerSet)
+
+	// The edit the scale set took while it was parked. It is not a runner spec
+	// change, so it never propagated to the listener.
+	maxRunners := 20
+	autoscalingRunnerSet.Spec.MaxRunners = &maxRunners
+	autoscalingRunnerSet.Status.ObservedGeneration = autoscalingRunnerSet.Generation
+	require.NoError(t, c.Update(ctx, autoscalingRunnerSet))
+	require.NoError(t, c.Status().Update(ctx, autoscalingRunnerSet))
+
+	// The set is settled on the current spec and no longer complaining, so this
+	// reconcile has nothing to publish to it and reaches the listener.
+	desiredERS, err := reconciler.newEphemeralRunnerSet(autoscalingRunnerSet)
+	require.NoError(t, err)
+	gotERS := new(v1alpha1.EphemeralRunnerSet)
+	require.NoError(t, c.Get(ctx, key, gotERS))
+	gotERS.Spec = desiredERS.Spec
+	gotERS.Labels = desiredERS.Labels
+	gotERS.Annotations = desiredERS.Annotations
+	require.NoError(t, c.Update(ctx, gotERS))
+	require.NoError(t, c.Get(ctx, key, gotERS))
+	gotERS.Status.Phase = v1alpha1.EphemeralRunnerSetPhaseRunning
+	require.NoError(t, c.Status().Update(ctx, gotERS))
+
+	parked := autoscalingRunnerSet.DeepCopy()
+	parked.Spec.MaxRunners = nil
+	listener, err := reconciler.newAutoscalingListener(parked, gotERS, reconciler.ControllerNamespace, "listener:image", nil)
+	require.NoError(t, err)
+	listener.Spec.Phase = v1alpha1.AutoscalingListenerPhaseStopped
+	require.NoError(t, c.Create(ctx, listener))
+
+	reconcileOutdatedFixture(t, reconciler, key)
+
+	err = c.Get(ctx, client.ObjectKeyFromObject(listener), new(v1alpha1.AutoscalingListener))
+	require.True(
+		t,
+		kerrors.IsNotFound(err),
+		"a stopped listener whose spec has drifted must be replaced rather than started, so it is never running with the spec the scale set was parked with",
+	)
 }

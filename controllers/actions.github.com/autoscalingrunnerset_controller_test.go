@@ -3104,6 +3104,48 @@ var _ = Describe("Test AutoscalingRunnerSet outdated lifecycle", Ordered, func()
 			expectRecovered(outdatedRevision)
 		})
 
+		// While a scale set is parked no listener spec drift is propagated, but
+		// edits outside the runner spec are still accepted and recorded. The
+		// listener that comes back on recovery therefore has to carry them.
+		//
+		// This covers the end state only. The transient it guards against - a
+		// listener started from the spec it was parked with, running under stale
+		// configuration until the next reconcile replaces it - is too short to
+		// observe here, and is covered deterministically by
+		// TestAutoscalingRunnerSetReplacesAStoppedListenerWithADriftedSpec.
+		It("starts the listener from the current spec after an edit made while outdated", func() {
+			markRunnersOutdated()
+			outdatedRevision := expectSwitchedOff()
+
+			updated := new(v1alpha1.AutoscalingRunnerSet)
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), updated)).To(Succeed())
+			original := updated.DeepCopy()
+			max := 20
+			updated.Spec.MaxRunners = &max
+			Expect(k8sClient.Patch(ctx, updated, client.MergeFrom(original))).To(Succeed(), "failed to update the replica bounds")
+
+			expectStaysOutdated(outdatedRevision)
+
+			updated = new(v1alpha1.AutoscalingRunnerSet)
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), updated)).To(Succeed())
+			original = updated.DeepCopy()
+			updated.Spec.Template.Spec.Containers[0].Image = "ghcr.io/actions/runner:fixed"
+			Expect(k8sClient.Patch(ctx, updated, client.MergeFrom(original))).To(Succeed(), "failed to correct the runner spec")
+
+			expectRecovered(outdatedRevision)
+
+			Eventually(
+				func(g Gomega) {
+					listener := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, listenerKey(), listener)).To(Succeed())
+					g.Expect(listener.Spec.Phase.Stopped()).To(BeFalse())
+					g.Expect(listener.Spec.MaxRunners).To(Equal(max), "the edit taken while the scale set was parked should reach the listener on recovery")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+		})
+
 		// The runner spec is not the only part of the EphemeralRunnerSet spec the
 		// AutoscalingRunnerSet owns: the metadata stamped onto the runners it
 		// creates is published the same way and changes what the next runner
