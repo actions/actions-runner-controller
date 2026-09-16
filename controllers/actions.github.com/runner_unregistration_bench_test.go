@@ -18,13 +18,18 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // serviceLatencies are the round trip times the Actions service is stood up
 // with. Zero is not a latency anyone observes; it is there to separate the cost
 // of the call itself from the cost of waiting for it.
 var serviceLatencies = []time.Duration{0, 1 * time.Millisecond, 25 * time.Millisecond}
+
+// Everything here is built with logr.Discard rather than the controller-runtime
+// global logger. That logger is a promise nobody fulfills in a benchmark
+// binary, and 30 seconds in it resolves itself to a fallback that writes a
+// stack trace to stderr. A run long enough to hit that gets its output
+// corrupted mid-line and its timings skewed by the writes.
 
 // benchmarkActionsClient returns a client whose RemoveRunner takes latency to
 // answer.
@@ -127,13 +132,13 @@ func createFinalizeBenchmarkRunner(b *testing.B, c client.Client, phase v1alpha1
 // what it saves by skipping is that same figure.
 func BenchmarkEphemeralRunnerFinalize(b *testing.B) {
 	b.Run("skipped", func(b *testing.B) {
-		queue := NewRunnerUnregistrationQueue(log.Log, nil, 0)
+		queue := NewRunnerUnregistrationQueue(logr.Discard(), nil, 0)
 		benchmarkFinalize(b, queue, v1alpha1.EphemeralRunnerPhaseSucceeded, nil)
 	})
 
 	for _, latency := range serviceLatencies {
 		b.Run(fmt.Sprintf("queued/latency=%s", latency), func(b *testing.B) {
-			queue := NewRunnerUnregistrationQueue(log.Log, &stubSecretResolver{client: benchmarkActionsClient(latency)}, 0)
+			queue := NewRunnerUnregistrationQueue(logr.Discard(), &stubSecretResolver{client: benchmarkActionsClient(latency)}, 0)
 			benchmarkFinalize(b, queue, v1alpha1.EphemeralRunnerPhaseRunning, nil)
 		})
 	}
@@ -194,7 +199,7 @@ func benchmarkFinalize(b *testing.B, queue *RunnerUnregistrationQueue, phase v1a
 // finalizer path now, and it must stay flat: Push is called under no lock the
 // reconciler holds, but every deletion goes through it.
 func BenchmarkRunnerUnregistrationQueuePush(b *testing.B) {
-	q := NewRunnerUnregistrationQueue(log.Log, nil, 0)
+	q := NewRunnerUnregistrationQueue(logr.Discard(), nil, 0)
 	runner := newUnregistrationTestRunner("runner", 0, v1alpha1.EphemeralRunnerPhaseRunning)
 
 	b.ReportAllocs()
@@ -225,7 +230,7 @@ func BenchmarkRunnerUnregistrationQueuePush(b *testing.B) {
 func BenchmarkRunnerUnregistrationQueueDrain(b *testing.B) {
 	for _, burst := range []int{100, 1_000, 10_000} {
 		b.Run(fmt.Sprintf("burst=%d", burst), func(b *testing.B) {
-			q := NewRunnerUnregistrationQueue(log.Log, nil, 0)
+			q := NewRunnerUnregistrationQueue(logr.Discard(), nil, 0)
 			runner := newUnregistrationTestRunner("runner", 42, v1alpha1.EphemeralRunnerPhaseRunning)
 			now := time.Now()
 
