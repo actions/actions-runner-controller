@@ -118,6 +118,8 @@ func main() {
 		terminatedRunnerPodGracePeriodSeconds int64
 
 		workqueueRateLimiter string
+
+		manageSafeToEvictAnnotation bool
 	)
 	var c github.Config
 	err = envconfig.Process("github", &c)
@@ -169,6 +171,7 @@ func main() {
 	flag.IntVar(&k8sClientRateLimiterBurst, "k8s-client-rate-limiter-burst", 30, "The burst value of the K8s client rate limiter.")
 	flag.StringVar(&workqueueRateLimiter, "workqueue-rate-limiter", "", `The workqueue rate limiter to use. Valid values are "bucket_rate_limiter" (default) and "typed_rate_limiter" (per-item only, no global token bucket).`)
 	flag.Int64Var(&terminatedRunnerPodGracePeriodSeconds, "terminated-runner-pod-grace-period-seconds", 0, "The grace period used when deleting a runner pod whose containers have all exited. Zero, the default, removes the pod from the API as soon as its job is over instead of leaving it Terminating while the kubelet cleans up locally, so the runner replacing it can start right away. A negative value leaves the pod's own terminationGracePeriodSeconds in charge. Pods that are still running are always deleted gracefully.")
+	flag.BoolVar(&manageSafeToEvictAnnotation, "manage-safe-to-evict-annotation", false, "Let the controller set the cluster-autoscaler.kubernetes.io/safe-to-evict annotation on runner pods: \"true\" while the runner is idle, \"false\" once a job is assigned to it. Runner templates that set the annotation themselves are left untouched.")
 	flag.Parse()
 
 	opts = opts.Resolve()
@@ -374,6 +377,7 @@ func main() {
 			PublishMetrics:                  metricsAddr != "0",
 			UnregistrationQueue:             runnerUnregistrationQueue,
 			TerminatedPodGracePeriodSeconds: terminatedRunnerPodGracePeriodSeconds,
+			ManageSafeToEvictAnnotation:     manageSafeToEvictAnnotation,
 			ResourceBuilder:                 rb,
 		}).SetupWithManager(mgr, ephemeralRunnerOpts...); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunner")

@@ -72,6 +72,11 @@ type EphemeralRunnerReconciler struct {
 	// that are still alive are always deleted gracefully.
 	TerminatedPodGracePeriodSeconds int64
 
+	// ManageSafeToEvictAnnotation lets the controller own the cluster-autoscaler
+	// safe-to-evict annotation on the runner pod, tracking whether the runner has
+	// a job assigned. It is opt-in because it changes how the cluster autoscaler
+	// treats every runner pod.
+	ManageSafeToEvictAnnotation bool
 	ResourceBuilder
 }
 
@@ -413,6 +418,11 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			log.Error(err, "Failed to create the pod")
 			return ctrl.Result{}, err
 		}
+	}
+
+	if err := r.reconcileSafeToEvictAnnotation(ctx, &ephemeralRunner, pod, log); err != nil {
+		log.Error(err, "Failed to reconcile the safe-to-evict annotation on the runner pod")
+		return ctrl.Result{}, err
 	}
 
 	cs := runnerContainerStatus(pod)
@@ -915,6 +925,12 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 		return ctrl.Result{}, err
 	}
 
+	// Applied after the pod has been built so it stays out of the pod template
+	// hash: the value tracks job assignment and changes over the pod lifetime.
+	if value, managed := r.safeToEvictFor(runner); managed {
+		metav1.SetMetaDataAnnotation(&newPod.ObjectMeta, AnnotationKeyClusterAutoscalerSafeToEvict, value)
+	}
+
 	log.Info("Created new pod spec for ephemeral runner")
 	if err := r.Create(ctx, newPod); err != nil {
 		log.Error(err, "Failed to create pod resource for ephemeral runner.")
@@ -945,6 +961,55 @@ func (r *EphemeralRunnerReconciler) createSecret(ctx context.Context, runner *v1
 
 	log.Info("Created ephemeral runner secret", "secretName", jitSecret.Name)
 	return jitSecret, nil
+}
+
+// safeToEvictFor returns the value the cluster-autoscaler safe-to-evict
+// annotation must carry for this runner, and whether the controller owns it.
+//
+// A runner without a job assigned is idle and safe to evict, so the autoscaler
+// can drain the node it sits on. Once the listener assigns a job, evicting the
+// pod would kill the job, so the annotation flips to false.
+//
+// The controller stays out of the way when the runner template sets the
+// annotation itself: an explicit value is a deliberate choice by whoever wrote
+// the template.
+func (r *EphemeralRunnerReconciler) safeToEvictFor(runner *v1alpha1.EphemeralRunner) (string, bool) {
+	if !r.ManageSafeToEvictAnnotation {
+		return "", false
+	}
+
+	if _, ok := runner.Annotations[AnnotationKeyClusterAutoscalerSafeToEvict]; ok {
+		return "", false
+	}
+	if _, ok := runner.Spec.Annotations[AnnotationKeyClusterAutoscalerSafeToEvict]; ok {
+		return "", false
+	}
+
+	return strconv.FormatBool(!runner.HasJob()), true
+}
+
+// reconcileSafeToEvictAnnotation keeps the runner pod's safe-to-evict annotation
+// in sync with whether the runner has a job assigned. It patches only when the
+// value actually changes, so a runner that never picks up a job costs a single
+// write at pod creation.
+func (r *EphemeralRunnerReconciler) reconcileSafeToEvictAnnotation(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, pod *corev1.Pod, log logr.Logger) error {
+	value, managed := r.safeToEvictFor(ephemeralRunner)
+	if !managed || !pod.DeletionTimestamp.IsZero() {
+		return nil
+	}
+
+	if pod.Annotations[AnnotationKeyClusterAutoscalerSafeToEvict] == value {
+		return nil
+	}
+
+	log.Info("Updating the safe-to-evict annotation on the runner pod", "safeToEvict", value, "jobId", ephemeralRunner.Status.JobID)
+	runnerPod := newLazyCopy(pod)
+	metav1.SetMetaDataAnnotation(&runnerPod.Mutate().ObjectMeta, AnnotationKeyClusterAutoscalerSafeToEvict, value)
+	if err := r.Patch(ctx, pod, runnerPod.MergeFrom()); err != nil {
+		return fmt.Errorf("failed to patch the safe-to-evict annotation on the runner pod: %w", err)
+	}
+
+	return nil
 }
 
 // updateRunStatusFromPod is responsible for updating non-exiting statuses.

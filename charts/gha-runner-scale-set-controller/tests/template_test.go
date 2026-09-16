@@ -915,6 +915,36 @@ func TestTemplate_ControllerDeployment_TerminatedRunnerPodGracePeriod(t *testing
 	})
 }
 
+func TestTemplate_ControllerDeployment_ManageSafeToEvictAnnotation(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set-controller")
+	require.NoError(t, err)
+
+	releaseName := "test-arc"
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
+
+	renderArgs := func(t *testing.T, setValues map[string]string) []string {
+		options := &helm.Options{
+			Logger:         logger.Discard,
+			SetValues:      setValues,
+			KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+		}
+
+		output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
+
+		var deployment appsv1.Deployment
+		helm.UnmarshalK8SYaml(t, output, &deployment)
+
+		require.Len(t, deployment.Spec.Template.Spec.Containers, 1)
+		return deployment.Spec.Template.Spec.Containers[0].Args
+	}
+
+	assert.NotContains(t, renderArgs(t, map[string]string{}), "--manage-safe-to-evict-annotation")
+	assert.NotContains(t, renderArgs(t, map[string]string{"flags.manageSafeToEvictAnnotation": "false"}), "--manage-safe-to-evict-annotation")
+	assert.Contains(t, renderArgs(t, map[string]string{"flags.manageSafeToEvictAnnotation": "true"}), "--manage-safe-to-evict-annotation")
+}
+
 func TestTemplate_ControllerContainerEnvironmentVariables(t *testing.T) {
 	t.Parallel()
 

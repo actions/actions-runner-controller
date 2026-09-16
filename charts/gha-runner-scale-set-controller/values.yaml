@@ -135,6 +135,14 @@ flags:
   ## in charge. Pods that are still running are always deleted gracefully.
   # terminatedRunnerPodGracePeriodSeconds: 0
 
+  ## Let the controller manage the cluster-autoscaler.kubernetes.io/safe-to-evict
+  ## annotation on runner pods: "true" while the runner sits idle waiting for work,
+  ## "false" once the listener assigns a job to it. This lets the cluster autoscaler
+  ## drain a node holding only idle runners instead of keeping it around.
+  ## Runner templates that set the annotation themselves are left untouched.
+  ## Defaults to false.
+  # manageSafeToEvictAnnotation: true
+
   ## Defines a list of prefixes that should not be propagated to internal resources.
   ## This is useful when you have labels that are used for internal purposes and should not be propagated to internal resources.
   ## See https://github.com/actions/actions-runner-controller/issues/3533 for more information.

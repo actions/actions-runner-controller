@@ -65,6 +65,12 @@ const (
 	AnnotationKeyListenerConfigResourceVersion = "actions.github.com/listener-config-resource-version"
 )
 
+// AnnotationKeyClusterAutoscalerSafeToEvict is the cluster-autoscaler annotation
+// that tells the autoscaler whether a pod may be evicted when it considers
+// scaling the node down. The controller only manages it when it is enabled and
+// the runner template does not set it explicitly.
+const AnnotationKeyClusterAutoscalerSafeToEvict = "cluster-autoscaler.kubernetes.io/safe-to-evict"
+
 // Labels applied to listener roles
 const (
 	labelKeyListenerName      = "auto-scaling-listener-name"
