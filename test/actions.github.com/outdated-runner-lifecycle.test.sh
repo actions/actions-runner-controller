@@ -19,6 +19,14 @@
 # assert_sticky_to_unrelated_change pins that by upgrading minRunners, which
 # bumps the AutoscalingRunnerSet generation without touching anything the
 # runners objected to, and confirming nothing restarts.
+#
+# Switched off is not the same as frozen, though, and that is the other half of
+# the same step. The minRunners edit still has to reach the parked objects: the
+# listener takes the new value while its phase stays Stopped, and the
+# EphemeralRunnerSet takes it while staying pinned at Replicas=0, PatchID=0. The
+# invariant is "switched off but still current", so the listener's phase and its
+# minRunners are read together rather than across two calls that could straddle
+# a change.
 
 set -euo pipefail
 
@@ -60,6 +68,14 @@ STICKY_WINDOW="${STICKY_WINDOW:-60}"
 STICKY_INTERVAL="${STICKY_INTERVAL:-5}"
 RECOVERY_TIMEOUT="${RECOVERY_TIMEOUT:-300}"
 LISTENER_STOP_TIMEOUT="${LISTENER_STOP_TIMEOUT:-120}"
+# How long an edit that is not a recovery signal may take to reach the parked
+# objects.
+PROPAGATION_TIMEOUT="${PROPAGATION_TIMEOUT:-120}"
+
+# minRunners the scale set is installed with, and the value the unrelated-edit
+# upgrade moves it to.
+INITIAL_MIN_RUNNERS=1
+UPGRADED_MIN_RUNNERS=2
 
 RUN_ID=""
 
@@ -115,7 +131,7 @@ function install_scale_set() {
         --namespace "${SCALE_SET_NAMESPACE}" \
         --create-namespace \
         "${values[@]}" \
-        --set scaleset.minRunners=1 \
+        --set scaleset.minRunners="${INITIAL_MIN_RUNNERS}" \
         --set runner.container.image="${OUTDATED_RUNNER_IMAGE}" \
         "${ROOT_DIR}/charts/gha-runner-scale-set-experimental" \
         --version="${VERSION}" \
@@ -128,7 +144,7 @@ function install_scale_set() {
 }
 
 function upgrade_min_runners() {
-    echo "Upgrading scale set ${SCALE_SET_NAMESPACE}/${SCALE_SET_NAME} to minRunners=2, leaving the runner spec alone"
+    echo "Upgrading scale set ${SCALE_SET_NAMESPACE}/${SCALE_SET_NAME} to minRunners=${UPGRADED_MIN_RUNNERS}, leaving the runner spec alone"
 
     local values=()
     mapfile -t values < <(scale_set_values)
@@ -136,7 +152,7 @@ function upgrade_min_runners() {
     helm upgrade "${SCALE_SET_NAME}" \
         --namespace "${SCALE_SET_NAMESPACE}" \
         "${values[@]}" \
-        --set scaleset.minRunners=2 \
+        --set scaleset.minRunners="${UPGRADED_MIN_RUNNERS}" \
         --set runner.container.image="${OUTDATED_RUNNER_IMAGE}" \
         "${ROOT_DIR}/charts/gha-runner-scale-set-experimental" \
         --version="${VERSION}" \
@@ -152,7 +168,7 @@ function upgrade_runner_image() {
     helm upgrade "${SCALE_SET_NAME}" \
         --namespace "${SCALE_SET_NAMESPACE}" \
         "${values[@]}" \
-        --set scaleset.minRunners=1 \
+        --set scaleset.minRunners="${INITIAL_MIN_RUNNERS}" \
         --set runner.container.image="${RECOVERED_RUNNER_IMAGE}" \
         "${ROOT_DIR}/charts/gha-runner-scale-set-experimental" \
         --version="${VERSION}" \
@@ -205,6 +221,25 @@ function listener_phase() {
     kubectl get autoscalinglistener "${name}" \
         -n "${ARC_NAMESPACE}" \
         -o jsonpath='{.spec.phase}' 2>/dev/null || true
+}
+
+# Phase and minRunners in a single read, so "took the edit" and "is still
+# switched off" are observed on one version of the object rather than across two
+# calls that a reconcile could land between.
+function listener_phase_and_min_runners() {
+    local name="$1"
+    kubectl get autoscalinglistener "${name}" \
+        -n "${ARC_NAMESPACE}" \
+        -o jsonpath='{.spec.phase}|{.spec.minRunners}' 2>/dev/null || true
+}
+
+# Replicas is omitempty, so a pinned 0 comes back as an empty string. PatchID is
+# not, so it is always serialized and 0 comes back as "0". Both are read
+# together and normalized by the caller.
+function ephemeral_runner_set_pinned_state() {
+    kubectl get ephemeralrunnerset "${RUNNER_SET_NAME}" \
+        -n "${SCALE_SET_NAMESPACE}" \
+        -o jsonpath='{.spec.replicas}|{.spec.patchID}' 2>/dev/null || true
 }
 
 function listener_pod_names() {
@@ -326,17 +361,83 @@ function assert_listener_stopped() {
     return 1
 }
 
+# A parked EphemeralRunnerSet is held at zero. This is what stops it scaling
+# back up while it carries edits that are not a recovery signal.
+function assert_runner_set_pinned() {
+    echo "[*] Asserting the EphemeralRunnerSet is pinned at Replicas=0, PatchID=0"
+
+    local state replicas patch_id
+    state="$(ephemeral_runner_set_pinned_state)"
+    replicas="${state%%|*}"
+    patch_id="${state##*|}"
+
+    if [[ "${replicas:-0}" != "0" || "${patch_id:-0}" != "0" ]]; then
+        dump_state "EphemeralRunnerSet is not pinned, saw replicas='${replicas:-<empty>}' patchID='${patch_id:-<empty>}'"
+        return 1
+    fi
+
+    echo "[*] EphemeralRunnerSet is pinned (replicas='${replicas:-<empty, means 0>}' patchID='${patch_id}')"
+}
+
+# Switched off is not frozen. An edit that is not a recovery signal still has to
+# land on the parked objects, and it has to land without switching anything back
+# on: the listener takes the new minRunners while its phase stays Stopped, and
+# the EphemeralRunnerSet takes it while staying pinned at zero.
+function assert_parked_objects_updated() {
+    local want_min_runners="$1"
+
+    echo "[*] Waiting up to ${PROPAGATION_TIMEOUT}s for minRunners=${want_min_runners} to reach the parked objects"
+
+    local deadline=$((SECONDS + PROPAGATION_TIMEOUT))
+    local name="" state="" phase="" min_runners=""
+    while ((SECONDS < deadline)); do
+        name="$(listener_name)"
+        if [[ -z "${name}" ]]; then
+            dump_state "AutoscalingListener object is gone, but a parked scale set must keep it"
+            return 1
+        fi
+
+        state="$(listener_phase_and_min_runners "${name}")"
+        phase="${state%%|*}"
+        min_runners="${state##*|}"
+
+        # Leaving Stopped is a failure at any point, not something to wait out:
+        # the edit must never be what starts the listener again.
+        if [[ "${phase}" != "Stopped" ]]; then
+            dump_state "Listener ${name} left the stopped phase while the scale set is parked, saw '${phase:-<empty>}' with minRunners='${min_runners:-<empty>}'"
+            return 1
+        fi
+
+        if [[ "${min_runners}" == "${want_min_runners}" ]]; then
+            echo "[*] Listener ${name} is Stopped and carries .spec.minRunners=${min_runners}"
+
+            assert_runner_set_pinned || return 1
+            assert_no_runner_pods || return 1
+
+            return 0
+        fi
+
+        echo "    listener=${name} phase=${phase} minRunners=${min_runners:-<empty>}, waiting for ${want_min_runners}"
+        sleep 5
+    done
+
+    dump_state "Timed out waiting for the parked listener to take minRunners=${want_min_runners}, last seen listener=${name:-<none>} phase=${phase:-<empty>} minRunners=${min_runners:-<empty>}"
+    return 1
+}
+
 # minRunners is not part of the runner spec, so it must not un-park the scale
-# set no matter how much it bumps the generation.
+# set no matter how much it bumps the generation. It must still reach the parked
+# objects, though, which is what assert_parked_objects_updated covers.
 function assert_sticky_to_unrelated_change() {
-    echo "[*] Asserting an edit outside the runner spec does not recover the scale set"
+    echo "[*] Asserting an edit outside the runner spec lands without recovering the scale set"
 
     upgrade_min_runners || return 1
 
+    assert_parked_objects_updated "${UPGRADED_MIN_RUNNERS}" || return 1
     assert_stays_outdated || return 1
     assert_listener_stopped || return 1
 
-    echo "[*] Scale set stayed Outdated across a minRunners change"
+    echo "[*] Scale set stayed Outdated across a minRunners change and took the edit anyway"
 }
 
 function assert_recovered() {
@@ -384,6 +485,7 @@ function main() {
     if assert_scale_set_outdated; then
         assert_stays_outdated || failed+=("assert_stays_outdated")
         assert_no_runner_pods || failed+=("assert_no_runner_pods")
+        assert_runner_set_pinned || failed+=("assert_runner_set_pinned")
         assert_listener_stopped || failed+=("assert_listener_stopped")
         assert_sticky_to_unrelated_change || failed+=("assert_sticky_to_unrelated_change")
 
