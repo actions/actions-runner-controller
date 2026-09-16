@@ -116,6 +116,8 @@ func main() {
 		k8sClientRateLimiterBurst int
 
 		workqueueRateLimiter string
+
+		manageSafeToEvictAnnotation bool
 	)
 	var c github.Config
 	err = envconfig.Process("github", &c)
@@ -167,6 +169,7 @@ func main() {
 	flag.IntVar(&k8sClientRateLimiterQPS, "k8s-client-rate-limiter-qps", 20, "The QPS value of the K8s client rate limiter.")
 	flag.IntVar(&k8sClientRateLimiterBurst, "k8s-client-rate-limiter-burst", 30, "The burst value of the K8s client rate limiter.")
 	flag.StringVar(&workqueueRateLimiter, "workqueue-rate-limiter", "", `The workqueue rate limiter to use. Valid values are "bucket_rate_limiter" (default) and "typed_rate_limiter" (per-item only, no global token bucket).`)
+	flag.BoolVar(&manageSafeToEvictAnnotation, "manage-safe-to-evict-annotation", false, "Let the controller set the cluster-autoscaler.kubernetes.io/safe-to-evict annotation on runner pods: \"true\" while the runner is idle, \"false\" once a job is assigned to it. Runner templates that set the annotation themselves are left untouched.")
 	flag.Parse()
 
 	opts = opts.Resolve()
@@ -366,12 +369,13 @@ func main() {
 		}
 
 		if err = (&actionsgithubcom.EphemeralRunnerReconciler{
-			Client:              mgr.GetClient(),
-			Log:                 log.WithName("EphemeralRunner").WithValues("version", build.Version),
-			Scheme:              mgr.GetScheme(),
-			PublishMetrics:      metricsAddr != "0",
-			UnregistrationQueue: runnerUnregistrationQueue,
-			ResourceBuilder:     rb,
+			Client:                      mgr.GetClient(),
+			Log:                         log.WithName("EphemeralRunner").WithValues("version", build.Version),
+			Scheme:                      mgr.GetScheme(),
+			PublishMetrics:              metricsAddr != "0",
+			UnregistrationQueue:         runnerUnregistrationQueue,
+			ManageSafeToEvictAnnotation: manageSafeToEvictAnnotation,
+			ResourceBuilder:             rb,
 		}).SetupWithManager(mgr, ephemeralRunnerOpts...); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunner")
 			os.Exit(1)
