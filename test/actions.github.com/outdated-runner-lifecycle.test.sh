@@ -226,6 +226,11 @@ function listener_phase() {
 # Phase and minRunners in a single read, so "took the edit" and "is still
 # switched off" are observed on one version of the object rather than across two
 # calls that a reconcile could land between.
+#
+# minRunners is omitempty, so a zero reads back as an empty string rather than
+# "0". Callers assert a non-zero value, which is unambiguous; an assertion
+# against zero would have to treat empty as zero the way
+# assert_runner_set_pinned does for replicas.
 function listener_phase_and_min_runners() {
     local name="$1"
     kubectl get autoscalinglistener "${name}" \
