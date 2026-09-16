@@ -350,12 +350,28 @@ func main() {
 		}
 
 		ephemeralRunnerOpts := append(controllerOpts, actionsgithubcom.WithMaxConcurrentReconciles(opts.EphemeralRunnerMaxConcurrentReconciles))
+
+		// Removing a runner registration from the Actions service is not part of
+		// deleting the Kubernetes resources an EphemeralRunner owns, and running
+		// it inline puts local pod cleanup behind an external API. These workers
+		// take it off the reconcile path instead.
+		runnerUnregistrationQueue := actionsgithubcom.NewRunnerUnregistrationQueue(
+			log.WithName("RunnerUnregistration").WithValues("version", build.Version),
+			secretResolver,
+			opts.EphemeralRunnerMaxConcurrentReconciles,
+		)
+		if err := mgr.Add(runnerUnregistrationQueue); err != nil {
+			log.Error(err, "unable to add the runner unregistration workers")
+			os.Exit(1)
+		}
+
 		if err = (&actionsgithubcom.EphemeralRunnerReconciler{
-			Client:          mgr.GetClient(),
-			Log:             log.WithName("EphemeralRunner").WithValues("version", build.Version),
-			Scheme:          mgr.GetScheme(),
-			PublishMetrics:  metricsAddr != "0",
-			ResourceBuilder: rb,
+			Client:              mgr.GetClient(),
+			Log:                 log.WithName("EphemeralRunner").WithValues("version", build.Version),
+			Scheme:              mgr.GetScheme(),
+			PublishMetrics:      metricsAddr != "0",
+			UnregistrationQueue: runnerUnregistrationQueue,
+			ResourceBuilder:     rb,
 		}).SetupWithManager(mgr, ephemeralRunnerOpts...); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunner")
 			os.Exit(1)

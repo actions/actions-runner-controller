@@ -53,6 +53,12 @@ type EphemeralRunnerReconciler struct {
 	Log            logr.Logger
 	Scheme         *runtime.Scheme
 	PublishMetrics bool
+
+	// UnregistrationQueue takes the removal of runner registrations from the
+	// Actions service off the reconcile path. When it is left unset,
+	// SetupWithManager creates one and registers it with the manager.
+	UnregistrationQueue *RunnerUnregistrationQueue
+
 	ResourceBuilder
 }
 
@@ -105,26 +111,42 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 
 		if controllerutil.ContainsFinalizer(&ephemeralRunner, ephemeralRunnerActionsFinalizerName) {
-			log.Info("Trying to clean up runner from the service")
-			ok, err := r.cleanupRunnerFromService(ctx, &ephemeralRunner, log)
-			if err != nil {
-				log.Error(err, "Failed to clean up runner from service")
-				return ctrl.Result{}, err
-			}
-			if !ok {
-				log.Info("Runner is not finished yet, retrying in 30s")
-				return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
-			}
+			// Removing the runner from the Actions service is handed to background
+			// workers rather than done here, so that deleting the pod and the
+			// secret below is never held up by an external API. See
+			// RunnerUnregistrationQueue for what that costs.
+			//
+			// This is also what stops holding the pod alive when the service
+			// reports that the runner is still executing a job. That used to keep
+			// the runner pod of a job that is still running from being deleted out
+			// from under it, but only for deletions that reach this branch
+			// directly. The EphemeralRunnerSet does not rely on it: it refuses to
+			// delete a runner that has a job assigned, and removes a runner from
+			// the service before deleting it when it scales down. What is left is
+			// an EphemeralRunner deleted by hand, and there the deletion is taken
+			// at face value: the pod goes now, and the workers keep retrying the
+			// removal until the service accepts it.
+			unregister := runnerMayBeRegistered(&ephemeralRunner)
+			log.Info(
+				"Removing the runner registration finalizer",
+				"unregisterFromService", unregister,
+				"phase", ephemeralRunner.Status.Phase,
+			)
 
-			log.Info("Runner is cleaned up from the service, removing finalizer")
 			if controllerutil.RemoveFinalizer(runner.Mutate(), ephemeralRunnerActionsFinalizerName) {
-				log.Info("Removed finalizer from ephemeral runner")
 				if err := r.Patch(ctx, &ephemeralRunner, runner.MergeFrom()); err != nil {
 					log.Error(err, "Failed to update ephemeral runner after removing finalizer")
 					return ctrl.Result{}, err
 				}
 			}
-			log.Info("Removed finalizer from ephemeral runner")
+
+			// Queued only once the finalizer is actually gone. A failed patch
+			// above sends the reconcile back through this branch, and queueing
+			// first would ask the service to remove the same runner twice.
+			if unregister {
+				r.UnregistrationQueue.Push(&ephemeralRunner)
+			}
+			log.Info("Removed the runner registration finalizer from ephemeral runner")
 		}
 
 		log.Info("Finalizing ephemeral runner")
@@ -453,19 +475,6 @@ func (r *EphemeralRunnerReconciler) deleteEphemeralRunnerOrPod(ctx context.Conte
 	}
 
 	return nil
-}
-
-func (r *EphemeralRunnerReconciler) cleanupRunnerFromService(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (ok bool, err error) {
-	if err := r.deleteRunnerFromService(ctx, ephemeralRunner, log); err != nil {
-		if errors.Is(err, scaleset.JobStillRunningError) {
-			log.Info("Runner job is still running, cannot remove the runner from the service yet")
-			return false, nil
-		}
-
-		return false, err
-	}
-
-	return true, nil
 }
 
 func (r *EphemeralRunnerReconciler) cleanupResources(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
@@ -961,6 +970,17 @@ func (r *EphemeralRunnerReconciler) deleteRunnerFromService(ctx context.Context,
 // SetupWithManager sets up the controller with the Manager.
 func (r *EphemeralRunnerReconciler) SetupWithManager(mgr ctrl.Manager, opts ...Option) error {
 	r.ResourceBuilder.setSchemeIfUnset(r.Scheme)
+
+	if r.UnregistrationQueue == nil {
+		r.UnregistrationQueue = NewRunnerUnregistrationQueue(
+			r.Log.WithName("runner-unregistration"),
+			r.SecretResolver,
+			0,
+		)
+		if err := mgr.Add(r.UnregistrationQueue); err != nil {
+			return fmt.Errorf("failed to add the runner unregistration workers to the manager: %w", err)
+		}
+	}
 
 	return builderWithOptions(
 		ctrl.NewControllerManagedBy(mgr).
