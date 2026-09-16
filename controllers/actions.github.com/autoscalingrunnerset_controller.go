@@ -757,6 +757,12 @@ func (r *AutoscalingRunnerSetReconciler) createStoppedListener(
 		return err
 	}
 
+	// Copied before the phase is stamped on. newAutoscalingListener serves a
+	// shared pointer out of the resource cache, so mutating what it returns
+	// switches off the desired listener every later caller derives, not just
+	// this one. Create would write the resulting object's identity back into the
+	// same shared entry for the same reason.
+	desired = desired.DeepCopy()
 	desired.Spec.Phase = v1alpha1.AutoscalingListenerPhaseStopped
 	log.Info("Creating the listener of a parked scale set in the stopped phase", "listener", desired.Name)
 	if err := r.Create(ctx, desired); err != nil && !kerrors.IsAlreadyExists(err) {
