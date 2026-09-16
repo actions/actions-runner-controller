@@ -24,6 +24,9 @@ spec:
     - jsonPath: .spec.autoscalingRunnerSetName
       name: AutoscalingRunnerSet Name
       type: string
+    - jsonPath: .spec.phase
+      name: Phase
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -193,6 +196,13 @@ spec:
               minRunners:
                 minimum: 0
                 type: integer
+              phase:
+                description: Phase controls whether the listener runs. Empty means
+                  Running.
+                enum:
+                - Running
+                - Stopped
+                type: string
               proxy:
                 properties:
                   http:

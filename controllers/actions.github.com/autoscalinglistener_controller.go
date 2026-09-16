@@ -148,6 +148,26 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, err
 	}
 
+	// A stopped listener keeps its object, spec and finalizer, but owns nothing:
+	// the AutoscalingRunnerSet parks it this way instead of deleting it so the
+	// scale set stops acquiring jobs without re-registering with the Actions
+	// service when it comes back. Patching the phase back to Running falls
+	// through to the regular reconcile below, which rebuilds the children.
+	if autoscalingListener.Spec.Phase.Stopped() {
+		log.Info("Listener is stopped, cleaning up its resources")
+		requeue, err := r.cleanupResources(ctx, &autoscalingListener, log)
+		if err != nil {
+			log.Error(err, "Failed to clean up the resources of a stopped listener")
+			return ctrl.Result{}, err
+		}
+		if requeue {
+			return ctrl.Result{RequeueAfter: time.Second}, nil
+		}
+
+		log.Info("Listener is stopped and all of its resources are cleaned up")
+		return ctrl.Result{}, nil
+	}
+
 	// Make sure the runner scale set listener service account is created for the listener pod in the controller namespace
 	var serviceAccount corev1.ServiceAccount
 	err := r.Get(

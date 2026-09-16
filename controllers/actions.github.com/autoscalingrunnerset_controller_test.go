@@ -2927,12 +2927,14 @@ var _ = Describe("Test AutoscalingRunnerSet outdated lifecycle", Ordered, func()
 				Should(BeEquivalentTo(v1alpha1.AutoscalingRunnerSetPhaseOutdated), "the autoscaling runner set should report the outdated phase")
 
 			Eventually(
-				func() bool {
-					return errors.IsNotFound(k8sClient.Get(ctx, listenerKey(), new(v1alpha1.AutoscalingListener)))
+				func(g Gomega) {
+					listener := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, listenerKey(), listener)).To(Succeed(), "the listener should be kept as the record of a scale set that can come back")
+					g.Expect(listener.Spec.Phase).To(Equal(v1alpha1.AutoscalingListenerPhaseStopped), "the listener should be stopped so no further jobs are acquired")
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
-			).Should(BeTrue(), "the listener should be removed so no further jobs are acquired")
+			).Should(Succeed())
 
 			// The set is kept, not deleted: deleting it would make the controller
 			// rebuild it from the same rejected spec on the very next reconcile.
@@ -2973,8 +2975,9 @@ var _ = Describe("Test AutoscalingRunnerSet outdated lifecycle", Ordered, func()
 					g.Expect(err).NotTo(HaveOccurred())
 					g.Expect(phase).To(BeEquivalentTo(v1alpha1.AutoscalingRunnerSetPhaseOutdated), "an edit outside the runner spec must not move the scale set out of the outdated phase")
 
-					g.Expect(errors.IsNotFound(k8sClient.Get(ctx, listenerKey(), new(v1alpha1.AutoscalingListener)))).
-						To(BeTrue(), "the listener must stay switched off so no further jobs are acquired")
+					listener := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, listenerKey(), listener)).To(Succeed(), "the listener must be kept, not deleted")
+					g.Expect(listener.Spec.Phase).To(Equal(v1alpha1.AutoscalingListenerPhaseStopped), "the listener must stay stopped so no further jobs are acquired")
 
 					current := getEphemeralRunnerSet()
 					g.Expect(current.Spec.ActionableRevision).To(Equal(outdatedRevision), "the rejected runner spec must not be retried")
@@ -3002,12 +3005,14 @@ var _ = Describe("Test AutoscalingRunnerSet outdated lifecycle", Ordered, func()
 			).Should(BeNumerically(">", outdatedRevision), "the runner spec revision should advance so the runner set stops judging itself by the rejected runners")
 
 			Eventually(
-				func() error {
-					return k8sClient.Get(ctx, listenerKey(), new(v1alpha1.AutoscalingListener))
+				func(g Gomega) {
+					listener := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, listenerKey(), listener)).To(Succeed())
+					g.Expect(listener.Spec.Phase.Stopped()).To(BeFalse(), "the listener should be started again so the scale set can acquire jobs")
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
-			).Should(Succeed(), "the listener should be created again so the scale set can acquire jobs")
+			).Should(Succeed())
 
 			Eventually(autoscalingRunnerSetPhase, autoscalingRunnerSetTestTimeout, autoscalingRunnerSetTestInterval).
 				Should(BeEquivalentTo(v1alpha1.AutoscalingRunnerSetPhaseRunning), "the autoscaling runner set should leave the outdated phase")

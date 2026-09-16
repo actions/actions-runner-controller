@@ -358,7 +358,24 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			return ctrl.Result{}, nil
 		}
 
-		if !cmp.Equal(listener.Spec, desired.Spec) ||
+		// Reaching here means the scale set is not outdated, so a listener that
+		// was switched off may run again. Start it by moving the phase rather
+		// than by replacing the object: the listener controller rebuilds the pod
+		// and the rest of the child resources from it.
+		if listener.Spec.Phase.Stopped() {
+			log.Info("Starting the stopped listener")
+			original := listener.DeepCopy()
+			listener.Spec.Phase = v1alpha1.AutoscalingListenerPhaseRunning
+			if err := r.Patch(ctx, &listener, client.MergeFrom(original)); err != nil {
+				log.Error(err, "Failed to start the stopped listener")
+				return ctrl.Result{}, err
+			}
+
+			log.Info("Started the stopped listener")
+			return ctrl.Result{}, nil
+		}
+
+		if listenerSpecChanged(&listener, desired) ||
 			!cmp.Equal(listener.Labels, desired.Labels) ||
 			!cmp.Equal(listener.Annotations, desired.Annotations) {
 			// The listener is about to be torn down and rebuilt, which is what
@@ -455,33 +472,92 @@ func (r *AutoscalingRunnerSetReconciler) runnerSpecChanged(autoscalingRunnerSet 
 	return ephemeralRunnerSetDesiredSpecChanged(ephemeralRunnerSet, desired)
 }
 
+// listenerSpecChanged reports whether the live listener spec differs from the
+// desired one in a way that requires replacing the listener.
+//
+// Phase is excluded. It is the one field the AutoscalingRunnerSet controller
+// writes onto a live listener rather than deriving from its own spec, so
+// comparing it would make a stopped listener look like drift and delete the very
+// object the stop is meant to preserve. Starting and stopping is handled by
+// patching the phase instead.
+func listenerSpecChanged(current, desired *v1alpha1.AutoscalingListener) bool {
+	if current == nil || desired == nil {
+		return current != desired
+	}
+
+	currentSpec := current.Spec
+	desiredSpec := desired.Spec
+	currentSpec.Phase = ""
+	desiredSpec.Phase = ""
+
+	return !cmp.Equal(currentSpec, desiredSpec)
+}
+
+// stopListener switches the listener off without deleting it.
+//
+// Deleting it would work, but the listener is the record of a scale set that is
+// meant to come back, and rebuilding it means re-registering with the Actions
+// service and recreating the service account, role, role binding and config
+// secret that go with it. Moving the phase to Stopped instead leaves all of that
+// in place; the listener controller tears down the pod and the child resources,
+// so no jobs are acquired either way.
+func (r *AutoscalingRunnerSetReconciler) stopListener(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, log logr.Logger) error {
+	var listener v1alpha1.AutoscalingListener
+	err := r.Get(
+		ctx,
+		client.ObjectKey{
+			Namespace: r.ControllerNamespace,
+			Name:      scaleSetListenerName(autoscalingRunnerSet),
+		},
+		&listener,
+	)
+	switch {
+	case kerrors.IsNotFound(err):
+		// Nothing to switch off. A scale set that is switched off never creates
+		// a listener, so this is the normal state after a restart.
+		return nil
+	case err != nil:
+		return err
+	}
+
+	if !listener.DeletionTimestamp.IsZero() || listener.Spec.Phase.Stopped() {
+		return nil
+	}
+
+	log.Info("Stopping the listener so no further jobs are acquired")
+	original := listener.DeepCopy()
+	listener.Spec.Phase = v1alpha1.AutoscalingListenerPhaseStopped
+	if err := r.Patch(ctx, &listener, client.MergeFrom(original)); err != nil {
+		return err
+	}
+
+	log.Info("Stopped the listener")
+	return nil
+}
+
 // reconcileOutdated holds a scale set whose runners rejected the runner spec.
 //
-// The listener is removed so no new jobs are acquired, and the EphemeralRunnerSet
+// The listener is stopped so no new jobs are acquired, and the EphemeralRunnerSet
 // is pinned to zero replicas so it releases every runner that is not currently
-// executing a job. The set itself is deliberately kept: the user has not asked
-// for the scale set to go away, and deleting it would make the controller
-// immediately rebuild it from the same rejected spec, in a loop. Keeping it also
-// preserves the revision bookkeeping that decides when the scale set may run
-// again.
+// executing a job. Neither object is deleted: the user has not asked for the
+// scale set to go away, and rebuilding it would mean re-registering with the
+// Actions service and recreating the listener's service account, role, role
+// binding and config secret, only to publish the same rejected spec again, in a
+// loop. Keeping them also preserves the revision bookkeeping that decides when
+// the scale set may run again.
 //
 // This state is left only when the runner spec the runners rejected is changed,
 // which moves the phase back to pending and lets the next reconcile publish the
-// new spec to the set.
+// new spec to the set and start the listener again.
 func (r *AutoscalingRunnerSetReconciler) reconcileOutdated(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, log logr.Logger) (ctrl.Result, error) {
-	log.Info("Autoscaling runner set is in outdated phase, removing the listener")
-	done, err := r.cleanupListener(ctx, autoscalingRunnerSet, log)
-	if err != nil {
-		log.Error(err, "Failed to clean up listener")
+	log.Info("Autoscaling runner set is in outdated phase, stopping the listener")
+	if err := r.stopListener(ctx, autoscalingRunnerSet, log); err != nil {
+		log.Error(err, "Failed to stop the listener for the outdated runner set")
 		return ctrl.Result{}, err
-	}
-	if !done {
-		log.Info("Waiting for listener to be cleaned up for the outdated runner set")
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
 	var ephemeralRunnerSet v1alpha1.EphemeralRunnerSet
-	err = r.Get(
+	err := r.Get(
 		ctx,
 		types.NamespacedName{
 			Namespace: autoscalingRunnerSet.Namespace,
