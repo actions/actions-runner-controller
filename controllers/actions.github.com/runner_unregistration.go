@@ -85,6 +85,25 @@ type runnerUnregistration struct {
 	readyAt time.Time
 }
 
+// key identifies the registration this request is trying to remove.
+//
+// The runner ID alone would be the obvious key, but it is assigned by the
+// Actions service and only unique within the scale set's GitHub scope. One
+// controller can serve several of those, so the runner is named as well.
+func (r runnerUnregistration) key() unregistrationKey {
+	return unregistrationKey{
+		namespace: r.runner.Namespace,
+		name:      r.runner.Name,
+		runnerID:  r.runnerID,
+	}
+}
+
+type unregistrationKey struct {
+	namespace string
+	name      string
+	runnerID  int
+}
+
 // RunnerUnregistrationQueue removes runners from the Actions service outside of
 // the EphemeralRunner reconcile loop.
 //
@@ -130,6 +149,16 @@ type RunnerUnregistrationQueue struct {
 	// enough to scan on every take.
 	delayed []runnerUnregistration
 
+	// claimed holds the key of every request that has been taken on and not yet
+	// finished with, whether it is waiting in the queue or in the middle of an
+	// API call. Pushing a key that is already in here drops the request, so the
+	// service is never asked twice to remove the same registration.
+	//
+	// A retry keeps its claim, which is what this mainly protects: two copies of
+	// a request for a runner that is still executing a job would sit in the
+	// delayed list retrying in lockstep for as long as the job runs.
+	claimed map[unregistrationKey]struct{}
+
 	// notify carries a single wake-up token for a waiting worker. It is only
 	// ever sent to without blocking, so that a push is never slowed down by the
 	// state of the pool.
@@ -149,6 +178,7 @@ func NewRunnerUnregistrationQueue(log logr.Logger, secretResolver SecretResolver
 		secretResolver: secretResolver,
 		workers:        max(workers, unregistrationMinWorkers),
 		retryDelay:     unregistrationRetryDelay,
+		claimed:        make(map[unregistrationKey]struct{}),
 		notify:         make(chan struct{}, 1),
 	}
 }
@@ -160,6 +190,9 @@ func NewRunnerUnregistrationQueue(log logr.Logger, secretResolver SecretResolver
 // never touches the network, so no caller can be delayed by how far behind the
 // pool is or by how the service is behaving.
 //
+// A registration that is already queued, or is in the middle of being removed,
+// is not queued again, so the service is asked to remove it exactly once.
+//
 // Pushing to a nil queue drops the request. The only way to get one is to build
 // an EphemeralRunnerReconciler by hand and never call SetupWithManager, which
 // wires a queue up when the field is left unset.
@@ -167,7 +200,14 @@ func (q *RunnerUnregistrationQueue) Push(ephemeralRunner *v1alpha1.EphemeralRunn
 	if q == nil {
 		return
 	}
-	q.push(runnerUnregistration{runner: ephemeralRunner.DeepCopy(), runnerID: runnerID})
+	request := runnerUnregistration{runner: ephemeralRunner.DeepCopy(), runnerID: runnerID}
+	if !q.push(request) {
+		q.log.V(1).Info(
+			"Runner is already queued for removal from the service",
+			"ephemeralRunner", types.NamespacedName{Namespace: ephemeralRunner.Namespace, Name: ephemeralRunner.Name},
+			"runnerId", runnerID,
+		)
+	}
 }
 
 // Start drains the queue until ctx is cancelled.
@@ -236,6 +276,16 @@ func (q *RunnerUnregistrationQueue) unregister(ctx context.Context, request runn
 		"runnerId", request.runnerID,
 	)
 
+	// The claim taken when this was queued is held until the request is done
+	// with, so nothing can queue the same registration alongside it. A retry is
+	// not done with, and keeps the claim.
+	retrying := false
+	defer func() {
+		if !retrying {
+			q.release(request)
+		}
+	}()
+
 	actionsClient, err := q.secretResolver.GetActionsService(ctx, runner)
 	if err != nil {
 		log.Error(err, "Failed to get actions client to remove the runner from the service; leaving the runner for the service to clean up")
@@ -253,6 +303,7 @@ func (q *RunnerUnregistrationQueue) unregister(ctx context.Context, request runn
 
 	case errors.Is(err, scaleset.JobStillRunningError):
 		log.Info("Runner is still executing a job, retrying the removal later", "retryAfter", q.retryDelay)
+		retrying = true
 		q.pushAfter(request, q.retryDelay)
 
 	case ctx.Err() != nil:
@@ -334,12 +385,39 @@ func (q *RunnerUnregistrationQueue) promoteLocked(now time.Time) time.Duration {
 
 // pushAfter queues request again, to be attempted no earlier than delay from
 // now.
+//
+// The request keeps the claim it already holds, so this cannot be turned away
+// as a duplicate of itself.
 func (q *RunnerUnregistrationQueue) pushAfter(request runnerUnregistration, delay time.Duration) {
 	request.readyAt = time.Now().Add(delay)
-	q.push(request)
+	q.enqueue(request)
 }
 
-func (q *RunnerUnregistrationQueue) push(request runnerUnregistration) {
+// push queues a request for a registration that is not already queued, and
+// reports whether it took it on.
+func (q *RunnerUnregistrationQueue) push(request runnerUnregistration) bool {
+	q.mu.Lock()
+	if _, ok := q.claimed[request.key()]; ok {
+		q.mu.Unlock()
+		return false
+	}
+	q.claimed[request.key()] = struct{}{}
+	q.mu.Unlock()
+
+	q.enqueue(request)
+	return true
+}
+
+// release gives up the claim on a request that is done with, whatever the
+// outcome was. A later request to remove the same registration is then taken on
+// as a new one.
+func (q *RunnerUnregistrationQueue) release(request runnerUnregistration) {
+	q.mu.Lock()
+	delete(q.claimed, request.key())
+	q.mu.Unlock()
+}
+
+func (q *RunnerUnregistrationQueue) enqueue(request runnerUnregistration) {
 	q.mu.Lock()
 	if request.readyAt.IsZero() {
 		q.ready = append(q.ready, request)

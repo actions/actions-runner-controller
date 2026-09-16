@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -286,6 +287,122 @@ func TestRunnerUnregistrationQueueRetriesWhileTheJobIsStillRunning(t *testing.T)
 	}
 
 	assert.Eventually(t, func() bool { return q.len() == 0 }, 10*time.Second, 10*time.Millisecond)
+}
+
+func TestRunnerUnregistrationQueueDeduplicates(t *testing.T) {
+	runner := newUnregistrationTestRunner("test-runner", 42, v1alpha1.EphemeralRunnerPhaseRunning)
+
+	t.Run("a registration already queued is not queued again", func(t *testing.T) {
+		q := newTestUnregistrationQueue(t, fake.NewClient())
+
+		for range 5 {
+			pushTestRunner(q, runner)
+		}
+
+		assert.Equal(t, 1, q.len())
+	})
+
+	t.Run("a registration being removed right now is not queued again", func(t *testing.T) {
+		// The window the claim covers is wider than the queue itself: a request
+		// a worker has already taken is no longer queued, but the service has
+		// not answered yet, so asking it again is the duplicate call.
+		started := make(chan struct{})
+		release := make(chan struct{})
+		var calls atomic.Int64
+
+		client := fake.NewClient(fake.WithRemoveRunnerFunc(func(ctx context.Context, _ int64) error {
+			if calls.Add(1) == 1 {
+				close(started)
+			}
+			select {
+			case <-release:
+			case <-ctx.Done():
+			}
+			return nil
+		}))
+
+		q := newTestUnregistrationQueue(t, client)
+		startTestUnregistrationQueue(t, q)
+		t.Cleanup(func() { close(release) })
+
+		pushTestRunner(q, runner)
+		select {
+		case <-started:
+		case <-time.After(10 * time.Second):
+			t.Fatal("the removal was never attempted")
+		}
+
+		pushTestRunner(q, runner)
+		assert.Zero(t, q.len(), "the runner was queued again while it was being removed")
+	})
+
+	t.Run("a retrying registration is not queued alongside itself", func(t *testing.T) {
+		// This is the case that costs something. Two copies of a request for a
+		// runner that is still executing a job would sit in the delayed list
+		// retrying in lockstep for as long as the job runs.
+		var calls atomic.Int64
+		client := fake.NewClient(fake.WithRemoveRunnerFunc(func(_ context.Context, _ int64) error {
+			calls.Add(1)
+			return fmt.Errorf("removing runner: %w", scaleset.JobStillRunningError)
+		}))
+
+		q := newTestUnregistrationQueue(t, client)
+		startTestUnregistrationQueue(t, q)
+
+		pushTestRunner(q, runner)
+		assert.Eventually(t, func() bool { return calls.Load() > 0 }, 10*time.Second, time.Millisecond)
+
+		for range 5 {
+			pushTestRunner(q, runner)
+		}
+
+		assert.LessOrEqual(t, q.len(), 1, "the retrying runner was queued more than once")
+	})
+
+	t.Run("the same runner is queued again once the removal is done with", func(t *testing.T) {
+		// The claim is not a memory of everything ever removed. A runner that
+		// comes back around, with a request that was dropped on a failure, is
+		// taken on again.
+		client := fake.NewClient(fake.WithRemoveRunnerFunc(func(_ context.Context, _ int64) error {
+			return errors.New("the service is unhappy")
+		}))
+
+		q := newTestUnregistrationQueue(t, client)
+		startTestUnregistrationQueue(t, q)
+
+		pushTestRunner(q, runner)
+		assert.Eventually(t, func() bool { return q.len() == 0 }, 10*time.Second, time.Millisecond)
+
+		// Asked of push rather than of the queue length, because a worker is
+		// free to drain the second request before the check runs.
+		assert.Eventually(t, func() bool {
+			return q.push(runnerUnregistration{runner: runner, runnerID: runner.Status.RunnerID})
+		}, 10*time.Second, time.Millisecond, "the runner could not be queued again after its removal failed")
+	})
+
+	t.Run("a different registration of the same runner is queued", func(t *testing.T) {
+		// A runner deleted before the controller recorded its ID is queued under
+		// the ID recovered from its jitconfig secret, which is a different
+		// registration from whatever its status reports.
+		q := newTestUnregistrationQueue(t, fake.NewClient())
+
+		q.Push(runner, 42)
+		q.Push(runner, 43)
+
+		assert.Equal(t, 2, q.len())
+	})
+
+	t.Run("runner IDs are only unique within their own GitHub scope", func(t *testing.T) {
+		// One controller serves scale sets in different orgs, and the service
+		// hands out runner IDs per scope, so the same ID can name two unrelated
+		// registrations. Dropping one of them would leak it.
+		q := newTestUnregistrationQueue(t, fake.NewClient())
+
+		pushTestRunner(q, newUnregistrationTestRunner("runner-in-one-scale-set", 42, v1alpha1.EphemeralRunnerPhaseRunning))
+		pushTestRunner(q, newUnregistrationTestRunner("runner-in-another", 42, v1alpha1.EphemeralRunnerPhaseRunning))
+
+		assert.Equal(t, 2, q.len())
+	})
 }
 
 func TestRunnerUnregistrationQueueDropsFailedRemovals(t *testing.T) {

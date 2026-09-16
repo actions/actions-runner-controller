@@ -195,16 +195,23 @@ func benchmarkFinalize(b *testing.B, queue *RunnerUnregistrationQueue, phase v1a
 // reconciler holds, but every deletion goes through it.
 func BenchmarkRunnerUnregistrationQueuePush(b *testing.B) {
 	q := NewRunnerUnregistrationQueue(log.Log, nil, 0)
-	runner := newUnregistrationTestRunner("runner", 42, v1alpha1.EphemeralRunnerPhaseRunning)
+	runner := newUnregistrationTestRunner("runner", 0, v1alpha1.EphemeralRunnerPhaseRunning)
 
 	b.ReportAllocs()
+	runnerID := 0
 	for b.Loop() {
+		// A distinct registration every time, as in production. Pushing one
+		// runner over and over would measure the duplicate being turned away
+		// rather than the cost of queueing.
+		runnerID++
+		runner.Status.RunnerID = runnerID
 		pushTestRunner(q, runner)
 	}
 	b.StopTimer()
 
-	// Nothing drains it here, so the queue holds every push. Reported so the
-	// number above is read as the cost of a push into a queue that deep.
+	// Nothing drains it here, so the queue holds every push and the claim on
+	// every one of them is never released. Reported so the number above is read
+	// as the cost of a push into a queue that deep.
 	b.ReportMetric(float64(q.len()), "queued")
 }
 
@@ -225,7 +232,10 @@ func BenchmarkRunnerUnregistrationQueueDrain(b *testing.B) {
 			for b.Loop() {
 				b.StopTimer()
 				for range burst {
-					q.push(runnerUnregistration{runner: runner})
+					// Queued directly, because what is being measured is taking
+					// requests back off, and a claim is only given up by the
+					// worker that finishes with one.
+					q.enqueue(runnerUnregistration{runner: runner})
 				}
 				b.StartTimer()
 
