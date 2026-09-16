@@ -77,6 +77,12 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			Log:                                logf.Log,
 			ControllerNamespace:                autoscalingNS.Name,
 			DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
+			// Configured rather than left empty so the suite exercises the
+			// listener spec the controller actually builds. These come from
+			// controller configuration, so a path that derives a desired
+			// listener without them reads its own listener as drifted and
+			// rebuilds it on every reconcile.
+			DefaultRunnerScaleSetListenerImagePullSecrets: []string{"dockerhub"},
 			ResourceBuilder: ResourceBuilder{
 				ResourceCache: resourceCache,
 				SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient(

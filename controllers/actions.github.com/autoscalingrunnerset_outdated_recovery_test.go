@@ -523,3 +523,45 @@ func TestCleanupListenerWaitsForAListenerLeftUnderAPreviousName(t *testing.T) {
 	err = c.Get(ctx, client.ObjectKeyFromObject(listener), new(v1alpha1.AutoscalingListener))
 	require.True(t, kerrors.IsNotFound(err), "the listener should have been deleted, got %v", err)
 }
+
+// The listener spec the parked path derives has to be the same one creation
+// derives, or propagating an unrelated edit silently rewrites the fields the
+// parked path does not know about. Image pull secrets are the ones that bite:
+// they come from controller configuration rather than from the
+// AutoscalingRunnerSet, so a listener parked with credentials for a private
+// image would come back without them and fail to pull.
+func TestPropagateToStoppedListenerKeepsTheConfiguredImagePullSecrets(t *testing.T) {
+	autoscalingRunnerSet, reconciler, c := outdatedFixture(t, v1alpha1.AutoscalingRunnerSetPhaseOutdated, 5, 4, "runner:rejected")
+	reconciler.DefaultRunnerScaleSetListenerImagePullSecrets = []string{"private-registry"}
+	ctx := context.Background()
+
+	ephemeralRunnerSet := new(v1alpha1.EphemeralRunnerSet)
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), ephemeralRunnerSet))
+
+	listener, err := reconciler.newAutoscalingListener(
+		autoscalingRunnerSet,
+		ephemeralRunnerSet,
+		reconciler.ControllerNamespace,
+		"listener:image",
+		[]corev1.LocalObjectReference{{Name: "private-registry"}},
+	)
+	require.NoError(t, err)
+	listener.Spec.Phase = v1alpha1.AutoscalingListenerPhaseStopped
+	require.NoError(t, c.Create(ctx, listener))
+
+	maxRunners := 20
+	autoscalingRunnerSet.Spec.MaxRunners = &maxRunners
+	require.NoError(t, c.Update(ctx, autoscalingRunnerSet))
+
+	require.NoError(t, reconciler.propagateToStoppedListener(ctx, autoscalingRunnerSet, ephemeralRunnerSet, logr.Discard()))
+
+	got := new(v1alpha1.AutoscalingListener)
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(listener), got))
+	require.Equal(t, maxRunners, got.Spec.MaxRunners, "the edit should still be propagated")
+	require.Equal(
+		t,
+		[]corev1.LocalObjectReference{{Name: "private-registry"}},
+		got.Spec.ImagePullSecrets,
+		"propagating an unrelated edit must not drop the credentials the listener image is pulled with",
+	)
+}

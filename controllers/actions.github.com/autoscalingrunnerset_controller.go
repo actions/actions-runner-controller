@@ -363,7 +363,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			&ephemeralRunnerSet,
 			r.ControllerNamespace,
 			r.DefaultRunnerScaleSetListenerImage,
-			nil, // TODO: remove
+			r.listenerImagePullSecrets(),
 		)
 		if err != nil {
 			log.Error(err, "Failed to generate AutoscalingListener spec")
@@ -699,7 +699,7 @@ func (r *AutoscalingRunnerSetReconciler) propagateToStoppedListener(
 		ephemeralRunnerSet,
 		r.ControllerNamespace,
 		r.DefaultRunnerScaleSetListenerImage,
-		nil, // TODO: remove
+		r.listenerImagePullSecrets(),
 	)
 	if err != nil {
 		return err
@@ -751,7 +751,7 @@ func (r *AutoscalingRunnerSetReconciler) createStoppedListener(
 		ephemeralRunnerSet,
 		r.ControllerNamespace,
 		r.DefaultRunnerScaleSetListenerImage,
-		nil, // TODO: remove
+		r.listenerImagePullSecrets(),
 	)
 	if err != nil {
 		return err
@@ -1255,13 +1255,25 @@ func (r *AutoscalingRunnerSetReconciler) createEphemeralRunnerSet(ctx context.Co
 	return ctrl.Result{}, nil
 }
 
-func (r *AutoscalingRunnerSetReconciler) createAutoScalingListenerForRunnerSet(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) (ctrl.Result, error) {
+// listenerImagePullSecrets returns the credentials the listener image is pulled
+// with. They come from controller configuration rather than from the
+// AutoscalingRunnerSet, so every caller that derives a desired listener has to
+// supply them: a caller that leaves them out does not describe a listener
+// without credentials, it describes a listener whose credentials it forgot, and
+// anything comparing against it reads the difference as drift.
+func (r *AutoscalingRunnerSetReconciler) listenerImagePullSecrets() []corev1.LocalObjectReference {
 	var imagePullSecrets []corev1.LocalObjectReference
 	for _, imagePullSecret := range r.DefaultRunnerScaleSetListenerImagePullSecrets {
 		imagePullSecrets = append(imagePullSecrets, corev1.LocalObjectReference{
 			Name: imagePullSecret,
 		})
 	}
+
+	return imagePullSecrets
+}
+
+func (r *AutoscalingRunnerSetReconciler) createAutoScalingListenerForRunnerSet(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) (ctrl.Result, error) {
+	imagePullSecrets := r.listenerImagePullSecrets()
 
 	r.ResourceCache.autoscalingListener.Delete(autoscalingRunnerSet)
 	autoscalingListener, err := r.newAutoscalingListener(
