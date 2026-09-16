@@ -1934,3 +1934,108 @@ var _ = Describe("EphemeralRunner", func() {
 		})
 	})
 })
+
+// The safe-to-evict annotation is written in two places: into the pod spec
+// before the pod is created, and through a patch on the live pod afterwards.
+// Unit tests call the patch path directly with a fake client, which neither
+// runs the reconcile that triggers it nor talks to an API server. This suite
+// covers the patch path end to end, including a runner pod that already exists
+// without the annotation — the case that breaks first when the patch does not
+// land, and the one the unit tests cannot reach.
+var _ = Describe("EphemeralRunner safe-to-evict annotation", func() {
+	var ctx context.Context
+	var mgr ctrl.Manager
+	var autoscalingNS *corev1.Namespace
+	var configSecret *corev1.Secret
+	var ephemeralRunner *v1alpha1.EphemeralRunner
+
+	safeToEvictOn := func(pod *corev1.Pod) string {
+		return pod.Annotations[AnnotationKeyClusterAutoscalerSafeToEvict]
+	}
+
+	runnerPodAnnotation := func() (string, error) {
+		pod := new(corev1.Pod)
+		if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod); err != nil {
+			return "", err
+		}
+		return safeToEvictOn(pod), nil
+	}
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
+		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
+
+		controller := &EphemeralRunnerReconciler{
+			Client:                      mgr.GetClient(),
+			Scheme:                      mgr.GetScheme(),
+			Log:                         logf.Log,
+			ManageSafeToEvictAnnotation: true,
+			ResourceBuilder: ResourceBuilder{
+				ResourceCache: newTestResourceCache(),
+				SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient(
+					scalefake.WithClient(
+						scalefake.NewClient(
+							scalefake.WithGenerateJitRunnerConfig(
+								&scaleset.RunnerScaleSetJitRunnerConfig{
+									Runner:           &scaleset.RunnerReference{ID: 1, Name: "test-runner"},
+									EncodedJITConfig: "fake-jit-config",
+								},
+								nil,
+							),
+						),
+					),
+				)),
+			},
+		}
+		Expect(controller.SetupWithManager(mgr)).To(BeNil(), "failed to setup controller")
+
+		ephemeralRunner = newExampleRunner("test-runner", autoscalingNS.Name, configSecret.Name)
+		Expect(k8sClient.Create(ctx, ephemeralRunner)).To(BeNil(), "failed to create ephemeral runner")
+
+		startManagers(GinkgoT(), mgr)
+	})
+
+	It("annotates an idle runner pod and follows job assignment", func() {
+		Eventually(runnerPodAnnotation, ephemeralRunnerTimeout, ephemeralRunnerInterval).
+			Should(BeEquivalentTo("true"), "an idle runner should be safe to evict")
+
+		er := new(v1alpha1.EphemeralRunner)
+		Eventually(func() error {
+			return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, er)
+		}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to get ephemeral runner")
+
+		er.Status.JobID = "1"
+		Expect(k8sClient.Status().Update(ctx, er)).To(BeNil(), "failed to assign a job to the runner")
+
+		Eventually(runnerPodAnnotation, ephemeralRunnerTimeout, ephemeralRunnerInterval).
+			Should(BeEquivalentTo("false"), "a runner with a job must not be evicted")
+	})
+
+	It("annotates a runner pod that already exists without the annotation", func() {
+		// A pod created before the flag was turned on carries no annotation, so
+		// only the patch can fix it. Stripping it from a live pod reproduces that
+		// state without having to restart the controller mid-test.
+		Eventually(runnerPodAnnotation, ephemeralRunnerTimeout, ephemeralRunnerInterval).
+			Should(BeEquivalentTo("true"), "failed to annotate the runner pod")
+
+		pod := new(corev1.Pod)
+		Expect(k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)).To(BeNil())
+		delete(pod.Annotations, AnnotationKeyClusterAutoscalerSafeToEvict)
+		Expect(k8sClient.Update(ctx, pod)).To(BeNil(), "failed to strip the annotation")
+
+		// The annotation is reconciled off the EphemeralRunner, not off the pod:
+		// ephemeralRunnerOwnedPodPredicate drops pod updates that only touch
+		// metadata, so stripping it does not wake the controller by itself. What
+		// repairs an existing pod is the next reconcile of its runner, which is
+		// what a controller restart produces for every runner it owns. Touching
+		// the runner stands in for that restart.
+		er := new(v1alpha1.EphemeralRunner)
+		Expect(k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, er)).To(BeNil())
+		metav1.SetMetaDataLabel(&er.ObjectMeta, "safe-to-evict-test", "reconcile")
+		Expect(k8sClient.Update(ctx, er)).To(BeNil(), "failed to trigger a reconcile")
+
+		Eventually(runnerPodAnnotation, ephemeralRunnerTimeout, ephemeralRunnerInterval).
+			Should(BeEquivalentTo("true"), "the reconcile must restore the annotation on an existing pod")
+	})
+})
