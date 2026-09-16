@@ -57,6 +57,13 @@ func TestHandleJobStartedAgainstAPIServer(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{GenerateName: "listener-job-started-"},
+	}
+	require.NoError(t, k8sClient.Create(ctx, namespace))
+	t.Cleanup(func() {
+		require.NoError(t, k8sClient.Delete(ctx, namespace))
+	})
 
 	jobInfo := &scaleset.JobStarted{
 		RunnerName: "runner-1",
@@ -75,7 +82,7 @@ func TestHandleJobStartedAgainstAPIServer(t *testing.T) {
 		t.Helper()
 
 		runner := &v1alpha1.EphemeralRunner{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace.Name},
 			Spec: v1alpha1.EphemeralRunnerSpec{
 				GitHubConfigURL:    "https://github.com/actions",
 				GitHubConfigSecret: "secret",
@@ -112,7 +119,7 @@ func TestHandleJobStartedAgainstAPIServer(t *testing.T) {
 
 		return &Scaler{
 			clientset:     clientset,
-			config:        Config{EphemeralRunnerSetNamespace: "default"},
+			config:        Config{EphemeralRunnerSetNamespace: namespace.Name},
 			targetRunners: -1,
 			patchSeq:      -1,
 			logger:        discardLogger,
