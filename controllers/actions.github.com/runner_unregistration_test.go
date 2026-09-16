@@ -19,9 +19,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -130,9 +133,11 @@ func TestRunnerSelfDeregistered(t *testing.T) {
 
 func TestRegisteredRunnerID(t *testing.T) {
 	tt := map[string]struct {
-		runnerID int
-		secret   map[string][]byte
-		want     int
+		runnerID  int
+		secret    map[string][]byte
+		secretErr error
+		want      int
+		wantErr   bool
 	}{
 		"runner reports its own ID": {
 			runnerID: 1,
@@ -156,6 +161,18 @@ func TestRegisteredRunnerID(t *testing.T) {
 			secret: map[string][]byte{"runnerId": []byte("not-a-number")},
 			want:   0,
 		},
+		// An unreadable secret is not an answer. Reporting 0 would drop the
+		// finalizer and lose the last record of a registration that may exist.
+		"runner whose secret cannot be read": {
+			secret:    map[string][]byte{"runnerId": []byte("7")},
+			secretErr: apierrors.NewServiceUnavailable("etcd is unhappy"),
+			wantErr:   true,
+		},
+		"the status is answered without reading the secret at all": {
+			runnerID:  1,
+			secretErr: apierrors.NewServiceUnavailable("etcd is unhappy"),
+			want:      1,
+		},
 	}
 
 	for name, tc := range tt {
@@ -173,9 +190,23 @@ func TestRegisteredRunnerID(t *testing.T) {
 					Data:       tc.secret,
 				})
 			}
+			if tc.secretErr != nil {
+				builder = builder.WithInterceptorFuncs(interceptor.Funcs{
+					Get: func(context.Context, client.WithWatch, client.ObjectKey, client.Object, ...client.GetOption) error {
+						return tc.secretErr
+					},
+				})
+			}
 
 			reconciler := &EphemeralRunnerReconciler{Client: builder.Build()}
-			assert.Equal(t, tc.want, reconciler.registeredRunnerID(t.Context(), runner, logr.Discard()))
+			runnerID, err := reconciler.registeredRunnerID(t.Context(), runner, logr.Discard())
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, runnerID)
 		})
 	}
 }

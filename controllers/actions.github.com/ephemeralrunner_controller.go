@@ -142,7 +142,12 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				// Resolved before the finalizer goes, because recovering an ID the
 				// status never recorded reads the jitconfig secret, which the
 				// cleanup below deletes.
-				runnerID = r.registeredRunnerID(ctx, &ephemeralRunner, log)
+				id, err := r.registeredRunnerID(ctx, &ephemeralRunner, log)
+				if err != nil {
+					log.Error(err, "Failed to resolve the registration of an ephemeral runner being deleted")
+					return ctrl.Result{}, err
+				}
+				runnerID = id
 			}
 
 			log.Info(
@@ -200,6 +205,18 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	if ephemeralRunner.IsDone() {
 		log.Info("Cleaning up resources after after ephemeral runner termination", "phase", ephemeralRunner.Status.Phase)
+
+		// markAsFailed and markAsOutdated release the registration as they record
+		// the terminal phase, but the patch that does it can fail after the phase
+		// is already recorded, and a retry lands here rather than back in them.
+		// Repeated here so that error costs a reconcile instead of leaving the
+		// registration held until the set gets around to deleting the runner.
+		// Does nothing once the registration is released.
+		if err := r.queueUnregistration(ctx, &ephemeralRunner, log); err != nil {
+			log.Error(err, "Failed to release the registration of a terminated ephemeral runner")
+			return ctrl.Result{}, err
+		}
+
 		err := r.cleanupResources(ctx, &ephemeralRunner, log)
 		if err != nil {
 			log.Error(err, "Failed to clean up ephemeral runner owned resources")
@@ -637,21 +654,37 @@ func (r *EphemeralRunnerReconciler) markAsFailed(ctx context.Context, ephemeralR
 	return nil
 }
 
-// queueUnregistration hands the runner's registration to the background workers
-// and drops the finalizer that exists to release it.
+// queueUnregistration releases the runner's registration with the Actions
+// service: it hands the removal to the background workers and drops the
+// finalizer that exists to make it happen.
 //
-// Dropping the finalizer is what keeps this to a single removal. Without it the
-// deletion that eventually follows would queue the same runner again, and the
-// service would be asked twice to remove a registration that is already on its
-// way out.
+// A runner that exited with code 0 deregistered itself, so it has nothing to
+// hand over and only the finalizer goes.
+//
+// Dropping the finalizer is also what keeps this to a single removal. Without
+// it the deletion that eventually follows would queue the same runner again.
+// It doubles as the guard that makes this safe to call repeatedly: a runner
+// whose registration is already released is left alone.
 func (r *EphemeralRunnerReconciler) queueUnregistration(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
-	runnerID := r.registeredRunnerID(ctx, ephemeralRunner, log)
+	if !controllerutil.ContainsFinalizer(ephemeralRunner, ephemeralRunnerActionsFinalizerName) {
+		return nil
+	}
+
+	var runnerID int
+	if runnerSelfDeregistered(ephemeralRunner) {
+		log.Info("Runner exited successfully and deregistered itself, skipping its removal from the service")
+	} else {
+		id, err := r.registeredRunnerID(ctx, ephemeralRunner, log)
+		if err != nil {
+			return err
+		}
+		runnerID = id
+	}
 
 	original := ephemeralRunner.DeepCopy()
-	if controllerutil.RemoveFinalizer(ephemeralRunner, ephemeralRunnerActionsFinalizerName) {
-		if err := r.Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
-			return fmt.Errorf("failed to remove the runner registration finalizer: %w", err)
-		}
+	controllerutil.RemoveFinalizer(ephemeralRunner, ephemeralRunnerActionsFinalizerName)
+	if err := r.Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
+		return fmt.Errorf("failed to remove the runner registration finalizer: %w", err)
 	}
 
 	// Queued only once the finalizer is actually gone, so a failed patch above
@@ -1006,29 +1039,38 @@ func ephemeralRunnerMetricLabels(ephemeralRunner *v1alpha1.EphemeralRunner) (met
 // in that window holds a registration the status cannot name, so the secret is
 // read to recover it. That read only happens for a runner that got that far and
 // no further, never on the path a finishing job takes.
-func (r *EphemeralRunnerReconciler) registeredRunnerID(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) int {
+//
+// A secret that cannot be read is an error rather than an answer. Only its
+// absence means the runner was never registered; anything else leaves the
+// question open, and answering 0 would drop the finalizer and lose the last
+// record of a registration that does exist. Retrying costs a read against the
+// local API server, which is not the call this change exists to get off the
+// deletion path.
+func (r *EphemeralRunnerReconciler) registeredRunnerID(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (int, error) {
 	if ephemeralRunner.Status.RunnerID != 0 {
-		return ephemeralRunner.Status.RunnerID
+		return ephemeralRunner.Status.RunnerID, nil
 	}
 
 	secret := new(corev1.Secret)
 	if err := r.Get(ctx, types.NamespacedName{Namespace: ephemeralRunner.Namespace, Name: ephemeralRunner.Name}, secret); err != nil {
 		if !kerrors.IsNotFound(err) {
-			log.Error(err, "Failed to read the jitconfig secret of a runner without a recorded ID; leaving the runner for the service to clean up")
+			return 0, fmt.Errorf("failed to read the jitconfig secret of a runner without a recorded ID: %w", err)
 		}
 		// Without a secret the JIT configuration was never created, so the runner
 		// was never registered in the first place.
-		return 0
+		return 0, nil
 	}
 
 	runnerID, err := strconv.Atoi(string(secret.Data["runnerId"]))
 	if err != nil {
+		// Not retried, unlike a failed read. Nothing about waiting makes the
+		// value parse, and there is no other record of the registration.
 		log.Error(err, "Jitconfig secret of a runner without a recorded ID is corrupted; leaving the runner for the service to clean up")
-		return 0
+		return 0, nil
 	}
 
 	log.Info("Recovered the runner ID from the jitconfig secret", "runnerId", runnerID)
-	return runnerID
+	return runnerID, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

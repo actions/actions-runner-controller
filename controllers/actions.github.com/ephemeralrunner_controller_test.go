@@ -1871,5 +1871,66 @@ var _ = Describe("EphemeralRunner", func() {
 
 			Expect(queue.queued()).To(BeEmpty())
 		})
+
+		It("releases the registration of a terminated runner that still holds the finalizer", func() {
+			// markAsFailed and markAsOutdated release the registration as they
+			// record the phase, but that patch can fail once the phase is already
+			// recorded, and the retry does not land back in them: the runner is
+			// terminal by then, so the reconcile takes the IsDone path instead.
+			// This is that path picking the release back up.
+			name := "terminated-runner-still-registered"
+			ephemeralRunner := newExampleRunner(name, autoscalingNS.Name, configSecret.Name)
+			ephemeralRunner.Finalizers = []string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName}
+			Expect(k8sClient.Create(ctx, ephemeralRunner)).To(Succeed())
+
+			original := ephemeralRunner.DeepCopy()
+			ephemeralRunner.Status.RunnerID = 42
+			ephemeralRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseFailed
+			Expect(k8sClient.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original))).To(Succeed())
+
+			// Not deleted. The set has not got to it yet, which is the whole
+			// reason the registration should not wait for that.
+			request := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(ephemeralRunner)}
+			_, err := controller.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+
+			queued := queue.queued()
+			Expect(queued).To(HaveLen(1))
+			Expect(queued[0].runnerID).To(Equal(42))
+
+			updated := new(v1alpha1.EphemeralRunner)
+			Expect(k8sClient.Get(ctx, request.NamespacedName, updated)).To(Succeed())
+			Expect(updated.Finalizers).NotTo(ContainElement(ephemeralRunnerActionsFinalizerName))
+
+			// Reconciling a terminal runner again must not ask the service to
+			// remove the same registration a second time.
+			_, err = controller.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(queue.queued()).To(HaveLen(1))
+		})
+
+		It("leaves a succeeded runner alone on the terminated path", func() {
+			// Same path, but the runner exited cleanly, so there is nothing to
+			// hand over and only the finalizer goes.
+			name := "terminated-succeeded-runner"
+			ephemeralRunner := newExampleRunner(name, autoscalingNS.Name, configSecret.Name)
+			ephemeralRunner.Finalizers = []string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName}
+			Expect(k8sClient.Create(ctx, ephemeralRunner)).To(Succeed())
+
+			original := ephemeralRunner.DeepCopy()
+			ephemeralRunner.Status.RunnerID = 42
+			ephemeralRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseSucceeded
+			Expect(k8sClient.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original))).To(Succeed())
+
+			request := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(ephemeralRunner)}
+			_, err := controller.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(queue.queued()).To(BeEmpty())
+
+			updated := new(v1alpha1.EphemeralRunner)
+			Expect(k8sClient.Get(ctx, request.NamespacedName, updated)).To(Succeed())
+			Expect(updated.Finalizers).NotTo(ContainElement(ephemeralRunnerActionsFinalizerName))
+		})
 	})
 })

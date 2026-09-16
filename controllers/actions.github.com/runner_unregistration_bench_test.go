@@ -49,7 +49,7 @@ func benchmarkActionsClient(latency time.Duration) multiclient.Client {
 // One of these per iteration. The fake client scans every object it holds on
 // every read, so a store built up across iterations would charge the reconcile
 // for how many runners the benchmark happens to have finalized already.
-func newFinalizeBenchmarkReconciler(b *testing.B, scheme *runtime.Scheme, queue *RunnerUnregistrationQueue, phase v1alpha1.EphemeralRunnerPhase) (*EphemeralRunnerReconciler, types.NamespacedName) {
+func newFinalizeBenchmarkReconciler(b *testing.B, scheme *runtime.Scheme, queue *RunnerUnregistrationQueue, phase v1alpha1.EphemeralRunnerPhase, n int) (*EphemeralRunnerReconciler, types.NamespacedName) {
 	b.Helper()
 
 	c := fake.NewClientBuilder().
@@ -67,7 +67,7 @@ func newFinalizeBenchmarkReconciler(b *testing.B, scheme *runtime.Scheme, queue 
 		},
 	}
 
-	return reconciler, createFinalizeBenchmarkRunner(b, c, phase)
+	return reconciler, createFinalizeBenchmarkRunner(b, c, phase, n)
 }
 
 // benchmarkScheme registers only the types the finalizer path touches. The fake
@@ -85,14 +85,20 @@ func benchmarkScheme(b *testing.B) *runtime.Scheme {
 // createFinalizeBenchmarkRunner puts a deleted EphemeralRunner, its pod and its
 // jitconfig secret in front of the reconciler, which is the state the finalizer
 // path runs against.
-func createFinalizeBenchmarkRunner(b *testing.B, c client.Client, phase v1alpha1.EphemeralRunnerPhase) types.NamespacedName {
+func createFinalizeBenchmarkRunner(b *testing.B, c client.Client, phase v1alpha1.EphemeralRunnerPhase, n int) types.NamespacedName {
 	b.Helper()
 
-	const name = "runner"
+	// A distinct runner every iteration, as in production. The API server is
+	// rebuilt each time and would not care, but the queue is not: it holds a
+	// claim on every registration handed to it, and reusing one would measure
+	// the duplicate being turned away rather than the push.
+	name := fmt.Sprintf("runner-%d", n)
 	ctx := context.Background()
 	ephemeralRunner := newExampleRunner(name, "default", "config-secret")
 	ephemeralRunner.Finalizers = []string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName}
-	ephemeralRunner.Status.RunnerID = 42
+	// Offset so the untimed warmup pass, which runs at -1, still gets a valid
+	// registration and takes the same path as the measured ones.
+	ephemeralRunner.Status.RunnerID = n + 2
 	ephemeralRunner.Status.Phase = phase
 	require.NoError(b, c.Create(ctx, ephemeralRunner))
 
@@ -168,15 +174,15 @@ func benchmarkFinalize(b *testing.B, queue *RunnerUnregistrationQueue, phase v1a
 	// One untimed pass first. Everything here is measured in fractions of a
 	// millisecond against a cold heap, and whichever variant runs first should
 	// not be charged for warming the process up.
-	warmup, key := newFinalizeBenchmarkReconciler(b, scheme, queue, phase)
+	warmup, key := newFinalizeBenchmarkReconciler(b, scheme, queue, phase, -1)
 	if _, err := warmup.Reconcile(ctx, ctrl.Request{NamespacedName: key}); err != nil {
 		b.Fatalf("reconcile: %v", err)
 	}
 
 	b.ResetTimer()
 	b.StopTimer()
-	for range b.N {
-		reconciler, key := newFinalizeBenchmarkReconciler(b, scheme, queue, phase)
+	for n := range b.N {
+		reconciler, key := newFinalizeBenchmarkReconciler(b, scheme, queue, phase, n)
 
 		b.StartTimer()
 		if before != nil {
