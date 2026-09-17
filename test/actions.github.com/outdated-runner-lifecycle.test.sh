@@ -47,9 +47,21 @@ WORKFLOW_FILE="arc-test-workflow.yaml"
 ARC_NAME="arc"
 ARC_NAMESPACE="arc-systems"
 
-# Old enough that the service rejects the runner, which makes the runner exit
-# with code 7 and the EphemeralRunner controller report the Outdated phase.
-OUTDATED_RUNNER_IMAGE="ghcr.io/actions/actions-runner:2.330.0"
+# The runner only reports that it is outdated if it is both old enough for the
+# service to reject it and new enough to know how to say so.
+#
+# Exit 7 is Constants.Runner.ReturnCode.RunnerVersionDeprecated, added to
+# actions/runner in #4285 and first shipped in v2.333.0. Older runners are
+# rejected just the same, but they report it as TerminatedError (exit 1), which
+# ARC reads as a failed runner and retries forever - the scale set churns and
+# never reaches the Outdated phase. So a *newer* image is required here, not an
+# older one, which is the opposite of the intuition.
+#
+# v2.333.0 is the floor of that range, and the floor is the durable choice: it
+# is already well past the service's deprecation cutoff, and a version that is
+# deprecated today stays deprecated. Do not "make this safer" by moving it
+# older - below v2.333.0 the runner loses the ability to report exit 7 at all.
+OUTDATED_RUNNER_IMAGE="ghcr.io/actions/actions-runner:2.333.0"
 RECOVERED_RUNNER_IMAGE="ghcr.io/actions/actions-runner:latest"
 
 # The EphemeralRunnerSet is named after the AutoscalingRunnerSet, which is named
