@@ -183,7 +183,15 @@ func (w *Scaler) patchJobStarted(ctx context.Context, jobInfo *scaleset.JobStart
 		},
 	}
 
-	// Only set Running phase if current phase is not terminal/failure and deletion is not in progress
+	// Only set Running phase if current phase is not terminal/failure and deletion is not in progress.
+	//
+	// The phase is the only field derived from the state read above, so the observed
+	// resourceVersion is attached to the patch as a precondition. Without it, a terminal
+	// phase written between the read and the patch would be silently overwritten with
+	// Running, resurrecting a runner that already finished. The job fields carry no such
+	// precondition: they are write-once metadata that the runner set only consults for
+	// runners that are neither done nor being deleted, so patching them unconditionally
+	// cannot change any scaling decision.
 	if currentRunner.DeletionTimestamp == nil &&
 		currentRunner.Status.Phase != v1alpha1.EphemeralRunnerPhaseFailed &&
 		currentRunner.Status.Phase != v1alpha1.EphemeralRunnerPhaseSucceeded &&
