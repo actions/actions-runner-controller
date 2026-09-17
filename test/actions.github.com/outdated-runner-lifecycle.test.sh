@@ -75,6 +75,13 @@ RUNNER_POD_SELECTOR="actions.github.com/scale-set-name=${SCALE_SET_NAME}"
 # parked state to settle. This covers pulling the runner image, registering and
 # being turned away, so it is generous on purpose.
 OUTDATED_TIMEOUT="${OUTDATED_TIMEOUT:-600}"
+# Releasing the runners is a convergence, not an instant. The phase flips as
+# soon as the rejection is seen, while the pods it released are still
+# terminating and their finalizers are still being processed, so there is a
+# window where the phase is Outdated and pods legitimately still exist. Wait
+# the window out before treating a live pod as a scale-up.
+RELEASE_TIMEOUT="${RELEASE_TIMEOUT:-180}"
+RELEASE_INTERVAL="${RELEASE_INTERVAL:-5}"
 # How long the parked state is sampled for before it is believed.
 STICKY_WINDOW="${STICKY_WINDOW:-60}"
 STICKY_INTERVAL="${STICKY_INTERVAL:-5}"
@@ -301,9 +308,33 @@ function assert_scale_set_outdated() {
     return 1
 }
 
+# Every runner the set released has to actually go away. None of them can be
+# executing a job here, because a runner that rejected its spec never got one,
+# so the whole set is expected to drain to zero.
+function assert_runners_released() {
+    echo "[*] Waiting up to ${RELEASE_TIMEOUT}s for the released runner pods to go away"
+
+    local deadline=$((SECONDS + RELEASE_TIMEOUT))
+    local pods=""
+    while ((SECONDS < deadline)); do
+        pods="$(runner_pod_names)"
+        if [[ -z "${pods}" ]]; then
+            echo "[*] All runner pods released"
+            return 0
+        fi
+
+        echo "    still terminating: ${pods}"
+        sleep "${RELEASE_INTERVAL}"
+    done
+
+    dump_state "Timed out waiting for runner pods to be released, still present: ${pods}"
+    return 1
+}
+
 # The Outdated phase has to hold, not just appear. minRunners is 1, so a set
 # that trusted the listener's target instead of the rejected spec would scale
-# back up inside this window.
+# back up inside this window. The runners have already drained by this point,
+# so any pod seen here is a fresh one, which is exactly the regression.
 function assert_stays_outdated() {
     echo "[*] Sampling the parked state for ${STICKY_WINDOW}s to confirm it holds"
 
@@ -325,7 +356,7 @@ function assert_stays_outdated() {
         fi
 
         if [[ -n "${pods}" ]]; then
-            dump_state "Runner pods were created while the scale set is Outdated: ${pods}"
+            dump_state "Runner pods reappeared while the scale set is Outdated: ${pods}"
             return 1
         fi
 
@@ -500,6 +531,7 @@ function main() {
     trigger_workflow || failed+=("trigger_workflow")
 
     if assert_scale_set_outdated; then
+        assert_runners_released || failed+=("assert_runners_released")
         assert_stays_outdated || failed+=("assert_stays_outdated")
         assert_no_runner_pods || failed+=("assert_no_runner_pods")
         assert_runner_set_pinned || failed+=("assert_runner_set_pinned")
