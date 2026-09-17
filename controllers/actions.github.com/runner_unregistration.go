@@ -342,6 +342,12 @@ func (q *RunnerUnregistrationQueue) next(now time.Time) (runnerUnregistration, t
 	if q.readyHead == len(q.ready) {
 		q.ready = q.ready[:0]
 		q.readyHead = 0
+	} else if q.readyHead >= len(q.ready)-q.readyHead {
+		remaining := len(q.ready) - q.readyHead
+		copy(q.ready, q.ready[q.readyHead:])
+		clear(q.ready[remaining:])
+		q.ready = q.ready[:remaining]
+		q.readyHead = 0
 	}
 
 	if q.readyHead < len(q.ready) || len(q.delayed) > 0 {

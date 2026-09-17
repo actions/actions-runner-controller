@@ -133,11 +133,13 @@ func TestRunnerSelfDeregistered(t *testing.T) {
 
 func TestRegisteredRunnerID(t *testing.T) {
 	tt := map[string]struct {
-		runnerID  int
-		secret    map[string][]byte
-		secretErr error
-		want      int
-		wantErr   bool
+		runnerID      int
+		secret        map[string][]byte
+		secretErr     error
+		actionsClient multiclient.Client
+		actionsErr    error
+		want          int
+		wantErr       bool
 	}{
 		"runner reports its own ID": {
 			runnerID: 1,
@@ -154,8 +156,34 @@ func TestRegisteredRunnerID(t *testing.T) {
 			secret: map[string][]byte{"runnerId": []byte("7")},
 			want:   7,
 		},
-		"runner without an ID or a secret was never registered": {
-			want: 0,
+		"runner deleted before its JIT secret was created": {
+			actionsClient: fake.NewClient(fake.WithGetRunnerByName(
+				&scaleset.RunnerReference{ID: 7, RunnerScaleSetID: 1},
+				nil,
+			)),
+			want: 7,
+		},
+		"runner without an ID, a secret, or a matching registration was never registered": {
+			actionsClient: fake.NewClient(fake.WithGetRunnerByName(nil, nil)),
+			want:          0,
+		},
+		"runner whose matching registration cannot be looked up": {
+			actionsClient: fake.NewClient(fake.WithGetRunnerByName(
+				nil,
+				errors.New("Actions service is unavailable"),
+			)),
+			wantErr: true,
+		},
+		"runner whose matching registration belongs to another scale set": {
+			actionsClient: fake.NewClient(fake.WithGetRunnerByName(
+				&scaleset.RunnerReference{ID: 7, RunnerScaleSetID: 2},
+				nil,
+			)),
+			wantErr: true,
+		},
+		"runner whose Actions client cannot be resolved": {
+			actionsErr: errors.New("configuration cannot be read"),
+			wantErr:    true,
 		},
 		"runner whose secret cannot name a registration": {
 			secret: map[string][]byte{"runnerId": []byte("not-a-number")},
@@ -178,6 +206,7 @@ func TestRegisteredRunnerID(t *testing.T) {
 	for name, tc := range tt {
 		t.Run(name, func(t *testing.T) {
 			runner := newUnregistrationTestRunner("test-runner", tc.runnerID, v1alpha1.EphemeralRunnerPhaseRunning)
+			runner.Spec.RunnerScaleSetID = 1
 
 			scheme := runtime.NewScheme()
 			require.NoError(t, corev1.AddToScheme(scheme))
@@ -198,7 +227,12 @@ func TestRegisteredRunnerID(t *testing.T) {
 				})
 			}
 
-			reconciler := &EphemeralRunnerReconciler{Client: builder.Build()}
+			reconciler := &EphemeralRunnerReconciler{
+				Client: builder.Build(),
+				ResourceBuilder: ResourceBuilder{
+					SecretResolver: &stubSecretResolver{client: tc.actionsClient, err: tc.actionsErr},
+				},
+			}
 			runnerID, err := reconciler.registeredRunnerID(t.Context(), runner, logr.Discard())
 			if tc.wantErr {
 				require.Error(t, err)
@@ -579,6 +613,26 @@ func TestRunnerUnregistrationQueueNext(t *testing.T) {
 		assert.Equal(t, 0, q.readyHead, "the ready list is reset once it is drained")
 		for _, request := range q.ready[:cap(q.ready)] {
 			assert.Nil(t, request.runner, "a taken request still references its runner")
+		}
+	})
+
+	t.Run("interleaved requests compact consumed ready storage", func(t *testing.T) {
+		q := NewRunnerUnregistrationQueue(log.Log, &stubSecretResolver{}, 0)
+		const depth = 8
+		for i := range depth {
+			pushTestRunner(q, newUnregistrationTestRunner(fmt.Sprintf("runner-%d", i), i+1, v1alpha1.EphemeralRunnerPhaseRunning))
+		}
+
+		for i := range 1_000 {
+			pushTestRunner(q, newUnregistrationTestRunner(fmt.Sprintf("new-runner-%d", i), depth+i+1, v1alpha1.EphemeralRunnerPhaseRunning))
+			_, _, ok := q.next(now)
+			require.True(t, ok)
+
+			q.mu.Lock()
+			assert.LessOrEqual(t, len(q.ready), 2*depth, "ready storage grew beyond the live queue depth")
+			assert.LessOrEqual(t, cap(q.ready), 3*depth, "ready backing storage grew beyond the live queue depth")
+			assert.Equal(t, depth, len(q.ready)-q.readyHead)
+			q.mu.Unlock()
 		}
 	})
 

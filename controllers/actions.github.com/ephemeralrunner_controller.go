@@ -1040,12 +1040,12 @@ func ephemeralRunnerMetricLabels(ephemeralRunner *v1alpha1.EphemeralRunner) (met
 // read to recover it. That read only happens for a runner that got that far and
 // no further, never on the path a finishing job takes.
 //
-// A secret that cannot be read is an error rather than an answer. Only its
-// absence means the runner was never registered; anything else leaves the
-// question open, and answering 0 would drop the finalizer and lose the last
-// record of a registration that does exist. Retrying costs a read against the
-// local API server, which is not the call this change exists to get off the
-// deletion path.
+// A secret that cannot be read is an error rather than an answer. If it is
+// absent, the service is checked by name before concluding the runner was
+// never registered: GenerateJitRunnerConfig can register it just before
+// createSecret persists the ID. Any other uncertainty leaves the question
+// open, because answering 0 would drop the finalizer and lose the last record
+// of a registration that does exist.
 func (r *EphemeralRunnerReconciler) registeredRunnerID(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (int, error) {
 	if ephemeralRunner.Status.RunnerID != 0 {
 		return ephemeralRunner.Status.RunnerID, nil
@@ -1056,9 +1056,31 @@ func (r *EphemeralRunnerReconciler) registeredRunnerID(ctx context.Context, ephe
 		if !kerrors.IsNotFound(err) {
 			return 0, fmt.Errorf("failed to read the jitconfig secret of a runner without a recorded ID: %w", err)
 		}
-		// Without a secret the JIT configuration was never created, so the runner
-		// was never registered in the first place.
-		return 0, nil
+
+		actionsClient, err := r.GetActionsService(ctx, ephemeralRunner)
+		if err != nil {
+			return 0, fmt.Errorf("failed to get actions client for a runner without a recorded ID or jitconfig secret: %w", err)
+		}
+
+		existingRunner, err := actionsClient.GetRunnerByName(ctx, ephemeralRunner.Name)
+		if err != nil {
+			return 0, fmt.Errorf("failed to get runner by name for a runner without a recorded ID or jitconfig secret: %w", err)
+		}
+		if existingRunner == nil {
+			log.Info("No runner registration found for a runner without a recorded ID or jitconfig secret")
+			return 0, nil
+		}
+		if existingRunner.RunnerScaleSetID != ephemeralRunner.Spec.RunnerScaleSetID {
+			return 0, fmt.Errorf(
+				"runner registration %d found by name belongs to runner scale set %d, expected %d",
+				existingRunner.ID,
+				existingRunner.RunnerScaleSetID,
+				ephemeralRunner.Spec.RunnerScaleSetID,
+			)
+		}
+
+		log.Info("Recovered the runner ID from the Actions service", "runnerId", existingRunner.ID)
+		return existingRunner.ID, nil
 	}
 
 	runnerID, err := strconv.Atoi(string(secret.Data["runnerId"]))
