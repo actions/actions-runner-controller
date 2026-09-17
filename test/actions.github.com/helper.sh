@@ -114,18 +114,7 @@ function create_cluster() {
     minikube start --driver=docker --container-runtime=docker --network=bridge --wait=all
 
     log "Verifying ns works"
-    local ns_retries=5
-    local ns_delay=3
-    local ns_ok=false
-    for (( i=1; i<=ns_retries; i++ )); do
-        if minikube ssh "nslookup github.com >/dev/null 2>&1"; then
-            ns_ok=true
-            break
-        fi
-        log "DNS check attempt ${i}/${ns_retries} failed, retrying in ${ns_delay}s..."
-        sleep "${ns_delay}"
-    done
-    if [[ "${ns_ok}" != "true" ]]; then
+    if ! retry 5 3 minikube ssh "nslookup github.com >/dev/null 2>&1"; then
         log "Nameserver configuration failed"
         exit 1
     fi
