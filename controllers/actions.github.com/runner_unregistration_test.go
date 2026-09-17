@@ -289,6 +289,57 @@ func TestRunnerUnregistrationQueuePushIsIndependentOfTheService(t *testing.T) {
 	assert.GreaterOrEqual(t, q.len(), runners-q.workers)
 }
 
+// TestRunnerUnregistrationQueueDoesNotParkBehindDelayedWork pins the property
+// that makes one shared pool safe to use for both ready and delayed requests: a
+// worker parked on a retry is parked on an upper bound, not a commitment.
+//
+// Without it a handful of runners refused with JobStillRunning would hold the
+// whole pool for the length of the retry delay, and everything pushed behind
+// them would sit in the queue waiting on work that has nothing to do with it.
+func TestRunnerUnregistrationQueueDoesNotParkBehindDelayedWork(t *testing.T) {
+	const ready = 1000
+
+	removed := make(chan int64, ready)
+	client := fake.NewClient(fake.WithRemoveRunnerFunc(func(_ context.Context, runnerID int64) error {
+		if runnerID < ready {
+			// Never succeeds, so these stay in the delayed list for the whole
+			// test and every worker sees them.
+			return fmt.Errorf("removing runner: %w", scaleset.JobStillRunningError)
+		}
+		removed <- runnerID
+		return nil
+	}))
+
+	q := newTestUnregistrationQueue(t, client)
+	// Long enough that a worker which committed to it would miss the deadline
+	// below by two orders of magnitude.
+	q.retryDelay = 30 * time.Second
+	startTestUnregistrationQueue(t, q)
+
+	// Enough refusals to park every worker twice over.
+	for i := range q.workers * 2 {
+		pushTestRunner(q, newUnregistrationTestRunner(fmt.Sprintf("still-running-%d", i), i+1, v1alpha1.EphemeralRunnerPhaseRunning))
+	}
+	require.Eventually(t, func() bool {
+		q.mu.Lock()
+		defer q.mu.Unlock()
+		return len(q.delayed) == q.workers*2
+	}, 10*time.Second, time.Millisecond, "the refused runners never settled into the delayed list")
+
+	for i := range ready {
+		runnerID := ready + i
+		pushTestRunner(q, newUnregistrationTestRunner(fmt.Sprintf("ready-%d", runnerID), runnerID, v1alpha1.EphemeralRunnerPhaseRunning))
+	}
+
+	for range ready {
+		select {
+		case <-removed:
+		case <-time.After(20 * time.Second):
+			t.Fatal("ready removals were held up behind runners waiting out a retry")
+		}
+	}
+}
+
 func TestRunnerUnregistrationQueueRetriesWhileTheJobIsStillRunning(t *testing.T) {
 	var mu sync.Mutex
 	var calls int

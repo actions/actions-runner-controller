@@ -248,6 +248,11 @@ func (q *RunnerUnregistrationQueue) work(ctx context.Context) {
 			continue
 		}
 
+		// Nothing is ready, so park until something is. wait is how long the
+		// earliest delayed request still has to go, and it is an upper bound
+		// rather than a commitment: a push cuts it short. That is what keeps a
+		// request needing no wait from queueing behind ones that do, even when
+		// every worker is parked on a retry 30 seconds out.
 		timer := time.NewTimer(wait)
 		select {
 		case <-ctx.Done():
