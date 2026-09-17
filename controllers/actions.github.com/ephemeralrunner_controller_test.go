@@ -1654,4 +1654,283 @@ var _ = Describe("EphemeralRunner", func() {
 			).Should(BeTrue(), "failed to contact server")
 		})
 	})
+
+	Describe("Unregistering the runner from the service", func() {
+		var ctx context.Context
+		var mgr ctrl.Manager
+		var autoscalingNS *corev1.Namespace
+		var configSecret *corev1.Secret
+		var controller *EphemeralRunnerReconciler
+		var queue *RunnerUnregistrationQueue
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
+			configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
+
+			// The workers are deliberately never started. These tests are about
+			// what the reconciler hands over to the queue, and leaving the pool
+			// out keeps the queue readable once the reconcile returns.
+			queue = NewRunnerUnregistrationQueue(logf.Log, nil, 0)
+
+			controller = &EphemeralRunnerReconciler{
+				Client:              k8sClient,
+				Scheme:              mgr.GetScheme(),
+				Log:                 logf.Log,
+				UnregistrationQueue: queue,
+				ResourceBuilder: ResourceBuilder{
+					ResourceCache: newTestResourceCache(),
+					SecretResolver: secretresolver.New(k8sClient, scalefake.NewMultiClient(
+						scalefake.WithClient(scalefake.NewClient()),
+					)),
+				},
+			}
+		})
+
+		// finalizeRunner drives a runner that has reached phase through deletion,
+		// and returns what the reconciler left on the unregistration queue.
+		finalizeRunner := func(name string, runnerID int, phase v1alpha1.EphemeralRunnerPhase) []runnerUnregistration {
+			ephemeralRunner := newExampleRunner(name, autoscalingNS.Name, configSecret.Name)
+			ephemeralRunner.Finalizers = []string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName}
+			Expect(k8sClient.Create(ctx, ephemeralRunner)).To(Succeed())
+
+			original := ephemeralRunner.DeepCopy()
+			ephemeralRunner.Status.RunnerID = runnerID
+			ephemeralRunner.Status.Phase = phase
+			Expect(k8sClient.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original))).To(Succeed())
+
+			Expect(k8sClient.Delete(ctx, ephemeralRunner)).To(Succeed())
+
+			request := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(ephemeralRunner)}
+			Eventually(func() bool {
+				_, err := controller.Reconcile(ctx, request)
+				Expect(err).NotTo(HaveOccurred())
+
+				err = k8sClient.Get(ctx, request.NamespacedName, new(v1alpha1.EphemeralRunner))
+				return kerrors.IsNotFound(err)
+			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeTrue(), "ephemeral runner was not finalized")
+
+			return queue.queued()
+		}
+		It("skips the service for a runner that exited successfully", func() {
+			// A runner that exits with code 0 removed its own registration on the
+			// way out, so the deletion costs no API call at all. This is the path
+			// every completed job takes.
+			Expect(finalizeRunner("succeeded-runner", 1, v1alpha1.EphemeralRunnerPhaseSucceeded)).To(BeEmpty())
+		})
+
+		It("skips the service for a runner that exited successfully before recording its ID", func() {
+			// The skip is decided on the exit alone. A succeeded runner is not
+			// chased through the jitconfig secret looking for a registration to
+			// remove, because it already removed its own.
+			name := "succeeded-unrecorded-runner"
+			Expect(k8sClient.Create(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: autoscalingNS.Name},
+				Data:       map[string][]byte{"runnerId": []byte("7"), "runnerName": []byte(name)},
+			})).To(Succeed())
+
+			Expect(finalizeRunner(name, 0, v1alpha1.EphemeralRunnerPhaseSucceeded)).To(BeEmpty())
+		})
+
+		It("skips the service for a runner that was never registered", func() {
+			Expect(finalizeRunner("unregistered-runner", 0, v1alpha1.EphemeralRunnerPhaseRunning)).To(BeEmpty())
+		})
+
+		It("queues the ID from the jitconfig secret when the status never recorded one", func() {
+			// The registration is created before the status can publish its ID, so
+			// a runner deleted in that window is registered under an ID only the
+			// secret knows.
+			name := "unrecorded-runner"
+			Expect(k8sClient.Create(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: autoscalingNS.Name},
+				Data:       map[string][]byte{"runnerId": []byte("7"), "runnerName": []byte(name)},
+			})).To(Succeed())
+
+			queued := finalizeRunner(name, 0, v1alpha1.EphemeralRunnerPhaseRunning)
+
+			Expect(queued).To(HaveLen(1))
+			Expect(queued[0].runnerID).To(Equal(7))
+		})
+
+		It("deletes the pod and the secret while the service call is still in flight", func() {
+			blocked := make(chan struct{})
+			removing := make(chan struct{})
+			defer close(blocked)
+
+			workerCtx, stopWorkers := context.WithCancel(ctx)
+			defer stopWorkers()
+
+			controller.UnregistrationQueue = NewRunnerUnregistrationQueue(
+				logf.Log,
+				secretresolver.New(k8sClient, scalefake.NewMultiClient(
+					scalefake.WithClient(scalefake.NewClient(
+						scalefake.WithRemoveRunnerFunc(func(context.Context, int64) error {
+							close(removing)
+							<-blocked
+							return nil
+						}),
+					)),
+				)),
+				0,
+			)
+			go func() {
+				defer GinkgoRecover()
+				Expect(controller.UnregistrationQueue.Start(workerCtx)).To(Succeed())
+			}()
+
+			name := "in-flight-runner"
+			ephemeralRunner := newExampleRunner(name, autoscalingNS.Name, configSecret.Name)
+			ephemeralRunner.Finalizers = []string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName}
+			Expect(k8sClient.Create(ctx, ephemeralRunner)).To(Succeed())
+
+			original := ephemeralRunner.DeepCopy()
+			ephemeralRunner.Status.RunnerID = 42
+			ephemeralRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
+			Expect(k8sClient.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original))).To(Succeed())
+
+			Expect(k8sClient.Create(ctx, &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: autoscalingNS.Name},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{Name: v1alpha1.EphemeralRunnerContainerName, Image: "ghcr.io/actions/actions-runner"}},
+				},
+			})).To(Succeed())
+			Expect(k8sClient.Create(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: autoscalingNS.Name},
+				Data:       map[string][]byte{jitTokenKey: []byte("jit")},
+			})).To(Succeed())
+
+			Expect(k8sClient.Delete(ctx, ephemeralRunner)).To(Succeed())
+
+			request := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(ephemeralRunner)}
+			Eventually(func() bool {
+				_, err := controller.Reconcile(ctx, request)
+				Expect(err).NotTo(HaveOccurred())
+
+				err = k8sClient.Get(ctx, request.NamespacedName, new(v1alpha1.EphemeralRunner))
+				return kerrors.IsNotFound(err)
+			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeTrue(), "ephemeral runner was not finalized")
+
+			// The worker picked the removal up and is sitting in the service call,
+			// which is the case the reconcile above used to be serialised behind.
+			Eventually(removing, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeClosed())
+
+			Expect(kerrors.IsNotFound(k8sClient.Get(ctx, request.NamespacedName, new(corev1.Secret)))).
+				To(BeTrue(), "jitconfig secret outlived the runner")
+
+			// envtest runs no kubelet, so nothing confirms the pod is gone and it
+			// stays behind terminating.
+			pod := new(corev1.Pod)
+			err := k8sClient.Get(ctx, request.NamespacedName, pod)
+			if !kerrors.IsNotFound(err) {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(pod.DeletionTimestamp.IsZero()).To(BeFalse(), "runner pod was not deleted")
+			}
+		})
+
+		for _, phase := range []v1alpha1.EphemeralRunnerPhase{
+			v1alpha1.EphemeralRunnerPhasePending,
+			v1alpha1.EphemeralRunnerPhaseRunning,
+			v1alpha1.EphemeralRunnerPhaseFailed,
+			v1alpha1.EphemeralRunnerPhaseOutdated,
+		} {
+			It(fmt.Sprintf("queues the removal of a runner in phase %s", phase), func() {
+				queued := finalizeRunner(fmt.Sprintf("%s-runner", strings.ToLower(string(phase))), 42, phase)
+
+				Expect(queued).To(HaveLen(1))
+				Expect(queued[0].runnerID).To(Equal(42))
+				// Queued rather than called, so the pod and the secret above are
+				// deleted without waiting on the service.
+				Expect(queued[0].readyAt.IsZero()).To(BeTrue())
+			})
+		}
+
+		It("skips the service for a runner the EphemeralRunnerSet already deregistered", func() {
+			// The set removes the registration before deleting a runner it is
+			// scaling down, and drops this finalizer to say so. Queueing here
+			// would be a second removal for a runner the service has forgotten.
+			name := "already-deregistered-runner"
+			ephemeralRunner := newExampleRunner(name, autoscalingNS.Name, configSecret.Name)
+			ephemeralRunner.Finalizers = []string{ephemeralRunnerFinalizerName}
+			Expect(k8sClient.Create(ctx, ephemeralRunner)).To(Succeed())
+
+			original := ephemeralRunner.DeepCopy()
+			ephemeralRunner.Status.RunnerID = 42
+			ephemeralRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
+			Expect(k8sClient.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original))).To(Succeed())
+
+			Expect(k8sClient.Delete(ctx, ephemeralRunner)).To(Succeed())
+
+			request := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(ephemeralRunner)}
+			Eventually(func() bool {
+				_, err := controller.Reconcile(ctx, request)
+				Expect(err).NotTo(HaveOccurred())
+
+				err = k8sClient.Get(ctx, request.NamespacedName, new(v1alpha1.EphemeralRunner))
+				return kerrors.IsNotFound(err)
+			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeTrue(), "ephemeral runner was not finalized")
+
+			Expect(queue.queued()).To(BeEmpty())
+		})
+
+		It("releases the registration of a terminated runner that still holds the finalizer", func() {
+			// markAsFailed and markAsOutdated release the registration as they
+			// record the phase, but that patch can fail once the phase is already
+			// recorded, and the retry does not land back in them: the runner is
+			// terminal by then, so the reconcile takes the IsDone path instead.
+			// This is that path picking the release back up.
+			name := "terminated-runner-still-registered"
+			ephemeralRunner := newExampleRunner(name, autoscalingNS.Name, configSecret.Name)
+			ephemeralRunner.Finalizers = []string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName}
+			Expect(k8sClient.Create(ctx, ephemeralRunner)).To(Succeed())
+
+			original := ephemeralRunner.DeepCopy()
+			ephemeralRunner.Status.RunnerID = 42
+			ephemeralRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseFailed
+			Expect(k8sClient.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original))).To(Succeed())
+
+			// Not deleted. The set has not got to it yet, which is the whole
+			// reason the registration should not wait for that.
+			request := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(ephemeralRunner)}
+			_, err := controller.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+
+			queued := queue.queued()
+			Expect(queued).To(HaveLen(1))
+			Expect(queued[0].runnerID).To(Equal(42))
+
+			updated := new(v1alpha1.EphemeralRunner)
+			Expect(k8sClient.Get(ctx, request.NamespacedName, updated)).To(Succeed())
+			Expect(updated.Finalizers).NotTo(ContainElement(ephemeralRunnerActionsFinalizerName))
+
+			// Reconciling a terminal runner again must not ask the service to
+			// remove the same registration a second time.
+			_, err = controller.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(queue.queued()).To(HaveLen(1))
+		})
+
+		It("leaves a succeeded runner alone on the terminated path", func() {
+			// Same path, but the runner exited cleanly, so there is nothing to
+			// hand over and only the finalizer goes.
+			name := "terminated-succeeded-runner"
+			ephemeralRunner := newExampleRunner(name, autoscalingNS.Name, configSecret.Name)
+			ephemeralRunner.Finalizers = []string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName}
+			Expect(k8sClient.Create(ctx, ephemeralRunner)).To(Succeed())
+
+			original := ephemeralRunner.DeepCopy()
+			ephemeralRunner.Status.RunnerID = 42
+			ephemeralRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseSucceeded
+			Expect(k8sClient.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original))).To(Succeed())
+
+			request := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(ephemeralRunner)}
+			_, err := controller.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(queue.queued()).To(BeEmpty())
+
+			updated := new(v1alpha1.EphemeralRunner)
+			Expect(k8sClient.Get(ctx, request.NamespacedName, updated)).To(Succeed())
+			Expect(updated.Finalizers).NotTo(ContainElement(ephemeralRunnerActionsFinalizerName))
+		})
+	})
 })

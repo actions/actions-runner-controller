@@ -991,12 +991,33 @@ func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Co
 
 func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunnerWithActionsClient(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, actionsClient multiclient.Client, log logr.Logger) (bool, error) {
 	if err := actionsClient.RemoveRunner(ctx, int64(ephemeralRunner.Status.RunnerID)); err != nil {
-		if errors.Is(err, scaleset.JobStillRunningError) {
+		switch {
+		case errors.Is(err, scaleset.JobStillRunningError):
 			log.Info("Runner is still running a job, skipping deletion", "name", ephemeralRunner.Name, "runnerId", ephemeralRunner.Status.RunnerID)
 			return false, nil
-		}
 
-		return false, err
+		case errors.Is(err, scaleset.RunnerNotFoundError), errors.Is(err, scaleset.NotFoundError):
+			// The registration is gone, which is all this call wanted. Reached by
+			// retrying after the removal landed but the deletion below did not,
+			// and treating it as a failure would leave the runner stuck behind a
+			// call that can never succeed again.
+			log.Info("Runner is already removed from the service", "name", ephemeralRunner.Name, "runnerId", ephemeralRunner.Status.RunnerID)
+
+		default:
+			return false, err
+		}
+	}
+
+	// The registration is gone, so drop the finalizer that exists to remove it.
+	// Otherwise deleting the runner below queues a second removal for a runner
+	// the service has already forgotten, which is one wasted API call for every
+	// runner a scale down takes.
+	if controllerutil.ContainsFinalizer(ephemeralRunner, ephemeralRunnerActionsFinalizerName) {
+		original := ephemeralRunner.DeepCopy()
+		controllerutil.RemoveFinalizer(ephemeralRunner, ephemeralRunnerActionsFinalizerName)
+		if err := r.Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil && !kerrors.IsNotFound(err) {
+			return false, fmt.Errorf("failed to remove the runner registration finalizer: %w", err)
+		}
 	}
 
 	log.Info("Deleting ephemeral runner after removing from the service", "name", ephemeralRunner.Name, "runnerId", ephemeralRunner.Status.RunnerID)
