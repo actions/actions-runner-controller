@@ -23,6 +23,11 @@
               "description": "Burst of queries the listener may issue to the Kubernetes API server.",
               "type": "integer",
               "minimum": 1
+            },
+            "workers": {
+              "description": "Number of job started and job completed events the listener handles concurrently within a single scale set message.",
+              "type": "integer",
+              "minimum": 1
             }
           }
         }

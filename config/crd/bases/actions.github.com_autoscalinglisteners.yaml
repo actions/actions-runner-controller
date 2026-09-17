@@ -140,6 +140,13 @@ spec:
                       qps:
                         minimum: 1
                         type: integer
+                      workers:
+                        description: |-
+                          Workers is the number of job started and job completed events the scaler
+                          handles concurrently within a single scale set message. The worker that
+                          scales the EphemeralRunnerSet runs on top of these.
+                        minimum: 1
+                        type: integer
                     type: object
                 type: object
               maxRunners:

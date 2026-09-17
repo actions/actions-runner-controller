@@ -26,6 +26,8 @@ github.com/actions-runner-controller/httpcache v0.2.0 h1:hCNvYuVPJ2xxYBymqBvH0hS
 github.com/actions-runner-controller/httpcache v0.2.0/go.mod h1:JLu9/2M/btPz1Zu/vTZ71XzukQHn2YeISPmJoM5exBI=
 github.com/actions/scaleset v0.4.1-0.20260706130337-9b2803251ede h1:75hCLFGd2GLYrFry4TpbBcEbIYZQ6NCHIl3Kd34IyOU=
 github.com/actions/scaleset v0.4.1-0.20260706130337-9b2803251ede/go.mod h1:+Ylz7IYPnOTJd8dZmMziJ7J9HEfZhdoH7iliEWSb/Ms=
+github.com/actions/scaleset v0.4.1-0.20260916214619-e6daac702355 h1:+DtFsbhUIxDt1vJL+xMPCPTZzE7nw+K4KTqqwUOFqIc=
+github.com/actions/scaleset v0.4.1-0.20260916214619-e6daac702355/go.mod h1:KOtL2Kh81PYbw/3/UYYU3BfCfVYx+/Q4vSJLK4Vu1aY=
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 h1:0CwZNZbxp69SHPdPJAN/hZIm0C4OItdklCFmMRWYpio=
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5/go.mod h1:wHh0iHkYZB8zMSxRWpUBQtwG5a7fFgvEO+odwuTv2gs=
 github.com/aws/aws-sdk-go-v2 v1.41.6 h1:1AX0AthnBQzMx1vbmir3Y4WsnJgiydmnJjiLu+LvXOg=

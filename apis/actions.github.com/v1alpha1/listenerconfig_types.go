@@ -23,4 +23,11 @@ type ScalerConfig struct {
 	// +optional
 	// +kubebuilder:validation:Minimum:=1
 	Burst *int `json:"burst,omitempty"`
+
+	// Workers is the number of job started and job completed events the scaler
+	// handles concurrently within a single scale set message. The worker that
+	// scales the EphemeralRunnerSet runs on top of these.
+	// +optional
+	// +kubebuilder:validation:Minimum:=1
+	Workers *int `json:"workers,omitempty"`
 }

@@ -151,6 +151,10 @@ listenerConfig:
   scaler:
     qps: 50
     burst: 100
+    ## Number of job started and job completed events handled concurrently
+    ## within a single scale set message. The worker patching the
+    ## EphemeralRunnerSet with the desired runner count runs on top of these.
+    workers: 10
 
 ## listenerMetrics are configurable metrics applied to the listener.
 ## In order to avoid helm merging these fields, we left the metrics commented out.
