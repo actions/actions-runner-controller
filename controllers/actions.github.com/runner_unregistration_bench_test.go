@@ -49,7 +49,7 @@ func benchmarkActionsClient(latency time.Duration) multiclient.Client {
 // One of these per iteration. The fake client scans every object it holds on
 // every read, so a store built up across iterations would charge the reconcile
 // for how many runners the benchmark happens to have finalized already.
-func newFinalizeBenchmarkReconciler(b *testing.B, scheme *runtime.Scheme, queue *RunnerUnregistrationQueue, phase v1alpha1.EphemeralRunnerPhase, n int) (*EphemeralRunnerReconciler, types.NamespacedName) {
+func newFinalizeBenchmarkReconciler(b *testing.B, scheme *runtime.Scheme, queue *RunnerUnregistrationQueue, phase v1alpha1.EphemeralRunnerPhase, n int) (*EphemeralRunnerReconciler, types.NamespacedName, int) {
 	b.Helper()
 
 	c := fake.NewClientBuilder().
@@ -67,7 +67,8 @@ func newFinalizeBenchmarkReconciler(b *testing.B, scheme *runtime.Scheme, queue 
 		},
 	}
 
-	return reconciler, createFinalizeBenchmarkRunner(b, c, phase, n)
+	key, runnerID := createFinalizeBenchmarkRunner(b, c, phase, n)
+	return reconciler, key, runnerID
 }
 
 // benchmarkScheme registers only the types the finalizer path touches. The fake
@@ -85,7 +86,7 @@ func benchmarkScheme(b *testing.B) *runtime.Scheme {
 // createFinalizeBenchmarkRunner puts a deleted EphemeralRunner, its pod and its
 // jitconfig secret in front of the reconciler, which is the state the finalizer
 // path runs against.
-func createFinalizeBenchmarkRunner(b *testing.B, c client.Client, phase v1alpha1.EphemeralRunnerPhase, n int) types.NamespacedName {
+func createFinalizeBenchmarkRunner(b *testing.B, c client.Client, phase v1alpha1.EphemeralRunnerPhase, n int) (types.NamespacedName, int) {
 	b.Helper()
 
 	// A distinct runner every iteration, as in production. The API server is
@@ -115,7 +116,7 @@ func createFinalizeBenchmarkRunner(b *testing.B, c client.Client, phase v1alpha1
 
 	require.NoError(b, c.Delete(ctx, ephemeralRunner))
 
-	return types.NamespacedName{Namespace: "default", Name: name}
+	return types.NamespacedName{Namespace: "default", Name: name}, ephemeralRunner.Status.RunnerID
 }
 
 // BenchmarkEphemeralRunnerFinalize measures one pass of the finalizer path: the
@@ -155,26 +156,21 @@ func BenchmarkEphemeralRunnerFinalize(b *testing.B) {
 			// The removal ran before any of the local cleanup, so the reconcile
 			// carried it. Issued here in front of a reconcile that queues nothing,
 			// which is the same two pieces of work in the same order.
-			benchmarkFinalize(b, nil, v1alpha1.EphemeralRunnerPhaseRunning, func(ctx context.Context, runner *v1alpha1.EphemeralRunner) {
-				_ = actionsClient.RemoveRunner(ctx, int64(runner.Status.RunnerID))
+			benchmarkFinalize(b, nil, v1alpha1.EphemeralRunnerPhaseRunning, func(ctx context.Context, runnerID int) {
+				_ = actionsClient.RemoveRunner(ctx, int64(runnerID))
 			})
 		})
 	}
 }
 
-func benchmarkFinalize(b *testing.B, queue *RunnerUnregistrationQueue, phase v1alpha1.EphemeralRunnerPhase, before func(context.Context, *v1alpha1.EphemeralRunner)) {
+func benchmarkFinalize(b *testing.B, queue *RunnerUnregistrationQueue, phase v1alpha1.EphemeralRunnerPhase, before func(context.Context, int)) {
 	scheme := benchmarkScheme(b)
 	ctx := context.Background()
-
-	runner := &v1alpha1.EphemeralRunner{
-		Spec:   v1alpha1.EphemeralRunnerSpec{GitHubConfigURL: "https://github.com/owner/repo"},
-		Status: v1alpha1.EphemeralRunnerStatus{RunnerID: 42},
-	}
 
 	// One untimed pass first. Everything here is measured in fractions of a
 	// millisecond against a cold heap, and whichever variant runs first should
 	// not be charged for warming the process up.
-	warmup, key := newFinalizeBenchmarkReconciler(b, scheme, queue, phase, -1)
+	warmup, key, _ := newFinalizeBenchmarkReconciler(b, scheme, queue, phase, -1)
 	if _, err := warmup.Reconcile(ctx, ctrl.Request{NamespacedName: key}); err != nil {
 		b.Fatalf("reconcile: %v", err)
 	}
@@ -182,11 +178,11 @@ func benchmarkFinalize(b *testing.B, queue *RunnerUnregistrationQueue, phase v1a
 	b.ResetTimer()
 	b.StopTimer()
 	for n := range b.N {
-		reconciler, key := newFinalizeBenchmarkReconciler(b, scheme, queue, phase, n)
+		reconciler, key, runnerID := newFinalizeBenchmarkReconciler(b, scheme, queue, phase, n)
 
 		b.StartTimer()
 		if before != nil {
-			before(ctx, runner)
+			before(ctx, runnerID)
 		}
 		_, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: key})
 		b.StopTimer()

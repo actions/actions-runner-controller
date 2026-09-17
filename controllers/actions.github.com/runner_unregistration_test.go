@@ -22,6 +22,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -241,6 +242,56 @@ func TestRegisteredRunnerID(t *testing.T) {
 
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, runnerID)
+		})
+	}
+}
+
+func TestQueueUnregistration(t *testing.T) {
+	tt := map[string]struct {
+		patchErr   error
+		wantErr    bool
+		wantQueued bool
+	}{
+		"finalizer was removed with the runner": {
+			patchErr:   apierrors.NewNotFound(schema.GroupResource{Resource: "ephemeralrunners"}, "test-runner"),
+			wantQueued: true,
+		},
+		"finalizer patch failed": {
+			patchErr: errors.New("etcd is unhappy"),
+			wantErr:  true,
+		},
+	}
+
+	for name, tc := range tt {
+		t.Run(name, func(t *testing.T) {
+			runner := newUnregistrationTestRunner("test-runner", 42, v1alpha1.EphemeralRunnerPhaseRunning)
+			runner.Finalizers = []string{ephemeralRunnerActionsFinalizerName}
+			q := NewRunnerUnregistrationQueue(logr.Discard(), nil, 0)
+
+			c := ctrlfake.NewClientBuilder().
+				WithScheme(runtime.NewScheme()).
+				WithInterceptorFuncs(interceptor.Funcs{
+					Patch: func(context.Context, client.WithWatch, client.Object, client.Patch, ...client.PatchOption) error {
+						return tc.patchErr
+					},
+				}).
+				Build()
+			reconciler := &EphemeralRunnerReconciler{Client: c, UnregistrationQueue: q}
+
+			err := reconciler.queueUnregistration(t.Context(), runner, logr.Discard())
+			if tc.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+
+			queued := q.queued()
+			if tc.wantQueued {
+				require.Len(t, queued, 1)
+				assert.Equal(t, 42, queued[0].runnerID)
+			} else {
+				assert.Empty(t, queued)
+			}
 		})
 	}
 }

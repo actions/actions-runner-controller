@@ -683,12 +683,13 @@ func (r *EphemeralRunnerReconciler) queueUnregistration(ctx context.Context, eph
 
 	original := ephemeralRunner.DeepCopy()
 	controllerutil.RemoveFinalizer(ephemeralRunner, ephemeralRunnerActionsFinalizerName)
-	if err := r.Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
+	if err := r.Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil && !kerrors.IsNotFound(err) {
 		return fmt.Errorf("failed to remove the runner registration finalizer: %w", err)
 	}
 
-	// Queued only once the finalizer is actually gone, so a failed patch above
-	// leaves the removal to the retry rather than queueing it twice.
+	// Queued only once the finalizer is gone. A NotFound patch means another
+	// actor already removed it and the runner finished deletion, while any other
+	// failed patch leaves the removal to the retry rather than queueing it twice.
 	if runnerID != 0 {
 		r.UnregistrationQueue.Push(ephemeralRunner, runnerID)
 	}
