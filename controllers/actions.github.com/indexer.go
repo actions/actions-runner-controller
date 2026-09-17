@@ -41,6 +41,15 @@ func SetupIndexers(mgr ctrl.Manager) error {
 
 	if err := mgr.GetFieldIndexer().IndexField(
 		context.Background(),
+		&v1alpha1.AutoscalingListener{},
+		autoscalingRunnerSetOwnerKey,
+		autoscalingListenerRunnerSetIndexer,
+	); err != nil {
+		return err
+	}
+
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(),
 		&v1alpha1.EphemeralRunner{},
 		resourceOwnerKey,
 		newGroupVersionOwnerKindIndexer("EphemeralRunnerSet"),
@@ -49,6 +58,28 @@ func SetupIndexers(mgr ctrl.Manager) error {
 	}
 
 	return nil
+}
+
+// autoscalingListenerRunnerSetIndexer indexes a listener by the scale set its
+// spec points back at, so the listeners belonging to a scale set can be found
+// without deriving their names. The derived name is a hash over the runner group
+// and the config URL, both of which a user may edit, so a name is only ever the
+// right lookup for the listener a scale set wants *now* - never for the ones it
+// already has.
+func autoscalingListenerRunnerSetIndexer(o client.Object) []string {
+	listener, ok := o.(*v1alpha1.AutoscalingListener)
+	if !ok {
+		return nil
+	}
+
+	return []string{autoscalingRunnerSetOwnerIndexValue(
+		listener.Spec.AutoscalingRunnerSetNamespace,
+		listener.Spec.AutoscalingRunnerSetName,
+	)}
+}
+
+func autoscalingRunnerSetOwnerIndexValue(namespace, name string) string {
+	return namespace + "/" + name
 }
 
 func newGroupVersionOwnerKindIndexer(ownerKind string, otherOwnerKinds ...string) client.IndexerFunc {

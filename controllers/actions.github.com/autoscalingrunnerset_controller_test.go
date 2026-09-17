@@ -77,6 +77,12 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			Log:                                logf.Log,
 			ControllerNamespace:                autoscalingNS.Name,
 			DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
+			// Configured rather than left empty so the suite exercises the
+			// listener spec the controller actually builds. These come from
+			// controller configuration, so a path that derives a desired
+			// listener without them reads its own listener as drifted and
+			// rebuilds it on every reconcile.
+			DefaultRunnerScaleSetListenerImagePullSecrets: []string{"dockerhub"},
 			ResourceBuilder: ResourceBuilder{
 				ResourceCache: resourceCache,
 				SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient(
@@ -1169,6 +1175,35 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
 			).Should(BeEquivalentTo("testgroup2"), "AutoScalingRunnerSet should have the runner group in its annotation")
+
+			// The listener name is a hash over the runner group, so renaming the
+			// group renames the listener. Every lookup is by that derived name,
+			// so the listener created under the previous name is invisible to
+			// the controller from here on: nothing deletes it while the scale
+			// set lives, and it keeps acquiring jobs alongside its replacement.
+			Eventually(
+				func(g Gomega) {
+					var listeners v1alpha1.AutoscalingListenerList
+					g.Expect(k8sClient.List(ctx, &listeners, client.InNamespace(autoscalingRunnerSet.Namespace))).To(Succeed())
+
+					var live []string
+					for _, listener := range listeners.Items {
+						if listener.Spec.AutoscalingRunnerSetName != autoscalingRunnerSet.Name ||
+							listener.Spec.AutoscalingRunnerSetNamespace != autoscalingRunnerSet.Namespace ||
+							!listener.DeletionTimestamp.IsZero() {
+							continue
+						}
+						live = append(live, listener.Name)
+					}
+
+					g.Expect(live).To(
+						ConsistOf(scaleSetListenerName(updated)),
+						"a renamed scale set should be left with exactly one listener, under the current name",
+					)
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
 		})
 	})
 
@@ -2879,8 +2914,16 @@ var _ = Describe("Test AutoscalingRunnerSet outdated lifecycle", Ordered, func()
 			return client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}
 		}
 
+		// The listener name is derived from the scale set as it stands now, not
+		// as the test declared it: the name is a hash over the runner group, so
+		// an edit to the group renames the listener the scale set should have.
 		listenerKey := func() client.ObjectKey {
-			return client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}
+			GinkgoHelper()
+
+			current := new(v1alpha1.AutoscalingRunnerSet)
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed(), "failed to get the autoscaling runner set")
+
+			return client.ObjectKey{Name: scaleSetListenerName(current), Namespace: autoscalingRunnerSet.Namespace}
 		}
 
 		getEphemeralRunnerSet := func() *v1alpha1.EphemeralRunnerSet {
@@ -2927,12 +2970,14 @@ var _ = Describe("Test AutoscalingRunnerSet outdated lifecycle", Ordered, func()
 				Should(BeEquivalentTo(v1alpha1.AutoscalingRunnerSetPhaseOutdated), "the autoscaling runner set should report the outdated phase")
 
 			Eventually(
-				func() bool {
-					return errors.IsNotFound(k8sClient.Get(ctx, listenerKey(), new(v1alpha1.AutoscalingListener)))
+				func(g Gomega) {
+					listener := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, listenerKey(), listener)).To(Succeed(), "the listener should be kept as the record of a scale set that can come back")
+					g.Expect(listener.Spec.Phase).To(Equal(v1alpha1.AutoscalingListenerPhaseStopped), "the listener should be stopped so no further jobs are acquired")
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
-			).Should(BeTrue(), "the listener should be removed so no further jobs are acquired")
+			).Should(Succeed())
 
 			// The set is kept, not deleted: deleting it would make the controller
 			// rebuild it from the same rejected spec on the very next reconcile.
@@ -2960,6 +3005,33 @@ var _ = Describe("Test AutoscalingRunnerSet outdated lifecycle", Ordered, func()
 			return runnerSet.Spec.ActionableRevision
 		}
 
+		// expectStaysOutdated asserts that an edit did not resurrect the scale
+		// set. Consistently rather than Eventually: the failure being guarded
+		// against is a spurious transition out of the outdated phase, which a
+		// single sample taken at the wrong moment would miss entirely.
+		expectStaysOutdated := func(outdatedRevision int64) {
+			GinkgoHelper()
+
+			Consistently(
+				func(g Gomega) {
+					phase, err := autoscalingRunnerSetPhase()
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(phase).To(BeEquivalentTo(v1alpha1.AutoscalingRunnerSetPhaseOutdated), "an edit outside the runner spec must not move the scale set out of the outdated phase")
+
+					listener := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, listenerKey(), listener)).To(Succeed(), "the listener must be kept, not deleted")
+					g.Expect(listener.Spec.Phase).To(Equal(v1alpha1.AutoscalingListenerPhaseStopped), "the listener must stay stopped so no further jobs are acquired")
+
+					current := getEphemeralRunnerSet()
+					g.Expect(current.Spec.ActionableRevision).To(Equal(outdatedRevision), "the rejected runner spec must not be retried")
+					g.Expect(current.Spec.Replicas).To(BeZero())
+					g.Expect(current.Spec.PatchID).To(BeZero())
+				},
+				3*time.Second,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+		}
+
 		expectRecovered := func(outdatedRevision int64) {
 			GinkgoHelper()
 
@@ -2976,12 +3048,14 @@ var _ = Describe("Test AutoscalingRunnerSet outdated lifecycle", Ordered, func()
 			).Should(BeNumerically(">", outdatedRevision), "the runner spec revision should advance so the runner set stops judging itself by the rejected runners")
 
 			Eventually(
-				func() error {
-					return k8sClient.Get(ctx, listenerKey(), new(v1alpha1.AutoscalingListener))
+				func(g Gomega) {
+					listener := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, listenerKey(), listener)).To(Succeed())
+					g.Expect(listener.Spec.Phase.Stopped()).To(BeFalse(), "the listener should be started again so the scale set can acquire jobs")
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
-			).Should(Succeed(), "the listener should be created again so the scale set can acquire jobs")
+			).Should(Succeed())
 
 			Eventually(autoscalingRunnerSetPhase, autoscalingRunnerSetTestTimeout, autoscalingRunnerSetTestInterval).
 				Should(BeEquivalentTo(v1alpha1.AutoscalingRunnerSetPhaseRunning), "the autoscaling runner set should leave the outdated phase")
@@ -3073,12 +3147,98 @@ var _ = Describe("Test AutoscalingRunnerSet outdated lifecycle", Ordered, func()
 			expectRecovered(outdatedRevision)
 		})
 
-		// The runner spec is not the only reason a scale set can be stuck: the
-		// runners may have been rejected because of the scale set registration
-		// rather than the pod template. Any spec edit therefore has to be enough
-		// to retry, otherwise the scale set can only be recovered by touching a
-		// field that has nothing to do with the failure.
-		It("recovers when a field outside the runner spec is updated", func() {
+		// While a scale set is parked no listener spec drift is propagated, but
+		// edits outside the runner spec are still accepted and recorded. The
+		// listener that comes back on recovery therefore has to carry them.
+		//
+		// This covers the end state only. The transient it guards against - a
+		// listener started from the spec it was parked with, running under stale
+		// configuration until the next reconcile replaces it - is too short to
+		// observe here, and is covered deterministically by
+		// TestAutoscalingRunnerSetReplacesAStoppedListenerWithADriftedSpec.
+		It("propagates an edit made while outdated and keeps it on recovery", func() {
+			markRunnersOutdated()
+			outdatedRevision := expectSwitchedOff()
+
+			updated := new(v1alpha1.AutoscalingRunnerSet)
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), updated)).To(Succeed())
+			original := updated.DeepCopy()
+			max := 20
+			updated.Spec.MaxRunners = &max
+			Expect(k8sClient.Patch(ctx, updated, client.MergeFrom(original))).To(Succeed(), "failed to update the replica bounds")
+
+			expectStaysOutdated(outdatedRevision)
+
+			// Switched off is not frozen: the edit lands on the listener while it
+			// is still stopped, rather than waiting for the scale set to recover.
+			Eventually(
+				func(g Gomega) {
+					listener := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, listenerKey(), listener)).To(Succeed())
+					g.Expect(listener.Spec.Phase).To(Equal(v1alpha1.AutoscalingListenerPhaseStopped), "the listener must stay switched off")
+					g.Expect(listener.Spec.MaxRunners).To(Equal(max), "the edit should reach the listener while it is stopped")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+
+			updated = new(v1alpha1.AutoscalingRunnerSet)
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), updated)).To(Succeed())
+			original = updated.DeepCopy()
+			updated.Spec.Template.Spec.Containers[0].Image = "ghcr.io/actions/runner:fixed"
+			Expect(k8sClient.Patch(ctx, updated, client.MergeFrom(original))).To(Succeed(), "failed to correct the runner spec")
+
+			expectRecovered(outdatedRevision)
+
+			Eventually(
+				func(g Gomega) {
+					listener := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, listenerKey(), listener)).To(Succeed())
+					g.Expect(listener.Spec.Phase.Stopped()).To(BeFalse())
+					g.Expect(listener.Spec.MaxRunners).To(Equal(max), "the edit taken while the scale set was parked should reach the listener on recovery")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+		})
+
+		// The runner spec is not the only part of the EphemeralRunnerSet spec the
+		// AutoscalingRunnerSet owns: the metadata stamped onto the runners it
+		// creates is published the same way and changes what the next runner
+		// looks like. It therefore recovers the scale set too.
+		It("recovers when the runner metadata is corrected", func() {
+			markRunnersOutdated()
+			outdatedRevision := expectSwitchedOff()
+
+			updated := new(v1alpha1.AutoscalingRunnerSet)
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), updated)).To(Succeed())
+			original := updated.DeepCopy()
+			updated.Spec.EphemeralRunnerMetadata = &v1alpha1.ResourceMeta{
+				Labels: map[string]string{"arc.test/runner": "corrected"},
+			}
+			Expect(k8sClient.Patch(ctx, updated, client.MergeFrom(original))).To(Succeed(), "failed to correct the runner metadata")
+
+			expectRecovered(outdatedRevision)
+
+			Eventually(
+				func() map[string]string {
+					current := getEphemeralRunnerSet()
+					if current.Spec.EphemeralRunnerMetadata == nil {
+						return nil
+					}
+					return current.Spec.EphemeralRunnerMetadata.Labels
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(HaveKeyWithValue("arc.test/runner", "corrected"), "the corrected runner metadata should be published to the set")
+		})
+
+		// The outdated phase is sticky. Only a change to what the runners would
+		// be handed next - the runner spec or the metadata stamped onto them -
+		// is evidence that retrying is worth anything. Any other edit would
+		// otherwise switch the listener back on and start acquiring jobs against
+		// runners that will reject the spec exactly as before.
+		It("stays outdated when the replica bounds are updated", func() {
 			markRunnersOutdated()
 			outdatedRevision := expectSwitchedOff()
 
@@ -3089,7 +3249,33 @@ var _ = Describe("Test AutoscalingRunnerSet outdated lifecycle", Ordered, func()
 			updated.Spec.MaxRunners = &max
 			Expect(k8sClient.Patch(ctx, updated, client.MergeFrom(original))).To(Succeed(), "failed to update the autoscaling runner set")
 
-			expectRecovered(outdatedRevision)
+			expectStaysOutdated(outdatedRevision)
+		})
+
+		It("stays outdated when the runner group is updated", func() {
+			markRunnersOutdated()
+			outdatedRevision := expectSwitchedOff()
+
+			updated := new(v1alpha1.AutoscalingRunnerSet)
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), updated)).To(Succeed())
+			original := updated.DeepCopy()
+			updated.Spec.RunnerGroup = "othergroup"
+			Expect(k8sClient.Patch(ctx, updated, client.MergeFrom(original))).To(Succeed(), "failed to update the runner group")
+
+			expectStaysOutdated(outdatedRevision)
+		})
+
+		It("stays outdated when the runner scale set name is updated", func() {
+			markRunnersOutdated()
+			outdatedRevision := expectSwitchedOff()
+
+			updated := new(v1alpha1.AutoscalingRunnerSet)
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), updated)).To(Succeed())
+			original := updated.DeepCopy()
+			updated.Spec.RunnerScaleSetName = "renamed-scale-set"
+			Expect(k8sClient.Patch(ctx, updated, client.MergeFrom(original))).To(Succeed(), "failed to update the runner scale set name")
+
+			expectStaysOutdated(outdatedRevision)
 		})
 
 		It("does not retry an outdated runner spec during a metadata-only listener rebuild", func() {

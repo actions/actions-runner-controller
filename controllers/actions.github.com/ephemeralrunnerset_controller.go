@@ -229,6 +229,43 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, r.updateStatus(ctx, &ephemeralRunnerSet, ephemeralRunnersByState, log)
 	}
 
+	// A runner that rejected the spec it was given settles the question the
+	// target count was asking. Spec.Replicas is what the listener wanted,
+	// computed from queued jobs before anything was known to be wrong with the
+	// spec those runners would be built from; acting on it now would create
+	// runners that reject it in exactly the same way. Release what can be
+	// released and record the rejection, rather than falling through to the
+	// scaling block below.
+	//
+	// The recorded phase is not enough to enforce this on its own. It only turns
+	// Outdated at the end of this reconcile, so the pass that discovers the
+	// rejection would otherwise scale up against a spec already known to be bad,
+	// and only the pass after it would take the early return above.
+	//
+	// The phase is recorded before the runners are released, not after. The
+	// cleanup deletes the outdated runners themselves, so a failure part way
+	// through would otherwise leave a set with no recorded rejection and fewer
+	// runners to rediscover it from. With the phase written first, the early
+	// return above picks the work up instead.
+	if len(ephemeralRunnersByState.outdated) > 0 {
+		log.Info(
+			"Ephemeral runners rejected the runner spec. Releasing runners instead of applying the target count",
+			"outdated", len(ephemeralRunnersByState.outdated),
+			"desired", ephemeralRunnerSet.Spec.Replicas,
+		)
+		if err := r.updateStatus(ctx, &ephemeralRunnerSet, ephemeralRunnersByState, log); err != nil {
+			log.Error(err, "Failed to record the outdated phase")
+			return ctrl.Result{}, err
+		}
+
+		if _, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log); err != nil {
+			log.Error(err, "Failed to clean up EphemeralRunners")
+			return ctrl.Result{}, err
+		}
+
+		return ctrl.Result{}, nil
+	}
+
 	total := ephemeralRunnersByState.scaleTotal()
 	if ephemeralRunnerSet.Spec.PatchID == 0 || ephemeralRunnerSet.Spec.PatchID != ephemeralRunnersByState.latestPatchID {
 		// Spec.Replicas is the count the listener asked for when it published

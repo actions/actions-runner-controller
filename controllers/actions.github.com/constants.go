@@ -51,9 +51,11 @@ const (
 	AnnotationKeyGitHubRunnerScaleSetName = "actions.github.com/runner-scale-set-name"
 	AnnotationKeyPatchID                  = "actions.github.com/patch-id"
 	// AnnotationKeyAutoscalingRunnerSetGeneration records the AutoscalingRunnerSet
-	// generation that published the current EphemeralRunnerSet actionable
-	// revision. It prevents a rejected revision from being retried more than once
-	// for the same AutoscalingRunnerSet spec update.
+	// generation the current EphemeralRunnerSet spec was derived from. It is
+	// informational: it makes it possible to tell, by looking at the set alone,
+	// how far behind the AutoscalingRunnerSet it is. Nothing keys behaviour off
+	// it - in particular, recovery from the outdated phase is decided by
+	// comparing the runner spec itself, not generations.
 	AnnotationKeyAutoscalingRunnerSetGeneration = "actions.github.com/autoscaling-runner-set-generation"
 	// AnnotationKeyActionableRevision records the EphemeralRunnerSet
 	// Spec.ActionableRevision that was in effect when the runner was created. It
@@ -95,6 +97,12 @@ const DefaultScaleSetListenerLogFormat = string(logging.LogFormatText)
 
 // ownerKey is field selector matching the owner name of a particular resource
 const resourceOwnerKey = ".metadata.controller"
+
+// autoscalingRunnerSetOwnerKey indexes an AutoscalingListener by the scale set
+// it names as its own. Listeners live in the controller namespace while the
+// scale set lives in its own, so they cannot carry an owner reference across
+// that boundary and the resourceOwnerKey index does not apply to them.
+const autoscalingRunnerSetOwnerKey = ".spec.autoscalingRunnerSet"
 
 // EphemeralRunner pod creation failure reasons
 const (

@@ -646,6 +646,94 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 			).Should(BeEquivalentTo(oldSecretUID), "Config secret should persist (not be re-created)")
 		})
 	})
+
+	Context("When the listener is stopped", func() {
+		listenerKey := func() client.ObjectKey {
+			return client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}
+		}
+
+		// The child resources are the listener's whole footprint: the pod that
+		// acquires jobs, the config secret holding its credentials, and the RBAC
+		// it runs under.
+		//
+		// A pod counts as removed once its deletion has been requested. envtest
+		// runs no kubelet, so nothing confirms the delete and the pod lingers
+		// Terminating for its whole 60s grace period; the controller has already
+		// done everything it can at that point.
+		expectChildResources := func(exist bool) {
+			GinkgoHelper()
+
+			Eventually(
+				func(g Gomega) {
+					pod := new(corev1.Pod)
+					err := k8sClient.Get(ctx, listenerKey(), pod)
+					if exist {
+						g.Expect(err).NotTo(HaveOccurred(), "pod should exist")
+						g.Expect(pod.DeletionTimestamp).To(BeNil(), "pod should not be terminating")
+					} else {
+						g.Expect(kerrors.IsNotFound(err) || (err == nil && pod.DeletionTimestamp != nil)).
+							To(BeTrue(), "pod should be removed while the listener is stopped")
+					}
+
+					for _, resource := range []struct {
+						name   string
+						key    client.ObjectKey
+						object client.Object
+					}{
+						{"config secret", client.ObjectKey{Name: scaleSetListenerConfigName(autoscalingListener), Namespace: autoscalingListener.Namespace}, new(corev1.Secret)},
+						{"service account", listenerKey(), new(corev1.ServiceAccount)},
+						{"role", client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace}, new(rbacv1.Role)},
+						{"role binding", client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace}, new(rbacv1.RoleBinding)},
+					} {
+						err := k8sClient.Get(ctx, resource.key, resource.object)
+						if exist {
+							g.Expect(err).NotTo(HaveOccurred(), "%s should exist", resource.name)
+							continue
+						}
+						g.Expect(kerrors.IsNotFound(err)).To(BeTrue(), "%s should be removed while the listener is stopped", resource.name)
+					}
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(Succeed())
+		}
+
+		patchPhase := func(phase v1alpha1.AutoscalingListenerPhase) {
+			GinkgoHelper()
+
+			listener := new(v1alpha1.AutoscalingListener)
+			Expect(k8sClient.Get(ctx, listenerKey(), listener)).To(Succeed())
+			original := listener.DeepCopy()
+			listener.Spec.Phase = phase
+			Expect(k8sClient.Patch(ctx, listener, client.MergeFrom(original))).To(Succeed(), "failed to patch the listener phase")
+		}
+
+		It("removes the child resources but keeps the listener, and rebuilds them when started again", func() {
+			expectChildResources(true)
+
+			patchPhase(v1alpha1.AutoscalingListenerPhaseStopped)
+
+			expectChildResources(false)
+
+			// The listener itself is the record of a scale set that is meant to
+			// come back, so it survives with its finalizer and spec intact.
+			Consistently(
+				func(g Gomega) {
+					listener := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, listenerKey(), listener)).To(Succeed())
+					g.Expect(listener.DeletionTimestamp).To(BeNil(), "a stopped listener must not be deleted")
+					g.Expect(listener.Finalizers).To(ContainElement(autoscalingListenerFinalizerName))
+					g.Expect(listener.Spec.Phase).To(Equal(v1alpha1.AutoscalingListenerPhaseStopped))
+				},
+				2*time.Second,
+				autoscalingListenerTestInterval,
+			).Should(Succeed())
+
+			patchPhase(v1alpha1.AutoscalingListenerPhaseRunning)
+
+			expectChildResources(true)
+		})
+	})
 })
 
 var _ = Describe("Test AutoScalingListener customization", func() {
