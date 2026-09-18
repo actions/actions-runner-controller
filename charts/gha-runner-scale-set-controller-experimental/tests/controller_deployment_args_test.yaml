@@ -74,14 +74,12 @@ tests:
           path: spec.template.spec.containers[0].args
           content: "--listener-metrics-endpoint=/metrics"
 
-  - it: should render only the explicitly defaulted max-concurrent-reconciles flags by default
+  - it: should render every max-concurrent-reconciles flag by default
     release:
       name: "test-arc"
       namespace: "test-ns"
     asserts:
-      # An exact match, so this also proves the three inheriting flags are not rendered.
-      # They are left unset in values.yaml so the binary resolves them from
-      # --default-max-concurrent-reconciles.
+      # An exact match, so this pins both the values and the render order.
       - equal:
           path: spec.template.spec.containers[0].args
           value:
@@ -89,6 +87,9 @@ tests:
             - "--log-level=debug"
             - "--log-format=text"
             - "--default-max-concurrent-reconciles=2"
+            - "--autoscaling-runner-set-max-concurrent-reconciles=2"
+            - "--autoscaling-listener-max-concurrent-reconciles=2"
+            - "--ephemeral-runner-set-max-concurrent-reconciles=2"
             - "--ephemeral-runner-max-concurrent-reconciles=4"
             - "--listener-metrics-addr=0"
             - "--listener-metrics-endpoint="
