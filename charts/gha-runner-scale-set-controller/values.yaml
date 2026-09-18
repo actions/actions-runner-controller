@@ -117,15 +117,18 @@ flags:
   ## The maximum number of concurrent reconciles applied to every controller that does not set its own value below.
   # Increase this value to improve the throughput of the controller when running many runner scale sets.
   # It may also increase the load on the API server and the external service (e.g. GitHub API).
-  # Defaults to 2 when unset.
-  # defaultMaxConcurrentReconciles: 2
+  defaultMaxConcurrentReconciles: 2
 
-  ## Per-controller overrides. Each defaults to defaultMaxConcurrentReconciles when unset,
-  ## except ephemeralRunnerMaxConcurrentReconciles, which defaults to 4.
-  # autoscalingRunnerSetMaxConcurrentReconciles: 2
-  # autoscalingListenerMaxConcurrentReconciles: 2
-  # ephemeralRunnerSetMaxConcurrentReconciles: 2
-  # ephemeralRunnerMaxConcurrentReconciles: 4
+  ## The EphemeralRunner controller is the only one that routinely has many distinct objects to
+  ## reconcile at once, one per runner, so it ships with a higher value of its own.
+  ephemeralRunnerMaxConcurrentReconciles: 4
+
+  ## The remaining controllers inherit defaultMaxConcurrentReconciles when left unset.
+  ## Leave them unset unless you need to tune one of them individually: pinning them here
+  ## would make defaultMaxConcurrentReconciles have no effect.
+  # autoscalingRunnerSetMaxConcurrentReconciles:
+  # autoscalingListenerMaxConcurrentReconciles:
+  # ephemeralRunnerSetMaxConcurrentReconciles:
 
   ## Defines a list of prefixes that should not be propagated to internal resources.
   ## This is useful when you have labels that are used for internal purposes and should not be propagated to internal resources.
