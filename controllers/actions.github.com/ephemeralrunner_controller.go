@@ -212,9 +212,17 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		// Repeated here so that error costs a reconcile instead of leaving the
 		// registration held until the set gets around to deleting the runner.
 		// Does nothing once the registration is released.
-		if err := r.queueUnregistration(ctx, &ephemeralRunner, log); err != nil {
-			log.Error(err, "Failed to release the registration of a terminated ephemeral runner")
-			return ctrl.Result{}, err
+		//
+		// A runner that deregistered itself holds nothing to release, so there is
+		// no error to recover from and nothing to queue. Releasing it here would
+		// only drop the finalizer, which the deletion below does anyway in a patch
+		// it already makes, at the cost of an extra write and the reconcile that
+		// write wakes.
+		if !runnerSelfDeregistered(&ephemeralRunner) {
+			if err := r.queueUnregistration(ctx, &ephemeralRunner, log); err != nil {
+				log.Error(err, "Failed to release the registration of a terminated ephemeral runner")
+				return ctrl.Result{}, err
+			}
 		}
 
 		err := r.cleanupResources(ctx, &ephemeralRunner, log)
