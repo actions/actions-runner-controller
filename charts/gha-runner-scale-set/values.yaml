@@ -149,8 +149,26 @@ githubConfigSecret:
 ## listenerConfig holds configuration for the ghalistener pod.
 listenerConfig:
   scaler:
+    ## The listener talks to the Kubernetes API server over two independent
+    ## clients. Job started patches are the bulk of the traffic, at up to two
+    ## calls per event, while publishing the desired runner count is a single
+    ## patch per message and is the only one that creates runners. Giving them
+    ## separate budgets keeps a large batch of job patches from draining the
+    ## rate limiter ahead of the patch new jobs are actually waiting on.
+    ##
+    ## qps and burst govern the client patching job started events.
     qps: 50
     burst: 100
+    ## scaleQPS and scaleBurst govern the client publishing the desired runner
+    ## count. One patch per message needs very little, so this only has to be
+    ## large enough that the patch never waits on a token.
+    scaleQPS: 10
+    scaleBurst: 20
+    ## Number of job started events patched concurrently. They are drained from
+    ## a background queue rather than tied to the message they arrived on, so
+    ## this bounds how many patches are in flight at once. Raising it beyond
+    ## what qps sustains has no effect.
+    workers: 10
 
 ## listenerMetrics are configurable metrics applied to the listener.
 ## In order to avoid helm merging these fields, we left the metrics commented out.

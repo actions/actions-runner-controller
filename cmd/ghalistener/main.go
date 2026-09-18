@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/config"
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/metrics"
@@ -90,14 +91,7 @@ func run(ctx context.Context, config *config.Config) error {
 		}
 	}()
 
-	var listenerOptions []listener.Option
 	if metricsExporter != nil {
-		listenerOptions = append(
-			listenerOptions,
-			listener.WithMetricsRecorder(
-				metricsExporter,
-			),
-		)
 		metricsExporter.RecordStatic(config.MinRunners, config.MaxRunners)
 	}
 
@@ -108,13 +102,13 @@ func run(ctx context.Context, config *config.Config) error {
 			MaxRunners: config.MaxRunners,
 			Logger:     logger.With("component", "listener"),
 		},
-		listenerOptions...,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create new listener: %w", err)
 	}
 
 	scaler, err := scaler.New(
+		sessionClient,
 		scaler.Config{
 			EphemeralRunnerSetNamespace: config.EphemeralRunnerSetNamespace,
 			EphemeralRunnerSetName:      config.EphemeralRunnerSetName,
@@ -123,10 +117,23 @@ func run(ctx context.Context, config *config.Config) error {
 			ScalerConfig:                config.ListenerConfig.GetScaler(),
 		},
 		scaler.WithLogger(logger.With("component", "worker")),
+		scaler.WithMetrics(metricsExporter),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create new kubernetes worker: %w", err)
 	}
+
+	// The scaler patches job started events in the background, after the listener
+	// has already acked the message they arrived on. Draining them on the way out
+	// keeps a clean shutdown from stranding job information the service believes
+	// was recorded.
+	defer func() {
+		drainCtx, cancelDrain := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancelDrain()
+		if err := scaler.Close(drainCtx); err != nil {
+			logger.Error("Failed to drain queued job started events", "error", err)
+		}
+	}()
 
 	g, ctx := errgroup.WithContext(ctx)
 	metricsCtx, cancelMetrics := context.WithCancelCause(ctx)
