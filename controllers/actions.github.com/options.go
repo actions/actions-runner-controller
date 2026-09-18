@@ -34,9 +34,16 @@ type Options struct {
 // OptionsWithDefault returns the default options.
 // This is here to maintain the options and their default values in one place,
 // rather than having to correlate those in multiple places.
+//
+// The EphemeralRunner controller gets a higher value than the rest because it
+// is the only one of the four that routinely has many distinct objects to
+// reconcile at once: one per runner. controller-runtime serialises reconciles
+// per object, so extra workers on the other three controllers only pay off
+// when many runner scale sets exist.
 func OptionsWithDefault() Options {
 	return Options{
-		DefaultMaxConcurrentReconciles: 1,
+		DefaultMaxConcurrentReconciles:         2,
+		EphemeralRunnerMaxConcurrentReconciles: 4,
 	}
 }
 

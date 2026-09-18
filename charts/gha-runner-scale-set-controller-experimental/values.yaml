@@ -29,10 +29,11 @@ controller:
       watchSingleNamespace: ""
 
       # The maximum number of concurrent reconciles applied to every controller that does not
-      # set its own value below. Defaults to 1 when unset.
+      # set its own value below. Defaults to 2 when unset.
       defaultMaxConcurrentReconciles: null
 
-      # Per-controller overrides. Each defaults to defaultMaxConcurrentReconciles when unset.
+      # Per-controller overrides. Each defaults to defaultMaxConcurrentReconciles when unset,
+      # except ephemeralRunnerMaxConcurrentReconciles, which defaults to 4.
       autoscalingRunnerSetMaxConcurrentReconciles: null
       autoscalingListenerMaxConcurrentReconciles: null
       ephemeralRunnerSetMaxConcurrentReconciles: null
