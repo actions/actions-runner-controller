@@ -15,7 +15,92 @@ This sample dashboard shows how to visualize the metrics with [Grafana](https://
 
 1. Make sure to have [Grafana](https://grafana.com/docs/grafana/latest/installation/) and [Prometheus](https://prometheus.io/docs/prometheus/latest/installation/) running in your cluster.
 2. Make sure that Prometheus is properly scraping the metrics endpoints of the controller-manager and listeners.
-3. Import the [dashboard](ARC-Autoscaling-Runner-Set-Monitoring.json) into Grafana.
+3. Make sure that your scrape configuration maps the pod labels onto the scraped metrics, as described in [Scale set labels come from Prometheus, not from ARC](#scale-set-labels-come-from-prometheus-not-from-arc).
+4. Import the [dashboard](ARC-Autoscaling-Runner-Set-Monitoring.json) into Grafana.
+
+## Scale set labels come from Prometheus, not from ARC
+
+The dashboard filters several panels on `actions_github_com_scale_set_name` and
+`actions_github_com_scale_set_namespace`. **ARC does not emit these labels.** They are
+produced by Prometheus from the labels that ARC sets on the listener pods:
+
+```
+Labels:
+  actions.github.com/scale-set-name=arc-runner-set
+  actions.github.com/scale-set-namespace=arc-runners
+  ...
+```
+
+Note that the listener pod itself runs in the controller's namespace (`arc-systems` in the
+examples below), while the `actions.github.com/scale-set-namespace` label holds the
+namespace the scale set was installed into (`arc-runners`). Scope the scrape configuration
+to the namespace where the listener pods run.
+
+During service discovery, Prometheus exposes those pod labels as metadata labels, with
+the characters that are invalid in a label name replaced by `_`:
+
+```
+__meta_kubernetes_pod_label_actions_github_com_scale_set_name=arc-runner-set
+__meta_kubernetes_pod_label_actions_github_com_scale_set_namespace=arc-runners
+```
+
+The scrape configuration has to copy those metadata labels onto the scraped metrics. The
+example below copies only the two labels the dashboard needs, scoped to the `arc-systems`
+namespace:
+
+```yaml
+scrape_configs:
+  - job_name: arc-metrics
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - arc-systems
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_actions_github_com_scale_set_name]
+        target_label: actions_github_com_scale_set_name
+      - source_labels: [__meta_kubernetes_pod_label_actions_github_com_scale_set_namespace]
+        target_label: actions_github_com_scale_set_namespace
+```
+
+If you use the Prometheus Operator, the equivalent is a `PodMonitor` (or `ServiceMonitor`)
+with the same entries in its `relabelings`.
+
+> [!TIP]
+> A `labelmap` action with the regex `__meta_kubernetes_pod_label_(.+)` is a common
+> shorthand that copies *every* pod label onto the metrics. It works, but it increases
+> series cardinality and risks colliding with labels the listener already emits, so prefer
+> mapping only the labels you need.
+
+> [!WARNING]
+> Do not set `honor_labels: true` for this job. With `honor_labels` enabled, a label that is
+> already present on the scraped metric wins over the one produced by `relabel_configs`, so
+> an empty `actions_github_com_scale_set_namespace=""` emitted by the listener would not be
+> overwritten.
+
+> [!IMPORTANT]
+> Adding `actions_github_com_scale_set_name` or `actions_github_com_scale_set_namespace` to
+> `listenerMetrics` in the scale set `values.yaml` does **not** populate them. The listener
+> only knows about its own label set (`name`, `namespace`, `repository`, `organization`,
+> `enterprise`, and the job labels), so any unknown label is exported with an empty value,
+> for example `actions_github_com_scale_set_namespace=""`.
+
+### Troubleshooting empty panels
+
+If the `Startup Duration`, `Job Execution`, or `Running Jobs` panels are empty or report
+`Cannot read properties of undefined (reading 'config')`, the scale set labels are most
+likely missing from the scraped metrics. Query one of the metrics directly (for example
+`gha_job_startup_duration_seconds_bucket`) in Prometheus and check the label values. If
+`actions_github_com_scale_set_namespace` is empty or absent, you can either:
+
+- Update your scrape configuration to relabel the scraped pod labels, as shown above. If the
+  listener is also emitting an empty label of the same name, remove it from
+  `listenerMetrics` so the relabeled value is the only one; or
+- Replace `actions_github_com_scale_set_name` and `actions_github_com_scale_set_namespace`
+  in your copy of the dashboard with labels that your setup already produces, such as
+  `namespace`.
+
+Both options assume that your scrape configuration is already capturing the pod's labels.
 
 ## Required metrics
 
@@ -49,6 +134,11 @@ The following metrics are required to be scraped by Prometheus in order to popul
 | scrape_duration_seconds | | prometheus
 | workqueue_depth | name, namespace | ARC Controller
 | workqueue_queue_duration_seconds_sum | namespace | ARC Controller
+
+> [!NOTE]
+> The `actions_github_com_scale_set_name` and `actions_github_com_scale_set_namespace` labels
+> are not emitted by ARC. They are added by Prometheus from the listener pod labels. See
+> [Scale set labels come from Prometheus, not from ARC](#scale-set-labels-come-from-prometheus-not-from-arc).
 
 ## Details
 
