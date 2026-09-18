@@ -10,54 +10,60 @@ import (
 // Options is the optional configuration for the controllers, which can be
 // set via command-line flags or environment variables.
 type Options struct {
-	// DefaultMaxConcurrentReconciles is the maximum number of concurrent Reconciles
-	// applied to every controller that does not have its own value set below.
-	DefaultMaxConcurrentReconciles int
-
 	// AutoscalingRunnerSetMaxConcurrentReconciles is the maximum number of concurrent Reconciles
-	// which can be run by the AutoscalingRunnerSetController. Zero means DefaultMaxConcurrentReconciles.
+	// which can be run by the AutoscalingRunnerSetController. Values of zero or less are replaced
+	// by the shipped default in Resolve.
 	AutoscalingRunnerSetMaxConcurrentReconciles int
 
 	// AutoscalingListenerMaxConcurrentReconciles is the maximum number of concurrent Reconciles
-	// which can be run by the AutoscalingListenerController. Zero means DefaultMaxConcurrentReconciles.
+	// which can be run by the AutoscalingListenerController. Values of zero or less are replaced
+	// by the shipped default in Resolve.
 	AutoscalingListenerMaxConcurrentReconciles int
 
 	// EphemeralRunnerSetMaxConcurrentReconciles is the maximum number of concurrent Reconciles
-	// which can be run by the EphemeralRunnerSetController. Zero means DefaultMaxConcurrentReconciles.
+	// which can be run by the EphemeralRunnerSetController. Values of zero or less are replaced
+	// by the shipped default in Resolve.
 	EphemeralRunnerSetMaxConcurrentReconciles int
 
 	// EphemeralRunnerMaxConcurrentReconciles is the maximum number of concurrent Reconciles
-	// which can be run by the EphemeralRunnerController. Zero means DefaultMaxConcurrentReconciles.
+	// which can be run by the EphemeralRunnerController. Values of zero or less are replaced
+	// by the shipped default in Resolve.
 	EphemeralRunnerMaxConcurrentReconciles int
 }
 
 // OptionsWithDefault returns the default options.
 // This is here to maintain the options and their default values in one place,
 // rather than having to correlate those in multiple places.
+//
+// The EphemeralRunner controller gets a higher value than the rest because it
+// is the only one of the four that routinely has many distinct objects to
+// reconcile at once: one per runner. controller-runtime serialises reconciles
+// per object, so extra workers on the other three controllers only pay off
+// when many runner scale sets exist.
 func OptionsWithDefault() Options {
 	return Options{
-		DefaultMaxConcurrentReconciles: 1,
+		AutoscalingRunnerSetMaxConcurrentReconciles: 2,
+		AutoscalingListenerMaxConcurrentReconciles:  2,
+		EphemeralRunnerSetMaxConcurrentReconciles:   2,
+		EphemeralRunnerMaxConcurrentReconciles:      4,
 	}
 }
 
-// Resolve returns a copy of the options where a DefaultMaxConcurrentReconciles
-// of zero or less is replaced by 1, and every per-controller
-// MaxConcurrentReconciles that is left at zero is replaced by
-// DefaultMaxConcurrentReconciles.
+// Resolve returns a copy of the options where every MaxConcurrentReconciles of
+// zero or less is replaced by that controller's shipped default, so a
+// non-positive value can never reach controller-runtime.
 func (o Options) Resolve() Options {
-	if o.DefaultMaxConcurrentReconciles <= 0 {
-		o.DefaultMaxConcurrentReconciles = 1
-	}
-	orDefault := func(n int) int {
+	defaults := OptionsWithDefault()
+	orDefault := func(n, def int) int {
 		if n > 0 {
 			return n
 		}
-		return o.DefaultMaxConcurrentReconciles
+		return def
 	}
-	o.AutoscalingRunnerSetMaxConcurrentReconciles = orDefault(o.AutoscalingRunnerSetMaxConcurrentReconciles)
-	o.AutoscalingListenerMaxConcurrentReconciles = orDefault(o.AutoscalingListenerMaxConcurrentReconciles)
-	o.EphemeralRunnerSetMaxConcurrentReconciles = orDefault(o.EphemeralRunnerSetMaxConcurrentReconciles)
-	o.EphemeralRunnerMaxConcurrentReconciles = orDefault(o.EphemeralRunnerMaxConcurrentReconciles)
+	o.AutoscalingRunnerSetMaxConcurrentReconciles = orDefault(o.AutoscalingRunnerSetMaxConcurrentReconciles, defaults.AutoscalingRunnerSetMaxConcurrentReconciles)
+	o.AutoscalingListenerMaxConcurrentReconciles = orDefault(o.AutoscalingListenerMaxConcurrentReconciles, defaults.AutoscalingListenerMaxConcurrentReconciles)
+	o.EphemeralRunnerSetMaxConcurrentReconciles = orDefault(o.EphemeralRunnerSetMaxConcurrentReconciles, defaults.EphemeralRunnerSetMaxConcurrentReconciles)
+	o.EphemeralRunnerMaxConcurrentReconciles = orDefault(o.EphemeralRunnerMaxConcurrentReconciles, defaults.EphemeralRunnerMaxConcurrentReconciles)
 	return o
 }
 
