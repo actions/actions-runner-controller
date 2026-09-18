@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Outdated runner lifecycle, on the stable charts.
+# Outdated runner lifecycle, on the experimental charts.
 #
-# outdated-runner-lifecycle-v2.test.sh is the same scenario on the experimental
-# charts. The assertions are identical because the behaviour is the
-# controller's; only the chart paths and the values schema differ.
+# outdated-runner-lifecycle.test.sh is the same scenario on the stable charts.
+# The assertions are identical because the behaviour is the controller's; only
+# the chart paths and the values schema differ.
 #
 # A runner that exits with code 7 has rejected the runner spec it was handed.
 # This test drives that end to end: it installs a scale set with minRunners=1
@@ -43,7 +43,7 @@ source "${DIR}/helper.sh" || {
     exit 1
 }
 
-export VERSION="$(chart_version "${ROOT_DIR}/charts/gha-runner-scale-set-controller/Chart.yaml")"
+export VERSION="$(chart_version "${ROOT_DIR}/charts/gha-runner-scale-set-controller-experimental/Chart.yaml")"
 
 SCALE_SET_NAME="outdated-lifecycle-$(date '+%M%S')$(((RANDOM + 100) % 100 + 1))"
 SCALE_SET_NAMESPACE="arc-runners"
@@ -122,9 +122,8 @@ function install_arc() {
     helm install "${ARC_NAME}" \
         --namespace "${ARC_NAMESPACE}" \
         --create-namespace \
-        --set image.repository="${IMAGE_NAME}" \
-        --set image.tag="${IMAGE_TAG}" \
-        "${ROOT_DIR}/charts/gha-runner-scale-set-controller" \
+        --set controller.manager.container.image="${IMAGE_NAME}:${IMAGE_TAG}" \
+        "${ROOT_DIR}/charts/gha-runner-scale-set-controller-experimental" \
         --debug
 
     if ! NAME="${ARC_NAME}" NAMESPACE="${ARC_NAMESPACE}" wait_for_arc; then
@@ -140,22 +139,9 @@ function scale_set_values() {
     printf '%s\n' \
         "--set" "controllerServiceAccount.name=${ARC_NAME}-gha-rs-controller" \
         "--set" "controllerServiceAccount.namespace=${ARC_NAMESPACE}" \
-        "--set" "githubConfigUrl=https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
-        "--set" "githubConfigSecret.github_token=${GITHUB_TOKEN}" \
-        "--set" "runnerScaleSetName=${SCALE_SET_NAME}"
-}
-
-# The stable chart carries the runner container as a list entry, and a --set on
-# a list index replaces the whole entry rather than merging into it. Overriding
-# just the image would silently drop the name and the command the chart
-# defaults ship, so all three are always set together.
-function runner_container_values() {
-    local image="$1"
-
-    printf '%s\n' \
-        "--set" "template.spec.containers[0].name=runner" \
-        "--set" "template.spec.containers[0].image=${image}" \
-        "--set" "template.spec.containers[0].command={/home/runner/run.sh}"
+        "--set" "auth.url=https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
+        "--set" "auth.githubToken=${GITHUB_TOKEN}" \
+        "--set" "scaleset.name=${SCALE_SET_NAME}"
 }
 
 function install_scale_set() {
@@ -163,16 +149,14 @@ function install_scale_set() {
 
     local values=()
     mapfile -t values < <(scale_set_values)
-    local runner_values=()
-    mapfile -t runner_values < <(runner_container_values "${OUTDATED_RUNNER_IMAGE}")
 
     helm install "${SCALE_SET_NAME}" \
         --namespace "${SCALE_SET_NAMESPACE}" \
         --create-namespace \
         "${values[@]}" \
-        --set minRunners="${INITIAL_MIN_RUNNERS}" \
-        "${runner_values[@]}" \
-        "${ROOT_DIR}/charts/gha-runner-scale-set" \
+        --set scaleset.minRunners="${INITIAL_MIN_RUNNERS}" \
+        --set runner.container.image="${OUTDATED_RUNNER_IMAGE}" \
+        "${ROOT_DIR}/charts/gha-runner-scale-set-experimental" \
         --version="${VERSION}" \
         --debug
 
@@ -187,15 +171,13 @@ function upgrade_min_runners() {
 
     local values=()
     mapfile -t values < <(scale_set_values)
-    local runner_values=()
-    mapfile -t runner_values < <(runner_container_values "${OUTDATED_RUNNER_IMAGE}")
 
     helm upgrade "${SCALE_SET_NAME}" \
         --namespace "${SCALE_SET_NAMESPACE}" \
         "${values[@]}" \
-        --set minRunners="${UPGRADED_MIN_RUNNERS}" \
-        "${runner_values[@]}" \
-        "${ROOT_DIR}/charts/gha-runner-scale-set" \
+        --set scaleset.minRunners="${UPGRADED_MIN_RUNNERS}" \
+        --set runner.container.image="${OUTDATED_RUNNER_IMAGE}" \
+        "${ROOT_DIR}/charts/gha-runner-scale-set-experimental" \
         --version="${VERSION}" \
         --debug
 }
@@ -205,15 +187,13 @@ function upgrade_runner_image() {
 
     local values=()
     mapfile -t values < <(scale_set_values)
-    local runner_values=()
-    mapfile -t runner_values < <(runner_container_values "${RECOVERED_RUNNER_IMAGE}")
 
     helm upgrade "${SCALE_SET_NAME}" \
         --namespace "${SCALE_SET_NAMESPACE}" \
         "${values[@]}" \
-        --set minRunners="${INITIAL_MIN_RUNNERS}" \
-        "${runner_values[@]}" \
-        "${ROOT_DIR}/charts/gha-runner-scale-set" \
+        --set scaleset.minRunners="${INITIAL_MIN_RUNNERS}" \
+        --set runner.container.image="${RECOVERED_RUNNER_IMAGE}" \
+        "${ROOT_DIR}/charts/gha-runner-scale-set-experimental" \
         --version="${VERSION}" \
         --debug
 }
