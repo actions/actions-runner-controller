@@ -67,9 +67,6 @@ spec:
         {{- with .Values.flags.watchSingleNamespace }}
         - "--watch-single-namespace={{ . }}"
         {{- end }}
-        {{- with .Values.flags.defaultMaxConcurrentReconciles }}
-        - "--default-max-concurrent-reconciles={{ . }}"
-        {{- end }}
         {{- with .Values.flags.autoscalingRunnerSetMaxConcurrentReconciles }}
         - "--autoscaling-runner-set-max-concurrent-reconciles={{ . }}"
         {{- end }}

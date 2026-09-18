@@ -86,7 +86,6 @@ tests:
             - "--auto-scaling-runner-set-only"
             - "--log-level=debug"
             - "--log-format=text"
-            - "--default-max-concurrent-reconciles=2"
             - "--autoscaling-runner-set-max-concurrent-reconciles=2"
             - "--autoscaling-listener-max-concurrent-reconciles=2"
             - "--ephemeral-runner-set-max-concurrent-reconciles=2"
@@ -100,7 +99,6 @@ tests:
       controller:
         manager:
           config:
-            defaultMaxConcurrentReconciles: 4
             autoscalingRunnerSetMaxConcurrentReconciles: 3
             autoscalingListenerMaxConcurrentReconciles: 5
             ephemeralRunnerSetMaxConcurrentReconciles: 6
@@ -109,9 +107,6 @@ tests:
       name: "test-arc"
       namespace: "test-ns"
     asserts:
-      - contains:
-          path: spec.template.spec.containers[0].args
-          content: "--default-max-concurrent-reconciles=4"
       - contains:
           path: spec.template.spec.containers[0].args
           content: "--autoscaling-runner-set-max-concurrent-reconciles=3"

@@ -114,14 +114,9 @@ flags:
   ## Defaults to watch all namespaces when unset.
   # watchSingleNamespace: ""
 
-  ## The maximum number of concurrent reconciles for each controller.
+  ## The maximum number of concurrent reconciles for each controller, set directly per controller.
   # Increase these values to improve the throughput of the controller when running many runner scale sets.
   # They may also increase the load on the API server and the external service (e.g. GitHub API).
-  #
-  # Every controller is pinned below, so editing defaultMaxConcurrentReconciles on its own will not
-  # change the other four. It applies only to a controller whose own value is removed or set to null.
-  # To tune a single controller, edit that controller's value directly.
-  defaultMaxConcurrentReconciles: 2
   autoscalingRunnerSetMaxConcurrentReconciles: 2
   autoscalingListenerMaxConcurrentReconciles: 2
   ephemeralRunnerSetMaxConcurrentReconciles: 2

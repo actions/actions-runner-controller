@@ -363,7 +363,6 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 		"--auto-scaling-runner-set-only",
 		"--log-level=debug",
 		"--log-format=text",
-		"--default-max-concurrent-reconciles=2",
 		"--autoscaling-runner-set-max-concurrent-reconciles=2",
 		"--autoscaling-listener-max-concurrent-reconciles=2",
 		"--ephemeral-runner-set-max-concurrent-reconciles=2",
@@ -519,7 +518,6 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 		"--auto-scaler-image-pull-secrets=dockerhub",
 		"--log-level=info",
 		"--log-format=json",
-		"--default-max-concurrent-reconciles=2",
 		"--autoscaling-runner-set-max-concurrent-reconciles=2",
 		"--autoscaling-listener-max-concurrent-reconciles=2",
 		"--ephemeral-runner-set-max-concurrent-reconciles=2",
@@ -651,7 +649,6 @@ func TestTemplate_EnableLeaderElection(t *testing.T) {
 		"--leader-election-id=test-arc-gha-rs-controller",
 		"--log-level=debug",
 		"--log-format=text",
-		"--default-max-concurrent-reconciles=2",
 		"--autoscaling-runner-set-max-concurrent-reconciles=2",
 		"--autoscaling-listener-max-concurrent-reconciles=2",
 		"--ephemeral-runner-set-max-concurrent-reconciles=2",
@@ -696,7 +693,6 @@ func TestTemplate_ControllerDeployment_ForwardImagePullSecrets(t *testing.T) {
 		"--auto-scaler-image-pull-secrets=ghcr",
 		"--log-level=debug",
 		"--log-format=text",
-		"--default-max-concurrent-reconciles=2",
 		"--autoscaling-runner-set-max-concurrent-reconciles=2",
 		"--autoscaling-listener-max-concurrent-reconciles=2",
 		"--ephemeral-runner-set-max-concurrent-reconciles=2",
@@ -790,7 +786,6 @@ func TestTemplate_ControllerDeployment_WatchSingleNamespace(t *testing.T) {
 		"--log-level=debug",
 		"--log-format=text",
 		"--watch-single-namespace=demo",
-		"--default-max-concurrent-reconciles=2",
 		"--autoscaling-runner-set-max-concurrent-reconciles=2",
 		"--autoscaling-listener-max-concurrent-reconciles=2",
 		"--ephemeral-runner-set-max-concurrent-reconciles=2",
@@ -839,7 +834,6 @@ func TestTemplate_ControllerDeployment_MaxConcurrentReconciles(t *testing.T) {
 
 		require.Len(t, deployment.Spec.Template.Spec.Containers, 1)
 		args := deployment.Spec.Template.Spec.Containers[0].Args
-		assert.Contains(t, args, "--default-max-concurrent-reconciles=2")
 		assert.Contains(t, args, "--autoscaling-runner-set-max-concurrent-reconciles=2")
 		assert.Contains(t, args, "--autoscaling-listener-max-concurrent-reconciles=2")
 		assert.Contains(t, args, "--ephemeral-runner-set-max-concurrent-reconciles=2")
@@ -850,7 +844,6 @@ func TestTemplate_ControllerDeployment_MaxConcurrentReconciles(t *testing.T) {
 		options := &helm.Options{
 			Logger: logger.Discard,
 			SetValues: map[string]string{
-				"flags.defaultMaxConcurrentReconciles":              "4",
 				"flags.autoscalingRunnerSetMaxConcurrentReconciles": "3",
 				"flags.autoscalingListenerMaxConcurrentReconciles":  "5",
 				"flags.ephemeralRunnerSetMaxConcurrentReconciles":   "6",
@@ -866,7 +859,6 @@ func TestTemplate_ControllerDeployment_MaxConcurrentReconciles(t *testing.T) {
 
 		require.Len(t, deployment.Spec.Template.Spec.Containers, 1)
 		args := deployment.Spec.Template.Spec.Containers[0].Args
-		assert.Contains(t, args, "--default-max-concurrent-reconciles=4")
 		assert.Contains(t, args, "--autoscaling-runner-set-max-concurrent-reconciles=3")
 		assert.Contains(t, args, "--autoscaling-listener-max-concurrent-reconciles=5")
 		assert.Contains(t, args, "--ephemeral-runner-set-max-concurrent-reconciles=6")
