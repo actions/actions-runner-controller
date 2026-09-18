@@ -1911,7 +1911,9 @@ var _ = Describe("EphemeralRunner", func() {
 
 		It("leaves a succeeded runner alone on the terminated path", func() {
 			// Same path, but the runner exited cleanly, so there is nothing to
-			// hand over and only the finalizer goes.
+			// hand over and nothing to release. The finalizer stays until the
+			// deletion that removes it anyway, in a patch that deletion already
+			// makes, rather than costing a write and a wake-up here.
 			name := "terminated-succeeded-runner"
 			ephemeralRunner := newExampleRunner(name, autoscalingNS.Name, configSecret.Name)
 			ephemeralRunner.Finalizers = []string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName}
@@ -1930,7 +1932,18 @@ var _ = Describe("EphemeralRunner", func() {
 
 			updated := new(v1alpha1.EphemeralRunner)
 			Expect(k8sClient.Get(ctx, request.NamespacedName, updated)).To(Succeed())
-			Expect(updated.Finalizers).NotTo(ContainElement(ephemeralRunnerActionsFinalizerName))
+			Expect(updated.Finalizers).To(ContainElement(ephemeralRunnerActionsFinalizerName))
+
+			// Deleting it clears both finalizers, so nothing is left behind and
+			// the service is still never asked to remove the registration.
+			Expect(k8sClient.Delete(ctx, updated)).To(Succeed())
+			_, err = controller.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(queue.queued()).To(BeEmpty())
+			Eventually(func() bool {
+				return kerrors.IsNotFound(k8sClient.Get(ctx, request.NamespacedName, new(v1alpha1.EphemeralRunner)))
+			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeTrue())
 		})
 	})
 })
