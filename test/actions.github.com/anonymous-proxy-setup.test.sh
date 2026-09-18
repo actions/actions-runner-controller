@@ -8,7 +8,7 @@ ROOT_DIR="$(realpath "${DIR}/../..")"
 
 source "${DIR}/helper.sh"
 
-export VERSION="$(chart_version "${ROOT_DIR}/charts/gha-runner-scale-set-controller-experimental/Chart.yaml")"
+export VERSION="$(chart_version "${ROOT_DIR}/charts/gha-runner-scale-set-controller/Chart.yaml")"
 
 SCALE_SET_NAME="anonymous-proxy-$(date +'%M%S')$(((RANDOM + 100) % 100 + 1))"
 SCALE_SET_NAMESPACE="arc-runners"
@@ -21,8 +21,9 @@ function install_arc() {
     helm install "${ARC_NAME}" \
         --namespace "${ARC_NAMESPACE}" \
         --create-namespace \
-        --set controller.manager.container.image="${IMAGE_NAME}:${IMAGE_TAG}" \
-        "${ROOT_DIR}/charts/gha-runner-scale-set-controller-experimental" \
+        --set image.repository="${IMAGE_NAME}" \
+        --set image.tag="${IMAGE_TAG}" \
+        "${ROOT_DIR}/charts/gha-runner-scale-set-controller" \
         --debug
 
     if ! NAME="${ARC_NAME}" NAMESPACE="${ARC_NAMESPACE}" wait_for_arc; then
@@ -42,13 +43,12 @@ function install_scale_set() {
     helm install "${SCALE_SET_NAME}" \
         --namespace "${SCALE_SET_NAMESPACE}" \
         --create-namespace \
-        --set controllerServiceAccount.name="${ARC_NAME}-gha-rs-controller" \
-        --set controllerServiceAccount.namespace="${ARC_NAMESPACE}" \
-        --set auth.url="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
-        --set auth.githubToken="${GITHUB_TOKEN}" \
+        --set githubConfigUrl="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
+        --set githubConfigSecret.github_token="${GITHUB_TOKEN}" \
         --set proxy.https.url="http://squid.default.svc.cluster.local:3128" \
         --set "proxy.noProxy[0]=10.96.0.1:443" \
-        "${ROOT_DIR}/charts/gha-runner-scale-set-experimental"
+        "${ROOT_DIR}/charts/gha-runner-scale-set" \
+        --debug
 
     if ! NAME="${SCALE_SET_NAME}" NAMESPACE="${ARC_NAMESPACE}" wait_for_scale_set; then
         NAMESPACE="${ARC_NAMESPACE}" log_arc

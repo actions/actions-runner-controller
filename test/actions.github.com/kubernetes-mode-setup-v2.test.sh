@@ -8,11 +8,11 @@ ROOT_DIR="$(realpath "${DIR}/../..")"
 
 source "${DIR}/helper.sh"
 
-export VERSION="$(chart_version "${ROOT_DIR}/charts/gha-runner-scale-set-controller/Chart.yaml")"
+export VERSION="$(chart_version "${ROOT_DIR}/charts/gha-runner-scale-set-controller-experimental/Chart.yaml")"
 
-SCALE_SET_NAME="default-$(date +'%M%S')$(((RANDOM + 100) % 100 + 1))"
+SCALE_SET_NAME="kubernetes-mode-$(date +'%M%S')$(((RANDOM + 100) % 100 + 1))"
 SCALE_SET_NAMESPACE="arc-runners"
-WORKFLOW_FILE="arc-test-workflow.yaml"
+WORKFLOW_FILE="arc-test-kubernetes-workflow.yaml"
 ARC_NAME="arc"
 ARC_NAMESPACE="arc-systems"
 
@@ -26,9 +26,8 @@ function install_arc() {
     helm install "${ARC_NAME}" \
         --namespace "${ARC_NAMESPACE}" \
         --create-namespace \
-        --set image.repository="${IMAGE_NAME}" \
-        --set image.tag="${IMAGE_TAG}" \
-        "${ROOT_DIR}/charts/gha-runner-scale-set-controller" \
+        --set controller.manager.container.image="${IMAGE_NAME}:${IMAGE_TAG}" \
+        "${ROOT_DIR}/charts/gha-runner-scale-set-controller-experimental" \
         --debug
 
     if ! NAME="${ARC_NAME}" NAMESPACE="${ARC_NAMESPACE}" wait_for_arc; then
@@ -37,33 +36,20 @@ function install_arc() {
     fi
 }
 
-function install_squid() {
-    echo "Starting squid-proxy"
-    kubectl apply -f "${DIR}/auth-proxy-setup.squid.yaml"
-
-    echo "Creating scale set namespace"
-    kubectl create namespace "${SCALE_SET_NAMESPACE}" || true
-
-    echo "Creating squid proxy secret"
-    kubectl create secret generic proxy-auth \
-        --namespace=arc-runners \
-        --from-literal=username=github \
-        --from-literal=password='actions'
-}
-
 function install_scale_set() {
     echo "Installing scale set ${SCALE_SET_NAMESPACE}/${SCALE_SET_NAME}"
     helm install "${SCALE_SET_NAME}" \
         --namespace "${SCALE_SET_NAMESPACE}" \
         --create-namespace \
-        --set githubConfigUrl="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
-        --set githubConfigSecret.github_token="${GITHUB_TOKEN}" \
-        --set proxy.https.url="http://squid.default.svc.cluster.local:3128" \
-        --set proxy.https.credentialSecretRef="proxy-auth" \
-        --set "proxy.noProxy[0]=10.96.0.1:443" \
-        "${ROOT_DIR}/charts/gha-runner-scale-set" \
-        --version="${VERSION}" \
-        --debug
+        --set controllerServiceAccount.name="${ARC_NAME}-gha-rs-controller" \
+        --set controllerServiceAccount.namespace="${ARC_NAMESPACE}" \
+        --set auth.url="https://github.com/${TARGET_ORG}/${TARGET_REPO}" \
+        --set auth.githubToken="${GITHUB_TOKEN}" \
+        --set runner.mode="kubernetes" \
+        --set runner.kubernetesMode.workVolumeClaim.accessModes={"ReadWriteOnce"} \
+        --set runner.kubernetesMode.workVolumeClaim.storageClassName="openebs-hostpath" \
+        --set runner.kubernetesMode.workVolumeClaim.resources.requests.storage="1Gi" \
+        "${ROOT_DIR}/charts/gha-runner-scale-set-experimental"
 
     if ! NAME="${SCALE_SET_NAME}" NAMESPACE="${ARC_NAMESPACE}" wait_for_scale_set; then
         NAMESPACE="${ARC_NAMESPACE}" log_arc
@@ -78,14 +64,7 @@ function main() {
     create_cluster
 
     install_arc
-    install_squid
-
-    install_scale_set || {
-        echo "Scale set installation failed"
-        NAMESPACE="${ARC_NAMESPACE}" log_arc
-        delete_cluster
-        exit 1
-    }
+    install_scale_set
 
     WORKFLOW_FILE="${WORKFLOW_FILE}" SCALE_SET_NAME="${SCALE_SET_NAME}" run_workflow || failed+=("run_workflow")
 
