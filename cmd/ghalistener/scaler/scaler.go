@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"sync"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/metrics"
 	"github.com/actions/scaleset"
 	"github.com/actions/scaleset/listener"
 	jsonpatch "github.com/evanphx/json-patch"
-	"golang.org/x/sync/errgroup"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -53,10 +53,17 @@ type Config struct {
 const (
 	defaultQPS   = 50
 	defaultBurst = 100
-	// defaultWorkers bounds how many job events are patched at once. Each event
-	// costs at most a GET and a PATCH, so the default stays well inside the
-	// default QPS budget while still collapsing a batch of events into a few
-	// round trips worth of latency.
+	// defaultScaleQPS and defaultScaleBurst budget the client that publishes the
+	// desired runner count. That is one patch per message, so a small budget is
+	// enough for it to never wait on a token. It is separate from the job client
+	// rather than carved out of it: sharing one bucket is what let a batch of job
+	// patches delay the scale patch in the first place.
+	defaultScaleQPS   = 10
+	defaultScaleBurst = 20
+	// defaultWorkers bounds how many job started events are patched at once.
+	// Each event costs at most a GET and a PATCH, and the rate limiter rather
+	// than this number is what bounds sustained throughput, so this only has to
+	// be large enough to keep the job client's tokens spoken for.
 	defaultWorkers = 10
 )
 
@@ -70,7 +77,12 @@ type JobAcquirer interface {
 // The Scaler's role is to process the messages it receives from the listener.
 // It then initiates Kubernetes API requests to carry out the necessary actions.
 type Scaler struct {
-	clientset     *kubernetes.Clientset
+	// scaleClientset publishes the desired runner count and nothing else, so its
+	// rate limiter is never drained by job event traffic.
+	scaleClientset *kubernetes.Clientset
+	// jobClientset patches job started events. It is used only by the background
+	// workers, never by Scale.
+	jobClientset  *kubernetes.Clientset
 	client        JobAcquirer
 	config        Config
 	metrics       metrics.Recorder
@@ -84,7 +96,19 @@ type Scaler struct {
 	// message at all, so the scaler keeps them to stay able to converge on an
 	// otherwise idle scale set.
 	lastStatistics *scaleset.RunnerScaleSetStatistic
-	logger         *slog.Logger
+
+	// jobs holds job started events accepted from a message but not yet patched.
+	jobs *jobQueue
+	// jobWorkers tracks the pool draining jobs.
+	jobWorkers sync.WaitGroup
+	// jobCtx scopes the background patches. It is rooted at context.Background()
+	// rather than at any message's context: the patches outlive the message that
+	// produced them, so cancelling that message must not abandon them.
+	jobCtx    context.Context
+	jobCancel context.CancelFunc
+	closeOnce sync.Once
+
+	logger *slog.Logger
 }
 
 var _ listener.Scaler = (*Scaler)(nil)
@@ -99,6 +123,7 @@ func New(client JobAcquirer, config Config, options ...Option) (*Scaler, error) 
 		config:        config,
 		targetRunners: -1,
 		patchSeq:      -1,
+		jobs:          newJobQueue(),
 	}
 	for _, option := range options {
 		option(w)
@@ -112,19 +137,99 @@ func New(client JobAcquirer, config Config, options ...Option) (*Scaler, error) 
 		return nil, err
 	}
 
-	qps, burst := effectiveRateLimiterConfig(config.ScalerConfig, w.logger)
-	conf.QPS = float32(qps)
-	conf.Burst = burst
 	w.workers = effectiveWorkerCount(config.ScalerConfig, w.logger)
 
-	clientset, err := kubernetes.NewForConfig(conf)
+	jobQPS, jobBurst := effectiveRateLimiterConfig(config.ScalerConfig, w.logger)
+	jobConf := rest.CopyConfig(conf)
+	jobConf.QPS = float32(jobQPS)
+	jobConf.Burst = jobBurst
+	jobClientset, err := kubernetes.NewForConfig(jobConf)
 	if err != nil {
 		return nil, err
 	}
 
-	w.clientset = clientset
+	scaleQPS, scaleBurst := effectiveScaleRateLimiterConfig(config.ScalerConfig, w.logger)
+	scaleConf := rest.CopyConfig(conf)
+	scaleConf.QPS = float32(scaleQPS)
+	scaleConf.Burst = scaleBurst
+	scaleClientset, err := kubernetes.NewForConfig(scaleConf)
+	if err != nil {
+		return nil, err
+	}
+
+	w.jobClientset = jobClientset
+	w.scaleClientset = scaleClientset
+
+	w.startJobWorkers()
 
 	return w, nil
+}
+
+// startJobWorkers brings up the pool that drains the job started queue.
+func (w *Scaler) startJobWorkers() {
+	w.jobCtx, w.jobCancel = context.WithCancel(context.Background())
+
+	for range w.workers {
+		w.jobWorkers.Add(1)
+		go func() {
+			defer w.jobWorkers.Done()
+
+			for {
+				jobInfo, ok := w.jobs.pop()
+				if !ok {
+					return
+				}
+
+				// Recorded here rather than at enqueue time so the metric and the
+				// patch describe the same moment.
+				w.metrics.RecordJobStarted(jobInfo)
+
+				if err := w.HandleJobStarted(w.jobCtx, jobInfo); err != nil {
+					// The message this event arrived on has already been acked, so
+					// there is nobody left to return the error to. Losing the patch
+					// costs a stale Status.JobID: the runner set may try to delete
+					// the runner as idle, and the Actions service rejects that while
+					// the job is still running, so the job itself is not at risk.
+					w.logger.Error("Failed to patch job started event",
+						"runnerName", jobInfo.RunnerName,
+						"requestId", jobInfo.RunnerRequestID,
+						"error", err.Error(),
+					)
+				}
+			}
+		}()
+	}
+}
+
+// Close drains the job started queue and stops the workers. Everything already
+// accepted from an acked message is patched first, so a clean shutdown does not
+// strand job information the service believes was recorded.
+//
+// If ctx expires before the queue drains, the remaining patches are abandoned
+// and any in-flight request is cancelled.
+func (w *Scaler) Close(ctx context.Context) error {
+	w.closeOnce.Do(func() {
+		w.jobs.close()
+	})
+
+	drained := make(chan struct{})
+	go func() {
+		w.jobWorkers.Wait()
+		close(drained)
+	}()
+
+	select {
+	case <-drained:
+		w.jobCancel()
+		return nil
+	case <-ctx.Done():
+		if depth := w.jobs.depth(); depth > 0 {
+			w.logger.Error("Abandoning queued job started events", "count", depth)
+		}
+		w.jobCancel()
+		<-drained
+		return ctx.Err()
+	}
 }
 
 func effectiveRateLimiterConfig(config *v1alpha1.ScalerConfig, logger *slog.Logger) (int, int) {
@@ -149,6 +254,35 @@ func effectiveRateLimiterConfig(config *v1alpha1.ScalerConfig, logger *slog.Logg
 		logger.Warn("Listener scaler burst must be greater than 0; using default", "configured", *config.Burst, "default", defaultBurst)
 	} else {
 		burst = *config.Burst
+	}
+
+	return qps, burst
+}
+
+// effectiveScaleRateLimiterConfig resolves the budget for the client that
+// publishes the desired runner count.
+func effectiveScaleRateLimiterConfig(config *v1alpha1.ScalerConfig, logger *slog.Logger) (int, int) {
+	if config == nil {
+		logger.Debug("Listener scaler configuration is missing; using defaults", "scaleQPS", defaultScaleQPS, "scaleBurst", defaultScaleBurst)
+		return defaultScaleQPS, defaultScaleBurst
+	}
+
+	qps := defaultScaleQPS
+	if config.ScaleQPS == nil {
+		logger.Debug("Listener scaler scaleQPS is missing; using default", "default", defaultScaleQPS)
+	} else if *config.ScaleQPS < 1 {
+		logger.Warn("Listener scaler scaleQPS must be greater than 0; using default", "configured", *config.ScaleQPS, "default", defaultScaleQPS)
+	} else {
+		qps = *config.ScaleQPS
+	}
+
+	burst := defaultScaleBurst
+	if config.ScaleBurst == nil {
+		logger.Debug("Listener scaler scaleBurst is missing; using default", "default", defaultScaleBurst)
+	} else if *config.ScaleBurst < 1 {
+		logger.Warn("Listener scaler scaleBurst must be greater than 0; using default", "configured", *config.ScaleBurst, "default", defaultScaleBurst)
+	} else {
+		burst = *config.ScaleBurst
 	}
 
 	return qps, burst
@@ -191,11 +325,26 @@ func (w *Scaler) applyDefaults() error {
 // redelivers it otherwise, so every step below is idempotent and safe to repeat
 // after a partially applied message.
 //
-// The desired runner count is published first, since that is the patch new jobs
-// wait on. The job started and job completed events are then patched across a
-// bounded worker pool: they touch distinct EphemeralRunners and carry no
-// ordering between them, so they run concurrently instead of one API call at a
-// time.
+// The order is chosen so that nothing the runner set is waiting on sits behind
+// work it is not waiting on:
+//
+//  1. The desired runner count is published. It is the only patch that creates
+//     runners, so it goes out on its own client before anything else can consume
+//     a rate limit token.
+//  2. The job started events are handed to the background pool. They are
+//     bookkeeping rather than something new jobs wait on, and at two API calls
+//     per event they are what a large batch would otherwise spend the whole
+//     message on.
+//  3. The available jobs are acquired. This is a single call to the Actions
+//     service, and it stays here, ahead of the ack, because a job that is never
+//     acquired is never assigned; unlike the patches above, losing it is not
+//     something a later message repairs.
+//
+// Acquiring last rather than first costs the round trip of the scale patch in
+// acquisition delay and saves the entire job patch batch in scale latency. The
+// scale decision itself is unaffected either way: it is derived from
+// msg.Statistics, a snapshot taken by the service when the message was built,
+// and jobs acquired now are reported as assigned in a later message.
 func (w *Scaler) Scale(ctx context.Context, msg *scaleset.RunnerScaleSetMessage) error {
 	if msg == nil {
 		// The long poll timed out without any activity. There is nothing to
@@ -212,62 +361,37 @@ func (w *Scaler) Scale(ctx context.Context, msg *scaleset.RunnerScaleSetMessage)
 		w.metrics.RecordStatistics(msg.Statistics)
 	}
 
-	// Acquire first so the jobs are assigned as early as possible. Acquiring a
-	// job that is already acquired is a no-op, so a redelivered message repeats
-	// this safely.
-	if err := w.acquireAvailableJobs(ctx, msg.JobAvailableMessages); err != nil {
-		return err
-	}
-
 	if len(msg.JobStartedMessages) > 0 || len(msg.JobCompletedMessages) > 0 {
 		w.dirty = true
 	}
 
-	// Publish the desired count before anything else. It is the only patch that
-	// creates runners, so it is what new jobs actually wait on, while the job
-	// event patches below are bookkeeping. Sending it first also keeps it clear
-	// of the client rate limiter, which a large batch of event patches would
-	// otherwise drain ahead of it.
-	//
-	// Nothing in the batch has to land first for this to be safe. The runner set
-	// controller only deletes idle runners under Spec.PatchID == 0, and
-	// setDesiredWorkerState emits that only when the target is unchanged (or on
-	// the very first patch, before any target exists), never when the target
-	// drops. A scale down therefore cannot reach the deletion path in the same
-	// patch that the job started events are racing.
 	if msg.Statistics != nil {
 		if err := w.patchDesiredRunnerCount(ctx, w.setDesiredWorkerState(msg.Statistics.TotalAssignedJobs)); err != nil {
 			return err
 		}
 	}
 
-	// The job events touch distinct runners and carry no ordering between them,
-	// so they are patched concurrently rather than one round trip at a time.
-	//
-	// They must still all land before this returns. The listener acks the message
-	// the moment Scale succeeds, and nothing other than these patches ever writes
-	// Status.JobID, so a runner whose patch was dropped after the ack would look
-	// idle forever. A later message that settles back to MinRunners publishes
-	// patch ID 0, and that is the one patch the controller does act on to delete
-	// idle runners.
-	g, gctx := errgroup.WithContext(ctx)
-	g.SetLimit(w.workers)
-
-	for _, jobStarted := range msg.JobStartedMessages {
-		g.Go(func() error {
-			w.metrics.RecordJobStarted(jobStarted)
-			return w.HandleJobStarted(gctx, jobStarted)
-		})
-	}
-
+	// A completed job has nothing to patch: the runner is torn down by the
+	// ephemeral runner controller once its pod exits, and the completion is
+	// already reflected in the desired count published above. It is handled
+	// inline because it costs no API call.
 	for _, jobCompleted := range msg.JobCompletedMessages {
-		g.Go(func() error {
-			w.metrics.RecordJobCompleted(jobCompleted)
-			return w.HandleJobCompleted(gctx, jobCompleted)
-		})
+		w.metrics.RecordJobCompleted(jobCompleted)
+		if err := w.HandleJobCompleted(ctx, jobCompleted); err != nil {
+			return err
+		}
 	}
 
-	return g.Wait()
+	// Queued rather than awaited. The listener acks as soon as this returns, so
+	// these patches outlive the message, which is why the workers run on their
+	// own context and the queue is drained by Close rather than here.
+	w.jobs.push(msg.JobStartedMessages...)
+
+	if depth := w.jobs.depth(); depth > 0 {
+		w.logger.Info("Job started events queued for patching", "depth", depth)
+	}
+
+	return w.acquireAvailableJobs(ctx, msg.JobAvailableMessages)
 }
 
 // acquireAvailableJobs assigns every available job to this scale set. A job that
@@ -301,8 +425,8 @@ func (w *Scaler) acquireAvailableJobs(ctx context.Context, jobsAvailable []*scal
 // It also transitions the phase to Running if the runner is not in a terminal state.
 // It returns an error if there is any issue with updating the job information.
 //
-// It is called from a worker goroutine, once per job started event in a message,
-// and only ever touches the runner named by its own event.
+// It is called from a background worker rather than from Scale, once per job
+// started event, and only ever touches the runner named by its own event.
 func (w *Scaler) HandleJobStarted(ctx context.Context, jobInfo *scaleset.JobStarted) error {
 	w.logger.Info("Updating job info for the runner",
 		"runnerName", jobInfo.RunnerName,
@@ -325,7 +449,7 @@ func (w *Scaler) HandleJobStarted(ctx context.Context, jobInfo *scaleset.JobStar
 func (w *Scaler) patchJobStarted(ctx context.Context, jobInfo *scaleset.JobStarted) error {
 	// Fetch current EphemeralRunner to check phase and deletion status
 	currentRunner := &v1alpha1.EphemeralRunner{}
-	err := w.clientset.RESTClient().
+	err := w.jobClientset.RESTClient().
 		Get().
 		Prefix("apis", v1alpha1.GroupVersion.Group, v1alpha1.GroupVersion.Version).
 		Namespace(w.config.EphemeralRunnerSetNamespace).
@@ -389,7 +513,7 @@ func (w *Scaler) patchJobStarted(ctx context.Context, jobInfo *scaleset.JobStart
 	w.logger.Info("Updating ephemeral runner with merge patch", "json", string(mergePatch))
 
 	patchedStatus := &v1alpha1.EphemeralRunner{}
-	err = w.clientset.RESTClient().
+	err = w.jobClientset.RESTClient().
 		Patch(types.MergePatchType).
 		Prefix("apis", v1alpha1.GroupVersion.Group, v1alpha1.GroupVersion.Version).
 		Namespace(w.config.EphemeralRunnerSetNamespace).
@@ -421,7 +545,7 @@ func (w *Scaler) patchJobStarted(ctx context.Context, jobInfo *scaleset.JobStart
 // is nothing to patch here; the completion only has to be reflected in the
 // desired count, which Scale already derives from the message.
 //
-// It is called from a worker goroutine, once per job completed event in a message.
+// It is called inline from Scale, once per job completed event.
 func (w *Scaler) HandleJobCompleted(ctx context.Context, msg *scaleset.JobCompleted) error {
 	w.logger.Info("Job completed",
 		"runnerName", msg.RunnerName,
@@ -475,7 +599,7 @@ func (w *Scaler) patchDesiredRunnerCount(ctx context.Context, patchID int) error
 	w.logger.Info("Preparing EphemeralRunnerSet update", "json", string(mergePatch))
 
 	patchedEphemeralRunnerSet := &v1alpha1.EphemeralRunnerSet{}
-	err = w.clientset.RESTClient().
+	err = w.scaleClientset.RESTClient().
 		Patch(types.MergePatchType).
 		Prefix("apis", v1alpha1.GroupVersion.Group, v1alpha1.GroupVersion.Version).
 		Namespace(w.config.EphemeralRunnerSetNamespace).

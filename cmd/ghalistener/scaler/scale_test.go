@@ -26,9 +26,16 @@ type fakeAcquirer struct {
 	mu       sync.Mutex
 	acquired [][]int64
 	err      error
+	// onAcquire runs before the call is recorded, so a test can observe what had
+	// already happened by the time the scaler reached the acquire step.
+	onAcquire func()
 }
 
 func (f *fakeAcquirer) AcquireJobs(ctx context.Context, requestIDs []int64) ([]int64, error) {
+	if f.onAcquire != nil {
+		f.onAcquire()
+	}
+
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.acquired = append(f.acquired, requestIDs)
@@ -152,23 +159,50 @@ func newScaleScaler(t *testing.T, client JobAcquirer, config Config, workers int
 		}
 	}))
 	t.Cleanup(httpServer.Close)
-	// Registered last so it runs first: a failed assertion must not leave a
-	// request parked inside the handler while Close waits for it.
-	t.Cleanup(server.release)
 
 	clientset, err := kubernetes.NewForConfig(&rest.Config{Host: httpServer.URL, QPS: -1})
 	require.NoError(t, err)
 
-	return &Scaler{
-		clientset:     clientset,
-		client:        client,
-		config:        config,
-		targetRunners: -1,
-		patchSeq:      -1,
-		logger:        discardLogger,
-		metrics:       metrics.Discard,
-		workers:       workers,
-	}, server
+	w := &Scaler{
+		// The split matters in production, where the two clients carry separate
+		// rate limits. The tests only care about ordering, so one unthrottled
+		// client backs both.
+		scaleClientset: clientset,
+		jobClientset:   clientset,
+		client:         client,
+		config:         config,
+		targetRunners:  -1,
+		patchSeq:       -1,
+		logger:         discardLogger,
+		metrics:        metrics.Discard,
+		workers:        workers,
+		jobs:           newJobQueue(),
+	}
+	w.startJobWorkers()
+
+	// Registered after the server so it runs first: the workers have to be gone
+	// before the server they are calling goes away.
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_ = w.Close(ctx)
+	})
+	// Registered last so it runs first of all: a failed assertion must not leave
+	// a request parked inside the handler while the workers are being drained.
+	t.Cleanup(server.release)
+
+	return w, server
+}
+
+// drain waits for every queued job started event to be patched. Scale
+// deliberately does not wait for them, so any assertion about job patches has
+// to ask for the drain explicitly.
+func drain(t *testing.T, w *Scaler) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	require.NoError(t, w.Close(ctx))
 }
 
 // runnerNameFromPath extracts the ephemeral runner name from a request path of
@@ -271,6 +305,7 @@ func TestScale_HandlesJobStartedConcurrently(t *testing.T) {
 	}
 
 	require.NoError(t, w.Scale(t.Context(), msg))
+	drain(t, w)
 
 	server.mu.Lock()
 	peak := server.peak
@@ -298,6 +333,7 @@ func TestScale_WorkersBoundConcurrency(t *testing.T) {
 	}
 
 	require.NoError(t, w.Scale(t.Context(), msg))
+	drain(t, w)
 
 	server.mu.Lock()
 	peak := server.peak
@@ -347,16 +383,117 @@ func TestScale_PublishesDesiredCountFirst(t *testing.T) {
 				JobStartedMessages: []*scaleset.JobStarted{jobStarted(0), jobStarted(1)},
 			}))
 
+			// Safe to assert before the drain: the events are not queued until
+			// the scale patch has already returned, so no job patch can precede
+			// it however the workers are scheduled.
 			server.mu.Lock()
-			defer server.mu.Unlock()
-
-			assert.Equal(t, tt.assigned, w.targetRunners)
 			require.Len(t, server.runnerSetPatches, 1)
 			assert.Equal(t, 0, server.runnerPatchesBeforeRunnerSet,
 				"the desired count is published before any job event patch")
+			server.mu.Unlock()
+
+			drain(t, w)
+
+			server.mu.Lock()
+			defer server.mu.Unlock()
+			assert.Equal(t, tt.assigned, w.targetRunners)
 			assert.Equal(t, 2, server.runnerPatches)
 		})
 	}
+}
+
+// TestScale_DoesNotWaitForJobStartedPatches is the property the background queue
+// exists for. The desired count is what new jobs wait on; the job started
+// patches are bookkeeping, and at two API calls each a full batch of them used
+// to sit between one scale decision and the next.
+//
+// The server holds every ephemeral runner request for the whole test, so a
+// scaler that still patched them inline could not return at all.
+func TestScale_DoesNotWaitForJobStartedPatches(t *testing.T) {
+	const jobs = 20
+
+	w, server := newScaleScaler(t, &fakeAcquirer{}, defaultConfig(), defaultWorkers)
+
+	// Never released by the test itself; cleanup releases it before draining.
+	server.block()
+
+	msg := &scaleset.RunnerScaleSetMessage{
+		MessageID:  1,
+		Statistics: &scaleset.RunnerScaleSetStatistic{TotalAssignedJobs: jobs},
+	}
+	for i := range jobs {
+		msg.JobStartedMessages = append(msg.JobStartedMessages, jobStarted(i))
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- w.Scale(t.Context(), msg) }()
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(30 * time.Second):
+		t.Fatal("Scale blocked on job started patches that cannot complete")
+	}
+
+	server.mu.Lock()
+	defer server.mu.Unlock()
+	assert.Len(t, server.runnerSetPatches, 1,
+		"the desired count is published even while every job patch is stuck")
+	assert.Equal(t, 0, server.runnerPatches)
+}
+
+// TestScale_AcquiresAfterPublishingDesiredCount pins the other half of the
+// reordering. Acquiring is a round trip to the Actions service, and the scale
+// decision does not depend on its result: it is derived from the statistics the
+// service already put in the message. Publishing first therefore costs nothing
+// and keeps that round trip off the path new runners wait on.
+func TestScale_AcquiresAfterPublishingDesiredCount(t *testing.T) {
+	acquirer := &fakeAcquirer{}
+	w, server := newScaleScaler(t, acquirer, defaultConfig(), defaultWorkers)
+
+	var runnerSetPatchesAtAcquire int
+	acquirer.onAcquire = func() {
+		server.mu.Lock()
+		defer server.mu.Unlock()
+		runnerSetPatchesAtAcquire = len(server.runnerSetPatches)
+	}
+
+	require.NoError(t, w.Scale(t.Context(), &scaleset.RunnerScaleSetMessage{
+		MessageID:            1,
+		JobAvailableMessages: []*scaleset.JobAvailable{{JobMessageBase: scaleset.JobMessageBase{RunnerRequestID: 1}}},
+		Statistics:           &scaleset.RunnerScaleSetStatistic{TotalAssignedJobs: 1},
+	}))
+
+	assert.Equal(t, 1, runnerSetPatchesAtAcquire,
+		"the desired count is published before the acquire round trip")
+}
+
+// TestScale_CloseDrainsQueuedJobStartedEvents covers the cost of not waiting.
+// The listener acks a message as soon as Scale returns, so by the time these
+// patches run the service already believes they were recorded and will never
+// redeliver them. Shutting down has to finish them rather than drop them.
+func TestScale_CloseDrainsQueuedJobStartedEvents(t *testing.T) {
+	const jobs = 16
+
+	// Two workers against sixteen events, so the queue is guaranteed to still
+	// hold work when Close is called.
+	w, server := newScaleScaler(t, &fakeAcquirer{}, defaultConfig(), 2)
+
+	msg := &scaleset.RunnerScaleSetMessage{
+		MessageID:  1,
+		Statistics: &scaleset.RunnerScaleSetStatistic{TotalAssignedJobs: jobs},
+	}
+	for i := range jobs {
+		msg.JobStartedMessages = append(msg.JobStartedMessages, jobStarted(i))
+	}
+	require.NoError(t, w.Scale(t.Context(), msg))
+
+	drain(t, w)
+
+	server.mu.Lock()
+	defer server.mu.Unlock()
+	assert.Equal(t, jobs, server.runnerPatches,
+		"a clean shutdown patches everything it accepted from an acked message")
 }
 
 // TestScale_ScaleDownNeverPublishesPatchIDZero is the invariant the ordering
@@ -429,7 +566,52 @@ func TestScale_AcquireFailureIsNotAcked(t *testing.T) {
 
 	server.mu.Lock()
 	defer server.mu.Unlock()
-	assert.Empty(t, server.runnerSetPatches, "nothing is published when the jobs were never acquired")
+	// The desired count is published ahead of the acquire, so it survives the
+	// failure. That is safe, and deliberate: it is derived from the statistics
+	// the service put in the message rather than from anything the acquire
+	// returns, and republishing it when the message is redelivered is a no-op.
+	assert.Len(t, server.runnerSetPatches, 1,
+		"the desired count is published before the acquire, so it stands even when the acquire fails")
+}
+
+func TestEffectiveScaleRateLimiterConfig(t *testing.T) {
+	qps, burst := 3, 7
+
+	tests := []struct {
+		name      string
+		config    *v1alpha1.ScalerConfig
+		wantQPS   int
+		wantBurst int
+	}{
+		{name: "nil config", config: nil, wantQPS: defaultScaleQPS, wantBurst: defaultScaleBurst},
+		{name: "unset", config: &v1alpha1.ScalerConfig{}, wantQPS: defaultScaleQPS, wantBurst: defaultScaleBurst},
+		{
+			name:      "configured",
+			config:    &v1alpha1.ScalerConfig{ScaleQPS: &qps, ScaleBurst: &burst},
+			wantQPS:   qps,
+			wantBurst: burst,
+		},
+		{
+			name:      "zero falls back",
+			config:    &v1alpha1.ScalerConfig{ScaleQPS: new(int), ScaleBurst: new(int)},
+			wantQPS:   defaultScaleQPS,
+			wantBurst: defaultScaleBurst,
+		},
+		{
+			name:      "independent of the job client budget",
+			config:    &v1alpha1.ScalerConfig{QPS: &qps, Burst: &burst},
+			wantQPS:   defaultScaleQPS,
+			wantBurst: defaultScaleBurst,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotQPS, gotBurst := effectiveScaleRateLimiterConfig(tt.config, discardLogger)
+			assert.Equal(t, tt.wantQPS, gotQPS)
+			assert.Equal(t, tt.wantBurst, gotBurst)
+		})
+	}
 }
 
 func TestEffectiveWorkerCount(t *testing.T) {

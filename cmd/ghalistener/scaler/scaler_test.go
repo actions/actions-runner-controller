@@ -333,7 +333,8 @@ func newTestScaler(t *testing.T, runner *v1alpha1.EphemeralRunner, onPatch ...fu
 	require.NoError(t, err)
 
 	return &Scaler{
-		clientset: clientset,
+		scaleClientset: clientset,
+		jobClientset:   clientset,
 		config: Config{
 			EphemeralRunnerSetNamespace: runner.Namespace,
 		},
@@ -771,7 +772,8 @@ func newRecordingScaler(t *testing.T, runner *v1alpha1.EphemeralRunner, notFound
 	require.NoError(t, err)
 
 	return &Scaler{
-		clientset: clientset,
+		scaleClientset: clientset,
+		jobClientset:   clientset,
 		config: Config{
 			EphemeralRunnerSetNamespace: runner.Namespace,
 		},

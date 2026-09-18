@@ -176,6 +176,16 @@ func TestTemplateListenerScalerValidation(t *testing.T) {
 			wantErrorText: "at '/listenerConfig/scaler/workers': minimum: got 0, want 1",
 		},
 		{
+			name:          "zero scaleQPS",
+			setValues:     map[string]string{"listenerConfig.scaler.scaleQPS": "0"},
+			wantErrorText: "at '/listenerConfig/scaler/scaleQPS': minimum: got 0, want 1",
+		},
+		{
+			name:          "negative scaleBurst",
+			setValues:     map[string]string{"listenerConfig.scaler.scaleBurst": "-1"},
+			wantErrorText: "at '/listenerConfig/scaler/scaleBurst': minimum: got -1, want 1",
+		},
+		{
 			name:          "fractional qps",
 			setValues:     map[string]string{"listenerConfig.scaler.qps": "1.5"},
 			wantErrorText: "at '/listenerConfig/scaler/qps'",
@@ -248,38 +258,59 @@ func TestTemplateListenerScalerConfig(t *testing.T) {
 		"controllerServiceAccount.namespace": "arc-system",
 	}
 	tests := []struct {
-		name        string
-		setValues   map[string]string
-		wantQPS     *int
-		wantBurst   *int
-		wantWorkers *int
+		name           string
+		setValues      map[string]string
+		wantQPS        *int
+		wantBurst      *int
+		wantScaleQPS   *int
+		wantScaleBurst *int
+		wantWorkers    *int
 	}{
 		{
-			name:        "defaults from values.yaml",
-			wantQPS:     ptr.To(50),
-			wantBurst:   ptr.To(100),
-			wantWorkers: ptr.To(10),
+			name:           "defaults from values.yaml",
+			wantQPS:        ptr.To(50),
+			wantBurst:      ptr.To(100),
+			wantScaleQPS:   ptr.To(10),
+			wantScaleBurst: ptr.To(20),
+			wantWorkers:    ptr.To(10),
 		},
 		{
-			name:        "both overridden",
-			setValues:   map[string]string{"listenerConfig.scaler.qps": "100", "listenerConfig.scaler.burst": "200"},
-			wantQPS:     ptr.To(100),
-			wantBurst:   ptr.To(200),
-			wantWorkers: ptr.To(10),
+			name:           "both overridden",
+			setValues:      map[string]string{"listenerConfig.scaler.qps": "100", "listenerConfig.scaler.burst": "200"},
+			wantQPS:        ptr.To(100),
+			wantBurst:      ptr.To(200),
+			wantScaleQPS:   ptr.To(10),
+			wantScaleBurst: ptr.To(20),
+			wantWorkers:    ptr.To(10),
 		},
 		{
-			name:        "qps overridden keeps default burst",
-			setValues:   map[string]string{"listenerConfig.scaler.qps": "75"},
-			wantQPS:     ptr.To(75),
-			wantBurst:   ptr.To(100),
-			wantWorkers: ptr.To(10),
+			name:           "qps overridden keeps default burst",
+			setValues:      map[string]string{"listenerConfig.scaler.qps": "75"},
+			wantQPS:        ptr.To(75),
+			wantBurst:      ptr.To(100),
+			wantScaleQPS:   ptr.To(10),
+			wantScaleBurst: ptr.To(20),
+			wantWorkers:    ptr.To(10),
 		},
 		{
-			name:        "workers overridden",
-			setValues:   map[string]string{"listenerConfig.scaler.workers": "32"},
-			wantQPS:     ptr.To(50),
-			wantBurst:   ptr.To(100),
-			wantWorkers: ptr.To(32),
+			name:           "workers overridden",
+			setValues:      map[string]string{"listenerConfig.scaler.workers": "32"},
+			wantQPS:        ptr.To(50),
+			wantBurst:      ptr.To(100),
+			wantScaleQPS:   ptr.To(10),
+			wantScaleBurst: ptr.To(20),
+			wantWorkers:    ptr.To(32),
+		},
+		{
+			// The scale client budget is deliberately independent of the job
+			// client budget: raising qps must not quietly reallocate it.
+			name:           "scale client overridden independently",
+			setValues:      map[string]string{"listenerConfig.scaler.scaleQPS": "5", "listenerConfig.scaler.scaleBurst": "9"},
+			wantQPS:        ptr.To(50),
+			wantBurst:      ptr.To(100),
+			wantScaleQPS:   ptr.To(5),
+			wantScaleBurst: ptr.To(9),
+			wantWorkers:    ptr.To(10),
 		},
 		{
 			name:      "listenerConfig disabled",
@@ -307,7 +338,8 @@ func TestTemplateListenerScalerConfig(t *testing.T) {
 			var ars v1alpha1.AutoscalingRunnerSet
 			helm.UnmarshalK8SYaml(t, output, &ars)
 
-			if tt.wantQPS == nil && tt.wantBurst == nil && tt.wantWorkers == nil {
+			if tt.wantQPS == nil && tt.wantBurst == nil && tt.wantWorkers == nil &&
+				tt.wantScaleQPS == nil && tt.wantScaleBurst == nil {
 				assert.Nil(t, ars.Spec.ListenerConfig.GetScaler())
 				return
 			}
@@ -316,6 +348,8 @@ func TestTemplateListenerScalerConfig(t *testing.T) {
 			require.NotNil(t, scaler)
 			assert.Equal(t, tt.wantQPS, scaler.QPS)
 			assert.Equal(t, tt.wantBurst, scaler.Burst)
+			assert.Equal(t, tt.wantScaleQPS, scaler.ScaleQPS)
+			assert.Equal(t, tt.wantScaleBurst, scaler.ScaleBurst)
 			assert.Equal(t, tt.wantWorkers, scaler.Workers)
 		})
 	}

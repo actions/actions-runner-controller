@@ -807,6 +807,16 @@ func (in *ScalerConfig) DeepCopyInto(out *ScalerConfig) {
 		*out = new(int)
 		**out = **in
 	}
+	if in.ScaleQPS != nil {
+		in, out := &in.ScaleQPS, &out.ScaleQPS
+		*out = new(int)
+		**out = **in
+	}
+	if in.ScaleBurst != nil {
+		in, out := &in.ScaleBurst, &out.ScaleBurst
+		*out = new(int)
+		**out = **in
+	}
 	if in.Workers != nil {
 		in, out := &in.Workers, &out.Workers
 		*out = new(int)

@@ -10,22 +10,32 @@
       "additionalProperties": false,
       "properties": {
         "scaler": {
-          "description": "Configuration for the Kubernetes client used by the ghalistener scaler.",
+          "description": "Configuration for the Kubernetes clients used by the ghalistener scaler.",
           "type": ["object", "null"],
           "additionalProperties": false,
           "properties": {
             "qps": {
-              "description": "Queries per second the listener may issue to the Kubernetes API server.",
+              "description": "Queries per second the listener may issue to the Kubernetes API server when patching job started events.",
               "type": "integer",
               "minimum": 1
             },
             "burst": {
-              "description": "Burst of queries the listener may issue to the Kubernetes API server.",
+              "description": "Burst of queries the listener may issue to the Kubernetes API server when patching job started events.",
+              "type": "integer",
+              "minimum": 1
+            },
+            "scaleQPS": {
+              "description": "Queries per second the listener may issue to the Kubernetes API server when publishing the desired runner count. This is a separate budget from qps so a batch of job event patches cannot delay it.",
+              "type": "integer",
+              "minimum": 1
+            },
+            "scaleBurst": {
+              "description": "Burst of queries the listener may issue to the Kubernetes API server when publishing the desired runner count.",
               "type": "integer",
               "minimum": 1
             },
             "workers": {
-              "description": "Number of job started and job completed events the listener handles concurrently within a single scale set message.",
+              "description": "Number of job started events the listener patches concurrently from its background queue.",
               "type": "integer",
               "minimum": 1
             }
