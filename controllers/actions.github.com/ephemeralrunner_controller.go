@@ -110,6 +110,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			return ctrl.Result{}, nil
 		}
 
+		deferredActionsFinalizer := false
 		if controllerutil.ContainsFinalizer(&ephemeralRunner, ephemeralRunnerActionsFinalizerName) {
 			// This finalizer exists to release the runner's registration with the
 			// Actions service. There are two ways that happens.
@@ -156,16 +157,22 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				"phase", ephemeralRunner.Status.Phase,
 			)
 
-			if controllerutil.RemoveFinalizer(runner.Mutate(), ephemeralRunnerActionsFinalizerName) {
+			removedActionsFinalizer := controllerutil.RemoveFinalizer(runner.Mutate(), ephemeralRunnerActionsFinalizerName)
+
+			// The patch has to land before the runner is queued: queueing first
+			// would ask the service to remove the same runner twice when the patch
+			// fails and the reconcile comes back through this branch. A runner with
+			// nothing to queue has nothing to order the patch against, so its
+			// removal rides along with the finalizer patch made after cleanup
+			// below rather than paying for a round trip of its own.
+			deferredActionsFinalizer = removedActionsFinalizer && runnerID == 0
+			if removedActionsFinalizer && !deferredActionsFinalizer {
 				if err := r.Patch(ctx, &ephemeralRunner, runner.MergeFrom()); err != nil {
 					log.Error(err, "Failed to update ephemeral runner after removing finalizer")
 					return ctrl.Result{}, err
 				}
 			}
 
-			// Queued only once the finalizer is actually gone. A failed patch
-			// above sends the reconcile back through this branch, and queueing
-			// first would ask the service to remove the same runner twice.
 			if runnerID != 0 {
 				r.UnregistrationQueue.Push(&ephemeralRunner, runnerID)
 			}
@@ -189,7 +196,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 
 		log.Info("Removing finalizer")
-		if controllerutil.RemoveFinalizer(runner.Mutate(), ephemeralRunnerFinalizerName) {
+		if controllerutil.RemoveFinalizer(runner.Mutate(), ephemeralRunnerFinalizerName) || deferredActionsFinalizer {
 			log.Info("Removed finalizer from ephemeral runner")
 			if err := r.Patch(ctx, &ephemeralRunner, runner.MergeFrom()); client.IgnoreNotFound(err) != nil {
 				log.Error(err, "Failed to update ephemeral runner after removing finalizer")
