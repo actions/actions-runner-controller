@@ -191,11 +191,11 @@ func (w *Scaler) applyDefaults() error {
 // redelivers it otherwise, so every step below is idempotent and safe to repeat
 // after a partially applied message.
 //
-// The work is split across workers: one patches the EphemeralRunnerSet with the
-// desired replica count, the rest patch the EphemeralRunner behind each job
-// started or job completed event. The events touch distinct resources and carry
-// no ordering between them, so they run concurrently instead of being replayed
-// one API call at a time.
+// The desired runner count is published first, since that is the patch new jobs
+// wait on. The job started and job completed events are then patched across a
+// bounded worker pool: they touch distinct EphemeralRunners and carry no
+// ordering between them, so they run concurrently instead of one API call at a
+// time.
 func (w *Scaler) Scale(ctx context.Context, msg *scaleset.RunnerScaleSetMessage) error {
 	if msg == nil {
 		// The long poll timed out without any activity. There is nothing to
@@ -223,37 +223,35 @@ func (w *Scaler) Scale(ctx context.Context, msg *scaleset.RunnerScaleSetMessage)
 		w.dirty = true
 	}
 
-	// The scale decision is computed up front, on the goroutine that owns the
-	// scaler state, so the scaling worker never races the event workers for it.
-	scaleRequested := msg.Statistics != nil
-	var patchID int
-	var scalesDown bool
-	if scaleRequested {
-		previousTarget := w.targetRunners
-		patchID = w.setDesiredWorkerState(msg.Statistics.TotalAssignedJobs)
-		scalesDown = previousTarget >= 0 && w.targetRunners < previousTarget
+	// Publish the desired count before anything else. It is the only patch that
+	// creates runners, so it is what new jobs actually wait on, while the job
+	// event patches below are bookkeeping. Sending it first also keeps it clear
+	// of the client rate limiter, which a large batch of event patches would
+	// otherwise drain ahead of it.
+	//
+	// Nothing in the batch has to land first for this to be safe. The runner set
+	// controller only deletes idle runners under Spec.PatchID == 0, and
+	// setDesiredWorkerState emits that only when the target is unchanged (or on
+	// the very first patch, before any target exists), never when the target
+	// drops. A scale down therefore cannot reach the deletion path in the same
+	// patch that the job started events are racing.
+	if msg.Statistics != nil {
+		if err := w.patchDesiredRunnerCount(ctx, w.setDesiredWorkerState(msg.Statistics.TotalAssignedJobs)); err != nil {
+			return err
+		}
 	}
 
-	// A patch that lowers the replica count can make the runner set controller
-	// delete idle runners, and it only skips a runner that already carries a job
-	// request ID. Publishing it before the job started patches land could
-	// therefore offer up a runner that just picked up a job, so the scaling
-	// worker waits for them in that case. A patch that scales up or holds cannot
-	// delete anything, so it runs alongside the event workers.
-	scaleConcurrently := scaleRequested && !scalesDown
-
+	// The job events touch distinct runners and carry no ordering between them,
+	// so they are patched concurrently rather than one round trip at a time.
+	//
+	// They must still all land before this returns. The listener acks the message
+	// the moment Scale succeeds, and nothing other than these patches ever writes
+	// Status.JobID, so a runner whose patch was dropped after the ack would look
+	// idle forever. A later message that settles back to MinRunners publishes
+	// patch ID 0, and that is the one patch the controller does act on to delete
+	// idle runners.
 	g, gctx := errgroup.WithContext(ctx)
-	limit := w.workers
-	if scaleConcurrently {
-		limit++ // the scaling worker gets a slot of its own
-	}
-	g.SetLimit(limit)
-
-	if scaleConcurrently {
-		g.Go(func() error {
-			return w.patchDesiredRunnerCount(gctx, patchID)
-		})
-	}
+	g.SetLimit(w.workers)
 
 	for _, jobStarted := range msg.JobStartedMessages {
 		g.Go(func() error {
@@ -269,15 +267,7 @@ func (w *Scaler) Scale(ctx context.Context, msg *scaleset.RunnerScaleSetMessage)
 		})
 	}
 
-	if err := g.Wait(); err != nil {
-		return err
-	}
-
-	if scaleRequested && !scaleConcurrently {
-		return w.patchDesiredRunnerCount(ctx, patchID)
-	}
-
-	return nil
+	return g.Wait()
 }
 
 // acquireAvailableJobs assigns every available job to this scale set. A job that

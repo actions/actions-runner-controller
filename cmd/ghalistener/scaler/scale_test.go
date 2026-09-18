@@ -303,78 +303,84 @@ func TestScale_WorkersBoundConcurrency(t *testing.T) {
 	peak := server.peak
 	server.mu.Unlock()
 
-	// workers event slots plus the scaling worker, which runs alongside them
-	// because this message scales up.
-	assert.LessOrEqual(t, peak, workers+1)
+	assert.LessOrEqual(t, peak, workers, "the pool bound is a real limit")
 }
 
-// TestScale_ScaleDownWaitsForJobStarted pins the ordering the runner set
-// controller depends on. It skips a runner during scale down only when that
-// runner already carries a job request ID, so a patch that lowers the replica
-// count must not be published while job started patches are still outstanding.
-func TestScale_ScaleDownWaitsForJobStarted(t *testing.T) {
-	w, server := newScaleScaler(t, &fakeAcquirer{}, defaultConfig(), defaultWorkers)
-
-	// Establish a target of 4 so the next message scales down.
-	require.NoError(t, w.Scale(t.Context(), &scaleset.RunnerScaleSetMessage{
-		MessageID:  1,
-		Statistics: &scaleset.RunnerScaleSetStatistic{TotalAssignedJobs: 4},
-	}))
-	require.Equal(t, 4, w.targetRunners)
-
-	server.mu.Lock()
-	server.runnerSetPatches = nil
-	server.mu.Unlock()
-
-	msg := &scaleset.RunnerScaleSetMessage{
-		MessageID:          2,
-		Statistics:         &scaleset.RunnerScaleSetStatistic{TotalAssignedJobs: 1},
-		JobStartedMessages: []*scaleset.JobStarted{jobStarted(0), jobStarted(1)},
+// TestScale_PublishesDesiredCountFirst pins the ordering that matters for
+// scale up latency: the replica patch is the one that creates runners, so it
+// goes out before any of the job event bookkeeping patches.
+//
+// It is asserted for a scale down as well as a scale up. Nothing requires the
+// job started patches to land first: the runner set controller only deletes
+// idle runners under Spec.PatchID == 0, which setDesiredWorkerState never emits
+// together with a falling target.
+func TestScale_PublishesDesiredCountFirst(t *testing.T) {
+	tests := []struct {
+		name     string
+		settleAt int
+		assigned int
+	}{
+		{name: "scale up", settleAt: 1, assigned: 5},
+		{name: "steady", settleAt: 5, assigned: 5},
+		{name: "scale down", settleAt: 5, assigned: 1},
 	}
 
-	require.NoError(t, w.Scale(t.Context(), msg))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w, server := newScaleScaler(t, &fakeAcquirer{}, defaultConfig(), defaultWorkers)
 
-	server.mu.Lock()
-	defer server.mu.Unlock()
+			require.NoError(t, w.Scale(t.Context(), &scaleset.RunnerScaleSetMessage{
+				MessageID:  1,
+				Statistics: &scaleset.RunnerScaleSetStatistic{TotalAssignedJobs: tt.settleAt},
+			}))
+			require.Equal(t, tt.settleAt, w.targetRunners)
 
-	assert.Equal(t, 1, w.targetRunners)
-	require.Len(t, server.runnerSetPatches, 1)
-	assert.Equal(t, 2, server.runnerPatchesBeforeRunnerSet,
-		"the scale down patch is published only after every job started patch landed")
+			server.mu.Lock()
+			server.runnerSetPatches = nil
+			server.runnerPatches = 0
+			server.runnerPatchesBeforeRunnerSet = 0
+			server.mu.Unlock()
+
+			require.NoError(t, w.Scale(t.Context(), &scaleset.RunnerScaleSetMessage{
+				MessageID:          2,
+				Statistics:         &scaleset.RunnerScaleSetStatistic{TotalAssignedJobs: tt.assigned},
+				JobStartedMessages: []*scaleset.JobStarted{jobStarted(0), jobStarted(1)},
+			}))
+
+			server.mu.Lock()
+			defer server.mu.Unlock()
+
+			assert.Equal(t, tt.assigned, w.targetRunners)
+			require.Len(t, server.runnerSetPatches, 1)
+			assert.Equal(t, 0, server.runnerPatchesBeforeRunnerSet,
+				"the desired count is published before any job event patch")
+			assert.Equal(t, 2, server.runnerPatches)
+		})
+	}
 }
 
-// TestScale_ScaleUpRunsAlongsideJobStarted is the counterpart: a patch that
-// cannot delete anything is published without waiting for the event workers.
-func TestScale_ScaleUpRunsAlongsideJobStarted(t *testing.T) {
-	w, server := newScaleScaler(t, &fakeAcquirer{}, defaultConfig(), defaultWorkers)
+// TestScale_ScaleDownNeverPublishesPatchIDZero is the invariant the ordering
+// above relies on. Patch ID 0 is the only one the runner set controller acts on
+// to delete idle runners, so a falling target must never carry it -- otherwise
+// a runner whose job started patch has not landed yet would look idle and be
+// eligible for deletion.
+func TestScale_ScaleDownNeverPublishesPatchIDZero(t *testing.T) {
+	for _, minRunners := range []int{0, 1, 2} {
+		config := defaultConfig()
+		config.MinRunners = minRunners
 
-	// Block the ephemeral runner requests so the scale patch can only land first
-	// if it genuinely does not wait for them.
-	server.block()
-	defer server.release()
+		w, _ := newScaleScaler(t, &fakeAcquirer{}, config, defaultWorkers)
 
-	done := make(chan error, 1)
-	go func() {
-		done <- w.Scale(t.Context(), &scaleset.RunnerScaleSetMessage{
-			MessageID:          1,
-			Statistics:         &scaleset.RunnerScaleSetStatistic{TotalAssignedJobs: 5},
-			JobStartedMessages: []*scaleset.JobStarted{jobStarted(0), jobStarted(1)},
-		})
-	}()
-
-	require.Eventually(t, func() bool {
-		server.mu.Lock()
-		defer server.mu.Unlock()
-		return len(server.runnerSetPatches) == 1
-	}, 10*time.Second, time.Millisecond, "scale up patch is published without waiting for job started patches")
-
-	server.release()
-	require.NoError(t, <-done)
-
-	server.mu.Lock()
-	defer server.mu.Unlock()
-	assert.Equal(t, 0, server.runnerPatchesBeforeRunnerSet)
-	assert.Equal(t, 2, server.runnerPatches)
+		previous := -1
+		for _, assigned := range []int{0, 3, 3, 1, 0, 0, 4, 2, 0} {
+			patchID := w.setDesiredWorkerState(assigned)
+			if previous >= 0 && w.targetRunners < previous {
+				assert.NotEqual(t, 0, patchID,
+					"minRunners=%d target %d->%d", minRunners, previous, w.targetRunners)
+			}
+			previous = w.targetRunners
+		}
+	}
 }
 
 // TestScale_NilMessage covers the long poll timing out. The listener stopped
