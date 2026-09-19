@@ -82,6 +82,36 @@ var failedRunnerBackoff = []time.Duration{
 
 const maxFailures = 5
 
+// imagePullGracePeriod is how long a runner pod may sit with a retryable image
+// error before the controller treats it as a failure. Pulls do fail transiently
+// (registry rate limits, a node that has just started), so the pod is given a
+// window to recover on its own before the runner is retried.
+const imagePullGracePeriod = 5 * time.Minute
+
+// imagePullFailure reports the waiting reason when the runner container cannot
+// start because its image cannot be pulled, and whether that state should be
+// treated as a failure now.
+//
+// Without this, a pod whose image can never be pulled stays Pending forever: the
+// runner container never terminates, so the reconciler keeps taking the "still
+// running" branch, the EphemeralRunner never fails, and the scale set holds the
+// slot until someone deletes it by hand.
+func imagePullFailure(cs *corev1.ContainerStatus, pod *corev1.Pod, now time.Time) (string, bool) {
+	if cs == nil || cs.State.Waiting == nil {
+		return "", false
+	}
+	switch reason := cs.State.Waiting.Reason; reason {
+	case "InvalidImageName", "ErrImageNeverPull":
+		// Neither can resolve on its own: the reference is unusable, or the image
+		// is absent on the node and the pull policy forbids fetching it.
+		return reason, true
+	case "ImagePullBackOff", "ErrImagePull":
+		return reason, now.After(pod.CreationTimestamp.Add(imagePullGracePeriod))
+	default:
+		return "", false
+	}
+}
+
 // +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunners,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunners/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunners/finalizers,verbs=get;list;watch;create;update;patch;delete
@@ -386,6 +416,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	cs := runnerContainerStatus(pod)
+	imagePullReason, imagePullStuck := imagePullFailure(cs, pod, time.Now())
 	switch {
 	case pod.Status.Phase == corev1.PodFailed: // All containers are stopped
 		log.Info(
@@ -443,6 +474,15 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		// starting, no container state yet
 		log.Info("Waiting for runner container status to be available")
 		return ctrl.Result{}, nil
+
+	case imagePullStuck:
+		log.Info(
+			"Runner container cannot pull its image, deleting pod as failed so it is retried and eventually fails",
+			"reason", imagePullReason,
+			"message", cs.State.Waiting.Message,
+			"image", cs.Image,
+		)
+		return ctrl.Result{}, r.deleteEphemeralRunnerOrPod(ctx, &ephemeralRunner, pod, log)
 
 	case cs.State.Terminated == nil: // container is not terminated and pod phase is not failed, so runner is still running
 		log.Info("Runner container is still running; updating ephemeral runner status")
@@ -758,6 +798,15 @@ func (r *EphemeralRunnerReconciler) deletePodAsFailed(ctx context.Context, ephem
 	ephemeralRunner.Status.Ready = false
 	ephemeralRunner.Status.Reason = pod.Status.Reason
 	ephemeralRunner.Status.Message = pod.Status.Message
+	// A pod that never started carries nothing in pod.Status.Reason/Message: it is still Pending and the detail lives
+	// on the runner container's waiting state. An image that cannot be pulled is the common case, and without this the
+	// runner would record the failure with no indication of why it failed.
+	if ephemeralRunner.Status.Reason == "" {
+		if cs := runnerContainerStatus(pod); cs != nil && cs.State.Waiting != nil {
+			ephemeralRunner.Status.Reason = cs.State.Waiting.Reason
+			ephemeralRunner.Status.Message = cs.State.Waiting.Message
+		}
+	}
 
 	if err := r.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
 		return fmt.Errorf("failed to update ephemeral runner status with failure count: %w", err)
