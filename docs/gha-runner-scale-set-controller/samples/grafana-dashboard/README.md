@@ -45,8 +45,8 @@ __meta_kubernetes_pod_label_actions_github_com_scale_set_namespace=arc-runners
 ```
 
 The scrape configuration has to copy those metadata labels onto the scraped metrics. The
-example below copies only the two labels the dashboard needs, scoped to the `arc-systems`
-namespace:
+example below selects only the listener pods in the `arc-systems` namespace and copies only
+the two labels the dashboard needs:
 
 ```yaml
 scrape_configs:
@@ -57,11 +57,22 @@ scrape_configs:
           names:
             - arc-systems
     relabel_configs:
+      # Only scrape the listener pods, on their metrics port.
+      - source_labels: [__meta_kubernetes_pod_label_actions_github_com_scale_set_name]
+        action: keep
+        regex: .+
+      - source_labels: [__meta_kubernetes_pod_container_port_name]
+        action: keep
+        regex: metrics
       - source_labels: [__meta_kubernetes_pod_label_actions_github_com_scale_set_name]
         target_label: actions_github_com_scale_set_name
       - source_labels: [__meta_kubernetes_pod_label_actions_github_com_scale_set_namespace]
         target_label: actions_github_com_scale_set_namespace
 ```
+
+Without the `keep` rules, Prometheus creates a target for every pod and port in the
+namespace, most of which do not serve metrics. If you already have a scrape job for the
+listeners, add just the two `target_label` relabelings to it.
 
 If you use the Prometheus Operator, the equivalent is a `PodMonitor` (or `ServiceMonitor`)
 with the same entries in its `relabelings`.
