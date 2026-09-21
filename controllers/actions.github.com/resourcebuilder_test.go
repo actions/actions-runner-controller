@@ -597,3 +597,89 @@ func TestNewEphemeralRunnerStampsActionableRevision(t *testing.T) {
 		assert.Equal(t, "7", runner.Annotations[AnnotationKeyActionableRevision])
 	})
 }
+
+// TestNewEphemeralRunnerDoesNotShareItsSpec pins that every runner built from a
+// set owns its spec outright.
+//
+// Creating a runner hands the object to the API server and decodes the reply
+// back into it, and the decoder writes into the maps and slice elements it
+// already finds rather than allocating new ones. Runners are built and created
+// in parallel, so a spec shared between two of them is memory two goroutines
+// write at the same time, which takes the process down rather than failing a
+// request. The set is read by all of them at once, so its own copy has to come
+// through untouched too.
+func TestNewEphemeralRunnerDoesNotShareItsSpec(t *testing.T) {
+	b := &ResourceBuilder{}
+	set := &v1alpha1.EphemeralRunnerSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "test-set",
+			Namespace:   "test-ns",
+			Labels:      map[string]string{"set-label": "original"},
+			Annotations: map[string]string{"set-annotation": "original"},
+		},
+		Spec: v1alpha1.EphemeralRunnerSetSpec{
+			Replicas: 2,
+			EphemeralRunnerSpec: v1alpha1.EphemeralRunnerSpec{
+				GitHubConfigURL: "https://github.com/org/repo",
+				Proxy: &v1alpha1.ProxyConfig{
+					HTTP:    &v1alpha1.ProxyServerConfig{Url: "http://original"},
+					NoProxy: []string{"original"},
+				},
+				EphemeralRunnerConfigSecretMetadata: &v1alpha1.ResourceMeta{
+					Labels: map[string]string{"secret-label": "original"},
+				},
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels:      map[string]string{"pod-label": "original"},
+						Annotations: map[string]string{"pod-annotation": "original"},
+					},
+					Spec: corev1.PodSpec{
+						NodeSelector: map[string]string{"node": "original"},
+						Volumes:      []corev1.Volume{{Name: "original"}},
+						Containers: []corev1.Container{{
+							Name:  v1alpha1.EphemeralRunnerContainerName,
+							Image: "original",
+							Env:   []corev1.EnvVar{{Name: "KEY", Value: "original"}},
+						}},
+					},
+				},
+			},
+		},
+	}
+	unchanged := set.DeepCopy()
+
+	first, err := b.newEphemeralRunner(set)
+	require.NoError(t, err)
+	second, err := b.newEphemeralRunner(set)
+	require.NoError(t, err)
+
+	// Write over everything the decoder would reach on its way through the
+	// reply, as it would for the runner that happened to be created first.
+	first.Spec.Spec.Containers[0].Image = "decoded"
+	first.Spec.Spec.Containers[0].Env[0].Value = "decoded"
+	first.Spec.Spec.Volumes[0].Name = "decoded"
+	first.Spec.Spec.NodeSelector["node"] = "decoded"
+	first.Spec.Labels["pod-label"] = "decoded"
+	first.Spec.Annotations["pod-annotation"] = "decoded"
+	first.Spec.Proxy.HTTP.Url = "decoded"
+	first.Spec.Proxy.NoProxy[0] = "decoded"
+	first.Spec.EphemeralRunnerConfigSecretMetadata.Labels["secret-label"] = "decoded"
+	first.Labels["set-label"] = "decoded"
+	first.Annotations["set-annotation"] = "decoded"
+
+	assert.Equal(t, "original", second.Spec.Spec.Containers[0].Image)
+	assert.Equal(t, "original", second.Spec.Spec.Containers[0].Env[0].Value)
+	assert.Equal(t, "original", second.Spec.Spec.Volumes[0].Name)
+	assert.Equal(t, "original", second.Spec.Spec.NodeSelector["node"])
+	assert.Equal(t, "original", second.Spec.Labels["pod-label"])
+	assert.Equal(t, "original", second.Spec.Annotations["pod-annotation"])
+	assert.Equal(t, "http://original", second.Spec.Proxy.HTTP.Url)
+	assert.Equal(t, "original", second.Spec.Proxy.NoProxy[0])
+	assert.Equal(t, "original", second.Spec.EphemeralRunnerConfigSecretMetadata.Labels["secret-label"])
+	assert.Equal(t, "original", second.Labels["set-label"])
+	assert.Equal(t, "original", second.Annotations["set-annotation"])
+
+	assert.Equal(t, unchanged.Spec, set.Spec, "the set a runner was built from was written into")
+	assert.Equal(t, unchanged.Labels, set.Labels)
+	assert.Equal(t, unchanged.Annotations, set.Annotations)
+}
