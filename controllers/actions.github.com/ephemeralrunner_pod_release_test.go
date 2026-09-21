@@ -46,7 +46,8 @@ func terminatedRunnerPod(exitCode int32) *corev1.Pod {
 // replacing them have nowhere to start. Skipping the wait is only safe once
 // every container has stopped, so the cases below cover both the pod phase and
 // the container states the phase lags behind, including the sidecars that
-// outlive the runner container.
+// outlive the runner container and the lost node whose phase says the pod
+// failed while the kubelet's last word was that the runner is still up.
 func TestDeletePodOptionsSkipsGracePeriodOnlyWhenNothingIsRunning(t *testing.T) {
 	sidecarRunning := terminatedRunnerPod(0)
 	sidecarRunning.Spec.Containers = append(sidecarRunning.Spec.Containers, corev1.Container{Name: "dind"})
@@ -72,17 +73,30 @@ func TestDeletePodOptionsSkipsGracePeriodOnlyWhenNothingIsRunning(t *testing.T) 
 	failed := terminatedRunnerPod(1)
 	failed.Status.Phase = corev1.PodFailed
 
+	nodeLost := terminatedRunnerPod(0)
+	nodeLost.Status.Phase = corev1.PodFailed
+	nodeLost.Status.ContainerStatuses[0].State = corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}
+
+	failedBeforeStarting := terminatedRunnerPod(0)
+	failedBeforeStarting.Status.Phase = corev1.PodFailed
+	failedBeforeStarting.Status.ContainerStatuses = nil
+	failedBeforeStarting.Status.InitContainerStatuses = []corev1.ContainerStatus{
+		{Name: "init", State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 1}}},
+	}
+
 	tt := map[string]struct {
 		pod       *corev1.Pod
 		immediate bool
 	}{
 		"pod succeeded": {pod: succeeded, immediate: true},
 		"pod failed":    {pod: failed, immediate: true},
-		"runner exited but the phase has not moved": {pod: terminatedRunnerPod(0), immediate: true},
-		"runner is still running":                   {pod: runnerStillRunning},
-		"sidecar is still running":                  {pod: sidecarRunning},
-		"native sidecar is still running":           {pod: nativeSidecarRunning},
-		"a container has not reported a status yet": {pod: statusNotReportedYet},
+		"runner exited but the phase has not moved":                             {pod: terminatedRunnerPod(0), immediate: true},
+		"pod failed before its containers started":                              {pod: failedBeforeStarting, immediate: true},
+		"runner is still running":                                               {pod: runnerStillRunning},
+		"sidecar is still running":                                              {pod: sidecarRunning},
+		"native sidecar is still running":                                       {pod: nativeSidecarRunning},
+		"a container has not reported a status yet":                             {pod: statusNotReportedYet},
+		"the phase failed the pod but a container is still reported as running": {pod: nodeLost},
 	}
 
 	for name, tc := range tt {

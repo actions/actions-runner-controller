@@ -1195,25 +1195,26 @@ func (r *EphemeralRunnerReconciler) SetupWithManager(mgr ctrl.Manager, opts ...O
 
 // podTerminated reports whether every container in the pod has stopped.
 //
-// The pod phase is the authoritative answer, but it lags: the kubelet can
-// report the runner container as terminated in one status update and only move
-// the pod out of Running in the next. The container states are checked as well
-// so that a runner whose job is over is not made to wait for that second
-// update.
+// No container the kubelet has reported on may still be running. That check is
+// made whatever the pod phase says, because the phase is not always the
+// kubelet's account of the containers: a pod is moved to Failed by the control
+// plane when its node is lost or shut down, while the last status the kubelet
+// managed to send still shows a container running on the other side of the
+// partition. Believing the phase there would drop the pod out of the API while
+// something is still alive under it.
+//
+// The phase is what says whether the containers that have not reported are
+// still to come. A pod that has reached Succeeded or Failed is not going to
+// start anything else, so a container missing from the status is one that never
+// ran, which is how a pod whose init container failed is still terminated. Short
+// of a terminal phase every container has to have reported, or the runner that
+// is about to be reported as started would be missed.
 //
 // Native sidecars run as init containers that outlive the regular ones, so they
 // are checked too. A pod still running one of those, or a legacy sidecar
 // alongside the runner, is not terminated no matter what the runner container
 // did.
 func podTerminated(pod *corev1.Pod) bool {
-	switch pod.Status.Phase {
-	case corev1.PodSucceeded, corev1.PodFailed:
-		return true
-	}
-
-	if len(pod.Status.ContainerStatuses) != len(pod.Spec.Containers) {
-		return false
-	}
 	for i := range pod.Status.ContainerStatuses {
 		if pod.Status.ContainerStatuses[i].State.Terminated == nil {
 			return false
@@ -1224,7 +1225,13 @@ func podTerminated(pod *corev1.Pod) bool {
 			return false
 		}
 	}
-	return true
+
+	switch pod.Status.Phase {
+	case corev1.PodSucceeded, corev1.PodFailed:
+		return true
+	}
+
+	return len(pod.Status.ContainerStatuses) == len(pod.Spec.Containers)
 }
 
 // deletePodOptions asks for an immediate deletion of a pod that has nothing
