@@ -213,70 +213,65 @@ func TestReconcileReleasesTheRunnerPodAsSoonAsTheJobIsDone(t *testing.T) {
 	err = c.Get(t.Context(), key, new(corev1.Pod))
 	assert.True(t, kerrors.IsNotFound(err), "the pod must be gone, got %v", err)
 
-	err = c.Get(t.Context(), key, new(corev1.Secret))
-	assert.True(t, kerrors.IsNotFound(err), "the jitconfig secret must be gone, got %v", err)
-
-	err = c.Get(t.Context(), key, new(v1alpha1.EphemeralRunner))
-	assert.True(t, kerrors.IsNotFound(err), "the runner must be gone without a second reconcile to run its finalizers, got %v", err)
+	var got v1alpha1.EphemeralRunner
+	require.NoError(t, c.Get(t.Context(), key, &got), "the runner is deleted, but its finalizers keep it until the deletion reconcile runs")
+	assert.False(t, got.DeletionTimestamp.IsZero(), "the runner must be deleted by the same reconcile")
+	assert.ElementsMatch(t,
+		[]string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName},
+		got.Finalizers,
+		"the deletion reconcile still owns the rest of the cleanup, and the set still has to see the runner going away",
+	)
 }
 
-// TestFinishedRunnerKeepsItsFinalizersWhenCleanupFails pins the fallback.
+// TestAFailedPodReleaseStillDeletesTheRunner pins what happens when the early
+// pod deletion does not work.
 //
-// Removing the finalizers before the deletion is only justified by the pod and
-// the secret being gone already. If either deletion fails, the finalizers are
-// what brings the deletion reconcile back to finish the job, so they have to
-// stay exactly where they are.
-func TestFinishedRunnerKeepsItsFinalizersWhenCleanupFails(t *testing.T) {
+// Releasing the pod here is an optimisation, not the thing that makes the
+// cleanup correct: the deletion reconcile deletes the pod as well. So a pod
+// that cannot be deleted must not stop the runner from being deleted, and must
+// not cost a reconcile retrying it, or a burst of finishing jobs would queue
+// behind whatever is making the API server unhappy.
+func TestAFailedPodReleaseStillDeletesTheRunner(t *testing.T) {
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
 	require.NoError(t, v1alpha1.AddToScheme(scheme))
 
-	tt := map[string]func(client.Object) bool{
-		"the pod cannot be deleted":    func(obj client.Object) bool { _, ok := obj.(*corev1.Pod); return ok },
-		"the secret cannot be deleted": func(obj client.Object) bool { _, ok := obj.(*corev1.Secret); return ok },
+	runner := &v1alpha1.EphemeralRunner{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-runner",
+			Namespace:  "default",
+			Finalizers: []string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName},
+		},
+		Status: v1alpha1.EphemeralRunnerStatus{Phase: v1alpha1.EphemeralRunnerPhaseSucceeded, RunnerID: 42},
 	}
 
-	for name, failsOn := range tt {
-		t.Run(name, func(t *testing.T) {
-			runner := &v1alpha1.EphemeralRunner{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-runner",
-					Namespace:  "default",
-					Finalizers: []string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName},
-				},
-				Status: v1alpha1.EphemeralRunnerStatus{Phase: v1alpha1.EphemeralRunnerPhaseSucceeded, RunnerID: 42},
-			}
-			secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "test-runner", Namespace: "default"}}
+	c := ctrlfake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(runner, terminatedRunnerPod(0)).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
+				if _, ok := obj.(*corev1.Pod); ok {
+					return kerrors.NewServiceUnavailable("etcd is unhappy")
+				}
+				return c.Delete(ctx, obj, opts...)
+			},
+		}).
+		Build()
 
-			c := ctrlfake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(runner, secret, terminatedRunnerPod(0)).
-				WithInterceptorFuncs(interceptor.Funcs{
-					Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
-						if failsOn(obj) {
-							return kerrors.NewServiceUnavailable("etcd is unhappy")
-						}
-						return c.Delete(ctx, obj, opts...)
-					},
-				}).
-				Build()
-
-			reconciler := &EphemeralRunnerReconciler{
-				Client:          c,
-				Scheme:          scheme,
-				ResourceBuilder: ResourceBuilder{ResourceCache: newTestResourceCache()},
-			}
-
-			require.NoError(t, reconciler.deleteSucceededRunner(t.Context(), runner, terminatedRunnerPod(0), logr.Discard()))
-
-			var got v1alpha1.EphemeralRunner
-			require.NoError(t, c.Get(t.Context(), types.NamespacedName{Namespace: "default", Name: "test-runner"}, &got))
-			assert.ElementsMatch(t,
-				[]string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName},
-				got.Finalizers,
-				"the deletion reconcile has to be left something to finish the cleanup with",
-			)
-			assert.False(t, got.DeletionTimestamp.IsZero(), "the runner must still be deleted")
-		})
+	reconciler := &EphemeralRunnerReconciler{
+		Client:          c,
+		Scheme:          scheme,
+		ResourceBuilder: ResourceBuilder{ResourceCache: newTestResourceCache()},
 	}
+
+	require.NoError(t, reconciler.releaseFinishedRunner(t.Context(), runner, terminatedRunnerPod(0), logr.Discard()))
+
+	var got v1alpha1.EphemeralRunner
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Namespace: "default", Name: "test-runner"}, &got))
+	assert.False(t, got.DeletionTimestamp.IsZero(), "the runner must still be deleted")
+	assert.ElementsMatch(t,
+		[]string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName},
+		got.Finalizers,
+		"the deletion reconcile has to be left something to delete the pod with",
+	)
 }

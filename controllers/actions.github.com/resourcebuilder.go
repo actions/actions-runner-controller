@@ -849,7 +849,13 @@ func (b *ResourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.Epheme
 				ephemeralRunnerActionsFinalizerName,
 			},
 		},
-		Spec: ephemeralRunnerSet.Spec.EphemeralRunnerSpec,
+		// Copied rather than shared. A plain assignment is a shallow copy, which
+		// leaves every runner built from this set pointing at the same container,
+		// volume and map values. Creating a runner writes the API server's
+		// response back into the object it was given, and the decoder reuses the
+		// maps and slices it finds there, so runners built in parallel would be
+		// writing into each other. Concurrently written maps end the process.
+		Spec: *ephemeralRunnerSet.Spec.EphemeralRunnerSpec.DeepCopy(),
 	}
 	if err := b.setControllerReference(ephemeralRunnerSet, ephemeralRunner); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for ephemeral runner: %w", err)

@@ -440,7 +440,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				log.Error(err, "Failed to set ephemeral runner to phase Succeeded")
 				return ctrl.Result{}, err
 			}
-			if err := r.deleteSucceededRunner(ctx, &ephemeralRunner, pod, log); err != nil {
+			if err := r.releaseFinishedRunner(ctx, &ephemeralRunner, pod, log); err != nil {
 				log.Error(err, "Failed to delete ephemeral runner after successful completion")
 				return ctrl.Result{}, err
 			}
@@ -497,7 +497,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			log.Error(err, "Failed to set ephemeral runner to phase Succeeded")
 			return ctrl.Result{}, err
 		}
-		if err := r.deleteSucceededRunner(ctx, &ephemeralRunner, pod, log); err != nil {
+		if err := r.releaseFinishedRunner(ctx, &ephemeralRunner, pod, log); err != nil {
 			log.Error(err, "Failed to delete ephemeral runner after successful completion")
 			return ctrl.Result{}, err
 		}
@@ -515,88 +515,39 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 // gap between a job finishing and the next one starting, which during a burst of
 // jobs is the difference between the pods draining and piling up.
 //
-// A failure is logged rather than failing the reconcile, and reported so that
-// the cleanup finalizer is left in place to retry it. The runner still has to be
-// deleted, and requeueing to repeat this deletion would be a slower route to the
-// same place.
-func (r *EphemeralRunnerReconciler) releaseFinishedRunnerPod(ctx context.Context, pod *corev1.Pod, log logr.Logger) bool {
+// A failure is only logged. The runner is deleted either way, and its deletion
+// reconcile deletes the pod again, so requeueing to repeat this deletion would
+// be a slower route to the same place.
+func (r *EphemeralRunnerReconciler) releaseFinishedRunnerPod(ctx context.Context, pod *corev1.Pod, log logr.Logger) {
 	if !pod.DeletionTimestamp.IsZero() {
-		return true
+		return
 	}
 
 	log.Info("Deleting the pod of a finished runner", "podId", pod.UID)
 	if err := r.Delete(ctx, pod, r.deletePodOptions(pod)...); err != nil && !kerrors.IsNotFound(err) {
 		log.Error(err, "Failed to delete the pod of a finished runner, leaving it to the finalizer", "podId", pod.UID)
-		return false
+		return
 	}
 	log.Info("Deleted the pod of a finished runner", "podId", pod.UID)
-	return true
 }
 
-// deleteSucceededRunner removes a runner that has finished its job, and with it
-// everything the runner owns.
+// releaseFinishedRunner hands back the pod of a runner that has finished its
+// job, and then deletes the runner.
 //
-// The generic route to that is to delete the runner and let the deletion
-// reconcile run the finalizers: release the registration, delete the pod and the
-// jitconfig secret, then drop the finalizers so the object can go. That is a
-// second trip through the workqueue for every runner, and during a burst of
-// finishing jobs it is time the scale set spends unable to replace them.
-//
-// A runner that exited with code 0 needs none of what that trip is for. It
-// deregistered itself on the way out, so the registration finalizer has nothing
-// to release, and the pod and the secret are deleted here, so the cleanup
-// finalizer has nothing to clean. Dropping both before the deletion lets the API
-// server remove the object outright.
-//
-// Anything that does not go to plan falls back to that route by leaving the
-// finalizers alone: the deletion still happens, and the deletion reconcile
-// finishes the work exactly as it does today. The pod and the secret are owned
-// by the runner, so even a crash between the patch and the deletion leaves them
-// to the garbage collector rather than behind.
-func (r *EphemeralRunnerReconciler) deleteSucceededRunner(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, pod *corev1.Pod, log logr.Logger) error {
-	if r.releaseFinishedRunnerPod(ctx, pod, log) && r.releaseSucceededRunnerFinalizers(ctx, ephemeralRunner, log) {
-		// Bookkeeping the deletion reconcile would have done. Both are local to
-		// this process, and both are restored by the next reconcile if the
-		// deletion below fails: the phase metric is republished from the recorded
-		// phase at the top of Reconcile, and the cache entry is rebuilt on demand.
-		r.publishEphemeralRunnerPhaseMetric(ephemeralRunner, "", log)
-		r.ResourceCache.Delete(ephemeralRunner)
-	}
+// Deleting the runner is what the controller has always done here, and the
+// deletion reconcile is what releases its registration, its pod and its
+// jitconfig secret. The pod is deleted first so that the cluster gets it back
+// now rather than a reconcile later. That reconcile is not worth skipping: the
+// EphemeralRunnerSet reads the runners that are finishing to tell a gap it
+// opened itself from fresh demand, and a runner that disappears before it is
+// read is a runner the set replaces for a job that is already done.
+func (r *EphemeralRunnerReconciler) releaseFinishedRunner(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, pod *corev1.Pod, log logr.Logger) error {
+	r.releaseFinishedRunnerPod(ctx, pod, log)
 
 	if err := r.Delete(ctx, ephemeralRunner); err != nil && !kerrors.IsNotFound(err) {
 		return err
 	}
 	return nil
-}
-
-// releaseSucceededRunnerFinalizers deletes the jitconfig secret of a runner that
-// has finished successfully and drops the finalizers that exist to do that work
-// later. It reports whether the runner is now free to be deleted outright.
-func (r *EphemeralRunnerReconciler) releaseSucceededRunnerFinalizers(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) bool {
-	secret := new(corev1.Secret)
-	switch err := r.Get(ctx, types.NamespacedName{Namespace: ephemeralRunner.Namespace, Name: ephemeralRunner.Name}, secret); {
-	case err == nil:
-		if secret.DeletionTimestamp.IsZero() {
-			if err := r.Delete(ctx, secret); err != nil && !kerrors.IsNotFound(err) {
-				log.Error(err, "Failed to delete the jitconfig secret of a finished runner, leaving it to the finalizer")
-				return false
-			}
-		}
-	case kerrors.IsNotFound(err):
-	default:
-		log.Error(err, "Failed to read the jitconfig secret of a finished runner, leaving it to the finalizer")
-		return false
-	}
-
-	original := ephemeralRunner.DeepCopy()
-	controllerutil.RemoveFinalizer(ephemeralRunner, ephemeralRunnerActionsFinalizerName)
-	controllerutil.RemoveFinalizer(ephemeralRunner, ephemeralRunnerFinalizerName)
-	if err := r.Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
-		log.Error(err, "Failed to remove the finalizers of a finished runner, leaving them to the deletion")
-		return false
-	}
-
-	return true
 }
 
 func (r *EphemeralRunnerReconciler) deleteEphemeralRunnerOrPod(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, pod *corev1.Pod, log logr.Logger) error {
