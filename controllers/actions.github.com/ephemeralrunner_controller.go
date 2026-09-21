@@ -59,6 +59,19 @@ type EphemeralRunnerReconciler struct {
 	// SetupWithManager creates one and registers it with the manager.
 	UnregistrationQueue *RunnerUnregistrationQueue
 
+	// TerminatedPodGracePeriodSeconds is the grace period used when deleting a
+	// runner pod whose containers have all exited. It is zero by default, so
+	// the pod is removed from the API as soon as its job is over instead of
+	// sitting in Terminating while the kubelet cleans up locally.
+	//
+	// Raise it to keep those pods around for longer, for example to give a log
+	// collector time to read them. A negative value asks for no override at
+	// all, leaving the deletion to the pod's own terminationGracePeriodSeconds.
+	//
+	// It is only ever applied to a pod with nothing left running in it. Pods
+	// that are still alive are always deleted gracefully.
+	TerminatedPodGracePeriodSeconds int64
+
 	ResourceBuilder
 }
 
@@ -427,7 +440,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				log.Error(err, "Failed to set ephemeral runner to phase Succeeded")
 				return ctrl.Result{}, err
 			}
-			if err := r.Delete(ctx, &ephemeralRunner); err != nil {
+			if err := r.deleteSucceededRunner(ctx, &ephemeralRunner, pod, log); err != nil {
 				log.Error(err, "Failed to delete ephemeral runner after successful completion")
 				return ctrl.Result{}, err
 			}
@@ -484,12 +497,106 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			log.Error(err, "Failed to set ephemeral runner to phase Succeeded")
 			return ctrl.Result{}, err
 		}
-		if err := r.Delete(ctx, &ephemeralRunner); err != nil {
+		if err := r.deleteSucceededRunner(ctx, &ephemeralRunner, pod, log); err != nil {
 			log.Error(err, "Failed to delete ephemeral runner after successful completion")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
 	}
+}
+
+// releaseFinishedRunnerPod deletes the pod of a runner whose job is over,
+// without waiting for the deletion of the EphemeralRunner to get around to it.
+//
+// The finalizer deletes the pod as well, one reconcile later. Freeing the pod is
+// what the cluster is waiting for: until it is gone it holds its name, its
+// scheduling slot and its share of any ResourceQuota, and the runner that
+// replaces it cannot start. Doing it here takes a queue round trip out of the
+// gap between a job finishing and the next one starting, which during a burst of
+// jobs is the difference between the pods draining and piling up.
+//
+// A failure is logged rather than failing the reconcile, and reported so that
+// the cleanup finalizer is left in place to retry it. The runner still has to be
+// deleted, and requeueing to repeat this deletion would be a slower route to the
+// same place.
+func (r *EphemeralRunnerReconciler) releaseFinishedRunnerPod(ctx context.Context, pod *corev1.Pod, log logr.Logger) bool {
+	if !pod.DeletionTimestamp.IsZero() {
+		return true
+	}
+
+	log.Info("Deleting the pod of a finished runner", "podId", pod.UID)
+	if err := r.Delete(ctx, pod, r.deletePodOptions(pod)...); err != nil && !kerrors.IsNotFound(err) {
+		log.Error(err, "Failed to delete the pod of a finished runner, leaving it to the finalizer", "podId", pod.UID)
+		return false
+	}
+	log.Info("Deleted the pod of a finished runner", "podId", pod.UID)
+	return true
+}
+
+// deleteSucceededRunner removes a runner that has finished its job, and with it
+// everything the runner owns.
+//
+// The generic route to that is to delete the runner and let the deletion
+// reconcile run the finalizers: release the registration, delete the pod and the
+// jitconfig secret, then drop the finalizers so the object can go. That is a
+// second trip through the workqueue for every runner, and during a burst of
+// finishing jobs it is time the scale set spends unable to replace them.
+//
+// A runner that exited with code 0 needs none of what that trip is for. It
+// deregistered itself on the way out, so the registration finalizer has nothing
+// to release, and the pod and the secret are deleted here, so the cleanup
+// finalizer has nothing to clean. Dropping both before the deletion lets the API
+// server remove the object outright.
+//
+// Anything that does not go to plan falls back to that route by leaving the
+// finalizers alone: the deletion still happens, and the deletion reconcile
+// finishes the work exactly as it does today. The pod and the secret are owned
+// by the runner, so even a crash between the patch and the deletion leaves them
+// to the garbage collector rather than behind.
+func (r *EphemeralRunnerReconciler) deleteSucceededRunner(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, pod *corev1.Pod, log logr.Logger) error {
+	if r.releaseFinishedRunnerPod(ctx, pod, log) && r.releaseSucceededRunnerFinalizers(ctx, ephemeralRunner, log) {
+		// Bookkeeping the deletion reconcile would have done. Both are local to
+		// this process, and both are restored by the next reconcile if the
+		// deletion below fails: the phase metric is republished from the recorded
+		// phase at the top of Reconcile, and the cache entry is rebuilt on demand.
+		r.publishEphemeralRunnerPhaseMetric(ephemeralRunner, "", log)
+		r.ResourceCache.Delete(ephemeralRunner)
+	}
+
+	if err := r.Delete(ctx, ephemeralRunner); err != nil && !kerrors.IsNotFound(err) {
+		return err
+	}
+	return nil
+}
+
+// releaseSucceededRunnerFinalizers deletes the jitconfig secret of a runner that
+// has finished successfully and drops the finalizers that exist to do that work
+// later. It reports whether the runner is now free to be deleted outright.
+func (r *EphemeralRunnerReconciler) releaseSucceededRunnerFinalizers(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) bool {
+	secret := new(corev1.Secret)
+	switch err := r.Get(ctx, types.NamespacedName{Namespace: ephemeralRunner.Namespace, Name: ephemeralRunner.Name}, secret); {
+	case err == nil:
+		if secret.DeletionTimestamp.IsZero() {
+			if err := r.Delete(ctx, secret); err != nil && !kerrors.IsNotFound(err) {
+				log.Error(err, "Failed to delete the jitconfig secret of a finished runner, leaving it to the finalizer")
+				return false
+			}
+		}
+	case kerrors.IsNotFound(err):
+	default:
+		log.Error(err, "Failed to read the jitconfig secret of a finished runner, leaving it to the finalizer")
+		return false
+	}
+
+	original := ephemeralRunner.DeepCopy()
+	controllerutil.RemoveFinalizer(ephemeralRunner, ephemeralRunnerActionsFinalizerName)
+	controllerutil.RemoveFinalizer(ephemeralRunner, ephemeralRunnerFinalizerName)
+	if err := r.Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
+		log.Error(err, "Failed to remove the finalizers of a finished runner, leaving them to the deletion")
+		return false
+	}
+
+	return true
 }
 
 func (r *EphemeralRunnerReconciler) deleteEphemeralRunnerOrPod(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, pod *corev1.Pod, log logr.Logger) error {
@@ -527,7 +634,7 @@ func (r *EphemeralRunnerReconciler) cleanupResources(ctx context.Context, epheme
 	case err == nil:
 		if pod.DeletionTimestamp.IsZero() {
 			log.Info("Deleting the runner pod")
-			if err := r.Delete(ctx, pod); err != nil && !kerrors.IsNotFound(err) {
+			if err := r.Delete(ctx, pod, r.deletePodOptions(pod)...); err != nil && !kerrors.IsNotFound(err) {
 				return fmt.Errorf("failed to delete pod: %w", err)
 			}
 			log.Info("Deleted the runner pod")
@@ -604,7 +711,7 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedPods(ctx context.Context,
 		}
 
 		log.Info("Deleting container hooks runner-linked pod", "name", linkedPod.Name)
-		if err := r.Delete(ctx, linkedPod); err != nil && !kerrors.IsNotFound(err) {
+		if err := r.Delete(ctx, linkedPod, r.deletePodOptions(linkedPod)...); err != nil && !kerrors.IsNotFound(err) {
 			errs = append(errs, fmt.Errorf("failed to delete runner linked pod %q: %w", linkedPod.Name, err))
 		}
 	}
@@ -759,7 +866,7 @@ func (r *EphemeralRunnerReconciler) markAsSucceeded(ctx context.Context, ephemer
 func (r *EphemeralRunnerReconciler) deletePodAsFailed(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, pod *corev1.Pod, log logr.Logger) error {
 	if pod.DeletionTimestamp.IsZero() {
 		log.Info("Deleting the ephemeral runner pod", "podId", pod.UID)
-		if err := r.Delete(ctx, pod); err != nil && !kerrors.IsNotFound(err) {
+		if err := r.Delete(ctx, pod, r.deletePodOptions(pod)...); err != nil && !kerrors.IsNotFound(err) {
 			return fmt.Errorf("failed to delete pod with status failed: %w", err)
 		}
 	}
@@ -1133,6 +1240,70 @@ func (r *EphemeralRunnerReconciler) SetupWithManager(mgr ctrl.Manager, opts ...O
 			WithEventFilter(predicate.ResourceVersionChangedPredicate{}),
 		opts,
 	).Complete(r)
+}
+
+// podTerminated reports whether every container in the pod has stopped.
+//
+// The pod phase is the authoritative answer, but it lags: the kubelet can
+// report the runner container as terminated in one status update and only move
+// the pod out of Running in the next. The container states are checked as well
+// so that a runner whose job is over is not made to wait for that second
+// update.
+//
+// Native sidecars run as init containers that outlive the regular ones, so they
+// are checked too. A pod still running one of those, or a legacy sidecar
+// alongside the runner, is not terminated no matter what the runner container
+// did.
+func podTerminated(pod *corev1.Pod) bool {
+	switch pod.Status.Phase {
+	case corev1.PodSucceeded, corev1.PodFailed:
+		return true
+	}
+
+	if len(pod.Status.ContainerStatuses) != len(pod.Spec.Containers) {
+		return false
+	}
+	for i := range pod.Status.ContainerStatuses {
+		if pod.Status.ContainerStatuses[i].State.Terminated == nil {
+			return false
+		}
+	}
+	for i := range pod.Status.InitContainerStatuses {
+		if pod.Status.InitContainerStatuses[i].State.Terminated == nil {
+			return false
+		}
+	}
+	return true
+}
+
+// deletePodOptions asks for an immediate deletion of a pod that has nothing
+// left running in it.
+//
+// A graceful deletion exists to give containers their terminationGracePeriod to
+// shut down, and the API object survives until the kubelet reports that they
+// have. For a pod whose containers have all terminated there is nothing to
+// shut down and nothing to protect: the grace period is spent waiting on the
+// kubelet to finish unmounting volumes and tearing down the sandbox, which it
+// does whether or not the object is still there.
+//
+// That wait is what fills a cluster with Terminating runner pods during a burst
+// of jobs. They hold their name, their scheduling slot, and their share of any
+// ResourceQuota, so the runners waiting to replace them cannot start. Removing
+// the object as soon as the job is over hands those back immediately.
+//
+// How long to wait is TerminatedPodGracePeriodSeconds, zero by default. A
+// negative value leaves the deletion alone, which restores whatever the pod
+// asks for in its own spec.
+//
+// A pod that is still running is deleted normally. Skipping the grace period
+// there would drop the object while its containers were still alive, leaving
+// the kubelet to kill them with nothing in the API to account for the resources
+// they hold in the meantime.
+func (r *EphemeralRunnerReconciler) deletePodOptions(pod *corev1.Pod) []client.DeleteOption {
+	if !podTerminated(pod) || r.TerminatedPodGracePeriodSeconds < 0 {
+		return nil
+	}
+	return []client.DeleteOption{client.GracePeriodSeconds(r.TerminatedPodGracePeriodSeconds)}
 }
 
 func runnerContainerStatus(pod *corev1.Pod) *corev1.ContainerStatus {

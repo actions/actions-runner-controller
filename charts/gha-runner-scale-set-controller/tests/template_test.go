@@ -366,7 +366,7 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 		"--autoscaling-runner-set-max-concurrent-reconciles=2",
 		"--autoscaling-listener-max-concurrent-reconciles=2",
 		"--ephemeral-runner-set-max-concurrent-reconciles=2",
-		"--ephemeral-runner-max-concurrent-reconciles=4",
+		"--ephemeral-runner-max-concurrent-reconciles=16",
 		"--metrics-addr=0",
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
@@ -521,7 +521,7 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 		"--autoscaling-runner-set-max-concurrent-reconciles=2",
 		"--autoscaling-listener-max-concurrent-reconciles=2",
 		"--ephemeral-runner-set-max-concurrent-reconciles=2",
-		"--ephemeral-runner-max-concurrent-reconciles=4",
+		"--ephemeral-runner-max-concurrent-reconciles=16",
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
 		"--metrics-addr=0",
@@ -652,7 +652,7 @@ func TestTemplate_EnableLeaderElection(t *testing.T) {
 		"--autoscaling-runner-set-max-concurrent-reconciles=2",
 		"--autoscaling-listener-max-concurrent-reconciles=2",
 		"--ephemeral-runner-set-max-concurrent-reconciles=2",
-		"--ephemeral-runner-max-concurrent-reconciles=4",
+		"--ephemeral-runner-max-concurrent-reconciles=16",
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
 		"--metrics-addr=0",
@@ -696,7 +696,7 @@ func TestTemplate_ControllerDeployment_ForwardImagePullSecrets(t *testing.T) {
 		"--autoscaling-runner-set-max-concurrent-reconciles=2",
 		"--autoscaling-listener-max-concurrent-reconciles=2",
 		"--ephemeral-runner-set-max-concurrent-reconciles=2",
-		"--ephemeral-runner-max-concurrent-reconciles=4",
+		"--ephemeral-runner-max-concurrent-reconciles=16",
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
 		"--metrics-addr=0",
@@ -789,7 +789,7 @@ func TestTemplate_ControllerDeployment_WatchSingleNamespace(t *testing.T) {
 		"--autoscaling-runner-set-max-concurrent-reconciles=2",
 		"--autoscaling-listener-max-concurrent-reconciles=2",
 		"--ephemeral-runner-set-max-concurrent-reconciles=2",
-		"--ephemeral-runner-max-concurrent-reconciles=4",
+		"--ephemeral-runner-max-concurrent-reconciles=16",
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
 		"--metrics-addr=0",
@@ -837,7 +837,7 @@ func TestTemplate_ControllerDeployment_MaxConcurrentReconciles(t *testing.T) {
 		assert.Contains(t, args, "--autoscaling-runner-set-max-concurrent-reconciles=2")
 		assert.Contains(t, args, "--autoscaling-listener-max-concurrent-reconciles=2")
 		assert.Contains(t, args, "--ephemeral-runner-set-max-concurrent-reconciles=2")
-		assert.Contains(t, args, "--ephemeral-runner-max-concurrent-reconciles=4")
+		assert.Contains(t, args, "--ephemeral-runner-max-concurrent-reconciles=16")
 	})
 
 	t.Run("every flag renders when configured", func(t *testing.T) {
@@ -863,6 +863,55 @@ func TestTemplate_ControllerDeployment_MaxConcurrentReconciles(t *testing.T) {
 		assert.Contains(t, args, "--autoscaling-listener-max-concurrent-reconciles=5")
 		assert.Contains(t, args, "--ephemeral-runner-set-max-concurrent-reconciles=6")
 		assert.Contains(t, args, "--ephemeral-runner-max-concurrent-reconciles=20")
+	})
+}
+
+// TestTemplate_ControllerDeployment_TerminatedRunnerPodGracePeriod pins how the
+// grace period of a finished runner pod reaches the controller.
+//
+// Leaving the value unset has to render no flag at all, so the controller keeps
+// its own default of removing those pods immediately. Setting it is what a
+// cluster that wants finished pods to stay readable for a while does, and a
+// negative value is how it asks for the pod's own grace period instead.
+func TestTemplate_ControllerDeployment_TerminatedRunnerPodGracePeriod(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set-controller")
+	require.NoError(t, err)
+
+	releaseName := "test-arc"
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
+
+	renderArgs := func(t *testing.T, values map[string]string) []string {
+		options := &helm.Options{
+			Logger:         logger.Discard,
+			SetValues:      values,
+			KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+		}
+
+		output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
+
+		var deployment appsv1.Deployment
+		helm.UnmarshalK8SYaml(t, output, &deployment)
+
+		require.Len(t, deployment.Spec.Template.Spec.Containers, 1)
+		return deployment.Spec.Template.Spec.Containers[0].Args
+	}
+
+	t.Run("no flag renders by default", func(t *testing.T) {
+		for _, arg := range renderArgs(t, nil) {
+			assert.NotContains(t, arg, "--terminated-runner-pod-grace-period-seconds")
+		}
+	})
+
+	t.Run("the flag renders when configured", func(t *testing.T) {
+		args := renderArgs(t, map[string]string{"flags.terminatedRunnerPodGracePeriodSeconds": "30"})
+		assert.Contains(t, args, "--terminated-runner-pod-grace-period-seconds=30")
+	})
+
+	t.Run("the flag renders when it hands the grace period back to the pod", func(t *testing.T) {
+		args := renderArgs(t, map[string]string{"flags.terminatedRunnerPodGracePeriodSeconds": "-1"})
+		assert.Contains(t, args, "--terminated-runner-pod-grace-period-seconds=-1")
 	})
 }
 

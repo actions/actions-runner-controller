@@ -123,8 +123,19 @@ flags:
   ## The EphemeralRunner controller is higher because it is the only one of the four that routinely
   ## has many distinct objects to reconcile at once, one per runner. controller-runtime serialises
   ## reconciles per object, so extra workers on the other three only pay off when many runner scale
-  ## sets exist.
-  ephemeralRunnerMaxConcurrentReconciles: 4
+  ## sets exist. The value is sized for a burst of jobs finishing together: every runner has to be
+  ## reconciled before the pod it holds is handed back, and these workers decide how many of those
+  ## can be in flight at once.
+  ephemeralRunnerMaxConcurrentReconciles: 16
+
+  ## How long a runner pod whose containers have all exited is kept before it is deleted.
+  ## Zero, the default, removes the pod as soon as its job is over instead of leaving it
+  ## Terminating while the kubelet cleans up locally, handing its name, its scheduling slot
+  ## and its share of any ResourceQuota straight to the runner replacing it.
+  ## Raise it to keep finished pods around for longer, for example to give a log collector
+  ## time to read them. A negative value leaves the pod's own terminationGracePeriodSeconds
+  ## in charge. Pods that are still running are always deleted gracefully.
+  # terminatedRunnerPodGracePeriodSeconds: 0
 
   ## Defines a list of prefixes that should not be propagated to internal resources.
   ## This is useful when you have labels that are used for internal purposes and should not be propagated to internal resources.
@@ -150,5 +161,7 @@ namespaceOverride: ""
   # healthProbeBindAddress: ":8081"
 
 ## Defines the K8s client rate limiter parameters.
-  # k8sClientRateLimiterQPS: 20
-  # k8sClientRateLimiterBurst: 30
+## A burst of finishing jobs costs roughly ten API calls per runner, so a low QPS delays both the
+## cleanup of the finished runners and the creation of the ones replacing them.
+  # k8sClientRateLimiterQPS: 100
+  # k8sClientRateLimiterBurst: 200

@@ -1801,7 +1801,7 @@ var _ = Describe("EphemeralRunner phase metrics", func() {
 		request = ctrl.Request{NamespacedName: types.NamespacedName{Namespace: ephemeralRunner.Namespace, Name: ephemeralRunner.Name}}
 	})
 
-	It("publishes pending, running, and succeeded phase transitions", func() {
+	It("publishes pending and running phase transitions, and stops counting a runner that finished", func() {
 		_, err := controller.Reconcile(ctx, request)
 		Expect(err).NotTo(HaveOccurred(), "failed to reconcile ephemeral runner")
 
@@ -1869,9 +1869,20 @@ var _ = Describe("EphemeralRunner phase metrics", func() {
 
 		_, err = controller.Reconcile(ctx, request)
 		Expect(err).NotTo(HaveOccurred(), "failed to reconcile succeeded pod")
-		expectEphemeralRunnerPhase(ctx, ephemeralRunner, v1alpha1.EphemeralRunnerPhaseSucceeded)
+
+		// A runner that exited cleanly is not carried into another reconcile: the
+		// same pass that observes the successful exit drops the pod, the jitconfig
+		// secret and the runner itself. Nothing is left to count, so every phase
+		// gauge for this runner has to come back to zero instead of leaking a
+		// succeeded runner that no longer exists.
+		runner := new(v1alpha1.EphemeralRunner)
+		err = k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, runner)
+		Expect(err).To(HaveOccurred(), "expected the finished ephemeral runner to be gone")
+		Expect(kerrors.IsNotFound(err)).To(BeTrue(), "expected the finished ephemeral runner to be gone")
+
+		expectEphemeralRunnerPhaseMetric(ephemeralRunner, v1alpha1.EphemeralRunnerPhasePending, 0)
 		expectEphemeralRunnerPhaseMetric(ephemeralRunner, v1alpha1.EphemeralRunnerPhaseRunning, 0)
-		expectEphemeralRunnerPhaseMetric(ephemeralRunner, v1alpha1.EphemeralRunnerPhaseSucceeded, 1)
+		expectEphemeralRunnerPhaseMetric(ephemeralRunner, v1alpha1.EphemeralRunnerPhaseSucceeded, 0)
 	})
 })
 

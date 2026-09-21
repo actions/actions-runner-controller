@@ -59,6 +59,9 @@ args:
 {{- with .Values.controller.manager.config.ephemeralRunnerMaxConcurrentReconciles }}
   - "--ephemeral-runner-max-concurrent-reconciles={{ . }}"
 {{- end }}
+{{- with .Values.controller.manager.config.terminatedRunnerPodGracePeriodSeconds }}
+  - "--terminated-runner-pod-grace-period-seconds={{ . }}"
+{{- end }}
 {{- if .Values.controller.metrics }}
 {{- with .Values.controller.metrics }}
   - "--listener-metrics-addr={{ .listenerAddr }}"
