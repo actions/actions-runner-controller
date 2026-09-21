@@ -47,9 +47,6 @@ args:
 {{- with .Values.controller.manager.config.watchSingleNamespace }}
   - "--watch-single-namespace={{ . }}"
 {{- end }}
-{{- with .Values.controller.manager.config.defaultMaxConcurrentReconciles }}
-  - "--default-max-concurrent-reconciles={{ . }}"
-{{- end }}
 {{- with .Values.controller.manager.config.autoscalingRunnerSetMaxConcurrentReconciles }}
   - "--autoscaling-runner-set-max-concurrent-reconciles={{ . }}"
 {{- end }}
