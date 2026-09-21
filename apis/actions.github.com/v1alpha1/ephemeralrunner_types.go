@@ -17,7 +17,6 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"github.com/actions/actions-runner-controller/hash"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -133,10 +132,6 @@ type EphemeralRunnerSpec struct {
 	corev1.PodTemplateSpec `json:",inline"`
 }
 
-func (s *EphemeralRunnerSpec) Hash() string {
-	return hash.ComputeTemplateHash(s)
-}
-
 // EphemeralRunnerStatus defines the observed state of EphemeralRunner
 type EphemeralRunnerStatus struct {
 	// Turns true only if the runner is online.
@@ -151,6 +146,10 @@ type EphemeralRunnerStatus struct {
 	//
 	// The PodSucceded phase should be set only when confirmed that EphemeralRunner
 	// actually executed the job and has been removed from the service.
+	//
+	// The Running phase is owned by the listener and is set only when a job has
+	// been assigned to this EphemeralRunner. It does not mean the runner is merely
+	// online and waiting for work; an idle registered runner stays Pending.
 	// +optional
 	Phase EphemeralRunnerPhase `json:"phase,omitempty"`
 	// +optional
@@ -190,11 +189,12 @@ type EphemeralRunnerStatus struct {
 type EphemeralRunnerPhase string
 
 const (
-	// EphemeralRunnerPhasePending is a phase set when the ephemeral runner is
-	// being provisioned and is not yet online.
+	// EphemeralRunnerPhasePending is a phase set while no job has been assigned to
+	// the ephemeral runner. It covers both a runner that is still being provisioned
+	// and one that is already online and registered but idle.
 	EphemeralRunnerPhasePending EphemeralRunnerPhase = "Pending"
-	// EphemeralRunnerPhaseRunning is a phase set when the ephemeral runner is online and
-	// waiting for a job to execute.
+	// EphemeralRunnerPhaseRunning is a phase set by the listener when a job has been
+	// assigned to this ephemeral runner and the runner is executing it.
 	EphemeralRunnerPhaseRunning EphemeralRunnerPhase = "Running"
 	// EphemeralRunnerPhaseSucceeded is a phase set when the ephemeral runner
 	// successfully executed the job and has been removed from the service.

@@ -363,10 +363,13 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 		"--auto-scaling-runner-set-only",
 		"--log-level=debug",
 		"--log-format=text",
+		"--autoscaling-runner-set-max-concurrent-reconciles=2",
+		"--autoscaling-listener-max-concurrent-reconciles=2",
+		"--ephemeral-runner-set-max-concurrent-reconciles=2",
+		"--ephemeral-runner-max-concurrent-reconciles=4",
 		"--metrics-addr=0",
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
-		"--runner-max-concurrent-reconciles=2",
 	}
 	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)
 
@@ -515,10 +518,13 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 		"--auto-scaler-image-pull-secrets=dockerhub",
 		"--log-level=info",
 		"--log-format=json",
+		"--autoscaling-runner-set-max-concurrent-reconciles=2",
+		"--autoscaling-listener-max-concurrent-reconciles=2",
+		"--ephemeral-runner-set-max-concurrent-reconciles=2",
+		"--ephemeral-runner-max-concurrent-reconciles=4",
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
 		"--metrics-addr=0",
-		"--runner-max-concurrent-reconciles=2",
 	}
 
 	assert.ElementsMatch(t, expectArgs, deployment.Spec.Template.Spec.Containers[0].Args)
@@ -643,10 +649,13 @@ func TestTemplate_EnableLeaderElection(t *testing.T) {
 		"--leader-election-id=test-arc-gha-rs-controller",
 		"--log-level=debug",
 		"--log-format=text",
+		"--autoscaling-runner-set-max-concurrent-reconciles=2",
+		"--autoscaling-listener-max-concurrent-reconciles=2",
+		"--ephemeral-runner-set-max-concurrent-reconciles=2",
+		"--ephemeral-runner-max-concurrent-reconciles=4",
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
 		"--metrics-addr=0",
-		"--runner-max-concurrent-reconciles=2",
 	}
 
 	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)
@@ -684,10 +693,13 @@ func TestTemplate_ControllerDeployment_ForwardImagePullSecrets(t *testing.T) {
 		"--auto-scaler-image-pull-secrets=ghcr",
 		"--log-level=debug",
 		"--log-format=text",
+		"--autoscaling-runner-set-max-concurrent-reconciles=2",
+		"--autoscaling-listener-max-concurrent-reconciles=2",
+		"--ephemeral-runner-set-max-concurrent-reconciles=2",
+		"--ephemeral-runner-max-concurrent-reconciles=4",
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
 		"--metrics-addr=0",
-		"--runner-max-concurrent-reconciles=2",
 	}
 
 	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)
@@ -774,10 +786,13 @@ func TestTemplate_ControllerDeployment_WatchSingleNamespace(t *testing.T) {
 		"--log-level=debug",
 		"--log-format=text",
 		"--watch-single-namespace=demo",
+		"--autoscaling-runner-set-max-concurrent-reconciles=2",
+		"--autoscaling-listener-max-concurrent-reconciles=2",
+		"--ephemeral-runner-set-max-concurrent-reconciles=2",
+		"--ephemeral-runner-max-concurrent-reconciles=4",
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
 		"--metrics-addr=0",
-		"--runner-max-concurrent-reconciles=2",
 	}
 
 	assert.ElementsMatch(t, expectedArgs, deployment.Spec.Template.Spec.Containers[0].Args)
@@ -794,6 +809,61 @@ func TestTemplate_ControllerDeployment_WatchSingleNamespace(t *testing.T) {
 	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].VolumeMounts, 1)
 	assert.Equal(t, "tmp", deployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name)
 	assert.Equal(t, "/tmp", deployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath)
+}
+
+func TestTemplate_ControllerDeployment_MaxConcurrentReconciles(t *testing.T) {
+	t.Parallel()
+
+	// Path to the helm chart we will test
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set-controller")
+	require.NoError(t, err)
+
+	releaseName := "test-arc"
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
+
+	t.Run("every flag renders by default", func(t *testing.T) {
+		options := &helm.Options{
+			Logger:         logger.Discard,
+			KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+		}
+
+		output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
+
+		var deployment appsv1.Deployment
+		helm.UnmarshalK8SYaml(t, output, &deployment)
+
+		require.Len(t, deployment.Spec.Template.Spec.Containers, 1)
+		args := deployment.Spec.Template.Spec.Containers[0].Args
+		assert.Contains(t, args, "--autoscaling-runner-set-max-concurrent-reconciles=2")
+		assert.Contains(t, args, "--autoscaling-listener-max-concurrent-reconciles=2")
+		assert.Contains(t, args, "--ephemeral-runner-set-max-concurrent-reconciles=2")
+		assert.Contains(t, args, "--ephemeral-runner-max-concurrent-reconciles=4")
+	})
+
+	t.Run("every flag renders when configured", func(t *testing.T) {
+		options := &helm.Options{
+			Logger: logger.Discard,
+			SetValues: map[string]string{
+				"flags.autoscalingRunnerSetMaxConcurrentReconciles": "3",
+				"flags.autoscalingListenerMaxConcurrentReconciles":  "5",
+				"flags.ephemeralRunnerSetMaxConcurrentReconciles":   "6",
+				"flags.ephemeralRunnerMaxConcurrentReconciles":      "20",
+			},
+			KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+		}
+
+		output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/deployment.yaml"})
+
+		var deployment appsv1.Deployment
+		helm.UnmarshalK8SYaml(t, output, &deployment)
+
+		require.Len(t, deployment.Spec.Template.Spec.Containers, 1)
+		args := deployment.Spec.Template.Spec.Containers[0].Args
+		assert.Contains(t, args, "--autoscaling-runner-set-max-concurrent-reconciles=3")
+		assert.Contains(t, args, "--autoscaling-listener-max-concurrent-reconciles=5")
+		assert.Contains(t, args, "--ephemeral-runner-set-max-concurrent-reconciles=6")
+		assert.Contains(t, args, "--ephemeral-runner-max-concurrent-reconciles=20")
+	})
 }
 
 func TestTemplate_ControllerContainerEnvironmentVariables(t *testing.T) {

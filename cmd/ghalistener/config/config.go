@@ -32,18 +32,19 @@ type Config struct {
 	// It is initially set to nil if VaultType is set.
 	// Otherwise, it is populated with the GitHub App credentials from the GitHub secret.
 	*appconfig.AppConfig
-	EphemeralRunnerSetNamespace string                  `json:"ephemeral_runner_set_namespace"`
-	EphemeralRunnerSetName      string                  `json:"ephemeral_runner_set_name"`
-	MaxRunners                  int                     `json:"max_runners"`
-	MinRunners                  int                     `json:"min_runners"`
-	RunnerScaleSetID            int                     `json:"runner_scale_set_id"`
-	RunnerScaleSetName          string                  `json:"runner_scale_set_name"`
-	ServerRootCA                string                  `json:"server_root_ca"`
-	LogLevel                    string                  `json:"log_level"`
-	LogFormat                   string                  `json:"log_format"`
-	MetricsAddr                 string                  `json:"metrics_addr"`
-	MetricsEndpoint             string                  `json:"metrics_endpoint"`
-	Metrics                     *v1alpha1.MetricsConfig `json:"metrics"`
+	EphemeralRunnerSetNamespace string                   `json:"ephemeral_runner_set_namespace"`
+	EphemeralRunnerSetName      string                   `json:"ephemeral_runner_set_name"`
+	MaxRunners                  int                      `json:"max_runners"`
+	MinRunners                  int                      `json:"min_runners"`
+	RunnerScaleSetID            int                      `json:"runner_scale_set_id"`
+	RunnerScaleSetName          string                   `json:"runner_scale_set_name"`
+	ServerRootCA                string                   `json:"server_root_ca"`
+	LogLevel                    string                   `json:"log_level"`
+	LogFormat                   string                   `json:"log_format"`
+	MetricsAddr                 string                   `json:"metrics_addr"`
+	MetricsEndpoint             string                   `json:"metrics_endpoint"`
+	Metrics                     *v1alpha1.MetricsConfig  `json:"metrics"`
+	ListenerConfig              *v1alpha1.ListenerConfig `json:"listener_config"`
 }
 
 func Read(ctx context.Context, configPath string) (*Config, error) {

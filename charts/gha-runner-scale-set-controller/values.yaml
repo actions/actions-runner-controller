@@ -114,10 +114,17 @@ flags:
   ## Defaults to watch all namespaces when unset.
   # watchSingleNamespace: ""
 
-  ## The maximum number of concurrent reconciles which can be run by the EphemeralRunner controller.
-  # Increase this value to improve the throughput of the controller.
-  # It may also increase the load on the API server and the external service (e.g. GitHub API).
-  runnerMaxConcurrentReconciles: 2
+  ## The maximum number of concurrent reconciles for each controller, set directly per controller.
+  # Increase these values to improve the throughput of the controller when running many runner scale sets.
+  # They may also increase the load on the API server and the external service (e.g. GitHub API).
+  autoscalingRunnerSetMaxConcurrentReconciles: 2
+  autoscalingListenerMaxConcurrentReconciles: 2
+  ephemeralRunnerSetMaxConcurrentReconciles: 2
+  ## The EphemeralRunner controller is higher because it is the only one of the four that routinely
+  ## has many distinct objects to reconcile at once, one per runner. controller-runtime serialises
+  ## reconciles per object, so extra workers on the other three only pay off when many runner scale
+  ## sets exist.
+  ephemeralRunnerMaxConcurrentReconciles: 4
 
   ## Defines a list of prefixes that should not be propagated to internal resources.
   ## This is useful when you have labels that are used for internal purposes and should not be propagated to internal resources.

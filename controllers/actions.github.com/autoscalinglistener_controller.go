@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -78,7 +79,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 	if err := r.Get(ctx, req.NamespacedName, &autoscalingListener); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	original := autoscalingListener.DeepCopy()
+	listener := newLazyCopy(&autoscalingListener)
 
 	if !autoscalingListener.DeletionTimestamp.IsZero() {
 		if !controllerutil.ContainsFinalizer(&autoscalingListener, autoscalingListenerFinalizerName) {
@@ -97,19 +98,21 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 
 		log.Info("Removing finalizer")
-		if controllerutil.RemoveFinalizer(&autoscalingListener, autoscalingListenerFinalizerName) {
-			if err := r.Patch(ctx, &autoscalingListener, client.MergeFrom(original)); err != nil && !kerrors.IsNotFound(err) {
+		if controllerutil.RemoveFinalizer(listener.Mutate(), autoscalingListenerFinalizerName) {
+			if err := r.Patch(ctx, &autoscalingListener, listener.MergeFrom()); err != nil && !kerrors.IsNotFound(err) {
 				log.Error(err, "Failed to remove finalizer")
 				return ctrl.Result{}, err
 			}
 		}
 
 		log.Info("Successfully removed finalizer after cleanup")
+		r.ResourceCache.Delete(&autoscalingListener)
 		return ctrl.Result{}, nil
 	}
 
-	if controllerutil.AddFinalizer(&autoscalingListener, autoscalingListenerFinalizerName) {
-		if err := r.Patch(ctx, &autoscalingListener, client.MergeFrom(original)); err != nil {
+	if !controllerutil.ContainsFinalizer(&autoscalingListener, autoscalingListenerFinalizerName) {
+		controllerutil.AddFinalizer(listener.Mutate(), autoscalingListenerFinalizerName)
+		if err := r.Patch(ctx, &autoscalingListener, listener.MergeFrom()); err != nil {
 			log.Error(err, "Failed to add finalizer")
 			return ctrl.Result{}, err
 		}
@@ -143,6 +146,26 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			"name", autoscalingListener.Spec.AutoscalingRunnerSetName,
 		)
 		return ctrl.Result{}, err
+	}
+
+	// A stopped listener keeps its object, spec and finalizer, but owns nothing:
+	// the AutoscalingRunnerSet parks it this way instead of deleting it so the
+	// scale set stops acquiring jobs without re-registering with the Actions
+	// service when it comes back. Patching the phase back to Running falls
+	// through to the regular reconcile below, which rebuilds the children.
+	if autoscalingListener.Spec.Phase.Stopped() {
+		log.Info("Listener is stopped, cleaning up its resources")
+		requeue, err := r.cleanupResources(ctx, &autoscalingListener, log)
+		if err != nil {
+			log.Error(err, "Failed to clean up the resources of a stopped listener")
+			return ctrl.Result{}, err
+		}
+		if requeue {
+			return ctrl.Result{RequeueAfter: time.Second}, nil
+		}
+
+		log.Info("Listener is stopped and all of its resources are cleaned up")
+		return ctrl.Result{}, nil
 	}
 
 	// Make sure the runner scale set listener service account is created for the listener pod in the controller namespace
@@ -393,14 +416,18 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		labelsModified := !maps.Equal(listenerConfigSecret.Labels, desiredLabels)
 		desiredAnnotations := r.mergeAnnotations(listenerConfigSecret.Annotations, desiredSecret.Annotations)
 		annotationsModified := !maps.Equal(listenerConfigSecret.Annotations, desiredAnnotations)
+		dataModified := !reflect.DeepEqual(listenerConfigSecret.Data, desiredSecret.Data)
 
-		if labelsModified || annotationsModified {
+		if labelsModified || annotationsModified || dataModified {
 			updatedSecret := listenerConfigSecret.DeepCopy()
 			if labelsModified {
 				updatedSecret.Labels = desiredLabels
 			}
 			if annotationsModified {
 				updatedSecret.Annotations = desiredAnnotations
+			}
+			if dataModified {
+				updatedSecret.Data = desiredSecret.Data
 			}
 			log.Info("Updating listener config secret", "namespace", updatedSecret.Namespace, "name", updatedSecret.Name)
 			if err := r.Patch(ctx, updatedSecret, client.MergeFrom(&listenerConfigSecret)); err != nil {
@@ -462,7 +489,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			return ctrl.Result{}, err
 		}
 
-		shouldReCreate := desiredPod.Annotations[annotationKeyIntegrityHash] != listenerPod.Annotations[annotationKeyIntegrityHash]
+		shouldReCreate := listenerPodSpecRequiresRecreation(&listenerPod, desiredPod)
 		if shouldReCreate {
 			log.Info("Listener pod dependency changed, recreating listener pod")
 			if err := r.deleteListenerPod(ctx, &autoscalingListener, &listenerPod, log); err != nil {
@@ -500,6 +527,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			return ctrl.Result{}, nil
 		}
 
+		r.ResourceCache.listenerPod.Delete(&autoscalingListener)
 		desiredPod, err := r.newScaleSetListenerPod(
 			&autoscalingListener,
 			&listenerConfigSecret,
@@ -613,24 +641,29 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 		return false, fmt.Errorf("failed to get listener config secret: %w", err)
 	}
 
-	if autoscalingListener.Spec.Proxy != nil {
-		logger.Info("Cleaning up the listener proxy secret")
-		proxySecret := new(corev1.Secret)
-		err = r.Get(ctx, types.NamespacedName{Name: proxyListenerSecretName(autoscalingListener), Namespace: autoscalingListener.Namespace}, proxySecret)
-		switch {
-		case err == nil:
-			if proxySecret.DeletionTimestamp.IsZero() {
-				logger.Info("Deleting the listener proxy secret")
-				if err := r.Delete(ctx, proxySecret); err != nil {
-					return false, fmt.Errorf("failed to delete listener proxy secret: %w", err)
-				}
+	// The proxy secret is deleted whatever the current spec says about a proxy.
+	// Its name is derived from the listener rather than from the spec, and the
+	// spec of a stopped listener is updated in place as the AutoscalingRunnerSet
+	// is edited, so asking the spec would let a user who removes the proxy while
+	// the scale set is switched off erase the only signal that the old secret is
+	// there. It holds credentials, and a stopped listener is never deleted, so
+	// nothing else would ever collect it.
+	logger.Info("Cleaning up the listener proxy secret")
+	proxySecret := new(corev1.Secret)
+	err = r.Get(ctx, types.NamespacedName{Name: proxyListenerSecretName(autoscalingListener), Namespace: autoscalingListener.Namespace}, proxySecret)
+	switch {
+	case err == nil:
+		if proxySecret.DeletionTimestamp.IsZero() {
+			logger.Info("Deleting the listener proxy secret")
+			if err := r.Delete(ctx, proxySecret); err != nil {
+				return false, fmt.Errorf("failed to delete listener proxy secret: %w", err)
 			}
-			requeue = true
-		case !kerrors.IsNotFound(err):
-			return false, fmt.Errorf("failed to get listener proxy secret: %w", err)
 		}
-		logger.Info("Listener proxy secret is deleted")
+		requeue = true
+	case !kerrors.IsNotFound(err):
+		return false, fmt.Errorf("failed to get listener proxy secret: %w", err)
 	}
+	logger.Info("Listener proxy secret is deleted")
 
 	listenerRoleBinding := new(rbacv1.RoleBinding)
 	err = r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace, Name: autoscalingListener.Name}, listenerRoleBinding)
@@ -685,6 +718,7 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 }
 
 func (r *AutoscalingListenerReconciler) createServiceAccountForListener(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) (ctrl.Result, error) {
+	r.ResourceCache.listenerServiceAccount.Delete(autoscalingListener)
 	newServiceAccount, err := r.newScaleSetListenerServiceAccount(autoscalingListener)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -768,6 +802,7 @@ func (r *AutoscalingListenerReconciler) createProxySecret(ctx context.Context, a
 }
 
 func (r *AutoscalingListenerReconciler) createRoleForListener(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) (ctrl.Result, error) {
+	r.ResourceCache.listenerRole.Delete(autoscalingListener)
 	newRole := r.newScaleSetListenerRole(autoscalingListener)
 
 	logger.Info("Creating listener role", "namespace", newRole.Namespace, "name", newRole.Name, "rules", newRole.Rules)
@@ -781,6 +816,7 @@ func (r *AutoscalingListenerReconciler) createRoleForListener(ctx context.Contex
 }
 
 func (r *AutoscalingListenerReconciler) createRoleBindingForListener(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, listenerRole *rbacv1.Role, serviceAccount *corev1.ServiceAccount, logger logr.Logger) (ctrl.Result, error) {
+	r.ResourceCache.listenerRoleBinding.Delete(autoscalingListener)
 	newRoleBinding := r.newScaleSetListenerRoleBinding(autoscalingListener, listenerRole, serviceAccount)
 
 	logger.Info("Creating listener role binding",
@@ -863,8 +899,8 @@ func (r *AutoscalingListenerReconciler) SetupWithManager(mgr ctrl.Manager, opts 
 	return builderWithOptions(
 		ctrl.NewControllerManagedBy(mgr).
 			For(&v1alpha1.AutoscalingListener{}).
-			Owns(&corev1.Pod{}).
-			Owns(&corev1.ServiceAccount{}).
+			Owns(&corev1.Pod{}, builder.WithPredicates(autoscalingListenerOwnedPodPredicate())).
+			Owns(&corev1.ServiceAccount{}, builder.WithPredicates(autoscalingListenerOwnedServiceAccountPredicate())).
 			Watches(&rbacv1.Role{}, handler.EnqueueRequestsFromMapFunc(labelBasedWatchFunc)).
 			Watches(&rbacv1.RoleBinding{}, handler.EnqueueRequestsFromMapFunc(labelBasedWatchFunc)).
 			WithEventFilter(predicate.ResourceVersionChangedPredicate{}),

@@ -28,8 +28,16 @@ controller:
       # Defaults to watch all namespaces when unset.
       watchSingleNamespace: ""
 
-      # The maximum number of concurrent reconciles which can be run by the EphemeralRunner controller.
-      runnerMaxConcurrentReconciles: 2
+      # The maximum number of concurrent reconciles for each controller, set directly
+      # per controller.
+      autoscalingRunnerSetMaxConcurrentReconciles: 2
+      autoscalingListenerMaxConcurrentReconciles: 2
+      ephemeralRunnerSetMaxConcurrentReconciles: 2
+      # The EphemeralRunner controller is higher because it is the only one of the four that
+      # routinely has many distinct objects to reconcile at once, one per runner.
+      # controller-runtime serialises reconciles per object, so extra workers on the other
+      # three only pay off when many runner scale sets exist.
+      ephemeralRunnerMaxConcurrentReconciles: 4
 
       # List of label prefixes that should NOT be propagated to internal resources.
       excludeLabelPropagationPrefixes: []

@@ -16,8 +16,9 @@ import (
 func TestMetadataPropagation(t *testing.T) {
 	autoscalingRunnerSet := v1alpha1.AutoscalingRunnerSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-scale-set",
-			Namespace: "test-ns",
+			Name:       "test-scale-set",
+			Namespace:  "test-ns",
+			Generation: 7,
 			Labels: map[string]string{
 				LabelKeyKubernetesPartOf:          labelValueKubernetesPartOf,
 				LabelKeyKubernetesVersion:         "0.2.0",
@@ -102,18 +103,20 @@ func TestMetadataPropagation(t *testing.T) {
 		},
 	}
 
+	cache := NewResourceCache()
 	b := ResourceBuilder{
 		ExcludeLabelPropagationPrefixes: []string{
 			"example.com/",
 			"directly.excluded.org/label",
 		},
+		ResourceCache: &cache,
 	}
 	ephemeralRunnerSet, err := b.newEphemeralRunnerSet(&autoscalingRunnerSet)
 	require.NoError(t, err)
 	assert.Equal(t, labelValueKubernetesPartOf, ephemeralRunnerSet.Labels[LabelKeyKubernetesPartOf])
 	assert.Equal(t, "runner-set", ephemeralRunnerSet.Labels[LabelKeyKubernetesComponent])
 	assert.Equal(t, autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion], ephemeralRunnerSet.Labels[LabelKeyKubernetesVersion])
-	assert.NotEmpty(t, ephemeralRunnerSet.Annotations[annotationKeyIntegrityHash])
+	assert.NotContains(t, ephemeralRunnerSet.Annotations, "actions.github.com/integrity-hash")
 	assert.Equal(t, autoscalingRunnerSet.Name, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName])
 	assert.Equal(t, autoscalingRunnerSet.Namespace, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace])
 	assert.Equal(t, "", ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise])
@@ -121,6 +124,7 @@ func TestMetadataPropagation(t *testing.T) {
 	assert.Equal(t, "repo", ephemeralRunnerSet.Labels[LabelKeyGitHubRepository])
 	assert.Equal(t, autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName], ephemeralRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName])
 	assert.Equal(t, autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName], ephemeralRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName])
+	assert.Equal(t, "7", ephemeralRunnerSet.Annotations[AnnotationKeyAutoscalingRunnerSetGeneration])
 	assert.Equal(t, autoscalingRunnerSet.Labels["arbitrary-label"], ephemeralRunnerSet.Labels["arbitrary-label"])
 	assert.Equal(t, "ephemeral-runner-set-label", ephemeralRunnerSet.Labels["test.com/ephemeral-runner-set-label"])
 	assert.Equal(t, "ephemeral-runner-set-annotation", ephemeralRunnerSet.Annotations["test.com/ephemeral-runner-set-annotation"])
@@ -130,7 +134,7 @@ func TestMetadataPropagation(t *testing.T) {
 	assert.Equal(t, labelValueKubernetesPartOf, listener.Labels[LabelKeyKubernetesPartOf])
 	assert.Equal(t, "runner-scale-set-listener", listener.Labels[LabelKeyKubernetesComponent])
 	assert.Equal(t, autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion], listener.Labels[LabelKeyKubernetesVersion])
-	assert.NotEmpty(t, ephemeralRunnerSet.Annotations[annotationKeyIntegrityHash])
+	assert.NotContains(t, listener.Annotations, "actions.github.com/integrity-hash")
 	assert.Equal(t, autoscalingRunnerSet.Name, listener.Labels[LabelKeyGitHubScaleSetName])
 	assert.Equal(t, autoscalingRunnerSet.Namespace, listener.Labels[LabelKeyGitHubScaleSetNamespace])
 	assert.Equal(t, "", listener.Labels[LabelKeyGitHubEnterprise])
@@ -171,6 +175,7 @@ func TestMetadataPropagation(t *testing.T) {
 
 	ephemeralRunner, err := b.newEphemeralRunner(ephemeralRunnerSet)
 	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName}, ephemeralRunner.Finalizers)
 
 	for _, key := range commonLabelKeys {
 		if key == LabelKeyKubernetesComponent {
@@ -203,7 +208,7 @@ func TestMetadataPropagation(t *testing.T) {
 	}
 }
 
-func TestEphemeralRunnerSetProxySecretZIdentityHash(t *testing.T) {
+func TestEphemeralRunnerSetProxySecretMetadata(t *testing.T) {
 	ephemeralRunnerSet := &v1alpha1.EphemeralRunnerSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-scale-set",
@@ -221,13 +226,11 @@ func TestEphemeralRunnerSetProxySecretZIdentityHash(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	actualHash := proxySecret.Annotations[annotationKeyIntegrityHash]
-	assert.NotEmpty(t, actualHash)
-	assert.Equal(t, ephemeralRunnerSetProxySecretZIdentityHash(proxySecret), actualHash)
-
-	changedProxySecret := proxySecret.DeepCopy()
-	changedProxySecret.Data["http_proxy"] = []byte("http://updated-proxy.example.com")
-	assert.NotEqual(t, actualHash, ephemeralRunnerSetProxySecretZIdentityHash(changedProxySecret))
+	assert.Equal(t, proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet), proxySecret.Name)
+	assert.Equal(t, ephemeralRunnerSet.Namespace, proxySecret.Namespace)
+	assert.Equal(t, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName], proxySecret.Labels[LabelKeyGitHubScaleSetName])
+	assert.Equal(t, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace], proxySecret.Labels[LabelKeyGitHubScaleSetNamespace])
+	assert.NotContains(t, proxySecret.Annotations, "actions.github.com/integrity-hash")
 }
 
 func TestGitHubURLTrimLabelValues(t *testing.T) {
@@ -257,7 +260,8 @@ func TestGitHubURLTrimLabelValues(t *testing.T) {
 			GitHubConfigUrl: fmt.Sprintf("https://github.com/%s/%s", organization, repository),
 		}
 
-		var b ResourceBuilder
+		cache := NewResourceCache()
+		b := ResourceBuilder{ResourceCache: &cache}
 		ephemeralRunnerSet, err := b.newEphemeralRunnerSet(autoscalingRunnerSet)
 		require.NoError(t, err)
 		assert.Len(t, ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise], 0)
@@ -281,7 +285,8 @@ func TestGitHubURLTrimLabelValues(t *testing.T) {
 			GitHubConfigUrl: fmt.Sprintf("https://github.com/enterprises/%s", enterprise),
 		}
 
-		var b ResourceBuilder
+		cache := NewResourceCache()
+		b := ResourceBuilder{ResourceCache: &cache}
 		ephemeralRunnerSet, err := b.newEphemeralRunnerSet(autoscalingRunnerSet)
 		require.NoError(t, err)
 		assert.Len(t, ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise], 63)
@@ -313,7 +318,6 @@ func TestOwnershipRelationships(t *testing.T) {
 				runnerScaleSetIDAnnotationKey:         "1",
 				AnnotationKeyGitHubRunnerGroupName:    "test-group",
 				AnnotationKeyGitHubRunnerScaleSetName: "test-scale-set",
-				annotationKeyIntegrityHash:            "test-hash",
 			},
 		},
 		Spec: v1alpha1.AutoscalingRunnerSetSpec{
@@ -322,7 +326,8 @@ func TestOwnershipRelationships(t *testing.T) {
 	}
 
 	// Initialize ResourceBuilder
-	b := ResourceBuilder{}
+	cache := NewResourceCache()
+	b := ResourceBuilder{ResourceCache: &cache}
 
 	// Create EphemeralRunnerSet
 	ephemeralRunnerSet, err := b.newEphemeralRunnerSet(&autoscalingRunnerSet)
@@ -421,7 +426,8 @@ func TestListenerPodNodeSelector(t *testing.T) {
 		},
 	}
 
-	b := ResourceBuilder{}
+	cache := NewResourceCache()
+	b := ResourceBuilder{ResourceCache: &cache}
 	ephemeralRunnerSet, err := b.newEphemeralRunnerSet(&autoscalingRunnerSet)
 	require.NoError(t, err)
 
@@ -540,5 +546,54 @@ func TestListenerPodNodeSelector(t *testing.T) {
 		assert.NotNil(t, pod.Spec.NodeSelector)
 		assert.Empty(t, pod.Spec.NodeSelector,
 			"explicitly empty nodeSelector should override the linux default")
+	})
+}
+
+// TestNewEphemeralRunnerStampsActionableRevision pins the annotation the
+// Outdated lifecycle is built on. The controller compares a runner's actionable
+// revision against the set's applied revision to decide whether an Outdated
+// report concerns the current runner spec or one that has since been replaced.
+// A runner that lost this annotation would parse as revision 0 and be treated as
+// stale, so it would be deleted and replaced instead of holding the set
+// Outdated, and the set would never stop scaling.
+func TestNewEphemeralRunnerStampsActionableRevision(t *testing.T) {
+	newSet := func(revision int64, metadata *v1alpha1.ResourceMeta) *v1alpha1.EphemeralRunnerSet {
+		return &v1alpha1.EphemeralRunnerSet{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-ers", Namespace: "test-ns"},
+			Spec: v1alpha1.EphemeralRunnerSetSpec{
+				ActionableRevision:      revision,
+				EphemeralRunnerMetadata: metadata,
+			},
+		}
+	}
+
+	var b ResourceBuilder
+
+	t.Run("stamps the set's actionable revision", func(t *testing.T) {
+		runner, err := b.newEphemeralRunner(newSet(7, nil))
+		require.NoError(t, err)
+		assert.Equal(t, "7", runner.Annotations[AnnotationKeyActionableRevision])
+	})
+
+	// The zero value is what an unupgraded set carries, and it has to round-trip
+	// as "0" rather than being omitted: the classifier parses a missing
+	// annotation as 0 too, so an absent stamp would be indistinguishable from a
+	// genuine revision 0 and upgrades would silently rely on that coincidence.
+	t.Run("stamps the zero revision explicitly", func(t *testing.T) {
+		runner, err := b.newEphemeralRunner(newSet(0, nil))
+		require.NoError(t, err)
+		assert.Equal(t, "0", runner.Annotations[AnnotationKeyActionableRevision])
+	})
+
+	// User-supplied runner annotations are merged underneath the controller's
+	// own, so they cannot forge a revision. If this inverted, a user annotation
+	// could make every runner look stale and the set would delete and recreate
+	// runners forever.
+	t.Run("user metadata cannot override it", func(t *testing.T) {
+		runner, err := b.newEphemeralRunner(newSet(7, &v1alpha1.ResourceMeta{
+			Annotations: map[string]string{AnnotationKeyActionableRevision: "1"},
+		}))
+		require.NoError(t, err)
+		assert.Equal(t, "7", runner.Annotations[AnnotationKeyActionableRevision])
 	})
 }

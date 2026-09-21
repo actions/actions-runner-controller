@@ -1,21 +1,22 @@
-suite: "AutoscalingRunnerSet listenerPodTemplate"
+suite: "AutoscalingRunnerSet listener.podTemplate"
 templates:
   - autoscalingrunnserset.yaml
 tests:
-  - it: should render listenerTemplate from listenerPodTemplate
+  - it: should render listenerTemplate from listener.podTemplate
     set:
       scaleset.name: "test"
       auth.url: "https://github.com/org"
       auth.githubToken: "gh_token12345"
       controllerServiceAccount.name: "arc"
       controllerServiceAccount.namespace: "arc-system"
-      listenerPodTemplate:
-        spec:
-          containers:
-            - name: listener
-              image: "ghcr.io/actions/actions-runner-controller/actionsmetricsserver:latest"
-              securityContext:
-                runAsUser: 1000
+      listener:
+        podTemplate:
+          spec:
+            containers:
+              - name: listener
+                image: "ghcr.io/actions/actions-runner-controller/actionsmetricsserver:latest"
+                securityContext:
+                  runAsUser: 1000
     release:
       name: "test-name"
       namespace: "test-namespace"
@@ -34,9 +35,10 @@ tests:
       auth.githubToken: "gh_token12345"
       controllerServiceAccount.name: "arc"
       controllerServiceAccount.namespace: "arc-system"
-      listenerPodTemplate:
-        spec:
-          restartPolicy: Always
+      listener:
+        podTemplate:
+          spec:
+            restartPolicy: Always
     release:
       name: "test-name"
       namespace: "test-namespace"
@@ -44,3 +46,49 @@ tests:
       - equal:
           path: spec.listenerTemplate.spec.containers[0].name
           value: listener
+
+  - it: should render podTemplate alongside scaler and metrics
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      listener:
+        scaler:
+          qps: 75
+        podTemplate:
+          spec:
+            restartPolicy: Always
+        metrics:
+          counters:
+            gha_started_jobs_total:
+              labels:
+                - repository
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.listenerConfig.scaler.qps
+          value: 75
+      - equal:
+          path: spec.listenerTemplate.spec.containers[0].name
+          value: listener
+      - equal:
+          path: spec.listenerMetrics.counters.gha_started_jobs_total.labels[0]
+          value: repository
+
+  - it: should not render listenerTemplate when podTemplate is empty
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - notExists:
+          path: spec.listenerTemplate

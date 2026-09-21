@@ -24,6 +24,9 @@ spec:
     - jsonPath: .spec.autoscalingRunnerSetName
       name: AutoscalingRunnerSet Name
       type: string
+    - jsonPath: .spec.phase
+      name: Phase
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -123,6 +126,22 @@ spec:
                   type: object
                   x-kubernetes-map-type: atomic
                 type: array
+              listenerConfig:
+                description: ListenerConfig holds configuration for the ghalistener
+                  pod.
+                properties:
+                  scaler:
+                    description: ScalerConfig configures the Kubernetes client used
+                      by the ghalistener scaler.
+                    properties:
+                      burst:
+                        minimum: 1
+                        type: integer
+                      qps:
+                        minimum: 1
+                        type: integer
+                    type: object
+                type: object
               maxRunners:
                 minimum: 0
                 type: integer
@@ -177,6 +196,13 @@ spec:
               minRunners:
                 minimum: 0
                 type: integer
+              phase:
+                description: Phase controls whether the listener runs. Empty means
+                  Running.
+                enum:
+                - Running
+                - Stopped
+                type: string
               proxy:
                 properties:
                   http:

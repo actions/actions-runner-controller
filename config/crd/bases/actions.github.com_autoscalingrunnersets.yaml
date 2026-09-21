@@ -130,6 +130,20 @@ spec:
                           x-kubernetes-map-type: atomic
                       type: object
                   type: object
+                listenerConfig:
+                  description: ListenerConfig holds configuration for the ghalistener pod.
+                  properties:
+                    scaler:
+                      description: ScalerConfig configures the Kubernetes client used by the ghalistener scaler.
+                      properties:
+                        burst:
+                          minimum: 1
+                          type: integer
+                        qps:
+                          minimum: 1
+                          type: integer
+                      type: object
+                  type: object
                 listenerConfigSecretMetadata:
                   description: ResourceMeta carries metadata common to all internal resources
                   properties:
@@ -16526,6 +16540,12 @@ spec:
             status:
               description: AutoscalingRunnerSetStatus defines the observed state of AutoscalingRunnerSet
               properties:
+                observedGeneration:
+                  description: |-
+                    ObservedGeneration tracks the metadata.generation of this ARS at observation time,
+                    enabling detection of Pending phase when generation differs. Unset defaults to 0.
+                  format: int64
+                  type: integer
                 phase:
                   type: string
               type: object

@@ -8,7 +8,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -23,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/watch"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/build"
@@ -44,6 +47,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 	var autoscalingNS *corev1.Namespace
 	var autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet
 	var configSecret *corev1.Secret
+	var resourceCache *ResourceCache
 
 	var originalBuildVersion string
 	buildVersion := "0.1.0"
@@ -65,6 +69,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 		// Track runner group mappings for dynamic responses
 		runnerGroupMap := map[int]string{1: "testgroup"} // ID -> Name mapping
 		runnerGroupMapLock := &sync.RWMutex{}            // Thread-safe access
+		resourceCache = newTestResourceCache()
 
 		controller = &AutoscalingRunnerSetReconciler{
 			Client:                             mgr.GetClient(),
@@ -72,7 +77,14 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			Log:                                logf.Log,
 			ControllerNamespace:                autoscalingNS.Name,
 			DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
+			// Configured rather than left empty so the suite exercises the
+			// listener spec the controller actually builds. These come from
+			// controller configuration, so a path that derives a desired
+			// listener without them reads its own listener as drifted and
+			// rebuilds it on every reconcile.
+			DefaultRunnerScaleSetListenerImagePullSecrets: []string{"dockerhub"},
 			ResourceBuilder: ResourceBuilder{
+				ResourceCache: resourceCache,
 				SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient(
 					scalefake.WithClient(
 						scalefake.NewClient(
@@ -251,6 +263,15 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 				autoscalingRunnerSetTestInterval,
 			).Should(Succeed(), "Listener should be created")
 
+			Eventually(
+				func() bool {
+					return resourceCacheStateHasMainObjectEntries(resourceCache.ephemeralRunnerSet, created) &&
+						resourceCacheStateHasMainObjectEntries(resourceCache.autoscalingListener, created)
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(BeTrue(), "AutoScalingRunnerSet EphemeralRunnerSet and AutoScalingListener resources should be cached after reconciliation")
+
 			// Check if status is updated
 			runnerSetList := new(v1alpha1.EphemeralRunnerSetList)
 			err := k8sClient.List(ctx, runnerSetList, client.InNamespace(autoscalingRunnerSet.Namespace))
@@ -270,8 +291,20 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 				autoscalingRunnerSetTestInterval,
 			).Should(Succeed(), "Listener should be created")
 
+			created := new(v1alpha1.AutoscalingRunnerSet)
+			err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, created)
+			Expect(err).NotTo(HaveOccurred(), "failed to get AutoScalingRunnerSet")
+			Eventually(
+				func() bool {
+					return resourceCacheStateHasMainObjectEntries(resourceCache.ephemeralRunnerSet, created) &&
+						resourceCacheStateHasMainObjectEntries(resourceCache.autoscalingListener, created)
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(BeTrue(), "AutoScalingRunnerSet EphemeralRunnerSet and AutoScalingListener resources should be cached before deletion")
+
 			// Delete the AutoScalingRunnerSet
-			err := k8sClient.Delete(ctx, autoscalingRunnerSet)
+			err = k8sClient.Delete(ctx, autoscalingRunnerSet)
 			Expect(err).NotTo(HaveOccurred(), "failed to delete AutoScalingRunnerSet")
 
 			// Check if the listener is deleted
@@ -320,6 +353,15 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
 			).Should(Succeed(), "AutoScalingRunnerSet should be deleted")
+
+			Eventually(
+				func() bool {
+					return resourceCacheStateHasMainObjectEntries(resourceCache.ephemeralRunnerSet, created) ||
+						resourceCacheStateHasMainObjectEntries(resourceCache.autoscalingListener, created)
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(BeFalse(), "AutoScalingRunnerSet EphemeralRunnerSet and AutoScalingListener resources should be removed from cache after deletion")
 		})
 	})
 
@@ -457,6 +499,236 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 	})
 
 	Context("When updating a new AutoScalingRunnerSet", func() {
+		It("advances the observed generation once a spec change has been applied", func() {
+			var settledGeneration int64
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhaseRunning))
+					g.Expect(current.Status.ObservedGeneration).To(Equal(current.Generation))
+					settledGeneration = current.Generation
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "AutoscalingRunnerSet should settle with its generation observed")
+
+			patched := autoscalingRunnerSet.DeepCopy()
+			patched.Spec.Template.Spec.Containers[0].Image = "ghcr.io/actions/runner:updated"
+			Expect(k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))).To(Succeed(), "failed to patch AutoScalingRunnerSet")
+
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Generation).To(BeNumerically(">", settledGeneration), "a spec write must bump metadata.generation")
+					g.Expect(current.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhaseRunning))
+					g.Expect(current.Status.ObservedGeneration).To(Equal(current.Generation), "observed generation must catch up once the change is applied")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+		})
+
+		// A label-only edit does not bump metadata.generation, so it never
+		// advances the observed generation. It does still rebuild the listener,
+		// because the desired listener labels are derived from the
+		// AutoscalingRunnerSet's, and the phase has to report that rebuild. So
+		// the scale set passes through Pending transiently and comes back to
+		// Running, while the observed generation stays exactly where it was.
+		It("does not re-observe a generation when only labels change, but still reports the listener rebuild", func() {
+			listener := new(v1alpha1.AutoscalingListener)
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "Listener should be created")
+			originalListenerUID := listener.UID
+
+			var settledGeneration int64
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhaseRunning))
+					g.Expect(current.Status.ObservedGeneration).To(Equal(current.Generation))
+					settledGeneration = current.Generation
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "AutoscalingRunnerSet should settle with its generation observed")
+
+			// Hold the deletion window open. Without this the listener is deleted
+			// and re-created between two polls, so an implementation that never
+			// reported Pending would look identical to one that did. The
+			// AutoscalingListener controller does not run in this suite, so
+			// nothing else is going to clear this finalizer.
+			blockDeletion(listener)
+			defer unblockDeletion(listener)
+
+			patched := autoscalingRunnerSet.DeepCopy()
+			patched.Labels["arc.test/label-drift"] = "updated"
+			Expect(k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))).To(Succeed(), "failed to patch AutoScalingRunnerSet labels")
+
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.EphemeralRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, current)).To(Succeed())
+					g.Expect(current.Labels).To(HaveKeyWithValue("arc.test/label-drift", "updated"), "labels should still propagate to the EphemeralRunnerSet")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+
+			// The listener is on its way out, so the scale set must not claim to
+			// be running. This is the assertion that fails if the Pending update
+			// before the listener delete is removed.
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, current)).To(Succeed())
+					g.Expect(current.DeletionTimestamp).NotTo(BeNil(), "listener should be marked for deletion to pick up the new label")
+
+					ars := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), ars)).To(Succeed())
+					g.Expect(ars.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhasePending), "scale set must report Pending while its listener is being rebuilt")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+
+			// It stays Pending for as long as the rebuild has not happened, and
+			// the observed generation does not drift in the meantime.
+			Consistently(
+				func(g Gomega) {
+					ars := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), ars)).To(Succeed())
+					g.Expect(ars.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhasePending), "scale set must stay Pending until the listener is back")
+					g.Expect(ars.Status.ObservedGeneration).To(Equal(settledGeneration))
+				},
+				3*time.Second,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+
+			// Let the rebuild finish.
+			unblockDeletion(listener)
+
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, current)).To(Succeed())
+					g.Expect(current.UID).NotTo(Equal(originalListenerUID), "listener should be re-created to pick up the new label")
+					g.Expect(current.Labels).To(HaveKeyWithValue("arc.test/label-drift", "updated"), "listener should carry the new label")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+
+			// Once the listener is back, the scale set settles on Running again
+			// without the observed generation ever moving, because no spec write
+			// happened.
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhaseRunning))
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "AutoscalingRunnerSet should return to Running once the listener is rebuilt")
+
+			Consistently(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Generation).To(Equal(settledGeneration), "a label-only edit must not bump metadata.generation")
+					g.Expect(current.Status.ObservedGeneration).To(Equal(settledGeneration), "a label-only edit must not move the observed generation")
+				},
+				3*time.Second,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+		})
+
+		// The observed generation is only meant to advance once a change has
+		// actually been applied. A reconcile that cannot finish must leave it
+		// behind the live generation, so the work is retried rather than being
+		// mistaken for settled.
+		It("leaves the observed generation behind until the reconcile completes", func() {
+			listener := new(v1alpha1.AutoscalingListener)
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "Listener should be created")
+
+			var settledGeneration int64
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhaseRunning))
+					g.Expect(current.Status.ObservedGeneration).To(Equal(current.Generation))
+					settledGeneration = current.Generation
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "AutoscalingRunnerSet should settle with its generation observed")
+
+			// Stall the reconcile part way through: the max runner change below
+			// forces the listener to be rebuilt, and the rebuild cannot complete
+			// while the listener is held in deletion.
+			blockDeletion(listener)
+			defer unblockDeletion(listener)
+
+			patched := autoscalingRunnerSet.DeepCopy()
+			updatedMax := 20
+			patched.Spec.MaxRunners = &updatedMax
+			Expect(k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))).To(Succeed(), "failed to patch AutoScalingRunnerSet max runners")
+
+			var liveGeneration int64
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Generation).To(BeNumerically(">", settledGeneration), "a spec write must bump metadata.generation")
+					g.Expect(current.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhasePending), "the scale set should go Pending while the change is being applied")
+					liveGeneration = current.Generation
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+
+			Consistently(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Status.ObservedGeneration).To(Equal(settledGeneration), "observed generation must not advance while the change is still being applied")
+					g.Expect(current.Status.ObservedGeneration).To(BeNumerically("<", liveGeneration))
+					g.Expect(current.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhasePending), "the scale set must stay Pending until the change is applied")
+				},
+				3*time.Second,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+
+			// Let the reconcile complete, and only now should the marker catch up.
+			unblockDeletion(listener)
+
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhaseRunning))
+					g.Expect(current.Status.ObservedGeneration).To(Equal(liveGeneration), "observed generation must catch up once the change has been applied")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+		})
+
 		It("updates EphemeralRunnerSet when the runner image changes without touching the Listener", func() {
 			listener := new(v1alpha1.AutoscalingListener)
 			Eventually(
@@ -478,7 +750,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 				autoscalingRunnerSetTestInterval,
 			).Should(Succeed(), "EphemeralRunnerSet should be created")
 			originalRunnerSetUID := runnerSet.UID
-			originalRunnerSetHash := runnerSet.Annotations[annotationKeyIntegrityHash]
+			originalActionableRevision := runnerSet.Spec.ActionableRevision
 
 			patched := autoscalingRunnerSet.DeepCopy()
 			patched.Spec.Template.Spec.Containers[0].Image = "ghcr.io/actions/runner:updated"
@@ -492,7 +764,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					g.Expect(err).NotTo(HaveOccurred(), "failed to get EphemeralRunnerSet")
 					g.Expect(current.UID).To(Equal(originalRunnerSetUID), "EphemeralRunnerSet should be updated in place")
 					g.Expect(current.Spec.EphemeralRunnerSpec.PodTemplateSpec.Spec.Containers[0].Image).To(Equal("ghcr.io/actions/runner:updated"))
-					g.Expect(current.Annotations[annotationKeyIntegrityHash]).NotTo(Equal(originalRunnerSetHash), "EphemeralRunnerSet spec hash should change")
+					g.Expect(current.Spec.ActionableRevision).To(BeNumerically(">", originalActionableRevision), "ActionableRevision should increment for actionable spec changes")
 				},
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
@@ -531,7 +803,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 				autoscalingRunnerSetTestInterval,
 			).Should(Succeed(), "EphemeralRunnerSet should be created")
 			originalRunnerSetUID := runnerSet.UID
-			originalRunnerSetHash := runnerSet.Annotations[annotationKeyIntegrityHash]
+			originalActionableRevision := runnerSet.Spec.ActionableRevision
 
 			patched := autoscalingRunnerSet.DeepCopy()
 			max := 20
@@ -557,7 +829,7 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, current)
 					g.Expect(err).NotTo(HaveOccurred(), "failed to get EphemeralRunnerSet")
 					g.Expect(current.UID).To(Equal(originalRunnerSetUID), "EphemeralRunnerSet should not be recreated")
-					g.Expect(current.Annotations[annotationKeyIntegrityHash]).To(Equal(originalRunnerSetHash), "EphemeralRunnerSet spec should not change")
+					g.Expect(current.Spec.ActionableRevision).To(Equal(originalActionableRevision), "ActionableRevision should not change for non-actionable updates")
 				},
 				time.Second*5,
 				autoscalingRunnerSetTestInterval,
@@ -628,6 +900,75 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
 			).Should(Succeed(), "EphemeralRunnerSet should be patched with annotation-only metadata drift")
+		})
+
+		It("preserves foreign annotations and labels on the EphemeralRunnerSet", func() {
+			runnerSet := new(v1alpha1.EphemeralRunnerSet)
+			Eventually(
+				func() (string, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, runnerSet)
+					if err != nil {
+						return "", err
+					}
+					return runnerSet.Annotations["arc.test/metadata-annotation"], nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Equal("initial"), "EphemeralRunnerSet should start with the predefined annotation")
+
+			// Simulate a third party (admission webhook, another controller, a user)
+			// adding metadata the AutoscalingRunnerSet knows nothing about.
+			foreign := runnerSet.DeepCopy()
+			foreign.Annotations["thirdparty.example.com/injected"] = "keep-me"
+			foreign.Labels["thirdparty.example.com/injected"] = "keep-me"
+			err := k8sClient.Patch(ctx, foreign, client.MergeFrom(runnerSet))
+			Expect(err).NotTo(HaveOccurred(), "failed to inject foreign metadata on EphemeralRunnerSet")
+
+			// Force the controller through the metadata reconciliation path.
+			patched := autoscalingRunnerSet.DeepCopy()
+			patched.Spec.EphemeralRunnerSetMetadata.Annotations["arc.test/metadata-annotation"] = "updated"
+			err = k8sClient.Patch(ctx, patched, client.MergeFrom(autoscalingRunnerSet))
+			Expect(err).NotTo(HaveOccurred(), "failed to patch AutoScalingRunnerSet EphemeralRunnerSet metadata")
+
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.EphemeralRunnerSet)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, current)
+					g.Expect(err).NotTo(HaveOccurred(), "failed to get EphemeralRunnerSet")
+					g.Expect(current.Annotations["arc.test/metadata-annotation"]).To(Equal("updated"))
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "desired annotation should still propagate")
+
+			// The foreign keys must survive, and the controller must be able to get
+			// past the metadata block. Before the fix the comparison was made
+			// against the unmerged desired metadata, so a foreign key made the
+			// block report "modified" on every reconcile and return early, which
+			// meant nothing after it — including listener reconciliation — ever
+			// ran again. Deleting the listener makes that stall observable.
+			listener := new(v1alpha1.AutoscalingListener)
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener)
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "listener should exist before deletion")
+			Expect(k8sClient.Delete(ctx, listener)).To(Succeed())
+			Eventually(
+				func(g Gomega) {
+					recreated := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, recreated)).To(Succeed())
+
+					current := new(v1alpha1.EphemeralRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, current)).To(Succeed())
+					g.Expect(current.Annotations).To(HaveKeyWithValue("thirdparty.example.com/injected", "keep-me"), "foreign annotation must not be stripped")
+					g.Expect(current.Labels).To(HaveKeyWithValue("thirdparty.example.com/injected", "keep-me"), "foreign label must not be stripped")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "reconciliation must converge past the metadata block instead of looping on it")
 		})
 
 		It("updates EphemeralRunnerSet runner metadata when only EphemeralRunner metadata changes", func() {
@@ -834,6 +1175,35 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
 			).Should(BeEquivalentTo("testgroup2"), "AutoScalingRunnerSet should have the runner group in its annotation")
+
+			// The listener name is a hash over the runner group, so renaming the
+			// group renames the listener. Every lookup is by that derived name,
+			// so the listener created under the previous name is invisible to
+			// the controller from here on: nothing deletes it while the scale
+			// set lives, and it keeps acquiring jobs alongside its replacement.
+			Eventually(
+				func(g Gomega) {
+					var listeners v1alpha1.AutoscalingListenerList
+					g.Expect(k8sClient.List(ctx, &listeners, client.InNamespace(autoscalingRunnerSet.Namespace))).To(Succeed())
+
+					var live []string
+					for _, listener := range listeners.Items {
+						if listener.Spec.AutoscalingRunnerSetName != autoscalingRunnerSet.Name ||
+							listener.Spec.AutoscalingRunnerSetNamespace != autoscalingRunnerSet.Namespace ||
+							!listener.DeletionTimestamp.IsZero() {
+							continue
+						}
+						live = append(live, listener.Name)
+					}
+
+					g.Expect(live).To(
+						ConsistOf(scaleSetListenerName(updated)),
+						"a renamed scale set should be left with exactly one listener, under the current name",
+					)
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
 		})
 	})
 
@@ -875,10 +1245,6 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 		statusUpdate := runnerSet.DeepCopy()
 		statusUpdate.Status.Phase = v1alpha1.EphemeralRunnerSetPhaseRunning
 
-		desiredStatus := v1alpha1.AutoscalingRunnerSetStatus{
-			Phase: v1alpha1.AutoscalingRunnerSetPhaseRunning,
-		}
-
 		err := k8sClient.Status().Patch(ctx, statusUpdate, client.MergeFrom(&runnerSet))
 		Expect(err).NotTo(HaveOccurred(), "Failed to patch runner set status")
 
@@ -893,7 +1259,10 @@ var _ = Describe("Test AutoScalingRunnerSet controller", Ordered, func() {
 			},
 			autoscalingRunnerSetTestTimeout,
 			autoscalingRunnerSetTestInterval,
-		).Should(BeEquivalentTo(desiredStatus), "AutoScalingRunnerSet status should be updated")
+		).Should(SatisfyAll(
+			WithTransform(func(s v1alpha1.AutoscalingRunnerSetStatus) v1alpha1.AutoscalingRunnerSetPhase { return s.Phase }, Equal(v1alpha1.AutoscalingRunnerSetPhaseRunning)),
+			WithTransform(func(s v1alpha1.AutoscalingRunnerSetStatus) int64 { return s.ObservedGeneration }, BeNumerically(">=", ars.Generation)),
+		), "AutoScalingRunnerSet status should be updated")
 	})
 })
 
@@ -961,6 +1330,7 @@ var _ = Describe("Test AutoScalingController updates", Ordered, func() {
 				ControllerNamespace:                autoscalingNS.Name,
 				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
 				ResourceBuilder: ResourceBuilder{
+					ResourceCache:  newTestResourceCache(),
 					SecretResolver: secretresolver.New(mgr.GetClient(), multiClient),
 				},
 			}
@@ -1078,6 +1448,7 @@ var _ = Describe("Test AutoscalingController creation failures", Ordered, func()
 				ControllerNamespace:                autoscalingNS.Name,
 				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
 				ResourceBuilder: ResourceBuilder{
+					ResourceCache:  newTestResourceCache(),
 					SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient()),
 				},
 			}
@@ -1205,6 +1576,7 @@ var _ = Describe("Test client optional configuration", Ordered, func() {
 				ControllerNamespace:                autoscalingNS.Name,
 				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
 				ResourceBuilder: ResourceBuilder{
+					ResourceCache:  newTestResourceCache(),
 					SecretResolver: secretresolver.New(mgr.GetClient(), multiclient.NewScaleset()),
 				},
 			}
@@ -1400,6 +1772,7 @@ var _ = Describe("Test client optional configuration", Ordered, func() {
 				ControllerNamespace:                autoscalingNS.Name,
 				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
 				ResourceBuilder: ResourceBuilder{
+					ResourceCache: newTestResourceCache(),
 					SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient(
 						scalefake.WithClient(
 							scalefake.NewClient(
@@ -1647,6 +2020,7 @@ var _ = Describe("Test external permissions cleanup", Ordered, func() {
 			ControllerNamespace:                autoscalingNS.Name,
 			DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
 			ResourceBuilder: ResourceBuilder{
+				ResourceCache:  newTestResourceCache(),
 				SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient()),
 			},
 		}
@@ -1807,6 +2181,7 @@ var _ = Describe("Test external permissions cleanup", Ordered, func() {
 			ControllerNamespace:                autoscalingNS.Name,
 			DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
 			ResourceBuilder: ResourceBuilder{
+				ResourceCache:  newTestResourceCache(),
 				SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient()),
 			},
 		}
@@ -2017,6 +2392,7 @@ var _ = Describe("Test resource version and build version mismatch", func() {
 			ControllerNamespace:                autoscalingNS.Name,
 			DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
 			ResourceBuilder: ResourceBuilder{
+				ResourceCache:  newTestResourceCache(),
 				SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient()),
 			},
 		}
@@ -2079,5 +2455,911 @@ var _ = Describe("Test resource version and build version mismatch", func() {
 			autoscalingRunnerSetTestTimeout,
 			autoscalingRunnerSetTestInterval,
 		).Should(BeTrue())
+	})
+})
+
+var _ = Describe("Test AutoscalingRunnerSet with a stale runner scale set", Ordered, func() {
+	const staleRunnerScaleSetID = 42
+	const freshRunnerScaleSetID = 1
+
+	var originalBuildVersion string
+	buildVersion := "0.1.0"
+
+	BeforeAll(func() {
+		originalBuildVersion = build.Version
+		build.Version = buildVersion
+	})
+
+	AfterAll(func() {
+		build.Version = originalBuildVersion
+	})
+
+	newAutoscalingRunnerSet := func(namespace, configSecretName string, annotations map[string]string) *v1alpha1.AutoscalingRunnerSet {
+		min := 1
+		max := 10
+		return &v1alpha1.AutoscalingRunnerSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        "test-asrs",
+				Namespace:   namespace,
+				Labels:      map[string]string{LabelKeyKubernetesVersion: buildVersion},
+				Annotations: annotations,
+			},
+			Spec: v1alpha1.AutoscalingRunnerSetSpec{
+				GitHubConfigUrl:    "https://github.com/owner/repo",
+				GitHubConfigSecret: configSecretName,
+				MaxRunners:         &max,
+				MinRunners:         &min,
+				RunnerGroup:        "testgroup",
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "runner",
+								Image: "ghcr.io/actions/runner",
+							},
+						},
+					},
+				},
+			},
+		}
+	}
+
+	registeredAnnotations := func(runnerScaleSetID int) map[string]string {
+		return map[string]string{
+			runnerScaleSetIDAnnotationKey:         strconv.Itoa(runnerScaleSetID),
+			AnnotationKeyGitHubRunnerScaleSetName: "test-asrs",
+			AnnotationKeyGitHubRunnerGroupName:    "testgroup",
+		}
+	}
+
+	Context("When the recorded runner scale set no longer exists on the Actions service", func() {
+		var ctx context.Context
+		var mgr ctrl.Manager
+		var autoscalingNS *corev1.Namespace
+		var autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
+			configSecret := createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
+
+			controller := &AutoscalingRunnerSetReconciler{
+				Client:                             mgr.GetClient(),
+				Scheme:                             mgr.GetScheme(),
+				Log:                                logf.Log,
+				ControllerNamespace:                autoscalingNS.Name,
+				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
+				ResourceBuilder: ResourceBuilder{
+					ResourceCache: newTestResourceCache(),
+					SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient(
+						scalefake.WithClient(
+							scalefake.NewClient(
+								scalefake.WithGetRunnerGroupByName(&scaleset.RunnerGroup{ID: 1, Name: "testgroup"}, nil),
+								scalefake.WithGetRunnerScaleSetByIDFunc(func(_ context.Context, runnerScaleSetID int) (*scaleset.RunnerScaleSet, error) {
+									if runnerScaleSetID == staleRunnerScaleSetID {
+										return nil, scaleset.NotFoundError
+									}
+									return &scaleset.RunnerScaleSet{ID: runnerScaleSetID, Name: "test-asrs", RunnerGroupID: 1, RunnerGroupName: "testgroup"}, nil
+								}),
+								scalefake.WithGetRunnerScaleSet(nil, nil),
+								scalefake.WithCreateRunnerScaleSet(&scaleset.RunnerScaleSet{ID: freshRunnerScaleSetID, Name: "test-asrs", RunnerGroupID: 1, RunnerGroupName: "testgroup"}, nil),
+								scalefake.WithDeleteRunnerScaleSet(nil),
+							),
+						),
+					)),
+				},
+			}
+			Expect(controller.SetupWithManager(mgr)).To(Succeed(), "failed to setup controller")
+			startManagers(GinkgoT(), mgr)
+
+			autoscalingRunnerSet = newAutoscalingRunnerSet(autoscalingNS.Name, configSecret.Name, registeredAnnotations(staleRunnerScaleSetID))
+			Expect(k8sClient.Create(ctx, autoscalingRunnerSet)).To(Succeed(), "failed to create AutoScalingRunnerSet")
+		})
+
+		It("registers the runner scale set again and creates the listener with the new ID", func() {
+			Eventually(
+				func() (string, error) {
+					updated := new(v1alpha1.AutoscalingRunnerSet)
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, updated); err != nil {
+						return "", err
+					}
+					return updated.Annotations[runnerScaleSetIDAnnotationKey], nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(BeEquivalentTo(strconv.Itoa(freshRunnerScaleSetID)), "the stale runner scale set ID should be replaced")
+
+			Eventually(
+				func() (int, error) {
+					listener := new(v1alpha1.AutoscalingListener)
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, listener); err != nil {
+						return 0, err
+					}
+					return listener.Spec.RunnerScaleSetID, nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(BeEquivalentTo(freshRunnerScaleSetID), "the listener should never be created with the stale runner scale set ID")
+		})
+
+		// The listener is not the only thing that has to follow a re-registration:
+		// the EphemeralRunnerSet carries the scale set ID down to every runner, so
+		// assert the propagation here rather than only on the listener.
+		It("propagates the fresh runner scale set ID to the EphemeralRunnerSet", func() {
+			runnerSet := new(v1alpha1.EphemeralRunnerSet)
+			Eventually(
+				func() (int, error) {
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, runnerSet); err != nil {
+						return 0, err
+					}
+					return runnerSet.Spec.EphemeralRunnerSpec.RunnerScaleSetID, nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(BeEquivalentTo(freshRunnerScaleSetID),
+				"the EphemeralRunnerSet must be re-pointed at the newly registered runner scale set")
+
+			// The runners themselves are still registered against the dead scale
+			// set, so the revision has to advance for them to be cleaned up.
+			Expect(runnerSet.Spec.ActionableRevision).To(BeNumerically(">", 0),
+				"re-registration must bump ActionableRevision so existing runners are replaced")
+		})
+	})
+
+	// A scale set can lose its Actions service counterpart long after it has
+	// settled, and re-registration then changes the runner scale set ID without
+	// anything in the AutoscalingRunnerSet spec changing. This exercises that
+	// full transition.
+	//
+	// It also pins down why drift detection cannot be keyed on
+	// metadata.generation: re-registration writes the ID as an annotation, and
+	// metadata changes do not bump generation. A generation-based shortcut would
+	// leave the EphemeralRunnerSet pointing at the dead scale set forever.
+	Context("When a settled runner scale set disappears from the Actions service", func() {
+		const originalRunnerScaleSetID = 77
+		const replacementRunnerScaleSetID = 78
+
+		var ctx context.Context
+		var mgr ctrl.Manager
+		var autoscalingNS *corev1.Namespace
+		var autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet
+		var scaleSetDeleted atomic.Bool
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
+			configSecret := createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
+			scaleSetDeleted.Store(false)
+
+			controller := &AutoscalingRunnerSetReconciler{
+				Client:                             mgr.GetClient(),
+				Scheme:                             mgr.GetScheme(),
+				Log:                                logf.Log,
+				ControllerNamespace:                autoscalingNS.Name,
+				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
+				ResourceBuilder: ResourceBuilder{
+					ResourceCache: newTestResourceCache(),
+					SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient(
+						scalefake.WithClient(
+							scalefake.NewClient(
+								scalefake.WithGetRunnerGroupByName(&scaleset.RunnerGroup{ID: 1, Name: "testgroup"}, nil),
+								scalefake.WithGetRunnerScaleSetByIDFunc(func(_ context.Context, runnerScaleSetID int) (*scaleset.RunnerScaleSet, error) {
+									if runnerScaleSetID == originalRunnerScaleSetID && scaleSetDeleted.Load() {
+										return nil, scaleset.NotFoundError
+									}
+									return &scaleset.RunnerScaleSet{ID: runnerScaleSetID, Name: "test-asrs", RunnerGroupID: 1, RunnerGroupName: "testgroup"}, nil
+								}),
+								scalefake.WithGetRunnerScaleSet(nil, nil),
+								scalefake.WithCreateRunnerScaleSet(&scaleset.RunnerScaleSet{ID: replacementRunnerScaleSetID, Name: "test-asrs", RunnerGroupID: 1, RunnerGroupName: "testgroup"}, nil),
+								scalefake.WithDeleteRunnerScaleSet(nil),
+							),
+						),
+					)),
+				},
+			}
+			Expect(controller.SetupWithManager(mgr)).To(Succeed(), "failed to setup controller")
+			startManagers(GinkgoT(), mgr)
+
+			autoscalingRunnerSet = newAutoscalingRunnerSet(autoscalingNS.Name, configSecret.Name, registeredAnnotations(originalRunnerScaleSetID))
+			// Set the scale set name explicitly. createRunnerScaleSet defaults an
+			// empty Spec.RunnerScaleSetName to the object name, and that spec write
+			// bumps metadata.generation, which would let a generation-based
+			// shortcut pass this test for the wrong reason.
+			autoscalingRunnerSet.Spec.RunnerScaleSetName = "test-asrs"
+			Expect(k8sClient.Create(ctx, autoscalingRunnerSet)).To(Succeed(), "failed to create AutoScalingRunnerSet")
+		})
+
+		It("re-points the EphemeralRunnerSet without any spec change on the AutoscalingRunnerSet", func() {
+			// Let the scale set settle first, so observedGeneration catches up with
+			// generation and the re-registration below is the only thing in flight.
+			var settledGeneration int64
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Status.ObservedGeneration).To(Equal(current.Generation),
+						"AutoscalingRunnerSet should reach a settled state")
+					settledGeneration = current.Generation
+
+					runnerSet := new(v1alpha1.EphemeralRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, runnerSet)).To(Succeed())
+					g.Expect(runnerSet.Spec.EphemeralRunnerSpec.RunnerScaleSetID).To(Equal(originalRunnerScaleSetID))
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+
+			// The scale set is deleted on the Actions service side. Nothing about
+			// the AutoscalingRunnerSet spec changes as a result.
+			scaleSetDeleted.Store(true)
+
+			// Re-registration is only considered when the listener has to be
+			// created, so drop the listener the way an operator or an eviction
+			// would. This deliberately does not touch the AutoscalingRunnerSet, so
+			// its generation stays put.
+			listener := new(v1alpha1.AutoscalingListener)
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingNS.Name}, listener)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, listener)).To(Succeed())
+
+			Eventually(
+				func(g Gomega) {
+					current := new(v1alpha1.EphemeralRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, current)).To(Succeed())
+					g.Expect(current.Spec.EphemeralRunnerSpec.RunnerScaleSetID).To(Equal(replacementRunnerScaleSetID),
+						"the EphemeralRunnerSet must be re-pointed at the newly registered runner scale set even though the AutoscalingRunnerSet spec never changed")
+					g.Expect(current.Spec.ActionableRevision).To(BeNumerically(">", 0),
+						"re-registration must bump ActionableRevision so runners registered against the dead scale set are replaced")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+
+			// Guard the premise of the test: re-registration must reach the
+			// EphemeralRunnerSet purely through a spec content change. If it ever
+			// starts writing to the AutoscalingRunnerSet spec, generation would
+			// bump and this would stop demonstrating that.
+			settled := new(v1alpha1.AutoscalingRunnerSet)
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), settled)).To(Succeed())
+			Expect(settled.Generation).To(Equal(settledGeneration),
+				"re-registration must not change the AutoscalingRunnerSet spec, otherwise this test proves nothing")
+		})
+	})
+
+	Context("When the Actions service cannot confirm whether the runner scale set exists", func() {
+		var ctx context.Context
+		var mgr ctrl.Manager
+		var autoscalingNS *corev1.Namespace
+		var autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet
+		var createCalls atomic.Int64
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
+			configSecret := createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
+			createCalls.Store(0)
+
+			controller := &AutoscalingRunnerSetReconciler{
+				Client:                             mgr.GetClient(),
+				Scheme:                             mgr.GetScheme(),
+				Log:                                logf.Log,
+				ControllerNamespace:                autoscalingNS.Name,
+				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
+				ResourceBuilder: ResourceBuilder{
+					ResourceCache: newTestResourceCache(),
+					SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient(
+						scalefake.WithClient(
+							scalefake.NewClient(
+								scalefake.WithGetRunnerGroupByName(&scaleset.RunnerGroup{ID: 1, Name: "testgroup"}, nil),
+								scalefake.WithGetRunnerScaleSetByIDFunc(func(_ context.Context, _ int) (*scaleset.RunnerScaleSet, error) {
+									return nil, fmt.Errorf("actions service is unavailable")
+								}),
+								scalefake.WithGetRunnerScaleSet(nil, nil),
+								scalefake.WithCreateRunnerScaleSetFunc(func(_ context.Context, rs *scaleset.RunnerScaleSet) (*scaleset.RunnerScaleSet, error) {
+									createCalls.Add(1)
+									return &scaleset.RunnerScaleSet{ID: freshRunnerScaleSetID, Name: rs.Name, RunnerGroupID: 1, RunnerGroupName: "testgroup"}, nil
+								}),
+								scalefake.WithDeleteRunnerScaleSet(nil),
+							),
+						),
+					)),
+				},
+			}
+			Expect(controller.SetupWithManager(mgr)).To(Succeed(), "failed to setup controller")
+			startManagers(GinkgoT(), mgr)
+
+			autoscalingRunnerSet = newAutoscalingRunnerSet(autoscalingNS.Name, configSecret.Name, registeredAnnotations(staleRunnerScaleSetID))
+			Expect(k8sClient.Create(ctx, autoscalingRunnerSet)).To(Succeed(), "failed to create AutoScalingRunnerSet")
+		})
+
+		It("leaves the runner scale set alone instead of registering a second one", func() {
+			Consistently(
+				func() (string, error) {
+					updated := new(v1alpha1.AutoscalingRunnerSet)
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, updated); err != nil {
+						return "", err
+					}
+					return updated.Annotations[runnerScaleSetIDAnnotationKey], nil
+				},
+				"3s",
+				autoscalingRunnerSetTestInterval,
+			).Should(BeEquivalentTo(strconv.Itoa(staleRunnerScaleSetID)), "a transient failure should never re-register the runner scale set")
+
+			Expect(createCalls.Load()).To(BeEquivalentTo(0), "no runner scale set should be created while the service is unavailable")
+		})
+	})
+
+	Context("When the runner scale set is already deleted from the Actions service", func() {
+		var ctx context.Context
+		var mgr ctrl.Manager
+		var autoscalingNS *corev1.Namespace
+		var autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
+			configSecret := createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
+
+			controller := &AutoscalingRunnerSetReconciler{
+				Client:                             mgr.GetClient(),
+				Scheme:                             mgr.GetScheme(),
+				Log:                                logf.Log,
+				ControllerNamespace:                autoscalingNS.Name,
+				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
+				ResourceBuilder: ResourceBuilder{
+					ResourceCache: newTestResourceCache(),
+					SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient(
+						scalefake.WithClient(
+							scalefake.NewClient(
+								scalefake.WithGetRunnerGroupByName(&scaleset.RunnerGroup{ID: 1, Name: "testgroup"}, nil),
+								scalefake.WithGetRunnerScaleSetByIDFunc(func(_ context.Context, runnerScaleSetID int) (*scaleset.RunnerScaleSet, error) {
+									return &scaleset.RunnerScaleSet{ID: runnerScaleSetID, Name: "test-asrs", RunnerGroupID: 1, RunnerGroupName: "testgroup"}, nil
+								}),
+								scalefake.WithGetRunnerScaleSet(nil, nil),
+								scalefake.WithCreateRunnerScaleSet(&scaleset.RunnerScaleSet{ID: freshRunnerScaleSetID, Name: "test-asrs", RunnerGroupID: 1, RunnerGroupName: "testgroup"}, nil),
+								scalefake.WithDeleteRunnerScaleSet(scaleset.NotFoundError),
+							),
+						),
+					)),
+				},
+			}
+			Expect(controller.SetupWithManager(mgr)).To(Succeed(), "failed to setup controller")
+			startManagers(GinkgoT(), mgr)
+
+			autoscalingRunnerSet = newAutoscalingRunnerSet(autoscalingNS.Name, configSecret.Name, nil)
+			Expect(k8sClient.Create(ctx, autoscalingRunnerSet)).To(Succeed(), "failed to create AutoScalingRunnerSet")
+		})
+
+		It("does not leave the AutoscalingRunnerSet stuck in Terminating", func() {
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingRunnerSet.Namespace}, new(v1alpha1.AutoscalingListener))
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "Listener should be created")
+
+			Expect(k8sClient.Delete(ctx, autoscalingRunnerSet)).To(Succeed(), "failed to delete AutoScalingRunnerSet")
+
+			Eventually(
+				func() error {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}, new(v1alpha1.AutoscalingRunnerSet))
+					if err != nil && errors.IsNotFound(err) {
+						return nil
+					}
+					return fmt.Errorf("AutoScalingRunnerSet is not deleted")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "the finalizer should be removed even though the runner scale set is already gone")
+		})
+	})
+})
+
+// testHoldFinalizer keeps an AutoscalingListener around after it has been
+// deleted, so a test can observe the window during which the scale set has no
+// usable listener. The AutoscalingListener controller is not running in this
+// suite, so nothing else adds or removes finalizers on these objects.
+const testHoldFinalizer = "arc.test/hold-deletion"
+
+func blockDeletion(listener *v1alpha1.AutoscalingListener) {
+	GinkgoHelper()
+
+	current := new(v1alpha1.AutoscalingListener)
+	Expect(k8sClient.Get(context.Background(), client.ObjectKeyFromObject(listener), current)).To(Succeed(), "failed to get listener to block its deletion")
+
+	original := current.DeepCopy()
+	Expect(controllerutil.AddFinalizer(current, testHoldFinalizer)).To(BeTrue(), "listener should not already hold the test finalizer")
+	Expect(k8sClient.Patch(context.Background(), current, client.MergeFrom(original))).To(Succeed(), "failed to add the test finalizer to the listener")
+}
+
+// unblockDeletion is idempotent so it can be deferred as a safety net and still
+// be called explicitly at the point a test wants the rebuild to proceed.
+func unblockDeletion(listener *v1alpha1.AutoscalingListener) {
+	GinkgoHelper()
+
+	current := new(v1alpha1.AutoscalingListener)
+	err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(listener), current)
+	if errors.IsNotFound(err) {
+		return
+	}
+	Expect(err).NotTo(HaveOccurred(), "failed to get listener to unblock its deletion")
+
+	original := current.DeepCopy()
+	if !controllerutil.RemoveFinalizer(current, testHoldFinalizer) {
+		return
+	}
+	Expect(k8sClient.Patch(context.Background(), current, client.MergeFrom(original))).To(Succeed(), "failed to remove the test finalizer from the listener")
+}
+
+var _ = Describe("Test AutoscalingRunnerSet outdated lifecycle", Ordered, func() {
+	var originalBuildVersion string
+	buildVersion := "0.1.0"
+
+	BeforeAll(func() {
+		originalBuildVersion = build.Version
+		build.Version = buildVersion
+	})
+
+	AfterAll(func() {
+		build.Version = originalBuildVersion
+	})
+
+	Context("When the runners reject the runner spec they were given", func() {
+		var ctx context.Context
+		var mgr ctrl.Manager
+		var autoscalingNS *corev1.Namespace
+		var autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet
+
+		ephemeralRunnerSetKey := func() client.ObjectKey {
+			return client.ObjectKey{Name: autoscalingRunnerSet.Name, Namespace: autoscalingRunnerSet.Namespace}
+		}
+
+		// The listener name is derived from the scale set as it stands now, not
+		// as the test declared it: the name is a hash over the runner group, so
+		// an edit to the group renames the listener the scale set should have.
+		listenerKey := func() client.ObjectKey {
+			GinkgoHelper()
+
+			current := new(v1alpha1.AutoscalingRunnerSet)
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed(), "failed to get the autoscaling runner set")
+
+			return client.ObjectKey{Name: scaleSetListenerName(current), Namespace: autoscalingRunnerSet.Namespace}
+		}
+
+		getEphemeralRunnerSet := func() *v1alpha1.EphemeralRunnerSet {
+			GinkgoHelper()
+
+			runnerSet := new(v1alpha1.EphemeralRunnerSet)
+			Expect(k8sClient.Get(ctx, ephemeralRunnerSetKey(), runnerSet)).To(Succeed(), "failed to get the ephemeral runner set")
+			return runnerSet
+		}
+
+		autoscalingRunnerSetPhase := func() (v1alpha1.AutoscalingRunnerSetPhase, error) {
+			updated := new(v1alpha1.AutoscalingRunnerSet)
+			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), updated); err != nil {
+				return "", err
+			}
+			return v1alpha1.AutoscalingRunnerSetPhase(updated.Status.Phase), nil
+		}
+
+		// markRunnersOutdated stands in for the EphemeralRunnerSet controller
+		// reporting that the runners it created rejected the runner spec. The
+		// applied revision is moved up to the spec revision because that is the
+		// state the report is only meaningful in: the set is running the spec it
+		// is complaining about.
+		markRunnersOutdated := func() {
+			GinkgoHelper()
+
+			runnerSet := getEphemeralRunnerSet()
+			original := runnerSet.DeepCopy()
+			runnerSet.Spec.Replicas = 3
+			runnerSet.Spec.PatchID = 7
+			Expect(k8sClient.Patch(ctx, runnerSet, client.MergeFrom(original))).To(Succeed(), "failed to seed a nonzero ephemeral runner set")
+
+			runnerSet = getEphemeralRunnerSet()
+			original = runnerSet.DeepCopy()
+			runnerSet.Status.Phase = v1alpha1.EphemeralRunnerSetPhaseOutdated
+			runnerSet.Status.AppliedActionableRevision = runnerSet.Spec.ActionableRevision
+			Expect(k8sClient.Status().Patch(ctx, runnerSet, client.MergeFrom(original))).To(Succeed(), "failed to mark the ephemeral runner set outdated")
+		}
+
+		expectSwitchedOff := func() int64 {
+			GinkgoHelper()
+
+			Eventually(autoscalingRunnerSetPhase, autoscalingRunnerSetTestTimeout, autoscalingRunnerSetTestInterval).
+				Should(BeEquivalentTo(v1alpha1.AutoscalingRunnerSetPhaseOutdated), "the autoscaling runner set should report the outdated phase")
+
+			Eventually(
+				func(g Gomega) {
+					listener := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, listenerKey(), listener)).To(Succeed(), "the listener should be kept as the record of a scale set that can come back")
+					g.Expect(listener.Spec.Phase).To(Equal(v1alpha1.AutoscalingListenerPhaseStopped), "the listener should be stopped so no further jobs are acquired")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+
+			// The set is kept, not deleted: deleting it would make the controller
+			// rebuild it from the same rejected spec on the very next reconcile.
+			var runnerSet *v1alpha1.EphemeralRunnerSet
+			Eventually(
+				func() (bool, error) {
+					runnerSet = new(v1alpha1.EphemeralRunnerSet)
+					if err := k8sClient.Get(ctx, ephemeralRunnerSetKey(), runnerSet); err != nil {
+						return false, err
+					}
+					return runnerSet.Spec.Replicas == 0 && runnerSet.Spec.PatchID == 0, nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(BeTrue(), "the ephemeral runner set should be held at zero replicas")
+
+			Consistently(
+				func() error {
+					return k8sClient.Get(ctx, ephemeralRunnerSetKey(), new(v1alpha1.EphemeralRunnerSet))
+				},
+				2*time.Second,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "the ephemeral runner set should not be deleted while the scale set is outdated")
+
+			return runnerSet.Spec.ActionableRevision
+		}
+
+		// expectStaysOutdated asserts that an edit did not resurrect the scale
+		// set. Consistently rather than Eventually: the failure being guarded
+		// against is a spurious transition out of the outdated phase, which a
+		// single sample taken at the wrong moment would miss entirely.
+		expectStaysOutdated := func(outdatedRevision int64) {
+			GinkgoHelper()
+
+			Consistently(
+				func(g Gomega) {
+					phase, err := autoscalingRunnerSetPhase()
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(phase).To(BeEquivalentTo(v1alpha1.AutoscalingRunnerSetPhaseOutdated), "an edit outside the runner spec must not move the scale set out of the outdated phase")
+
+					listener := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, listenerKey(), listener)).To(Succeed(), "the listener must be kept, not deleted")
+					g.Expect(listener.Spec.Phase).To(Equal(v1alpha1.AutoscalingListenerPhaseStopped), "the listener must stay stopped so no further jobs are acquired")
+
+					current := getEphemeralRunnerSet()
+					g.Expect(current.Spec.ActionableRevision).To(Equal(outdatedRevision), "the rejected runner spec must not be retried")
+					g.Expect(current.Spec.Replicas).To(BeZero())
+					g.Expect(current.Spec.PatchID).To(BeZero())
+				},
+				3*time.Second,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+		}
+
+		expectRecovered := func(outdatedRevision int64) {
+			GinkgoHelper()
+
+			Eventually(
+				func() (int64, error) {
+					runnerSet := new(v1alpha1.EphemeralRunnerSet)
+					if err := k8sClient.Get(ctx, ephemeralRunnerSetKey(), runnerSet); err != nil {
+						return 0, err
+					}
+					return runnerSet.Spec.ActionableRevision, nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(BeNumerically(">", outdatedRevision), "the runner spec revision should advance so the runner set stops judging itself by the rejected runners")
+
+			Eventually(
+				func(g Gomega) {
+					listener := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, listenerKey(), listener)).To(Succeed())
+					g.Expect(listener.Spec.Phase.Stopped()).To(BeFalse(), "the listener should be started again so the scale set can acquire jobs")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+
+			Eventually(autoscalingRunnerSetPhase, autoscalingRunnerSetTestTimeout, autoscalingRunnerSetTestInterval).
+				Should(BeEquivalentTo(v1alpha1.AutoscalingRunnerSetPhaseRunning), "the autoscaling runner set should leave the outdated phase")
+		}
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
+			configSecret := createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
+
+			controller := &AutoscalingRunnerSetReconciler{
+				Client:                             mgr.GetClient(),
+				Scheme:                             mgr.GetScheme(),
+				Log:                                logf.Log,
+				ControllerNamespace:                autoscalingNS.Name,
+				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
+				ResourceBuilder: ResourceBuilder{
+					ResourceCache: newTestResourceCache(),
+					SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient(
+						scalefake.WithClient(
+							scalefake.NewClient(
+								scalefake.WithGetRunnerGroupByName(&scaleset.RunnerGroup{ID: 1, Name: "testgroup"}, nil),
+								scalefake.WithGetRunnerScaleSet(nil, nil),
+								scalefake.WithCreateRunnerScaleSet(&scaleset.RunnerScaleSet{ID: 1, Name: "test-asrs", RunnerGroupID: 1, RunnerGroupName: "testgroup"}, nil),
+								scalefake.WithDeleteRunnerScaleSet(nil),
+							),
+						),
+					)),
+				},
+			}
+			Expect(controller.SetupWithManager(mgr)).To(Succeed(), "failed to setup controller")
+			startManagers(GinkgoT(), mgr)
+
+			min := 1
+			max := 10
+			autoscalingRunnerSet = &v1alpha1.AutoscalingRunnerSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-asrs",
+					Namespace: autoscalingNS.Name,
+					Labels:    map[string]string{LabelKeyKubernetesVersion: buildVersion},
+				},
+				Spec: v1alpha1.AutoscalingRunnerSetSpec{
+					GitHubConfigUrl:    "https://github.com/owner/repo",
+					GitHubConfigSecret: configSecret.Name,
+					MaxRunners:         &max,
+					MinRunners:         &min,
+					RunnerGroup:        "testgroup",
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "runner",
+									Image: "ghcr.io/actions/runner",
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, autoscalingRunnerSet)).To(Succeed(), "failed to create AutoScalingRunnerSet")
+
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, ephemeralRunnerSetKey(), new(v1alpha1.EphemeralRunnerSet))
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "the ephemeral runner set should be created")
+
+			Eventually(autoscalingRunnerSetPhase, autoscalingRunnerSetTestTimeout, autoscalingRunnerSetTestInterval).
+				Should(BeEquivalentTo(v1alpha1.AutoscalingRunnerSetPhaseRunning), "the autoscaling runner set should settle before the runners reject the spec")
+		})
+
+		It("switches the scale set off and keeps the ephemeral runner set", func() {
+			markRunnersOutdated()
+			expectSwitchedOff()
+		})
+
+		It("recovers when the runner spec is corrected", func() {
+			markRunnersOutdated()
+			outdatedRevision := expectSwitchedOff()
+
+			updated := new(v1alpha1.AutoscalingRunnerSet)
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), updated)).To(Succeed())
+			original := updated.DeepCopy()
+			updated.Spec.Template.Spec.Containers[0].Image = "ghcr.io/actions/runner:fixed"
+			Expect(k8sClient.Patch(ctx, updated, client.MergeFrom(original))).To(Succeed(), "failed to correct the runner spec")
+
+			expectRecovered(outdatedRevision)
+		})
+
+		// While a scale set is parked no listener spec drift is propagated, but
+		// edits outside the runner spec are still accepted and recorded. The
+		// listener that comes back on recovery therefore has to carry them.
+		//
+		// This covers the end state only. The transient it guards against - a
+		// listener started from the spec it was parked with, running under stale
+		// configuration until the next reconcile replaces it - is too short to
+		// observe here, and is covered deterministically by
+		// TestAutoscalingRunnerSetReplacesAStoppedListenerWithADriftedSpec.
+		It("propagates an edit made while outdated and keeps it on recovery", func() {
+			markRunnersOutdated()
+			outdatedRevision := expectSwitchedOff()
+
+			updated := new(v1alpha1.AutoscalingRunnerSet)
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), updated)).To(Succeed())
+			original := updated.DeepCopy()
+			max := 20
+			updated.Spec.MaxRunners = &max
+			Expect(k8sClient.Patch(ctx, updated, client.MergeFrom(original))).To(Succeed(), "failed to update the replica bounds")
+
+			expectStaysOutdated(outdatedRevision)
+
+			// Switched off is not frozen: the edit lands on the listener while it
+			// is still stopped, rather than waiting for the scale set to recover.
+			Eventually(
+				func(g Gomega) {
+					listener := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, listenerKey(), listener)).To(Succeed())
+					g.Expect(listener.Spec.Phase).To(Equal(v1alpha1.AutoscalingListenerPhaseStopped), "the listener must stay switched off")
+					g.Expect(listener.Spec.MaxRunners).To(Equal(max), "the edit should reach the listener while it is stopped")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+
+			updated = new(v1alpha1.AutoscalingRunnerSet)
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), updated)).To(Succeed())
+			original = updated.DeepCopy()
+			updated.Spec.Template.Spec.Containers[0].Image = "ghcr.io/actions/runner:fixed"
+			Expect(k8sClient.Patch(ctx, updated, client.MergeFrom(original))).To(Succeed(), "failed to correct the runner spec")
+
+			expectRecovered(outdatedRevision)
+
+			Eventually(
+				func(g Gomega) {
+					listener := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, listenerKey(), listener)).To(Succeed())
+					g.Expect(listener.Spec.Phase.Stopped()).To(BeFalse())
+					g.Expect(listener.Spec.MaxRunners).To(Equal(max), "the edit taken while the scale set was parked should reach the listener on recovery")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+		})
+
+		// The runner spec is not the only part of the EphemeralRunnerSet spec the
+		// AutoscalingRunnerSet owns: the metadata stamped onto the runners it
+		// creates is published the same way and changes what the next runner
+		// looks like. It therefore recovers the scale set too.
+		It("recovers when the runner metadata is corrected", func() {
+			markRunnersOutdated()
+			outdatedRevision := expectSwitchedOff()
+
+			updated := new(v1alpha1.AutoscalingRunnerSet)
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), updated)).To(Succeed())
+			original := updated.DeepCopy()
+			updated.Spec.EphemeralRunnerMetadata = &v1alpha1.ResourceMeta{
+				Labels: map[string]string{"arc.test/runner": "corrected"},
+			}
+			Expect(k8sClient.Patch(ctx, updated, client.MergeFrom(original))).To(Succeed(), "failed to correct the runner metadata")
+
+			expectRecovered(outdatedRevision)
+
+			Eventually(
+				func() map[string]string {
+					current := getEphemeralRunnerSet()
+					if current.Spec.EphemeralRunnerMetadata == nil {
+						return nil
+					}
+					return current.Spec.EphemeralRunnerMetadata.Labels
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(HaveKeyWithValue("arc.test/runner", "corrected"), "the corrected runner metadata should be published to the set")
+		})
+
+		// The outdated phase is sticky. Only a change to what the runners would
+		// be handed next - the runner spec or the metadata stamped onto them -
+		// is evidence that retrying is worth anything. Any other edit would
+		// otherwise switch the listener back on and start acquiring jobs against
+		// runners that will reject the spec exactly as before.
+		It("stays outdated when the replica bounds are updated", func() {
+			markRunnersOutdated()
+			outdatedRevision := expectSwitchedOff()
+
+			updated := new(v1alpha1.AutoscalingRunnerSet)
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), updated)).To(Succeed())
+			original := updated.DeepCopy()
+			max := 20
+			updated.Spec.MaxRunners = &max
+			Expect(k8sClient.Patch(ctx, updated, client.MergeFrom(original))).To(Succeed(), "failed to update the autoscaling runner set")
+
+			expectStaysOutdated(outdatedRevision)
+		})
+
+		It("stays outdated when the runner group is updated", func() {
+			markRunnersOutdated()
+			outdatedRevision := expectSwitchedOff()
+
+			updated := new(v1alpha1.AutoscalingRunnerSet)
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), updated)).To(Succeed())
+			original := updated.DeepCopy()
+			updated.Spec.RunnerGroup = "othergroup"
+			Expect(k8sClient.Patch(ctx, updated, client.MergeFrom(original))).To(Succeed(), "failed to update the runner group")
+
+			expectStaysOutdated(outdatedRevision)
+		})
+
+		It("stays outdated when the runner scale set name is updated", func() {
+			markRunnersOutdated()
+			outdatedRevision := expectSwitchedOff()
+
+			updated := new(v1alpha1.AutoscalingRunnerSet)
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), updated)).To(Succeed())
+			original := updated.DeepCopy()
+			updated.Spec.RunnerScaleSetName = "renamed-scale-set"
+			Expect(k8sClient.Patch(ctx, updated, client.MergeFrom(original))).To(Succeed(), "failed to update the runner scale set name")
+
+			expectStaysOutdated(outdatedRevision)
+		})
+
+		It("does not retry an outdated runner spec during a metadata-only listener rebuild", func() {
+			listener := new(v1alpha1.AutoscalingListener)
+			Expect(k8sClient.Get(ctx, listenerKey(), listener)).To(Succeed())
+			blockDeletion(listener)
+			defer unblockDeletion(listener)
+
+			runnerSet := getEphemeralRunnerSet()
+			rejectedRevision := runnerSet.Spec.ActionableRevision
+
+			updated := new(v1alpha1.AutoscalingRunnerSet)
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), updated)).To(Succeed())
+			original := updated.DeepCopy()
+			if updated.Labels == nil {
+				updated.Labels = map[string]string{}
+			}
+			updated.Labels["arc.test/listener-rebuild"] = "true"
+			Expect(k8sClient.Patch(ctx, updated, client.MergeFrom(original))).To(Succeed(), "failed to trigger a metadata-only listener rebuild")
+
+			Eventually(
+				func(g Gomega) {
+					currentListener := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, listenerKey(), currentListener)).To(Succeed())
+					g.Expect(currentListener.DeletionTimestamp).NotTo(BeNil(), "listener deletion should remain blocked")
+
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current)).To(Succeed())
+					g.Expect(current.Status.Phase).To(Equal(v1alpha1.AutoscalingRunnerSetPhasePending))
+					g.Expect(current.Generation).To(Equal(current.Status.ObservedGeneration), "metadata-only updates must not look like spec recovery")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+
+			watchClient, err := client.NewWithWatch(cfg, client.Options{Scheme: mgr.GetScheme()})
+			Expect(err).NotTo(HaveOccurred())
+			listenerWatch, err := watchClient.Watch(ctx, new(v1alpha1.AutoscalingListenerList), client.InNamespace(autoscalingRunnerSet.Namespace))
+			Expect(err).NotTo(HaveOccurred())
+			defer listenerWatch.Stop()
+
+			var listenerRecreated atomic.Bool
+			go func() {
+				for event := range listenerWatch.ResultChan() {
+					if event.Type != watch.Added {
+						continue
+					}
+					added, ok := event.Object.(*v1alpha1.AutoscalingListener)
+					if ok && added.Name == listenerKey().Name && added.UID != listener.UID {
+						listenerRecreated.Store(true)
+					}
+				}
+			}()
+
+			markRunnersOutdated()
+
+			Consistently(
+				func(g Gomega) {
+					current := getEphemeralRunnerSet()
+					g.Expect(current.Spec.ActionableRevision).To(Equal(rejectedRevision), "the rejected runner spec must not be retried without an AutoscalingRunnerSet spec update")
+
+					currentListener := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, listenerKey(), currentListener)).To(Succeed())
+					g.Expect(currentListener.DeletionTimestamp).NotTo(BeNil(), "the metadata-only listener rebuild should remain blocked")
+				},
+				3*time.Second,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed())
+
+			unblockDeletion(listener)
+
+			Eventually(autoscalingRunnerSetPhase, autoscalingRunnerSetTestTimeout, autoscalingRunnerSetTestInterval).
+				Should(BeEquivalentTo(v1alpha1.AutoscalingRunnerSetPhaseOutdated), "the metadata-only rebuild should transition directly to outdated")
+
+			Eventually(
+				func() bool {
+					return errors.IsNotFound(k8sClient.Get(ctx, listenerKey(), new(v1alpha1.AutoscalingListener)))
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(BeTrue(), "the outdated scale set should stay switched off")
+
+			Consistently(listenerRecreated.Load, time.Second, autoscalingRunnerSetTestInterval).
+				Should(BeFalse(), "the listener must not be recreated for a rejected runner spec")
+		})
 	})
 })

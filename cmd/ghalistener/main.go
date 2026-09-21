@@ -120,6 +120,7 @@ func run(ctx context.Context, config *config.Config) error {
 			EphemeralRunnerSetName:      config.EphemeralRunnerSetName,
 			MaxRunners:                  config.MaxRunners,
 			MinRunners:                  config.MinRunners,
+			ScalerConfig:                config.ListenerConfig.GetScaler(),
 		},
 		scaler.WithLogger(logger.With("component", "worker")),
 	)

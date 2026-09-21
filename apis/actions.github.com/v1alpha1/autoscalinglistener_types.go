@@ -17,13 +17,43 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"github.com/actions/actions-runner-controller/hash"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// AutoscalingListenerPhase describes whether the listener should be running.
+//
+// It is part of the spec rather than the status because it is a desired state
+// written by the AutoscalingRunnerSet controller, not an observation made by the
+// AutoscalingListener controller about itself.
+type AutoscalingListenerPhase string
+
+const (
+	// AutoscalingListenerPhaseRunning is the default. The listener controller
+	// creates and maintains the listener pod and everything it depends on.
+	AutoscalingListenerPhaseRunning AutoscalingListenerPhase = "Running"
+
+	// AutoscalingListenerPhaseStopped switches the listener off without
+	// deleting it. The listener controller tears the pod and the rest of the
+	// child resources down, so no further jobs are acquired, but the
+	// AutoscalingListener object stays as the record of a scale set that is
+	// meant to come back. Moving the phase to Running is what starts it again.
+	AutoscalingListenerPhaseStopped AutoscalingListenerPhase = "Stopped"
+)
+
+// Stopped reports whether the phase switches the listener off. The zero value
+// means Running, so listeners written before this field existed keep working.
+func (p AutoscalingListenerPhase) Stopped() bool {
+	return p == AutoscalingListenerPhaseStopped
+}
+
 // AutoscalingListenerSpec defines the desired state of AutoscalingListener
 type AutoscalingListenerSpec struct {
+	// Phase controls whether the listener runs. Empty means Running.
+	// +kubebuilder:validation:Enum=Running;Stopped
+	// +optional
+	Phase AutoscalingListenerPhase `json:"phase,omitempty"`
+
 	// +optional
 	GitHubConfigURL string `json:"githubConfigUrl,omitempty"`
 
@@ -82,10 +112,9 @@ type AutoscalingListenerSpec struct {
 
 	// +optional
 	RoleBindingMetadata *ResourceMeta `json:"roleBindingMetadata,omitempty"`
-}
 
-func (s *AutoscalingListenerSpec) Hash() string {
-	return hash.ComputeTemplateHash(s)
+	// +optional
+	ListenerConfig *ListenerConfig `json:"listenerConfig,omitempty"`
 }
 
 // AutoscalingListenerStatus defines the observed state of AutoscalingListener
@@ -96,6 +125,7 @@ type AutoscalingListenerStatus struct{}
 // +kubebuilder:printcolumn:JSONPath=".spec.githubConfigUrl",name=GitHub Configure URL,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.autoscalingRunnerSetNamespace",name=AutoscalingRunnerSet Namespace,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.autoscalingRunnerSetName",name=AutoscalingRunnerSet Name,type=string
+// +kubebuilder:printcolumn:JSONPath=".spec.phase",name=Phase,type=string
 
 // AutoscalingListener is the Schema for the autoscalinglisteners API
 type AutoscalingListener struct {
