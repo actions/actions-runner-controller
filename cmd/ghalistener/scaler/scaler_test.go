@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/cmd/ghalistener/metrics"
 	"github.com/actions/scaleset"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -332,13 +333,16 @@ func newTestScaler(t *testing.T, runner *v1alpha1.EphemeralRunner, onPatch ...fu
 	require.NoError(t, err)
 
 	return &Scaler{
-		clientset: clientset,
+		scaleClientset: clientset,
+		jobClientset:   clientset,
 		config: Config{
 			EphemeralRunnerSetNamespace: runner.Namespace,
 		},
 		targetRunners: -1,
 		patchSeq:      -1,
 		logger:        discardLogger,
+		metrics:       metrics.Discard,
+		workers:       defaultWorkers,
 	}, server.Close
 }
 
@@ -768,13 +772,16 @@ func newRecordingScaler(t *testing.T, runner *v1alpha1.EphemeralRunner, notFound
 	require.NoError(t, err)
 
 	return &Scaler{
-		clientset: clientset,
+		scaleClientset: clientset,
+		jobClientset:   clientset,
 		config: Config{
 			EphemeralRunnerSetNamespace: runner.Namespace,
 		},
 		targetRunners: -1,
 		patchSeq:      -1,
 		logger:        discardLogger,
+		metrics:       metrics.Discard,
+		workers:       defaultWorkers,
 	}, requests, server.Close
 }
 

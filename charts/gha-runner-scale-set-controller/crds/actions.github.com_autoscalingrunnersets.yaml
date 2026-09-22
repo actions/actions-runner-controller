@@ -134,12 +134,60 @@ spec:
                   description: ListenerConfig holds configuration for the ghalistener pod.
                   properties:
                     scaler:
-                      description: ScalerConfig configures the Kubernetes client used by the ghalistener scaler.
+                      description: |-
+                        ScalerConfig configures the Kubernetes clients used by the ghalistener scaler.
+
+                        The scaler talks to the API server over two independent clients, because the
+                        two kinds of traffic have very different shapes and only one of them is on the
+                        critical path:
+
+                          - The scale client publishes the desired runner count. That is one patch per
+                            message, and it is the only patch that creates runners, so it must never
+                            queue behind anything.
+                          - The job client patches job started events. That is two calls per event and
+                            can be a whole batch at once, so it is the traffic that actually consumes
+                            the rate limit.
+
+                        A single shared client lets a batch of job event patches drain the token
+                        bucket ahead of the scale patch, which delays the only call new jobs are
+                        waiting on. Splitting them keeps the scale patch clear of that backlog.
                       properties:
                         burst:
+                          description: Burst is the burst limit of the client that patches job started events.
                           minimum: 1
                           type: integer
                         qps:
+                          description: |-
+                            QPS is the query per second limit of the client that patches job started
+                            events. This is the bulk of the scaler's API traffic, at up to two calls
+                            per job started event.
+                          minimum: 1
+                          type: integer
+                        scaleBurst:
+                          description: |-
+                            ScaleBurst is the burst limit of the client that publishes the desired
+                            runner count.
+                          minimum: 1
+                          type: integer
+                        scaleQPS:
+                          description: |-
+                            ScaleQPS is the query per second limit of the client that publishes the
+                            desired runner count. The scaler issues at most one such patch per scale
+                            set message, so this only has to be large enough that the patch never
+                            waits on a token; it is deliberately a small budget separate from QPS
+                            rather than a share of it.
+                          minimum: 1
+                          type: integer
+                        workers:
+                          description: |-
+                            Workers is the number of job started events the scaler patches
+                            concurrently. The events are drained from a background queue rather than
+                            being tied to the message they arrived on, so this bounds how many job
+                            patches are in flight at any moment, not how many a single message may
+                            carry.
+
+                            Raising it past what QPS sustains does nothing, since the rate limiter
+                            rather than the worker count is what bounds throughput.
                           minimum: 1
                           type: integer
                       type: object
