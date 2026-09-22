@@ -1512,7 +1512,7 @@ var _ = Describe("EphemeralRunner", func() {
 			).Should(Succeed(), "failed to get ephemeral runner pod")
 
 			Expect(pod.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
-				Name: EnvVarHTTPProxy,
+				Name: "http_proxy",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
@@ -1524,7 +1524,7 @@ var _ = Describe("EphemeralRunner", func() {
 			}))
 
 			Expect(pod.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
-				Name: EnvVarHTTPSProxy,
+				Name: "https_proxy",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
@@ -1536,7 +1536,7 @@ var _ = Describe("EphemeralRunner", func() {
 			}))
 
 			Expect(pod.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
-				Name: EnvVarNoProxy,
+				Name: "no_proxy",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
