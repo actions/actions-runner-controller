@@ -302,7 +302,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				return ctrl.Result{}, fmt.Errorf("failed to delete the corrupted runner config secret")
 			}
 			log.Info("Corrupted runner config secret has been deleted")
-			return ctrl.Result{}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
 
 		runnerName := string(secret.Data["runnerName"])
