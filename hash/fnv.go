@@ -7,7 +7,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/rand"
 )
 
-func FNVHashStringObjects(objs ...interface{}) string {
+func FNVHashStringObjects(objs ...any) string {
 	hash := fnv.New32a()
 
 	for _, obj := range objs {
