@@ -1467,7 +1467,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			).Should(BeEquivalentTo(3), "3 EphemeralRunner should be created")
 
 			idleRunnerNames := map[string]struct{}{}
-			for i := 0; i < 2; i++ {
+			for i := range 2 {
 				idleRunner := runnerList.Items[i].DeepCopy()
 				idleRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
 				idleRunner.Status.RunnerID = i + 101
