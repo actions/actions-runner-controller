@@ -1257,11 +1257,31 @@ func podTerminated(pod *corev1.Pod) bool {
 // there would drop the object while its containers were still alive, leaving
 // the kubelet to kill them with nothing in the API to account for the resources
 // they hold in the meantime.
+//
+// The deletion is pinned to the pod the decision was made about. Pods are read
+// through the informer cache and every generation of a runner's pod carries the
+// same name, so a delete by name is a delete of whatever holds that name when
+// the API server reads the request, not of the pod whose containers were
+// observed to have stopped. A single controller cannot get that wrong, since it
+// is the only thing creating that name and it only creates after a read says the
+// name is free, but that argument is worth exactly as much as the single writer
+// it assumes: during a leader election handover the outgoing leader's reconcile
+// is still in flight while the new leader is already replacing pods. Naming the
+// UID turns the delete into a conflict when it lands on a pod the controller
+// never looked at. Without the grace period there is nothing to catch it
+// afterwards: the pod would be gone the moment the request was accepted,
+// killing a job instead of handing its container a SIGTERM to deregister with.
 func (r *EphemeralRunnerReconciler) deletePodOptions(pod *corev1.Pod) []client.DeleteOption {
 	if !podTerminated(pod) || r.TerminatedPodGracePeriodSeconds < 0 {
 		return nil
 	}
-	return []client.DeleteOption{client.GracePeriodSeconds(r.TerminatedPodGracePeriodSeconds)}
+
+	opts := []client.DeleteOption{client.GracePeriodSeconds(r.TerminatedPodGracePeriodSeconds)}
+	if pod.UID != "" {
+		uid := pod.UID
+		opts = append(opts, client.Preconditions{UID: &uid})
+	}
+	return opts
 }
 
 func runnerContainerStatus(pod *corev1.Pod) *corev1.ContainerStatus {

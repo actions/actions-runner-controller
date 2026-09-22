@@ -21,7 +21,7 @@ import (
 
 func terminatedRunnerPod(exitCode int32) *corev1.Pod {
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-runner", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: "test-runner", Namespace: "default", UID: "d6f1e2b4-0f3a-4a1e-9a1f-2c9f0a3b7c55"},
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{{Name: v1alpha1.EphemeralRunnerContainerName}},
 		},
@@ -148,6 +148,53 @@ func TestDeletePodOptionsHonorsTheConfiguredGracePeriod(t *testing.T) {
 		r := &EphemeralRunnerReconciler{TerminatedPodGracePeriodSeconds: -1}
 
 		assert.Empty(t, r.deletePodOptions(pod))
+	})
+}
+
+// TestDeletePodOptionsDeletesOnlyThePodItLookedAt pins that the force delete
+// names the pod it was handed, not the name that pod happens to hold.
+//
+// Every generation of a runner's pod is named after the EphemeralRunner, and
+// pods are read through the informer cache, so a delete by name can outlive the
+// object it was decided on: an outgoing leader whose reconcile is still running
+// after the lease moved would otherwise delete the replacement pod the new
+// leader has already started a job in. The UID makes that a conflict instead.
+// This has to be asserted on the options, because the fake client honours only
+// the ResourceVersion precondition and would delete the pod either way.
+func TestDeletePodOptionsDeletesOnlyThePodItLookedAt(t *testing.T) {
+	r := &EphemeralRunnerReconciler{}
+
+	t.Run("a finished pod is deleted by identity", func(t *testing.T) {
+		pod := terminatedRunnerPod(0)
+
+		var deleteOptions client.DeleteOptions
+		for _, opt := range r.deletePodOptions(pod) {
+			opt.ApplyToDelete(&deleteOptions)
+		}
+
+		require.NotNil(t, deleteOptions.Preconditions)
+		require.NotNil(t, deleteOptions.Preconditions.UID)
+		assert.Equal(t, pod.UID, *deleteOptions.Preconditions.UID)
+	})
+
+	t.Run("a running pod is deleted without any options", func(t *testing.T) {
+		pod := terminatedRunnerPod(0)
+		pod.Status.ContainerStatuses[0].State = corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}
+
+		assert.Empty(t, r.deletePodOptions(pod))
+	})
+
+	t.Run("a pod with no UID carries no precondition", func(t *testing.T) {
+		pod := terminatedRunnerPod(0)
+		pod.UID = ""
+
+		var deleteOptions client.DeleteOptions
+		for _, opt := range r.deletePodOptions(pod) {
+			opt.ApplyToDelete(&deleteOptions)
+		}
+
+		require.NotNil(t, deleteOptions.GracePeriodSeconds)
+		assert.Nil(t, deleteOptions.Preconditions, "an empty UID is a precondition nothing can satisfy")
 	})
 }
 
