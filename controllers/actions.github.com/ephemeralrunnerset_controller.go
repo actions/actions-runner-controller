@@ -761,7 +761,6 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 		return false, err
 	}
 
-	var errs []error
 	// avoid fetching the client if we have nothing left to do
 	if len(ephemeralRunnerState.running) == 0 && len(ephemeralRunnerState.pending) == 0 {
 		return false, nil
@@ -772,6 +771,7 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 		return false, err
 	}
 
+	var errs []error
 	log.Info("Cleanup pending or running ephemeral runners")
 	for _, ephemeralRunner := range ephemeralRunnerState.pending {
 		log.Info("Removing the ephemeral runner from the service", "name", ephemeralRunner.Name)

@@ -3,6 +3,7 @@ package actionsgithubcom
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
@@ -682,4 +683,58 @@ func TestNewEphemeralRunnerDoesNotShareItsSpec(t *testing.T) {
 	assert.Equal(t, unchanged.Spec, set.Spec, "the set a runner was built from was written into")
 	assert.Equal(t, unchanged.Labels, set.Labels)
 	assert.Equal(t, unchanged.Annotations, set.Annotations)
+}
+
+// TestNewEphemeralRunnerIsSafeToBuildConcurrentlyWithoutAScheme pins that a
+// builder that was never given a scheme can still build runners in parallel.
+//
+// Runners are built concurrently, and the ownership reference needs a scheme to
+// resolve the owner's kind. A builder without one falls back to a scheme it
+// makes itself, and doing that by assigning to the builder would be a write
+// every other goroutine is reading at the same time: they would race on the
+// field, and one could pick up a scheme another had allocated but not yet
+// registered the types on, which fails the build with an unknown kind rather
+// than racing quietly. Every runner here has to come back owned, whichever
+// goroutine got there first. The race itself is only reported under -race.
+func TestNewEphemeralRunnerIsSafeToBuildConcurrentlyWithoutAScheme(t *testing.T) {
+	b := &ResourceBuilder{}
+	require.Nil(t, b.Scheme, "the fallback only runs for a builder without a scheme")
+
+	set := &v1alpha1.EphemeralRunnerSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-set", Namespace: "test-ns"},
+		Spec: v1alpha1.EphemeralRunnerSetSpec{
+			EphemeralRunnerSpec: v1alpha1.EphemeralRunnerSpec{
+				GitHubConfigURL: "https://github.com/org/repo",
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: v1alpha1.EphemeralRunnerContainerName}},
+					},
+				},
+			},
+		},
+	}
+
+	const runners = 32
+	var wg sync.WaitGroup
+	built := make([]*v1alpha1.EphemeralRunner, runners)
+	errs := make([]error, runners)
+
+	start := make(chan struct{})
+	for i := range runners {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			built[i], errs[i] = b.newEphemeralRunner(set)
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	for i := range runners {
+		require.NoError(t, errs[i])
+		require.Len(t, built[i].OwnerReferences, 1, "the runner has to come back owned by the set")
+		assert.Equal(t, set.Name, built[i].OwnerReferences[0].Name)
+		assert.Equal(t, "EphemeralRunnerSet", built[i].OwnerReferences[0].Kind)
+	}
 }

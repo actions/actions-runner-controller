@@ -96,15 +96,24 @@ func (b *ResourceBuilder) setSchemeIfUnset(scheme *runtime.Scheme) {
 	}
 }
 
+// setControllerReference marks object as owned by owner.
+//
+// The scheme is not memoised when the builder was built without one. Runners
+// are built concurrently now, and a lazily assigned field is a write shared
+// with every goroutine reading it: they would race on the pointer, and one of
+// them could read a scheme the other had allocated but not yet registered the
+// types on, failing the ownership call with an unknown kind. Building a local
+// one costs an allocation on a path no caller with a scheme ever takes.
 func (b *ResourceBuilder) setControllerReference(owner client.Object, object client.Object) error {
-	if b.Scheme == nil {
-		b.Scheme = runtime.NewScheme()
-		if err := v1alpha1.AddToScheme(b.Scheme); err != nil {
+	scheme := b.Scheme
+	if scheme == nil {
+		scheme = runtime.NewScheme()
+		if err := v1alpha1.AddToScheme(scheme); err != nil {
 			return err
 		}
 	}
 
-	return ctrl.SetControllerReference(owner, object, b.Scheme)
+	return ctrl.SetControllerReference(owner, object, scheme)
 }
 
 func (b *ResourceBuilder) newAutoscalingListener(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, namespace, image string, imagePullSecrets []corev1.LocalObjectReference) (*v1alpha1.AutoscalingListener, error) {
