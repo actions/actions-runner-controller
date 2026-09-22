@@ -2,6 +2,7 @@ package tests
 
 import (
 	"fmt"
+	"maps"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -210,12 +211,8 @@ func TestTemplateListenerScalerValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			setValues := make(map[string]string, len(baseValues)+len(tt.setValues))
-			for key, value := range baseValues {
-				setValues[key] = value
-			}
-			for key, value := range tt.setValues {
-				setValues[key] = value
-			}
+			maps.Copy(setValues, baseValues)
+			maps.Copy(setValues, tt.setValues)
 
 			options := &helm.Options{
 				Logger:         logger.Discard,
@@ -276,12 +273,8 @@ func TestTemplateListenerScalerConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			setValues := make(map[string]string, len(baseValues)+len(tt.setValues))
-			for key, value := range baseValues {
-				setValues[key] = value
-			}
-			for key, value := range tt.setValues {
-				setValues[key] = value
-			}
+			maps.Copy(setValues, baseValues)
+			maps.Copy(setValues, tt.setValues)
 
 			options := &helm.Options{
 				Logger:         logger.Discard,
