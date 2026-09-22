@@ -89,7 +89,7 @@ tests:
             - "--autoscaling-runner-set-max-concurrent-reconciles=2"
             - "--autoscaling-listener-max-concurrent-reconciles=2"
             - "--ephemeral-runner-set-max-concurrent-reconciles=2"
-            - "--ephemeral-runner-max-concurrent-reconciles=16"
+            - "--ephemeral-runner-max-concurrent-reconciles=4"
             - "--listener-metrics-addr=0"
             - "--listener-metrics-endpoint="
             - "--metrics-addr=0"

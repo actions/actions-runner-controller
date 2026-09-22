@@ -366,7 +366,7 @@ func TestTemplate_ControllerDeployment_Defaults(t *testing.T) {
 		"--autoscaling-runner-set-max-concurrent-reconciles=2",
 		"--autoscaling-listener-max-concurrent-reconciles=2",
 		"--ephemeral-runner-set-max-concurrent-reconciles=2",
-		"--ephemeral-runner-max-concurrent-reconciles=16",
+		"--ephemeral-runner-max-concurrent-reconciles=4",
 		"--metrics-addr=0",
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
@@ -521,7 +521,7 @@ func TestTemplate_ControllerDeployment_Customize(t *testing.T) {
 		"--autoscaling-runner-set-max-concurrent-reconciles=2",
 		"--autoscaling-listener-max-concurrent-reconciles=2",
 		"--ephemeral-runner-set-max-concurrent-reconciles=2",
-		"--ephemeral-runner-max-concurrent-reconciles=16",
+		"--ephemeral-runner-max-concurrent-reconciles=4",
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
 		"--metrics-addr=0",
@@ -652,7 +652,7 @@ func TestTemplate_EnableLeaderElection(t *testing.T) {
 		"--autoscaling-runner-set-max-concurrent-reconciles=2",
 		"--autoscaling-listener-max-concurrent-reconciles=2",
 		"--ephemeral-runner-set-max-concurrent-reconciles=2",
-		"--ephemeral-runner-max-concurrent-reconciles=16",
+		"--ephemeral-runner-max-concurrent-reconciles=4",
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
 		"--metrics-addr=0",
@@ -696,7 +696,7 @@ func TestTemplate_ControllerDeployment_ForwardImagePullSecrets(t *testing.T) {
 		"--autoscaling-runner-set-max-concurrent-reconciles=2",
 		"--autoscaling-listener-max-concurrent-reconciles=2",
 		"--ephemeral-runner-set-max-concurrent-reconciles=2",
-		"--ephemeral-runner-max-concurrent-reconciles=16",
+		"--ephemeral-runner-max-concurrent-reconciles=4",
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
 		"--metrics-addr=0",
@@ -789,7 +789,7 @@ func TestTemplate_ControllerDeployment_WatchSingleNamespace(t *testing.T) {
 		"--autoscaling-runner-set-max-concurrent-reconciles=2",
 		"--autoscaling-listener-max-concurrent-reconciles=2",
 		"--ephemeral-runner-set-max-concurrent-reconciles=2",
-		"--ephemeral-runner-max-concurrent-reconciles=16",
+		"--ephemeral-runner-max-concurrent-reconciles=4",
 		"--listener-metrics-addr=0",
 		"--listener-metrics-endpoint=",
 		"--metrics-addr=0",
@@ -837,7 +837,7 @@ func TestTemplate_ControllerDeployment_MaxConcurrentReconciles(t *testing.T) {
 		assert.Contains(t, args, "--autoscaling-runner-set-max-concurrent-reconciles=2")
 		assert.Contains(t, args, "--autoscaling-listener-max-concurrent-reconciles=2")
 		assert.Contains(t, args, "--ephemeral-runner-set-max-concurrent-reconciles=2")
-		assert.Contains(t, args, "--ephemeral-runner-max-concurrent-reconciles=16")
+		assert.Contains(t, args, "--ephemeral-runner-max-concurrent-reconciles=4")
 	})
 
 	t.Run("every flag renders when configured", func(t *testing.T) {

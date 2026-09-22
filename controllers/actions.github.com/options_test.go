@@ -14,7 +14,7 @@ func TestOptionsResolve(t *testing.T) {
 		assert.Equal(t, 2, got.AutoscalingRunnerSetMaxConcurrentReconciles)
 		assert.Equal(t, 2, got.AutoscalingListenerMaxConcurrentReconciles)
 		assert.Equal(t, 2, got.EphemeralRunnerSetMaxConcurrentReconciles)
-		assert.Equal(t, 16, got.EphemeralRunnerMaxConcurrentReconciles)
+		assert.Equal(t, 4, got.EphemeralRunnerMaxConcurrentReconciles)
 	})
 
 	t.Run("the shipped defaults survive a second resolve", func(t *testing.T) {
@@ -55,7 +55,7 @@ func TestOptionsResolve(t *testing.T) {
 		opts.EphemeralRunnerMaxConcurrentReconciles = 0
 		got := opts.Resolve()
 		assert.Equal(t, 7, got.AutoscalingListenerMaxConcurrentReconciles)
-		assert.Equal(t, 16, got.EphemeralRunnerMaxConcurrentReconciles)
+		assert.Equal(t, 4, got.EphemeralRunnerMaxConcurrentReconciles)
 		assert.Equal(t, 2, got.AutoscalingRunnerSetMaxConcurrentReconciles)
 		assert.Equal(t, 2, got.EphemeralRunnerSetMaxConcurrentReconciles)
 	})

@@ -36,10 +36,8 @@ controller:
       # The EphemeralRunner controller is higher because it is the only one of the four that
       # routinely has many distinct objects to reconcile at once, one per runner.
       # controller-runtime serialises reconciles per object, so extra workers on the other
-      # three only pay off when many runner scale sets exist. The value is sized for a burst
-      # of jobs finishing together: every runner has to be reconciled before the pod it holds
-      # is handed back, and these workers decide how many of those can be in flight at once.
-      ephemeralRunnerMaxConcurrentReconciles: 16
+      # three only pay off when many runner scale sets exist.
+      ephemeralRunnerMaxConcurrentReconciles: 4
 
       # How long a runner pod whose containers have all exited is kept before it is deleted.
       # Zero, the default, removes the pod as soon as its job is over instead of leaving it

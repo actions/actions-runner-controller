@@ -40,19 +40,12 @@ type Options struct {
 // reconcile at once: one per runner. controller-runtime serialises reconciles
 // per object, so extra workers on the other three controllers only pay off
 // when many runner scale sets exist.
-//
-// Its value is sized for a burst of jobs finishing together rather than for a
-// steady trickle. Every runner in the burst has to be reconciled through its
-// pod events and its deletion before the pod it holds is handed back, and the
-// workers are what decides how many of those can be in flight at once. Four of
-// them draining a hundred runners is a queue, and the jobs waiting on those
-// pods are what sits in it.
 func OptionsWithDefault() Options {
 	return Options{
 		AutoscalingRunnerSetMaxConcurrentReconciles: 2,
 		AutoscalingListenerMaxConcurrentReconciles:  2,
 		EphemeralRunnerSetMaxConcurrentReconciles:   2,
-		EphemeralRunnerMaxConcurrentReconciles:      16,
+		EphemeralRunnerMaxConcurrentReconciles:      4,
 	}
 }
 
