@@ -15,6 +15,7 @@ import (
 	"github.com/google/go-github/v52/github"
 	"github.com/onsi/gomega"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/mod/modfile"
 	"golang.org/x/oauth2"
 	"sigs.k8s.io/yaml"
 )
@@ -1018,7 +1019,7 @@ type job struct {
 func createTestJobs(id, testResultCMNamePrefix string, numJobs int) []job {
 	var testJobs []job
 
-	for i := 0; i < numJobs; i++ {
+	for i := range numJobs {
 		name := fmt.Sprintf("test%d", i)
 		testArg := fmt.Sprintf("%s%d", id, i)
 		configMapName := testResultCMNamePrefix + testArg
@@ -1118,7 +1119,7 @@ func installActionsWorkflow(t *testing.T, testName, runnerLabel, testResultCMNam
 				testing.Step{
 					Uses: "actions/setup-go@v3",
 					With: &testing.With{
-						GoVersion: "1.26.3",
+						GoVersion: goVersionFromGoMod(t),
 					},
 				},
 			)
@@ -1298,6 +1299,33 @@ kubectl create cm %s$id --from-literal=status=ok
 	if err := g.Sync(ctx); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// goVersionFromGoMod keeps the runner-side Go toolchain in sync with go.mod so
+// the version is pinned in exactly one place. Like setup-go's go-version-file,
+// the toolchain directive wins over the go directive when both are present.
+func goVersionFromGoMod(t *testing.T) string {
+	t.Helper()
+
+	data, err := os.ReadFile(filepath.Join("..", "..", "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := modfile.ParseLax("go.mod", data, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if f.Toolchain != nil {
+		return strings.TrimPrefix(f.Toolchain.Name, "go")
+	}
+
+	if f.Go == nil {
+		t.Fatal("go.mod has no go directive")
+	}
+
+	return f.Go.Version
 }
 
 func verifyActionsWorkflowRun(t *testing.T, ctx context.Context, env *testing.Env, testJobs []job, timeout time.Duration, cmCfg testing.KubectlConfig) {
