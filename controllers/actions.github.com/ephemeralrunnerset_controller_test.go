@@ -1873,13 +1873,29 @@ var _ = Describe("EphemeralRunner phase metrics", func() {
 		expectEphemeralRunnerPhaseMetric(ephemeralRunner, v1alpha1.EphemeralRunnerPhaseRunning, 0)
 		expectEphemeralRunnerPhaseMetric(ephemeralRunner, v1alpha1.EphemeralRunnerPhaseSucceeded, 1)
 
-		// The pod is handed back by the same reconcile, rather than by the one
-		// that runs the finalizers after the runner is deleted. The runner itself
-		// is still there to be read: it is deleted, but its finalizers hold it
-		// until that reconcile, which is also what lets the EphemeralRunnerSet
-		// see that the job finished.
-		err = k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
-		Expect(kerrors.IsNotFound(err)).To(BeTrue(), "expected the pod of the finished runner to be gone")
+		// The pod is handed back by the reconcile that finalizes the deleted
+		// runner, not by the one that observes the exit. The runner itself is
+		// still there to be read: it is deleted, but its finalizers hold it until
+		// that reconcile, which is also what lets the EphemeralRunnerSet see that
+		// the job finished.
+		//
+		// Deleting the pod on the success path instead would emit a pod deletion
+		// on the pod informer just after the status patch goes to the runner
+		// informer, and nothing orders those two streams, so the reconcile that
+		// deletion wakes could read a runner that is not yet Succeeded and build
+		// a replacement pod from a JIT config that has already been used.
+		runnerFinishing := new(v1alpha1.EphemeralRunner)
+		err = k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, runnerFinishing)
+		Expect(err).NotTo(HaveOccurred(), "the finalizers must keep the finished runner readable")
+		Expect(runnerFinishing.DeletionTimestamp.IsZero()).To(BeFalse(), "the reconcile that observes the exit must delete the runner")
+
+		_, err = controller.Reconcile(ctx, request)
+		Expect(err).NotTo(HaveOccurred(), "failed to reconcile the deleted runner")
+
+		Eventually(func() bool {
+			err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+			return kerrors.IsNotFound(err)
+		}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeTrue(), "expected the pod of the finished runner to be gone")
 	})
 })
 

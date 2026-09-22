@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
-	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -198,16 +197,23 @@ func TestDeletePodOptionsDeletesOnlyThePodItLookedAt(t *testing.T) {
 	})
 }
 
-// TestReconcileReleasesTheRunnerPodAsSoonAsTheJobIsDone pins when, and how, the
-// pod of a finished runner goes away.
+// TestReconcileReleasesTheRunnerPodWithoutAGracePeriod pins how the pod of a
+// finished runner goes away.
 //
-// The finalizer deletes the pod as well, but only on the reconcile that follows
-// the deletion of the EphemeralRunner. Until then the pod is still occupying the
-// cluster, so a scale set draining a burst of jobs spends a queue round trip per
-// runner before the next one can be scheduled. The delete also has to skip the
-// grace period, or the pod lingers in Terminating for the full
-// terminationGracePeriodSeconds with nothing left inside it to shut down.
-func TestReconcileReleasesTheRunnerPodAsSoonAsTheJobIsDone(t *testing.T) {
+// The reconcile that observes the clean exit marks the runner Succeeded and
+// deletes it; the finalizers hold the object until the deletion reconcile,
+// which is what deletes the pod. What matters is the state that run of
+// reconciles leaves behind: the runner deleted, and its pod gone rather than
+// lingering in Terminating for the full terminationGracePeriodSeconds with
+// nothing left inside it to shut down.
+//
+// The pod is deliberately not deleted on the success path itself. Doing that
+// emits a pod deletion on the pod informer microseconds after the status patch
+// goes to the runner informer, and the two streams have no ordering between
+// them, so the reconcile that deletion wakes can read a runner that is not yet
+// Succeeded and build a replacement pod from a JIT config that has already been
+// used.
+func TestReconcileReleasesTheRunnerPodWithoutAGracePeriod(t *testing.T) {
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
 	require.NoError(t, v1alpha1.AddToScheme(scheme))
@@ -264,75 +270,26 @@ func TestReconcileReleasesTheRunnerPodAsSoonAsTheJobIsDone(t *testing.T) {
 	}
 
 	key := types.NamespacedName{Namespace: "default", Name: "test-runner"}
+
+	// The reconcile that sees the exit records it and deletes the runner. The
+	// pod is still the deletion reconcile's to clean up.
 	_, err := reconciler.Reconcile(t.Context(), ctrl.Request{NamespacedName: key})
 	require.NoError(t, err)
 
-	require.Len(t, podDeleteOptions, 1, "the pod of a finished runner must be deleted by the reconcile that observes the exit")
+	var got v1alpha1.EphemeralRunner
+	require.NoError(t, c.Get(t.Context(), key, &got), "the runner is deleted, but its finalizers keep it until the deletion reconcile runs")
+	assert.False(t, got.DeletionTimestamp.IsZero(), "the runner must be deleted by the reconcile that observes the exit")
+	assert.Equal(t, v1alpha1.EphemeralRunnerPhaseSucceeded, got.Status.Phase)
+	assert.Empty(t, podDeleteOptions, "the success path must not delete the pod itself")
+
+	// The deletion reconcile is what hands the pod back.
+	_, err = reconciler.Reconcile(t.Context(), ctrl.Request{NamespacedName: key})
+	require.NoError(t, err)
+
+	require.Len(t, podDeleteOptions, 1, "the pod of a finished runner must be deleted once it is being finalized")
 	require.NotNil(t, podDeleteOptions[0].GracePeriodSeconds)
-	assert.Equal(t, int64(0), *podDeleteOptions[0].GracePeriodSeconds)
+	assert.Equal(t, int64(0), *podDeleteOptions[0].GracePeriodSeconds, "a pod with nothing left running in it must not wait out a grace period")
 
 	err = c.Get(t.Context(), key, new(corev1.Pod))
 	assert.True(t, kerrors.IsNotFound(err), "the pod must be gone, got %v", err)
-
-	var got v1alpha1.EphemeralRunner
-	require.NoError(t, c.Get(t.Context(), key, &got), "the runner is deleted, but its finalizers keep it until the deletion reconcile runs")
-	assert.False(t, got.DeletionTimestamp.IsZero(), "the runner must be deleted by the same reconcile")
-	assert.ElementsMatch(t,
-		[]string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName},
-		got.Finalizers,
-		"the deletion reconcile still owns the rest of the cleanup, and the set still has to see the runner going away",
-	)
-}
-
-// TestAFailedPodReleaseStillDeletesTheRunner pins what happens when the early
-// pod deletion does not work.
-//
-// Releasing the pod here is an optimisation, not the thing that makes the
-// cleanup correct: the deletion reconcile deletes the pod as well. So a pod
-// that cannot be deleted must not stop the runner from being deleted, and must
-// not cost a reconcile retrying it, or a burst of finishing jobs would queue
-// behind whatever is making the API server unhappy.
-func TestAFailedPodReleaseStillDeletesTheRunner(t *testing.T) {
-	scheme := runtime.NewScheme()
-	require.NoError(t, corev1.AddToScheme(scheme))
-	require.NoError(t, v1alpha1.AddToScheme(scheme))
-
-	runner := &v1alpha1.EphemeralRunner{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       "test-runner",
-			Namespace:  "default",
-			Finalizers: []string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName},
-		},
-		Status: v1alpha1.EphemeralRunnerStatus{Phase: v1alpha1.EphemeralRunnerPhaseSucceeded, RunnerID: 42},
-	}
-
-	c := ctrlfake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(runner, terminatedRunnerPod(0)).
-		WithInterceptorFuncs(interceptor.Funcs{
-			Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
-				if _, ok := obj.(*corev1.Pod); ok {
-					return kerrors.NewServiceUnavailable("etcd is unhappy")
-				}
-				return c.Delete(ctx, obj, opts...)
-			},
-		}).
-		Build()
-
-	reconciler := &EphemeralRunnerReconciler{
-		Client:          c,
-		Scheme:          scheme,
-		ResourceBuilder: ResourceBuilder{ResourceCache: newTestResourceCache()},
-	}
-
-	require.NoError(t, reconciler.releaseFinishedRunner(t.Context(), runner, terminatedRunnerPod(0), logr.Discard()))
-
-	var got v1alpha1.EphemeralRunner
-	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Namespace: "default", Name: "test-runner"}, &got))
-	assert.False(t, got.DeletionTimestamp.IsZero(), "the runner must still be deleted")
-	assert.ElementsMatch(t,
-		[]string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName},
-		got.Finalizers,
-		"the deletion reconcile has to be left something to delete the pod with",
-	)
 }
