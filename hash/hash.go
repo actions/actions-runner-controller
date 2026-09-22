@@ -16,7 +16,7 @@ import (
 // DeepHashObject writes specified object to hash using the spew library
 // which follows pointers and prints actual values of the nested objects
 // ensuring the hash does not change when a pointer changes.
-func DeepHashObject(hasher hash.Hash, objectToWrite interface{}) {
+func DeepHashObject(hasher hash.Hash, objectToWrite any) {
 	hasher.Reset()
 	printer := spew.ConfigState{
 		Indent:         " ",
@@ -34,7 +34,7 @@ func DeepHashObject(hasher hash.Hash, objectToWrite interface{}) {
 //
 // Proudly modified and adopted from k8s.io/kubernetes/pkg/util/hash.DeepHashObject and
 // k8s.io/kubernetes/pkg/controller.ComputeHash.
-func ComputeTemplateHash(template interface{}) string {
+func ComputeTemplateHash(template any) string {
 	hasher := fnv.New32a()
 
 	hasher.Reset()

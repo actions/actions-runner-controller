@@ -410,8 +410,8 @@ func TestPredicateProjectionsCoverEveryStatusField(t *testing.T) {
 	fieldNames := func(v any) []string {
 		typ := reflect.TypeOf(v)
 		names := make([]string, 0, typ.NumField())
-		for i := 0; i < typ.NumField(); i++ {
-			names = append(names, typ.Field(i).Name)
+		for field := range typ.Fields() {
+			names = append(names, field.Name)
 		}
 		sort.Strings(names)
 		return names

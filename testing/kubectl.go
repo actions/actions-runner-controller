@@ -122,7 +122,7 @@ func (k *Kubectl) FindPods(ctx context.Context, label string, cfg KubectlConfig)
 	}
 
 	var pods []string
-	for _, l := range strings.Split(out, "\n") {
+	for l := range strings.SplitSeq(out, "\n") {
 		if l != "" {
 			pods = append(pods, l)
 		}
