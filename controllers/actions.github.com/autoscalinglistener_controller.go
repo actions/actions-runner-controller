@@ -94,7 +94,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 		if requeue {
 			log.Info("Waiting for resources to be deleted before removing finalizer")
-			return ctrl.Result{Requeue: true, RequeueAfter: time.Second}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
 
 		log.Info("Removing finalizer")
@@ -205,7 +205,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 				return ctrl.Result{}, err
 			}
 
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{RequeueAfter: 100 * time.Millisecond}, nil
 		}
 	case kerrors.IsNotFound(err):
 		// Create a service account for the listener pod in the controller namespace
@@ -250,7 +250,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 				log.Error(err, "Failed to update listener role")
 				return ctrl.Result{}, err
 			}
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{}, nil
 		}
 	case kerrors.IsNotFound(err):
 		// Create a role for the listener pod in the AutoScalingRunnerSet namespace
@@ -290,7 +290,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			}
 
 			log.Info("Updated listener role binding")
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{}, nil
 		}
 
 	case kerrors.IsNotFound(err):
@@ -343,7 +343,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 					log.Error(err, "Failed to update listener proxy secret")
 					return ctrl.Result{}, err
 				}
-				return ctrl.Result{Requeue: true}, nil
+				return ctrl.Result{}, nil
 			}
 		case kerrors.IsNotFound(err):
 			// Create a mirror secret for the listener pod in the Controller namespace for listener pod to use
@@ -433,7 +433,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			if err := r.Patch(ctx, updatedSecret, client.MergeFrom(&listenerConfigSecret)); err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to update listener config secret: %w", err)
 			}
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{}, nil
 		}
 	case kerrors.IsNotFound(err):
 		cfg, err := getAppConfig()
@@ -459,7 +459,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 
 		// Requeue to create listener pod with the config secret
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{}, nil
 	default:
 		log.Error(err, "Unable to get listener config secret", "namespace", autoscalingListener.Namespace, "name", scaleSetListenerConfigName(&autoscalingListener))
 		return ctrl.Result{}, err
@@ -798,7 +798,7 @@ func (r *AutoscalingListenerReconciler) createProxySecret(ctx context.Context, a
 
 	logger.Info("Created listener proxy secret", "namespace", newProxySecret.Namespace, "name", newProxySecret.Name)
 
-	return ctrl.Result{Requeue: true}, nil
+	return ctrl.Result{}, nil
 }
 
 func (r *AutoscalingListenerReconciler) createRoleForListener(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) (ctrl.Result, error) {
@@ -812,7 +812,7 @@ func (r *AutoscalingListenerReconciler) createRoleForListener(ctx context.Contex
 	}
 
 	logger.Info("Created listener role", "namespace", newRole.Namespace, "name", newRole.Name, "rules", newRole.Rules)
-	return ctrl.Result{Requeue: true}, nil
+	return ctrl.Result{}, nil
 }
 
 func (r *AutoscalingListenerReconciler) createRoleBindingForListener(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, listenerRole *rbacv1.Role, serviceAccount *corev1.ServiceAccount, logger logr.Logger) (ctrl.Result, error) {
@@ -841,7 +841,7 @@ func (r *AutoscalingListenerReconciler) createRoleBindingForListener(ctx context
 		"role", listenerRole.Name,
 		"serviceAccountNamespace", serviceAccount.Namespace,
 		"serviceAccount", serviceAccount.Name)
-	return ctrl.Result{Requeue: true}, nil
+	return ctrl.Result{}, nil
 }
 
 func (r *AutoscalingListenerReconciler) publishRunningListener(autoscalingListener *v1alpha1.AutoscalingListener, isUp bool) error {

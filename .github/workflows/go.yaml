@@ -51,7 +51,7 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a
         with:
           only-new-issues: true
-          version: v2.11.2
+          version: v2.13.2
 
   generate:
     runs-on: ubuntu-latest
@@ -91,9 +91,8 @@ jobs:
         run: git diff --exit-code
       - name: Setup envtest
         run: |
-          go install sigs.k8s.io/controller-runtime/tools/setup-envtest@$(go list -m -f '{{ .Version }}' sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $2, $3}')
           ENVTEST_K8S_VERSION=$(go list -m -f '{{ .Version }}' k8s.io/api | awk -F'[v.]' '{printf "1.%d", $3}')
-          echo "KUBEBUILDER_ASSETS=$(setup-envtest use ${ENVTEST_K8S_VERSION} -p path)" >> $GITHUB_ENV
+          echo "KUBEBUILDER_ASSETS=$(go tool sigs.k8s.io/controller-runtime/tools/setup-envtest use ${ENVTEST_K8S_VERSION} -p path)" >> $GITHUB_ENV
       - name: Run go tests
         run: |
           go test -short `go list ./... | grep -v ./test_e2e_arc`

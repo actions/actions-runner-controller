@@ -73,7 +73,11 @@ func (s *server) Run(ctx context.Context) error {
 			}
 		}
 
-		time.Sleep(10 * time.Second)
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(time.Second):
+		}
 	}
 }
 

@@ -278,7 +278,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 		case errors.Is(err, retryableError):
 			log.Info("Encountered retryable error, requeueing", "error", err.Error())
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{RequeueAfter: time.Second}, nil
 		case errors.Is(err, fatalError):
 			log.Info("JIT config cannot be created for this ephemeral runner, issuing delete", "error", err.Error())
 			if err := r.Delete(ctx, &ephemeralRunner); err != nil {
@@ -302,7 +302,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				return ctrl.Result{}, fmt.Errorf("failed to delete the corrupted runner config secret")
 			}
 			log.Info("Corrupted runner config secret has been deleted")
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{}, nil
 		}
 
 		runnerName := string(secret.Data["runnerName"])
@@ -339,7 +339,6 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			"requeueAfter", requeueAfter,
 		)
 		return ctrl.Result{
-			Requeue:      true,
 			RequeueAfter: requeueAfter,
 		}, nil
 	}
@@ -358,7 +357,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			return result, nil
 		case kerrors.IsAlreadyExists(err):
 			log.Info("Runner pod already exists. Waiting for the pod event to be received")
-			return ctrl.Result{Requeue: true, RequeueAfter: 5 * time.Second}, nil
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		case kerrors.IsInvalid(err):
 			log.Error(err, "Failed to create a pod due to unrecoverable failure")
 			errMessage := fmt.Sprintf("Failed to create the pod: %v", err)
