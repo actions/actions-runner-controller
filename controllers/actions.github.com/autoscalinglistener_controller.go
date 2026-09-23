@@ -586,9 +586,6 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 
 	cs := listenerContainerStatus(&listenerPod)
 	switch {
-	case listenerPodIsDead(&listenerPod):
-		logDeadListenerPod(&listenerPod, log)
-		return ctrl.Result{}, r.deleteListenerPod(ctx, &autoscalingListener, &listenerPod, log)
 	case cs == nil:
 		log.Info("Listener pod is not ready", "namespace", listenerPod.Namespace, "name", listenerPod.Name)
 		return ctrl.Result{}, nil
