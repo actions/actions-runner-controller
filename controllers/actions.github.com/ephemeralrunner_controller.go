@@ -305,30 +305,6 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 
-	if ephemeralRunner.Status.RunnerID == 0 {
-		log.Info("Updating ephemeral runner status with runnerId and runnerName")
-		runnerID, err := strconv.Atoi(string(secret.Data["runnerId"]))
-		if err != nil {
-			log.Error(err, "Runner config secret is corrupted: missing runnerId")
-			log.Info("Deleting corrupted runner config secret")
-			if err := r.Delete(ctx, secret); err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to delete the corrupted runner config secret")
-			}
-			log.Info("Corrupted runner config secret has been deleted")
-			return ctrl.Result{RequeueAfter: 500 * time.Millisecond}, nil
-		}
-
-		runnerName := string(secret.Data["runnerName"])
-		original := ephemeralRunner.DeepCopy()
-		ephemeralRunner.Status.RunnerID = runnerID
-		ephemeralRunner.Status.RunnerName = runnerName
-
-		if err := r.Status().Patch(ctx, &ephemeralRunner, client.MergeFrom(original)); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to update runner status for RunnerId/RunnerName: %w", err)
-		}
-		log.Info("Updated ephemeral runner status with runnerId and runnerName")
-	}
-
 	if len(ephemeralRunner.Status.Failures) > maxFailures {
 		log.Info(fmt.Sprintf("EphemeralRunner has failed more than %d times. Deleting ephemeral runner so it can be re-created", maxFailures))
 		if err := r.Delete(ctx, &ephemeralRunner); err != nil {
@@ -413,6 +389,32 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			log.Error(err, "Failed to create the pod")
 			return ctrl.Result{}, err
 		}
+	}
+
+	// The Pod only needs the JIT secret, so publish the registration identity
+	// after the Pod exists. A retry can recover both fields from that secret.
+	if ephemeralRunner.Status.RunnerID == 0 {
+		log.Info("Updating ephemeral runner status with runnerId and runnerName")
+		runnerID, err := strconv.Atoi(string(secret.Data["runnerId"]))
+		if err != nil {
+			log.Error(err, "Runner config secret is corrupted: missing runnerId")
+			log.Info("Deleting corrupted runner config secret")
+			if err := r.Delete(ctx, secret); err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to delete the corrupted runner config secret")
+			}
+			log.Info("Corrupted runner config secret has been deleted")
+			return ctrl.Result{RequeueAfter: 500 * time.Millisecond}, nil
+		}
+
+		runnerName := string(secret.Data["runnerName"])
+		original := ephemeralRunner.DeepCopy()
+		ephemeralRunner.Status.RunnerID = runnerID
+		ephemeralRunner.Status.RunnerName = runnerName
+
+		if err := r.Status().Patch(ctx, &ephemeralRunner, client.MergeFrom(original)); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update runner status for RunnerId/RunnerName: %w", err)
+		}
+		log.Info("Updated ephemeral runner status with runnerId and runnerName")
 	}
 
 	cs := runnerContainerStatus(pod)
