@@ -20,12 +20,14 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -135,4 +137,47 @@ func TestReconcileDefersRunnerIdentityUntilPodExists(t *testing.T) {
 	assert.Equal(t, 2, statusPatchAttempts)
 	assert.Equal(t, 7, getRunner().Status.RunnerID)
 	assert.Equal(t, "test-runner", getRunner().Status.RunnerName)
+}
+
+func TestReconcileRejectsMalformedJITSecretBeforeCreatingPod(t *testing.T) {
+	ctx := context.Background()
+	key := types.NamespacedName{Namespace: "default", Name: "test-runner"}
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, v1alpha1.AddToScheme(scheme))
+
+	runner := newExampleRunner(key.Name, key.Namespace, "github-config-secret")
+	runner.Finalizers = []string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName}
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: key.Name, Namespace: key.Namespace},
+		Data: map[string][]byte{
+			jitTokenKey:  []byte("jit-token"),
+			"runnerName": []byte(key.Name),
+		},
+	}
+	c := ctrlfake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(runner, secret).
+		WithStatusSubresource(&v1alpha1.EphemeralRunner{}).
+		Build()
+
+	reconciler := &EphemeralRunnerReconciler{
+		Client: c,
+		Log:    logr.Discard(),
+		Scheme: scheme,
+		ResourceBuilder: ResourceBuilder{
+			Scheme: scheme,
+		},
+	}
+
+	result, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: key})
+	require.NoError(t, err)
+	assert.Equal(t, 500*time.Millisecond, result.RequeueAfter)
+
+	err = c.Get(ctx, key, new(corev1.Pod))
+	assert.True(t, kerrors.IsNotFound(err), "a malformed JIT Secret must never produce a Pod")
+
+	err = c.Get(ctx, key, new(corev1.Secret))
+	assert.True(t, kerrors.IsNotFound(err), "the malformed JIT Secret must be deleted")
 }
