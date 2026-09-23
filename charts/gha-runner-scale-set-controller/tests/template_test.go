@@ -248,6 +248,7 @@ func TestTemplate_CreateManagerListenerRole(t *testing.T) {
 	assert.Equal(t, "test-arc-gha-rs-controller-listener", managerListenerRole.Name)
 	assert.Equal(t, 4, len(managerListenerRole.Rules))
 	assert.Equal(t, "pods", managerListenerRole.Rules[0].Resources[0])
+	assert.ElementsMatch(t, []string{"create", "delete", "get", "patch"}, managerListenerRole.Rules[0].Verbs)
 	assert.Equal(t, "pods/status", managerListenerRole.Rules[1].Resources[0])
 	assert.Equal(t, "secrets", managerListenerRole.Rules[2].Resources[0])
 	assert.Equal(t, "serviceaccounts", managerListenerRole.Rules[3].Resources[0])

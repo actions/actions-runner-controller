@@ -524,6 +524,15 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			return ctrl.Result{}, nil
 		}
 
+		if listenerPodIsDead(&listenerPod) {
+			logDeadListenerPod(&listenerPod, log)
+			return ctrl.Result{}, r.deleteListenerPod(ctx, &autoscalingListener, &listenerPod, log)
+		}
+
+		if !listenerPod.DeletionTimestamp.IsZero() {
+			return ctrl.Result{}, nil
+		}
+
 		desiredLabels := r.filterAndMergeLabels(listenerPod.Labels, desiredPod.Labels)
 		labelsModified := !maps.Equal(listenerPod.Labels, desiredLabels)
 		desiredAnnotations := r.mergeAnnotations(listenerPod.Annotations, desiredPod.Annotations)
@@ -577,30 +586,12 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 
 	cs := listenerContainerStatus(&listenerPod)
 	switch {
-	case listenerPod.Status.Reason == "Evicted":
-		log.Info(
-			"Listener pod is evicted",
-			"phase", listenerPod.Status.Phase,
-			"reason", listenerPod.Status.Reason,
-			"message", listenerPod.Status.Message,
-		)
-
+	case listenerPodIsDead(&listenerPod):
+		logDeadListenerPod(&listenerPod, log)
 		return ctrl.Result{}, r.deleteListenerPod(ctx, &autoscalingListener, &listenerPod, log)
-
 	case cs == nil:
 		log.Info("Listener pod is not ready", "namespace", listenerPod.Namespace, "name", listenerPod.Name)
 		return ctrl.Result{}, nil
-	case cs.State.Terminated != nil:
-		log.Info(
-			"Listener pod is terminated",
-			"namespace", listenerPod.Namespace,
-			"name", listenerPod.Name,
-			"reason", cs.State.Terminated.Reason,
-			"message", cs.State.Terminated.Message,
-		)
-
-		return ctrl.Result{}, r.deleteListenerPod(ctx, &autoscalingListener, &listenerPod, log)
-
 	case cs.State.Running != nil:
 		if err := r.publishRunningListener(&autoscalingListener, true); err != nil {
 			log.Error(err, "Unable to publish running listener", "namespace", listenerPod.Namespace, "name", listenerPod.Name)
@@ -985,4 +976,34 @@ func listenerContainerStatus(pod *corev1.Pod) *corev1.ContainerStatus {
 		}
 	}
 	return nil
+}
+
+func listenerPodIsDead(pod *corev1.Pod) bool {
+	if pod.Status.Reason == "Evicted" {
+		return true
+	}
+
+	cs := listenerContainerStatus(pod)
+	return cs != nil && cs.State.Terminated != nil
+}
+
+func logDeadListenerPod(pod *corev1.Pod, log logr.Logger) {
+	if pod.Status.Reason == "Evicted" {
+		log.Info(
+			"Listener pod is evicted",
+			"phase", pod.Status.Phase,
+			"reason", pod.Status.Reason,
+			"message", pod.Status.Message,
+		)
+		return
+	}
+
+	cs := listenerContainerStatus(pod)
+	log.Info(
+		"Listener pod is terminated",
+		"namespace", pod.Namespace,
+		"name", pod.Name,
+		"reason", cs.State.Terminated.Reason,
+		"message", cs.State.Terminated.Message,
+	)
 }
