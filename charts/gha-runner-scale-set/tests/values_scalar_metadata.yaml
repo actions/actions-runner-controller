@@ -11,12 +11,15 @@ controllerServiceAccount:
 labels:
   chart-bool: true
   chart-int: 1
+  chart-max-safe-int: 9007199254740991
 annotations:
   chart-bool-annotation: false
   chart-float-annotation: 1.5
   # Large integers must not be rendered in scientific notation. Values loaded from a file
   # arrive as float64, so a naive "%v" would produce "1.2345678901234e+13".
   chart-big-int-annotation: 12345678901234
+  chart-max-safe-int-annotation: 9007199254740991
+  chart-min-safe-int-annotation: -9007199254740991
   chart-quoted-unsafe-int-annotation: "9007199254740993"
 
 template:
