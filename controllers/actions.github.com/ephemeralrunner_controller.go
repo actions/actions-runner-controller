@@ -278,7 +278,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 		case errors.Is(err, retryableError):
 			log.Info("Encountered retryable error, requeueing", "error", err.Error())
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			return ctrl.Result{RequeueAfter: 500 * time.Millisecond}, nil
 		case errors.Is(err, fatalError):
 			log.Info("JIT config cannot be created for this ephemeral runner, issuing delete", "error", err.Error())
 			if err := r.Delete(ctx, &ephemeralRunner); err != nil {
@@ -302,7 +302,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				return ctrl.Result{}, fmt.Errorf("failed to delete the corrupted runner config secret")
 			}
 			log.Info("Corrupted runner config secret has been deleted")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			return ctrl.Result{RequeueAfter: 500 * time.Millisecond}, nil
 		}
 
 		runnerName := string(secret.Data["runnerName"])
@@ -338,6 +338,9 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			"nextReconciliation", nextReconciliation,
 			"requeueAfter", requeueAfter,
 		)
+		if requeueAfter <= 0 {
+			requeueAfter = time.Millisecond
+		}
 		return ctrl.Result{
 			RequeueAfter: requeueAfter,
 		}, nil

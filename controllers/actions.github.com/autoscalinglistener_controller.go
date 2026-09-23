@@ -46,6 +46,11 @@ import (
 const (
 	autoscalingListenerContainerName = "listener"
 	autoscalingListenerFinalizerName = "autoscalinglistener.actions.github.com/finalizer"
+
+	// listenerSecretFinalizerPollInterval is how often cleanup checks back on
+	// a listener secret that a foreign finalizer keeps from going away.
+	// Secrets are not watched, so that is the one wait no event ends.
+	listenerSecretFinalizerPollInterval = 500 * time.Millisecond
 )
 
 // AutoscalingListenerReconciler reconciles a AutoscalingListener object
@@ -87,14 +92,14 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 
 		log.Info("Deleting resources")
-		requeue, err := r.cleanupResources(ctx, &autoscalingListener, log)
+		done, requeueAfter, err := r.cleanupResources(ctx, &autoscalingListener, log)
 		if err != nil {
 			log.Error(err, "Failed to cleanup resources after deletion")
 			return ctrl.Result{}, err
 		}
-		if requeue {
+		if !done {
 			log.Info("Waiting for resources to be deleted before removing finalizer")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			return ctrl.Result{RequeueAfter: requeueAfter}, nil
 		}
 
 		log.Info("Removing finalizer")
@@ -155,13 +160,13 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 	// through to the regular reconcile below, which rebuilds the children.
 	if autoscalingListener.Spec.Phase.Stopped() {
 		log.Info("Listener is stopped, cleaning up its resources")
-		requeue, err := r.cleanupResources(ctx, &autoscalingListener, log)
+		done, requeueAfter, err := r.cleanupResources(ctx, &autoscalingListener, log)
 		if err != nil {
 			log.Error(err, "Failed to clean up the resources of a stopped listener")
 			return ctrl.Result{}, err
 		}
-		if requeue {
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+		if !done {
+			return ctrl.Result{RequeueAfter: requeueAfter}, nil
 		}
 
 		log.Info("Listener is stopped and all of its resources are cleaned up")
@@ -205,7 +210,11 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 				return ctrl.Result{}, err
 			}
 
-			return ctrl.Result{RequeueAfter: 100 * time.Millisecond}, nil
+			// The service account is owned and watched, so the update event
+			// brings the next reconcile, and it is guaranteed to see the
+			// patched object in the cache. A timed requeue could only fire
+			// before that event and act on a stale cache.
+			return ctrl.Result{}, nil
 		}
 	case kerrors.IsNotFound(err):
 		// Create a service account for the listener pod in the controller namespace
@@ -250,7 +259,8 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 				log.Error(err, "Failed to update listener role")
 				return ctrl.Result{}, err
 			}
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			// Roles are watched by label, the update event brings us back.
+			return ctrl.Result{}, nil
 		}
 	case kerrors.IsNotFound(err):
 		// Create a role for the listener pod in the AutoScalingRunnerSet namespace
@@ -290,7 +300,8 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			}
 
 			log.Info("Updated listener role binding")
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			// Role bindings are watched by label, the update event brings us back.
+			return ctrl.Result{}, nil
 		}
 
 	case kerrors.IsNotFound(err):
@@ -343,12 +354,18 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 					log.Error(err, "Failed to update listener proxy secret")
 					return ctrl.Result{}, err
 				}
-				return ctrl.Result{RequeueAfter: time.Second}, nil
+				// Secrets are not watched, so nothing would bring us back.
+				// The listener pod only references the proxy secret by name,
+				// so carry on in the same reconcile.
 			}
 		case kerrors.IsNotFound(err):
 			// Create a mirror secret for the listener pod in the Controller namespace for listener pod to use
 			log.Info("Creating a listener proxy secret for the listener pod")
-			return r.createProxySecret(ctx, &autoscalingListener, log)
+			if err := r.createProxySecret(ctx, &autoscalingListener, log); err != nil {
+				return ctrl.Result{}, err
+			}
+			// Secrets are not watched and reads of them bypass the cache, so
+			// carry on in the same reconcile instead of requeueing.
 		default: // error
 			log.Error(err, "Unable to get listener proxy secret", "namespace", autoscalingListener.Namespace, "name", proxyListenerSecretName(&autoscalingListener))
 			return ctrl.Result{}, err
@@ -433,7 +450,11 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			if err := r.Patch(ctx, updatedSecret, client.MergeFrom(&listenerConfigSecret)); err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to update listener config secret: %w", err)
 			}
-			return ctrl.Result{RequeueAfter: time.Second}, nil
+			// Secrets are not watched, so nothing would bring us back. The
+			// patch response carries the new resource version, which is what
+			// the listener pod is compared against below, so carry on with
+			// it in the same reconcile.
+			listenerConfigSecret = *updatedSecret
 		}
 	case kerrors.IsNotFound(err):
 		cfg, err := getAppConfig()
@@ -458,9 +479,11 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			return ctrl.Result{}, fmt.Errorf("failed to create listener config secret: %w", err)
 		}
 
-		// Requeue to create listener pod with the config secret. The secret
-		// create does not enqueue another reconcile, so this has to come back.
-		return ctrl.Result{RequeueAfter: time.Second}, nil
+		// The secret create does not enqueue another reconcile, since secrets
+		// are not watched. The create response carries the resource version
+		// the listener pod is built against, so carry on with it in the same
+		// reconcile instead of requeueing.
+		listenerConfigSecret = *desiredSecret
 	default:
 		log.Error(err, "Unable to get listener config secret", "namespace", autoscalingListener.Namespace, "name", scaleSetListenerConfigName(&autoscalingListener))
 		return ctrl.Result{}, err
@@ -607,7 +630,18 @@ func (r *AutoscalingListenerReconciler) deleteListenerPod(ctx context.Context, a
 	return nil
 }
 
-func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) (requeue bool, err error) {
+// cleanupResources deletes everything the listener owns and reports whether
+// all of it is gone. When it is not, requeueAfter says how the caller should
+// wait for the rest.
+//
+// The pod, service account, role and role binding are watched, so their
+// delete events wake the reconciler the moment they are gone, and waiting on
+// them needs no requeue at all. A timed requeue would only add reconciles
+// that find the pod still terminating. Secrets are not watched, so a secret
+// that a foreign finalizer holds is the one wait that needs a timed requeue.
+func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) (done bool, requeueAfter time.Duration, err error) {
+	var waitingOnWatched, waitingOnSecret bool
+
 	logger.Info("Cleaning up the listener pod")
 	listenerPod := new(corev1.Pod)
 	err = r.Get(ctx, types.NamespacedName{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, listenerPod)
@@ -615,15 +649,15 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 	case err == nil:
 		if listenerPod.DeletionTimestamp.IsZero() {
 			logger.Info("Deleting the listener pod")
-			if err := r.Delete(ctx, listenerPod); err != nil {
-				return false, fmt.Errorf("failed to delete listener pod: %w", err)
+			if err := r.Delete(ctx, listenerPod); client.IgnoreNotFound(err) != nil {
+				return false, 0, fmt.Errorf("failed to delete listener pod: %w", err)
 			}
 		}
-		requeue = true
+		waitingOnWatched = true
 	case kerrors.IsNotFound(err):
 		_ = r.publishRunningListener(autoscalingListener, false) // If error is returned, we never published metrics so it is safe to ignore
 	default:
-		return false, fmt.Errorf("failed to get listener pods: %w", err)
+		return false, 0, fmt.Errorf("failed to get listener pods: %w", err)
 	}
 	logger.Info("Listener pod is deleted")
 
@@ -631,15 +665,16 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 	err = r.Get(ctx, types.NamespacedName{Namespace: autoscalingListener.Namespace, Name: scaleSetListenerConfigName(autoscalingListener)}, &secret)
 	switch {
 	case err == nil:
-		if secret.DeletionTimestamp.IsZero() {
-			logger.Info("Deleting the listener config secret")
-			if err := r.Delete(ctx, &secret); err != nil {
-				return false, fmt.Errorf("failed to delete listener config secret: %w", err)
-			}
+		logger.Info("Deleting the listener config secret")
+		gone, err := r.deleteUnwatchedSecret(ctx, &secret)
+		if err != nil {
+			return false, 0, fmt.Errorf("failed to delete listener config secret: %w", err)
 		}
-		requeue = true
+		if !gone {
+			waitingOnSecret = true
+		}
 	case !kerrors.IsNotFound(err):
-		return false, fmt.Errorf("failed to get listener config secret: %w", err)
+		return false, 0, fmt.Errorf("failed to get listener config secret: %w", err)
 	}
 
 	// The proxy secret is deleted whatever the current spec says about a proxy.
@@ -654,15 +689,16 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 	err = r.Get(ctx, types.NamespacedName{Name: proxyListenerSecretName(autoscalingListener), Namespace: autoscalingListener.Namespace}, proxySecret)
 	switch {
 	case err == nil:
-		if proxySecret.DeletionTimestamp.IsZero() {
-			logger.Info("Deleting the listener proxy secret")
-			if err := r.Delete(ctx, proxySecret); err != nil {
-				return false, fmt.Errorf("failed to delete listener proxy secret: %w", err)
-			}
+		logger.Info("Deleting the listener proxy secret")
+		gone, err := r.deleteUnwatchedSecret(ctx, proxySecret)
+		if err != nil {
+			return false, 0, fmt.Errorf("failed to delete listener proxy secret: %w", err)
 		}
-		requeue = true
+		if !gone {
+			waitingOnSecret = true
+		}
 	case !kerrors.IsNotFound(err):
-		return false, fmt.Errorf("failed to get listener proxy secret: %w", err)
+		return false, 0, fmt.Errorf("failed to get listener proxy secret: %w", err)
 	}
 	logger.Info("Listener proxy secret is deleted")
 
@@ -672,13 +708,13 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 	case err == nil:
 		if listenerRoleBinding.DeletionTimestamp.IsZero() {
 			logger.Info("Deleting the listener role binding")
-			if err := r.Delete(ctx, listenerRoleBinding); err != nil {
-				return false, fmt.Errorf("failed to delete listener role binding: %w", err)
+			if err := r.Delete(ctx, listenerRoleBinding); client.IgnoreNotFound(err) != nil {
+				return false, 0, fmt.Errorf("failed to delete listener role binding: %w", err)
 			}
 		}
-		requeue = true
+		waitingOnWatched = true
 	case !kerrors.IsNotFound(err):
-		return false, fmt.Errorf("failed to get listener role binding: %w", err)
+		return false, 0, fmt.Errorf("failed to get listener role binding: %w", err)
 	}
 	logger.Info("Listener role binding is deleted")
 
@@ -688,13 +724,13 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 	case err == nil:
 		if listenerRole.DeletionTimestamp.IsZero() {
 			logger.Info("Deleting the listener role")
-			if err := r.Delete(ctx, listenerRole); err != nil {
-				return false, fmt.Errorf("failed to delete listener role: %w", err)
+			if err := r.Delete(ctx, listenerRole); client.IgnoreNotFound(err) != nil {
+				return false, 0, fmt.Errorf("failed to delete listener role: %w", err)
 			}
 		}
-		requeue = true
+		waitingOnWatched = true
 	case !kerrors.IsNotFound(err):
-		return false, fmt.Errorf("failed to get listener role: %w", err)
+		return false, 0, fmt.Errorf("failed to get listener role: %w", err)
 	}
 	logger.Info("Listener role is deleted")
 
@@ -705,17 +741,46 @@ func (r *AutoscalingListenerReconciler) cleanupResources(ctx context.Context, au
 	case err == nil:
 		if listenerSa.DeletionTimestamp.IsZero() {
 			logger.Info("Deleting the listener service account")
-			if err := r.Delete(ctx, listenerSa); err != nil {
-				return false, fmt.Errorf("failed to delete listener service account: %w", err)
+			if err := r.Delete(ctx, listenerSa); client.IgnoreNotFound(err) != nil {
+				return false, 0, fmt.Errorf("failed to delete listener service account: %w", err)
 			}
 		}
-		requeue = true
+		waitingOnWatched = true
 	case !kerrors.IsNotFound(err):
-		return false, fmt.Errorf("failed to get listener service account: %w", err)
+		return false, 0, fmt.Errorf("failed to get listener service account: %w", err)
 	}
 	logger.Info("Listener service account is deleted")
 
-	return requeue, nil
+	switch {
+	case waitingOnSecret:
+		return false, listenerSecretFinalizerPollInterval, nil
+	case waitingOnWatched:
+		return false, 0, nil
+	default:
+		return true, 0, nil
+	}
+}
+
+// deleteUnwatchedSecret deletes a secret the listener controller does not
+// watch and reports whether it is gone.
+//
+// Secrets are not watched, so no event would wake the reconciler once they
+// disappear, and waiting on one would need a timed requeue. Secrets are not
+// deleted gracefully though: without finalizers the delete removes the object
+// before the call returns, so it is only worth waiting on a secret something
+// else holds with a finalizer. Reads of secrets bypass the cache, so the
+// object passed in is fresh.
+func (r *AutoscalingListenerReconciler) deleteUnwatchedSecret(ctx context.Context, secret *corev1.Secret) (gone bool, err error) {
+	if secret.DeletionTimestamp.IsZero() {
+		if err := r.Delete(ctx, secret); err != nil {
+			if kerrors.IsNotFound(err) {
+				return true, nil
+			}
+			return false, err
+		}
+	}
+
+	return len(secret.Finalizers) == 0, nil
 }
 
 func (r *AutoscalingListenerReconciler) createServiceAccountForListener(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) (ctrl.Result, error) {
@@ -732,7 +797,8 @@ func (r *AutoscalingListenerReconciler) createServiceAccountForListener(ctx cont
 	}
 
 	logger.Info("Created listener service accounts", "namespace", newServiceAccount.Namespace, "name", newServiceAccount.Name)
-	return ctrl.Result{RequeueAfter: time.Second}, nil
+	// The create event of the owned service account brings the next reconcile.
+	return ctrl.Result{}, nil
 }
 
 func (r *AutoscalingListenerReconciler) certificate(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, autoscalingListener *v1alpha1.AutoscalingListener) (string, error) {
@@ -773,7 +839,7 @@ func (r *AutoscalingListenerReconciler) certificate(ctx context.Context, autosca
 	return certificate, nil
 }
 
-func (r *AutoscalingListenerReconciler) createProxySecret(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) (ctrl.Result, error) {
+func (r *AutoscalingListenerReconciler) createProxySecret(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) error {
 	data, err := autoscalingListener.Spec.Proxy.ToSecretData(func(s string) (*corev1.Secret, error) {
 		var secret corev1.Secret
 		err := r.Get(ctx, types.NamespacedName{Name: s, Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace}, &secret)
@@ -783,23 +849,23 @@ func (r *AutoscalingListenerReconciler) createProxySecret(ctx context.Context, a
 		return &secret, nil
 	})
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to convert proxy config to secret data: %w", err)
+		return fmt.Errorf("failed to convert proxy config to secret data: %w", err)
 	}
 
 	newProxySecret, err := r.newAutoscalingListenerProxySecret(autoscalingListener, data)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to build listener proxy secret: %w", err)
+		return fmt.Errorf("failed to build listener proxy secret: %w", err)
 	}
 
 	logger.Info("Creating listener proxy secret", "namespace", newProxySecret.Namespace, "name", newProxySecret.Name)
 	if err := r.Create(ctx, newProxySecret); err != nil {
 		logger.Error(err, "Unable to create listener secret", "namespace", newProxySecret.Namespace, "name", newProxySecret.Name)
-		return ctrl.Result{}, err
+		return err
 	}
 
 	logger.Info("Created listener proxy secret", "namespace", newProxySecret.Namespace, "name", newProxySecret.Name)
 
-	return ctrl.Result{RequeueAfter: time.Second}, nil
+	return nil
 }
 
 func (r *AutoscalingListenerReconciler) createRoleForListener(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) (ctrl.Result, error) {
@@ -813,7 +879,8 @@ func (r *AutoscalingListenerReconciler) createRoleForListener(ctx context.Contex
 	}
 
 	logger.Info("Created listener role", "namespace", newRole.Namespace, "name", newRole.Name, "rules", newRole.Rules)
-	return ctrl.Result{RequeueAfter: time.Second}, nil
+	// The create event of the labeled role brings the next reconcile.
+	return ctrl.Result{}, nil
 }
 
 func (r *AutoscalingListenerReconciler) createRoleBindingForListener(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, listenerRole *rbacv1.Role, serviceAccount *corev1.ServiceAccount, logger logr.Logger) (ctrl.Result, error) {
@@ -842,7 +909,8 @@ func (r *AutoscalingListenerReconciler) createRoleBindingForListener(ctx context
 		"role", listenerRole.Name,
 		"serviceAccountNamespace", serviceAccount.Namespace,
 		"serviceAccount", serviceAccount.Name)
-	return ctrl.Result{RequeueAfter: time.Second}, nil
+	// The create event of the labeled role binding brings the next reconcile.
+	return ctrl.Result{}, nil
 }
 
 func (r *AutoscalingListenerReconciler) publishRunningListener(autoscalingListener *v1alpha1.AutoscalingListener, isUp bool) error {

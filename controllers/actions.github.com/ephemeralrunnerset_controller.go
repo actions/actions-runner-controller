@@ -179,15 +179,14 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, nil
 	}
 
-	// Create or update proxy secret if needed
-	if _, updated, err := r.reconcileEphemeralRunnerSetProxySecret(ctx, &ephemeralRunnerSet, log); err != nil {
+	// Create or update proxy secret if needed. Secrets are not watched and
+	// runners only reference the proxy secret by name, so carry on in the same
+	// reconcile after writing it instead of delaying the scaling below.
+	if _, _, err := r.reconcileEphemeralRunnerSetProxySecret(ctx, &ephemeralRunnerSet, log); err != nil {
 		log.Error(err, "Unable to reconcile ephemeralRunnerSet proxy secret", "namespace", ephemeralRunnerSet.Namespace, "name", proxyEphemeralRunnerSetSecretName(&ephemeralRunnerSet))
 		return ctrl.Result{}, err
-	} else if updated {
-		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 	}
 
-	// Find all EphemeralRunner with matching namespace and own by this EphemeralRunnerSet.
 	var ephemeralRunnerList v1alpha1.EphemeralRunnerList
 	if err := r.List(
 		ctx,
