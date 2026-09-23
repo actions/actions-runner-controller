@@ -36,11 +36,14 @@ TOOLS_PATH=$(PWD)/.tools
 
 OS_NAME := $(shell uname -s | tr A-Z a-z)
 
-# ENVTEST_VERSION is the version of controller-runtime release branch to fetch the envtest setup script
-ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
 # ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries
 ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
-ENVTEST ?= $(GOBIN)/setup-envtest
+
+# Tools are declared as `tool` directives in go.mod and executed with `go tool`,
+# so their versions are pinned and updated alongside the rest of the dependencies.
+CONTROLLER_GEN ?= go tool sigs.k8s.io/controller-tools/cmd/controller-gen
+ENVTEST ?= go tool sigs.k8s.io/controller-runtime/tools/setup-envtest
+YQ ?= go tool github.com/mikefarah/yq/v4
 
 # default list of platforms for which multiarch image is built
 ifeq (${PLATFORMS}, )
@@ -62,7 +65,7 @@ endif
 all: manager
 
 lint:
-	docker run --rm -v $(PWD):/app -w /app golangci/golangci-lint:v2.11.2 golangci-lint run
+	docker run --rm -v $(PWD):/app -w /app golangci/golangci-lint:v2.13.2 golangci-lint run
 
 GO_TEST_ARGS ?= -short
 
@@ -110,7 +113,7 @@ deploy: manifests
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: manifests-gen-crds chart-crds
 
-manifests-gen-crds: controller-gen yq
+manifests-gen-crds:
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 	make manifests-gen-crds-fix DELETE_KEY=x-kubernetes-list-type
 	make manifests-gen-crds-fix DELETE_KEY=x-kubernetes-list-map-keys
@@ -195,7 +198,7 @@ vet:
 	go vet ./...
 
 # Generate code
-generate: controller-gen
+generate:
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths="./..."
 
 # Run shellcheck on runner scripts
@@ -302,7 +305,8 @@ gha-e2e:
 github-release: release
 	ghr ${VERSION} release/
 
-# Find or download controller-gen
+# controller-gen is provided by the `sigs.k8s.io/controller-tools/cmd/controller-gen`
+# tool directive in go.mod, and is invoked through `$(CONTROLLER_GEN)`.
 #
 # Note that controller-gen newer than 0.4.1 is needed for https://github.com/kubernetes-sigs/controller-tools/issues/444#issuecomment-680168439
 # Otherwise we get errors like the below:
@@ -310,39 +314,6 @@ github-release: release
 #
 # Note that controller-gen newer than 0.8.1 is needed due to https://github.com/kubernetes-sigs/controller-tools/issues/448
 # Otherwise ObjectMeta embedded in Spec results in empty on the storage.
-controller-gen:
-ifeq (, $(shell which controller-gen))
-ifeq (, $(wildcard $(GOBIN)/controller-gen))
-	@{ \
-	set -e ;\
-	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
-	cd $$CONTROLLER_GEN_TMP_DIR ;\
-	go mod init tmp ;\
-	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.20.1 ;\
-	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
-	}
-endif
-CONTROLLER_GEN=$(GOBIN)/controller-gen
-else
-CONTROLLER_GEN=$(shell which controller-gen)
-endif
-
-# find or download yq
-# download yq if necessary
-# Use always go-version to get consistent line wraps etc.
-yq:
-ifeq (, $(wildcard $(GOBIN)/yq))
-	echo "Downloading yq"
-	@{ \
-	set -e ;\
-	YQ_TMP_DIR=$$(mktemp -d) ;\
-	cd $$YQ_TMP_DIR ;\
-	go mod init tmp ;\
-	go install github.com/mikefarah/yq/v4@v4.25.3 ;\
-	rm -rf $$YQ_TMP_DIR ;\
-	}
-endif
-YQ=$(GOBIN)/yq
 
 # find or download shellcheck
 # download shellcheck if necessary
@@ -363,26 +334,8 @@ ifeq (, $(wildcard $(TOOLS_PATH)/shellcheck))
 endif
 SHELLCHECK=$(TOOLS_PATH)/shellcheck
 
-# find or download envtest
-envtest:
-ifeq (, $(shell which setup-envtest))
-ifeq (, $(wildcard $(GOBIN)/setup-envtest))
-	@{ \
-	set -e ;\
-	ENVTEST_TMP_DIR=$$(mktemp -d) ;\
-	cd $$ENVTEST_TMP_DIR ;\
-	go mod init tmp ;\
-	go install sigs.k8s.io/controller-runtime/tools/setup-envtest@$(ENVTEST_VERSION) ;\
-	rm -rf $$ENVTEST_TMP_DIR ;\
-	}
-endif
-ENVTEST=$(GOBIN)/setup-envtest
-else
-ENVTEST=$(shell which setup-envtest)
-endif
-
 .PHONY: setup-envtest
-setup-envtest: envtest
+setup-envtest:
 	@echo "Setting up envtest binaries for Kubernetes version $(ENVTEST_K8S_VERSION)..."
 	@$(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(GOBIN) -p path || { \
 		echo "Error: Failed to set up envtest binaries for version $(ENVTEST_K8S_VERSION)."; \

@@ -3420,7 +3420,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_NonScalarMetadataValueValidationEr
 			"controllerServiceAccount.name":      "arc",
 			"controllerServiceAccount.namespace": "arc-system",
 		},
-		SetJsonValues: map[string]string{
+		SetJSONValues: map[string]string{
 			"template.metadata.annotations": `{"nested":{"inner":"value"}}`,
 		},
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),

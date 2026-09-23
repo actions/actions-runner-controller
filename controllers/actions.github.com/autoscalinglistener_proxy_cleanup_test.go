@@ -63,8 +63,12 @@ func TestCleanupResourcesDeletesTheProxySecretWithoutAskingTheSpec(t *testing.T)
 		Log:    logr.Discard(),
 	}
 
-	_, err := reconciler.cleanupResources(context.Background(), listener, logr.Discard())
+	done, requeueAfter, err := reconciler.cleanupResources(context.Background(), listener, logr.Discard())
 	require.NoError(t, err)
+	// Secrets are not watched, so cleanup must not wait on one it has just
+	// deleted: without finalizers it is gone before the delete returns.
+	require.True(t, done, "a secret without finalizers is gone once the delete returns, there is nothing to wait for")
+	require.Zero(t, requeueAfter)
 
 	err = fakeClient.Get(
 		context.Background(),
