@@ -305,8 +305,11 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 
+	var (
+		initialRunnerID   int
+		initialRunnerName string
+	)
 	if ephemeralRunner.Status.RunnerID == 0 {
-		log.Info("Updating ephemeral runner status with runnerId and runnerName")
 		runnerID, err := strconv.Atoi(string(secret.Data["runnerId"]))
 		if err != nil {
 			log.Error(err, "Runner config secret is corrupted: missing runnerId")
@@ -317,16 +320,8 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			log.Info("Corrupted runner config secret has been deleted")
 			return ctrl.Result{RequeueAfter: 500 * time.Millisecond}, nil
 		}
-
-		runnerName := string(secret.Data["runnerName"])
-		original := ephemeralRunner.DeepCopy()
-		ephemeralRunner.Status.RunnerID = runnerID
-		ephemeralRunner.Status.RunnerName = runnerName
-
-		if err := r.Status().Patch(ctx, &ephemeralRunner, client.MergeFrom(original)); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to update runner status for RunnerId/RunnerName: %w", err)
-		}
-		log.Info("Updated ephemeral runner status with runnerId and runnerName")
+		initialRunnerID = runnerID
+		initialRunnerName = string(secret.Data["runnerName"])
 	}
 
 	if len(ephemeralRunner.Status.Failures) > maxFailures {
@@ -413,6 +408,21 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			log.Error(err, "Failed to create the pod")
 			return ctrl.Result{}, err
 		}
+	}
+
+	// Validation above keeps malformed JIT secrets from reaching a Pod. The Pod
+	// only needs the valid secret, so publish the registration identity after
+	// the Pod exists. A retry can recover both fields from that secret.
+	if ephemeralRunner.Status.RunnerID == 0 {
+		log.Info("Updating ephemeral runner status with runnerId and runnerName")
+		original := ephemeralRunner.DeepCopy()
+		ephemeralRunner.Status.RunnerID = initialRunnerID
+		ephemeralRunner.Status.RunnerName = initialRunnerName
+
+		if err := r.Status().Patch(ctx, &ephemeralRunner, client.MergeFrom(original)); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update runner status for RunnerId/RunnerName: %w", err)
+		}
+		log.Info("Updated ephemeral runner status with runnerId and runnerName")
 	}
 
 	cs := runnerContainerStatus(pod)
