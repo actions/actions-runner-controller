@@ -3338,6 +3338,26 @@ func TestTemplateRenderedAutoScalingRunnerSet_UnsafeIntegerMetadataValueValidati
 	assert.ErrorContains(t, err, `.Values.annotations: invalid value for annotation "unsafe-integer": unquoted integers outside the IEEE 754 safe range must be quoted to preserve their exact value`)
 }
 
+func TestTemplateRenderedAutoScalingRunnerSet_OverlongMetadataPrefixSegmentValidationError(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values_overlong_metadata_prefix.yaml")
+	require.NoError(t, err)
+
+	options := &helm.Options{
+		Logger:         logger.Discard,
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", "test"),
+	}
+
+	_, err = helm.RenderTemplateContextE(t, t.Context(), options, helmChartPath, "test-runners", []string{"templates/autoscalingrunnerset.yaml"})
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `.Values.annotations: invalid annotation key "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.example.com/overlong-prefix": the prefix segment "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" must be no more than 63 characters`)
+}
+
 func TestTemplateRenderedAutoScalingRunnerSet_NonMapMetadataValidationError(t *testing.T) {
 	t.Parallel()
 
@@ -3452,9 +3472,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_NonScalarMetadataValueValidationEr
 	assert.Contains(t, err.Error(), `.Values.template.metadata.annotations: invalid value for annotation "nested": must be a scalar, got map`)
 }
 
-// Kubernetes only bounds a label key prefix at 253 characters in total, so the chart must
-// not impose the stricter per-segment 63 character limit that applies to DNS labels.
-func TestTemplateRenderedAutoScalingRunnerSet_LongPrefixSegmentIsAccepted(t *testing.T) {
+func TestTemplateRenderedAutoScalingRunnerSet_LongPrefixSegmentValidationError(t *testing.T) {
 	t.Parallel()
 
 	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
@@ -3477,10 +3495,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_LongPrefixSegmentIsAccepted(t *tes
 		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
 	}
 
-	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
-
-	var autoscalingRunnerSet v1alpha1.AutoscalingRunnerSet
-	helm.UnmarshalK8SYaml(t, output, &autoscalingRunnerSet)
-
-	assert.Equal(t, "yes", autoscalingRunnerSet.Spec.Template.Labels[key])
+	_, err = helm.RenderTemplateContextE(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `.Values.template.metadata.labels: invalid label key "`+key+`": the prefix segment "`+strings.Repeat("a", 64)+`" must be no more than 63 characters`)
 }

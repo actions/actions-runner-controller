@@ -74,6 +74,11 @@ Expects a dict with "key", "kind" (label|annotation) and "path" (the values path
 {{- if gt (len $prefix) 253 -}}
 {{- fail (printf "%s: invalid %s key %q: the prefix %q must be a DNS subdomain of no more than 253 characters" $path $kind $key $prefix) -}}
 {{- end -}}
+{{- range $segment := splitList "." $prefix -}}
+{{- if gt (len $segment) 63 -}}
+{{- fail (printf "%s: invalid %s key %q: the prefix segment %q must be no more than 63 characters" $path $kind $key $segment) -}}
+{{- end -}}
+{{- end -}}
 {{- if not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$" $prefix) -}}
 {{- fail (printf "%s: invalid %s key %q: the prefix %q must be a DNS subdomain, so it must consist of dot-separated segments of lowercase alphanumeric characters or '-', each starting and ending with an alphanumeric character" $path $kind $key $prefix) -}}
 {{- end -}}
@@ -320,4 +325,3 @@ Behavior:
         path: {{ $key | quote }}
 {{ end }}
 {{ end }}
-
