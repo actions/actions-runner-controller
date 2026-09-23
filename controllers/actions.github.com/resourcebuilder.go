@@ -96,15 +96,24 @@ func (b *ResourceBuilder) setSchemeIfUnset(scheme *runtime.Scheme) {
 	}
 }
 
+// setControllerReference marks object as owned by owner.
+//
+// The scheme is not memoised when the builder was built without one. Runners
+// are built concurrently now, and a lazily assigned field is a write shared
+// with every goroutine reading it: they would race on the pointer, and one of
+// them could read a scheme the other had allocated but not yet registered the
+// types on, failing the ownership call with an unknown kind. Building a local
+// one costs an allocation on a path no caller with a scheme ever takes.
 func (b *ResourceBuilder) setControllerReference(owner client.Object, object client.Object) error {
-	if b.Scheme == nil {
-		b.Scheme = runtime.NewScheme()
-		if err := v1alpha1.AddToScheme(b.Scheme); err != nil {
+	scheme := b.Scheme
+	if scheme == nil {
+		scheme = runtime.NewScheme()
+		if err := v1alpha1.AddToScheme(scheme); err != nil {
 			return err
 		}
 	}
 
-	return ctrl.SetControllerReference(owner, object, b.Scheme)
+	return ctrl.SetControllerReference(owner, object, scheme)
 }
 
 func (b *ResourceBuilder) newAutoscalingListener(autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, namespace, image string, imagePullSecrets []corev1.LocalObjectReference) (*v1alpha1.AutoscalingListener, error) {
@@ -849,7 +858,13 @@ func (b *ResourceBuilder) newEphemeralRunner(ephemeralRunnerSet *v1alpha1.Epheme
 				ephemeralRunnerActionsFinalizerName,
 			},
 		},
-		Spec: ephemeralRunnerSet.Spec.EphemeralRunnerSpec,
+		// Copied rather than shared. A plain assignment is a shallow copy, which
+		// leaves every runner built from this set pointing at the same container,
+		// volume and map values. Creating a runner writes the API server's
+		// response back into the object it was given, and the decoder reuses the
+		// maps and slices it finds there, so runners built in parallel would be
+		// writing into each other. Concurrently written maps end the process.
+		Spec: *ephemeralRunnerSet.Spec.EphemeralRunnerSpec.DeepCopy(),
 	}
 	if err := b.setControllerReference(ephemeralRunnerSet, ephemeralRunner); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for ephemeral runner: %w", err)

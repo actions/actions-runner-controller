@@ -59,6 +59,19 @@ type EphemeralRunnerReconciler struct {
 	// SetupWithManager creates one and registers it with the manager.
 	UnregistrationQueue *RunnerUnregistrationQueue
 
+	// TerminatedPodGracePeriodSeconds is the grace period used when deleting a
+	// runner pod whose containers have all exited. It is zero by default, so
+	// the pod leaves the API as soon as the delete is issued instead of sitting
+	// in Terminating while the kubelet cleans up locally.
+	//
+	// Raise it to keep those pods around for longer, for example to give a log
+	// collector time to read them. A negative value asks for no override at
+	// all, leaving the deletion to the pod's own terminationGracePeriodSeconds.
+	//
+	// It is only ever applied to a pod with nothing left running in it. Pods
+	// that are still alive are always deleted gracefully.
+	TerminatedPodGracePeriodSeconds int64
+
 	ResourceBuilder
 }
 
@@ -527,7 +540,7 @@ func (r *EphemeralRunnerReconciler) cleanupResources(ctx context.Context, epheme
 	case err == nil:
 		if pod.DeletionTimestamp.IsZero() {
 			log.Info("Deleting the runner pod")
-			if err := r.Delete(ctx, pod); err != nil && !kerrors.IsNotFound(err) {
+			if err := r.Delete(ctx, pod, r.deletePodOptions(pod)...); err != nil && !kerrors.IsNotFound(err) {
 				return fmt.Errorf("failed to delete pod: %w", err)
 			}
 			log.Info("Deleted the runner pod")
@@ -604,7 +617,7 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedPods(ctx context.Context,
 		}
 
 		log.Info("Deleting container hooks runner-linked pod", "name", linkedPod.Name)
-		if err := r.Delete(ctx, linkedPod); err != nil && !kerrors.IsNotFound(err) {
+		if err := r.Delete(ctx, linkedPod, r.deletePodOptions(linkedPod)...); err != nil && !kerrors.IsNotFound(err) {
 			errs = append(errs, fmt.Errorf("failed to delete runner linked pod %q: %w", linkedPod.Name, err))
 		}
 	}
@@ -759,7 +772,7 @@ func (r *EphemeralRunnerReconciler) markAsSucceeded(ctx context.Context, ephemer
 func (r *EphemeralRunnerReconciler) deletePodAsFailed(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, pod *corev1.Pod, log logr.Logger) error {
 	if pod.DeletionTimestamp.IsZero() {
 		log.Info("Deleting the ephemeral runner pod", "podId", pod.UID)
-		if err := r.Delete(ctx, pod); err != nil && !kerrors.IsNotFound(err) {
+		if err := r.Delete(ctx, pod, r.deletePodOptions(pod)...); err != nil && !kerrors.IsNotFound(err) {
 			return fmt.Errorf("failed to delete pod with status failed: %w", err)
 		}
 	}
@@ -1133,6 +1146,97 @@ func (r *EphemeralRunnerReconciler) SetupWithManager(mgr ctrl.Manager, opts ...O
 			WithEventFilter(predicate.ResourceVersionChangedPredicate{}),
 		opts,
 	).Complete(r)
+}
+
+// podTerminated reports whether every container in the pod has stopped.
+//
+// No container the kubelet has reported on may still be running. That check is
+// made whatever the pod phase says, because the phase is not always the
+// kubelet's account of the containers: a pod is moved to Failed by the control
+// plane when its node is lost or shut down, while the last status the kubelet
+// managed to send still shows a container running on the other side of the
+// partition. Believing the phase there would drop the pod out of the API while
+// something is still alive under it.
+//
+// The phase is what says whether the containers that have not reported are
+// still to come. A pod that has reached Succeeded or Failed is not going to
+// start anything else, so a container missing from the status is one that never
+// ran, which is how a pod whose init container failed is still terminated. Short
+// of a terminal phase every container has to have reported, or the runner that
+// is about to be reported as started would be missed.
+//
+// Native sidecars run as init containers that outlive the regular ones, so they
+// are checked too. A pod still running one of those, or a legacy sidecar
+// alongside the runner, is not terminated no matter what the runner container
+// did.
+func podTerminated(pod *corev1.Pod) bool {
+	for i := range pod.Status.ContainerStatuses {
+		if pod.Status.ContainerStatuses[i].State.Terminated == nil {
+			return false
+		}
+	}
+	for i := range pod.Status.InitContainerStatuses {
+		if pod.Status.InitContainerStatuses[i].State.Terminated == nil {
+			return false
+		}
+	}
+
+	switch pod.Status.Phase {
+	case corev1.PodSucceeded, corev1.PodFailed:
+		return true
+	}
+
+	return len(pod.Status.ContainerStatuses) == len(pod.Spec.Containers)
+}
+
+// deletePodOptions asks for an immediate deletion of a pod that has nothing
+// left running in it.
+//
+// A graceful deletion exists to give containers their terminationGracePeriod to
+// shut down, and the API object survives until the kubelet reports that they
+// have. For a pod whose containers have all terminated there is nothing to
+// shut down and nothing to protect: the grace period is spent waiting on the
+// kubelet to finish unmounting volumes and tearing down the sandbox, which it
+// does whether or not the object is still there.
+//
+// That wait is what fills a cluster with Terminating runner pods during a burst
+// of jobs. They hold their name, their scheduling slot, and their share of any
+// ResourceQuota, so the runners waiting to replace them cannot start. Dropping
+// the object as the delete is issued hands those back immediately.
+//
+// How long to wait is TerminatedPodGracePeriodSeconds, zero by default. A
+// negative value leaves the deletion alone, which restores whatever the pod
+// asks for in its own spec.
+//
+// A pod that is still running is deleted normally. Skipping the grace period
+// there would drop the object while its containers were still alive, leaving
+// the kubelet to kill them with nothing in the API to account for the resources
+// they hold in the meantime.
+//
+// The deletion is pinned to the pod the decision was made about. Pods are read
+// through the informer cache and every generation of a runner's pod carries the
+// same name, so a delete by name is a delete of whatever holds that name when
+// the API server reads the request, not of the pod whose containers were
+// observed to have stopped. A single controller cannot get that wrong, since it
+// is the only thing creating that name and it only creates after a read says the
+// name is free, but that argument is worth exactly as much as the single writer
+// it assumes: during a leader election handover the outgoing leader's reconcile
+// is still in flight while the new leader is already replacing pods. Naming the
+// UID turns the delete into a conflict when it lands on a pod the controller
+// never looked at. Without the grace period there is nothing to catch it
+// afterwards: the pod would be gone the moment the request was accepted,
+// killing a job instead of handing its container a SIGTERM to deregister with.
+func (r *EphemeralRunnerReconciler) deletePodOptions(pod *corev1.Pod) []client.DeleteOption {
+	if !podTerminated(pod) || r.TerminatedPodGracePeriodSeconds < 0 {
+		return nil
+	}
+
+	opts := []client.DeleteOption{client.GracePeriodSeconds(r.TerminatedPodGracePeriodSeconds)}
+	if pod.UID != "" {
+		uid := pod.UID
+		opts = append(opts, client.Preconditions{UID: &uid})
+	}
+	return opts
 }
 
 func runnerContainerStatus(pod *corev1.Pod) *corev1.ContainerStatus {

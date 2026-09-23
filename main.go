@@ -115,6 +115,8 @@ func main() {
 		k8sClientRateLimiterQPS   int
 		k8sClientRateLimiterBurst int
 
+		terminatedRunnerPodGracePeriodSeconds int64
+
 		workqueueRateLimiter string
 	)
 	var c github.Config
@@ -166,6 +168,7 @@ func main() {
 	flag.IntVar(&k8sClientRateLimiterQPS, "k8s-client-rate-limiter-qps", 20, "The QPS value of the K8s client rate limiter.")
 	flag.IntVar(&k8sClientRateLimiterBurst, "k8s-client-rate-limiter-burst", 30, "The burst value of the K8s client rate limiter.")
 	flag.StringVar(&workqueueRateLimiter, "workqueue-rate-limiter", "", `The workqueue rate limiter to use. Valid values are "bucket_rate_limiter" (default) and "typed_rate_limiter" (per-item only, no global token bucket).`)
+	flag.Int64Var(&terminatedRunnerPodGracePeriodSeconds, "terminated-runner-pod-grace-period-seconds", 0, "The grace period used when deleting a runner pod whose containers have all exited. Zero, the default, removes the pod from the API as soon as its job is over instead of leaving it Terminating while the kubelet cleans up locally, so the runner replacing it can start right away. A negative value leaves the pod's own terminationGracePeriodSeconds in charge. Pods that are still running are always deleted gracefully.")
 	flag.Parse()
 
 	opts = opts.Resolve()
@@ -183,6 +186,7 @@ func main() {
 		"autoscaling-listener-max-concurrent-reconciles", opts.AutoscalingListenerMaxConcurrentReconciles,
 		"ephemeral-runner-set-max-concurrent-reconciles", opts.EphemeralRunnerSetMaxConcurrentReconciles,
 		"ephemeral-runner-max-concurrent-reconciles", opts.EphemeralRunnerMaxConcurrentReconciles,
+		"terminated-runner-pod-grace-period-seconds", terminatedRunnerPodGracePeriodSeconds,
 	)
 
 	if !autoScalingRunnerSetOnly {
@@ -364,12 +368,13 @@ func main() {
 		}
 
 		if err = (&actionsgithubcom.EphemeralRunnerReconciler{
-			Client:              mgr.GetClient(),
-			Log:                 log.WithName("EphemeralRunner").WithValues("version", build.Version),
-			Scheme:              mgr.GetScheme(),
-			PublishMetrics:      metricsAddr != "0",
-			UnregistrationQueue: runnerUnregistrationQueue,
-			ResourceBuilder:     rb,
+			Client:                          mgr.GetClient(),
+			Log:                             log.WithName("EphemeralRunner").WithValues("version", build.Version),
+			Scheme:                          mgr.GetScheme(),
+			PublishMetrics:                  metricsAddr != "0",
+			UnregistrationQueue:             runnerUnregistrationQueue,
+			TerminatedPodGracePeriodSeconds: terminatedRunnerPodGracePeriodSeconds,
+			ResourceBuilder:                 rb,
 		}).SetupWithManager(mgr, ephemeralRunnerOpts...); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunner")
 			os.Exit(1)

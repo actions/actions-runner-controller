@@ -119,3 +119,34 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].args
           content: "--ephemeral-runner-max-concurrent-reconciles=20"
+
+  # Unset, the controller keeps its own default of removing a finished runner pod
+  # immediately. The exact match above is what pins that no flag is rendered for it.
+  - it: should render the terminated runner pod grace period when configured
+    set:
+      controller:
+        manager:
+          config:
+            terminatedRunnerPodGracePeriodSeconds: 30
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--terminated-runner-pod-grace-period-seconds=30"
+
+  # A negative value hands the grace period back to the pod itself.
+  - it: should render a negative terminated runner pod grace period
+    set:
+      controller:
+        manager:
+          config:
+            terminatedRunnerPodGracePeriodSeconds: -1
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--terminated-runner-pod-grace-period-seconds=-1"

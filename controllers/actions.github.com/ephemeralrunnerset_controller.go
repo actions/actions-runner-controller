@@ -25,6 +25,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
@@ -32,6 +33,7 @@ import (
 	"github.com/actions/scaleset"
 	"github.com/go-logr/logr"
 	"go.uber.org/multierr"
+	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -47,6 +49,23 @@ import (
 const (
 	// EphemeralRunnerSetFinalizerName is the finalizer name used in EphemeralRunnerSet resource to protect the cleanup process of the child ephemeral runners and proxy secret.
 	EphemeralRunnerSetFinalizerName = "ephemeralrunnerset.actions.github.com/finalizer"
+
+	// runnerBatchConcurrency is how many runners of a single EphemeralRunnerSet
+	// are created or deleted at the same time.
+	//
+	// A set reconciles as one object, and controller-runtime serialises
+	// reconciles per object, so every runner a burst of jobs asks for is created
+	// by one reconcile and every finished runner it leaves behind is deleted by
+	// one reconcile. Done one at a time, the round trip to the API server is
+	// paid once per runner in sequence, and the last runner of a scale up waits
+	// for all the ones before it. The requests are independent, so they are
+	// issued in a batch instead.
+	//
+	// The bound exists because these are writes, and an unbounded fan-out would
+	// hand the whole burst to the client rate limiter at once, where it would
+	// queue in front of the reconciles of every other controller rather than in
+	// front of itself.
+	runnerBatchConcurrency = 8
 )
 
 // EphemeralRunnerSetReconciler reconciles a EphemeralRunnerSet object
@@ -650,16 +669,40 @@ func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemer
 
 // deleteTerminatedEphemeralRunners deletes runners that have reached a terminal
 // state and are no longer useful, so that the scaling logic can replace them.
+//
+// The deletions are issued in a batch. Each one is an independent request, and
+// the pods they release are what the jobs waiting behind them need, so there is
+// nothing to be gained by making the hundredth runner of a burst wait for the
+// ninety-nine round trips before it.
 func (r *EphemeralRunnerSetReconciler) deleteTerminatedEphemeralRunners(ctx context.Context, ephemeralRunners []*v1alpha1.EphemeralRunner, log logr.Logger) error {
+	return r.deleteEphemeralRunnersInBatches(ctx, ephemeralRunners, log)
+}
+
+// deleteEphemeralRunnersInBatches deletes the given runners with a bounded
+// number of requests in flight, and reports every failure rather than the first.
+func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunnersInBatches(ctx context.Context, ephemeralRunners []*v1alpha1.EphemeralRunner, log logr.Logger) error {
+	if len(ephemeralRunners) == 0 {
+		return nil
+	}
+
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(runnerBatchConcurrency)
+
+	var mu sync.Mutex
 	var errs []error
 	for i := range ephemeralRunners {
-		log.Info("Deleting terminated ephemeral runner", "name", ephemeralRunners[i].Name, "phase", ephemeralRunners[i].Status.Phase)
-		if err := r.Delete(ctx, ephemeralRunners[i]); err != nil {
-			if !kerrors.IsNotFound(err) {
+		ephemeralRunner := ephemeralRunners[i]
+		g.Go(func() error {
+			log.Info("Deleting terminated ephemeral runner", "name", ephemeralRunner.Name, "phase", ephemeralRunner.Status.Phase)
+			if err := r.Delete(ctx, ephemeralRunner); err != nil && !kerrors.IsNotFound(err) {
+				mu.Lock()
 				errs = append(errs, err)
+				mu.Unlock()
 			}
-		}
+			return nil
+		})
 	}
+	_ = g.Wait()
 
 	return multierr.Combine(errs...)
 }
@@ -713,18 +756,9 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 	)
 
 	log.Info("Cleanup terminated ephemeral runners")
-	var errs []error
-	for _, ephemeralRunner := range ephemeralRunnerState.terminated() {
-		log.Info("Deleting ephemeral runner", "name", ephemeralRunner.Name)
-		if err := r.Delete(ctx, ephemeralRunner); err != nil && !kerrors.IsNotFound(err) {
-			errs = append(errs, err)
-		}
-	}
-
-	if len(errs) > 0 {
-		mergedErrs := multierr.Combine(errs...)
-		log.Error(mergedErrs, "Failed to delete ephemeral runners")
-		return false, mergedErrs
+	if err := r.deleteEphemeralRunnersInBatches(ctx, ephemeralRunnerState.terminated(), log); err != nil {
+		log.Error(err, "Failed to delete ephemeral runners")
+		return false, err
 	}
 
 	// avoid fetching the client if we have nothing left to do
@@ -737,8 +771,8 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 		return false, err
 	}
 
+	var errs []error
 	log.Info("Cleanup pending or running ephemeral runners")
-	errs = errs[0:0]
 	for _, ephemeralRunner := range ephemeralRunnerState.pending {
 		log.Info("Removing the ephemeral runner from the service", "name", ephemeralRunner.Name)
 		_, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
@@ -878,29 +912,52 @@ func (r *EphemeralRunnerSetReconciler) reconcileEphemeralRunnerSetProxySecret(ct
 }
 
 // createEphemeralRunners provisions `count` number of v1alpha1.EphemeralRunner resources in the cluster.
+//
+// The creations are issued in a batch for the same reason the deletions are:
+// they are independent of one another, they all belong to one reconcile of one
+// object, and a job waiting for the last runner of a scale up should not also
+// be waiting for the round trips of every runner created before it.
 func (r *EphemeralRunnerSetReconciler) createEphemeralRunners(ctx context.Context, runnerSet *v1alpha1.EphemeralRunnerSet, count int, log logr.Logger) error {
-	// Track multiple errors at once and return the bundle.
-	errs := make([]error, 0)
-	for i := range count {
-		ephemeralRunner, err := r.newEphemeralRunner(runnerSet)
-		if err != nil {
-			log.Error(err, "failed to build ephemeral runner")
-			errs = append(errs, err)
-			continue
-		}
-		if runnerSet.Spec.EphemeralRunnerSpec.Proxy != nil {
-			ephemeralRunner.Spec.ProxySecretRef = proxyEphemeralRunnerSetSecretName(runnerSet)
-		}
-
-		log.Info("Creating new ephemeral runner", "progress", i+1, "total", count)
-		if err := r.Create(ctx, ephemeralRunner); err != nil {
-			log.Error(err, "failed to make ephemeral runner")
-			errs = append(errs, err)
-			continue
-		}
-
-		log.Info("Created new ephemeral runner", "runner", ephemeralRunner.Name)
+	if count <= 0 {
+		return nil
 	}
+
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(runnerBatchConcurrency)
+
+	// Track multiple errors at once and return the bundle.
+	var mu sync.Mutex
+	var errs []error
+	addErr := func(err error) {
+		mu.Lock()
+		errs = append(errs, err)
+		mu.Unlock()
+	}
+
+	for i := range count {
+		g.Go(func() error {
+			ephemeralRunner, err := r.newEphemeralRunner(runnerSet)
+			if err != nil {
+				log.Error(err, "failed to build ephemeral runner")
+				addErr(err)
+				return nil
+			}
+			if runnerSet.Spec.EphemeralRunnerSpec.Proxy != nil {
+				ephemeralRunner.Spec.ProxySecretRef = proxyEphemeralRunnerSetSecretName(runnerSet)
+			}
+
+			log.Info("Creating new ephemeral runner", "progress", i+1, "total", count)
+			if err := r.Create(ctx, ephemeralRunner); err != nil {
+				log.Error(err, "failed to make ephemeral runner")
+				addErr(err)
+				return nil
+			}
+
+			log.Info("Created new ephemeral runner", "runner", ephemeralRunner.Name)
+			return nil
+		})
+	}
+	_ = g.Wait()
 
 	return multierr.Combine(errs...)
 }

@@ -126,6 +126,15 @@ flags:
   ## sets exist.
   ephemeralRunnerMaxConcurrentReconciles: 4
 
+  ## How long a runner pod whose containers have all exited is kept before it is deleted.
+  ## Zero, the default, removes the pod as soon as its job is over instead of leaving it
+  ## Terminating while the kubelet cleans up locally, handing its name, its scheduling slot
+  ## and its share of any ResourceQuota straight to the runner replacing it.
+  ## Raise it to keep finished pods around for longer, for example to give a log collector
+  ## time to read them. A negative value leaves the pod's own terminationGracePeriodSeconds
+  ## in charge. Pods that are still running are always deleted gracefully.
+  # terminatedRunnerPodGracePeriodSeconds: 0
+
   ## Defines a list of prefixes that should not be propagated to internal resources.
   ## This is useful when you have labels that are used for internal purposes and should not be propagated to internal resources.
   ## See https://github.com/actions/actions-runner-controller/issues/3533 for more information.

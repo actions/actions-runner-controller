@@ -79,6 +79,9 @@ spec:
         {{- with .Values.flags.ephemeralRunnerMaxConcurrentReconciles }}
         - "--ephemeral-runner-max-concurrent-reconciles={{ . }}"
         {{- end }}
+        {{- with .Values.flags.terminatedRunnerPodGracePeriodSeconds }}
+        - "--terminated-runner-pod-grace-period-seconds={{ . }}"
+        {{- end }}
         {{- if .Values.metrics }}
         {{- with .Values.metrics }}
         - "--listener-metrics-addr={{ .listenerAddr }}"
