@@ -32,6 +32,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -500,6 +501,10 @@ func (r *AutoscalingRunnerSetReconciler) runnerSpecChanged(autoscalingRunnerSet 
 // comparing it would make a stopped listener look like drift and delete the very
 // object the stop is meant to preserve. Starting and stopping is handled by
 // patching the phase instead.
+//
+// Semantic equality treats nil and empty collections alike: omitempty drops
+// explicit empty input when the derived listener is persisted. Comparing those
+// representations strictly would replace an unchanged listener on every reconcile.
 func listenerSpecChanged(current, desired *v1alpha1.AutoscalingListener) bool {
 	if current == nil || desired == nil {
 		return current != desired
@@ -510,7 +515,7 @@ func listenerSpecChanged(current, desired *v1alpha1.AutoscalingListener) bool {
 	currentSpec.Phase = ""
 	desiredSpec.Phase = ""
 
-	return !cmp.Equal(currentSpec, desiredSpec)
+	return !apiequality.Semantic.DeepEqual(currentSpec, desiredSpec)
 }
 
 // stopListener switches the listener off without deleting it.

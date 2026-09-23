@@ -134,7 +134,7 @@ func ephemeralRunnerSetOutdatedForAppliedRevision(ephemeralRunnerSet *v1alpha1.E
 // The cost of DeepDerivative is that it ignores empty values on the desired side,
 // so a field being *removed* is invisible to it. For everything sourced from the
 // user-facing template that is harmless: the AutoscalingRunnerSet controller
-// compares the whole AutoscalingListener spec with cmp.Equal and deletes the
+// compares the AutoscalingListener spec with Semantic.DeepEqual and deletes the
 // listener outright, which takes the pod with it. Container ports are the
 // exception, because they come from the --listener-metrics-addr controller flag
 // rather than from any resource, so disabling metrics would otherwise leave the
