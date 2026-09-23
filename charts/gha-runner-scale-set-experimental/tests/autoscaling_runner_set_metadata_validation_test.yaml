@@ -92,6 +92,7 @@ tests:
               sync-wave: 1
             annotations:
               enabled: true
+              quoted-unsafe-integer: "9007199254740993"
       runner:
         pod:
           metadata:
@@ -110,6 +111,28 @@ tests:
       - equal:
           path: spec.ephemeralRunnerMetadata.annotations["enabled"]
           value: "true"
+      - equal:
+          path: spec.ephemeralRunnerMetadata.annotations["quoted-unsafe-integer"]
+          value: "9007199254740993"
+
+  - it: should fail when an unquoted metadata integer is outside the IEEE 754 safe range
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        all:
+          metadata:
+            annotations:
+              unsafe-integer: 9007199254740993
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: '.Values.resource.all.metadata.annotations: invalid value for annotation "unsafe-integer": unquoted integers outside the IEEE 754 safe range must be quoted to preserve their exact value'
 
   - it: should fail when a metadata block is not a mapping
     set:

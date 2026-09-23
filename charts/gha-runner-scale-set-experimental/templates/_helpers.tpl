@@ -1,8 +1,8 @@
 {{/*
 Render a single label or annotation value as a string.
-Values from a values file arrive as float64, so "%v" would turn large integers into
-scientific notation (12345678901234 -> 1.2345678901234e+13) and silently write a value the
-user never asked for. Integral floats are therefore formatted without an exponent.
+Values from a values file arrive as float64. Integral values in the IEEE 754 safe integer
+range are formatted without an exponent. Unsafe integral values are rejected by assert-scalar
+before reaching this helper, because their original value may already have been rounded.
 */}}
 {{- define "metadata-value" -}}
 {{- if eq . nil -}}
@@ -50,6 +50,8 @@ Expects a dict with "value", "key", "kind" and "path".
 {{- $value := .value -}}
 {{- if or (kindIs "map" $value) (kindIs "slice" $value) (kindIs "invalid" $value) -}}
 {{- fail (printf "%s: invalid value for %s %q: must be a scalar, got %s. Quote the value if it is meant to be a string" .path .kind .key (kindOf $value)) -}}
+{{- else if and (kindIs "float64" $value) (eq $value (floor $value)) (or (ge $value 9007199254740992.0) (le $value -9007199254740992.0)) -}}
+{{- fail (printf "%s: invalid value for %s %q: unquoted integers outside the IEEE 754 safe range must be quoted to preserve their exact value" .path .kind .key) -}}
 {{- end -}}
 {{- end }}
 
@@ -318,5 +320,4 @@ Behavior:
         path: {{ $key | quote }}
 {{ end }}
 {{ end }}
-
 

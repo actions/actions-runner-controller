@@ -3290,6 +3290,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_ScalarMetadataValuesAreRenderedAsS
 	assert.Equal(t, "false", autoscalingRunnerSet.Annotations["chart-bool-annotation"])
 	assert.Equal(t, "1.5", autoscalingRunnerSet.Annotations["chart-float-annotation"])
 	assert.Equal(t, "12345678901234", autoscalingRunnerSet.Annotations["chart-big-int-annotation"])
+	assert.Equal(t, "9007199254740993", autoscalingRunnerSet.Annotations["chart-quoted-unsafe-int-annotation"])
 
 	assert.Equal(t, "true", autoscalingRunnerSet.Spec.Template.Labels["pod-bool"])
 	assert.Equal(t, "42", autoscalingRunnerSet.Spec.Template.Labels["pod-int"])
@@ -3315,6 +3316,26 @@ func TestTemplateRenderedAutoScalingRunnerSet_ScalarMetadataValuesAreRenderedAsS
 	assert.Equal(t, "5", githubSecret.Labels["secret-int"])
 	assert.Equal(t, "true", githubSecret.Labels["chart-bool"])
 	assert.Equal(t, "1.5", githubSecret.Annotations["chart-float-annotation"])
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_UnsafeIntegerMetadataValueValidationError(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values_unsafe_metadata.yaml")
+	require.NoError(t, err)
+
+	options := &helm.Options{
+		Logger:         logger.Discard,
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", "test"),
+	}
+
+	_, err = helm.RenderTemplateContextE(t, t.Context(), options, helmChartPath, "test-runners", []string{"templates/autoscalingrunnerset.yaml"})
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `.Values.annotations: invalid value for annotation "unsafe-integer": unquoted integers outside the IEEE 754 safe range must be quoted to preserve their exact value`)
 }
 
 func TestTemplateRenderedAutoScalingRunnerSet_NonMapMetadataValidationError(t *testing.T) {
