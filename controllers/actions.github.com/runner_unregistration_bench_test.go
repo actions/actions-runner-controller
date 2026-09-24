@@ -59,6 +59,7 @@ func newFinalizeBenchmarkReconciler(b *testing.B, scheme *runtime.Scheme, queue 
 
 	reconciler := &EphemeralRunnerReconciler{
 		Client:              c,
+		APIReader:           c,
 		Scheme:              scheme,
 		Log:                 logr.Discard(),
 		UnregistrationQueue: queue,

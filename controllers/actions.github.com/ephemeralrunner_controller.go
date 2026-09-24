@@ -54,6 +54,7 @@ const (
 // EphemeralRunnerReconciler reconciles a EphemeralRunner object
 type EphemeralRunnerReconciler struct {
 	client.Client
+	APIReader      client.Reader
 	Log            logr.Logger
 	Scheme         *runtime.Scheme
 	PublishMetrics bool
@@ -1103,9 +1104,13 @@ func ephemeralRunnerMetricLabels(ephemeralRunner *v1alpha1.EphemeralRunner) (met
 // never registered: GenerateJitRunnerConfig can register it just before
 // createSecret persists the ID. Any other uncertainty leaves the question
 // open, because answering 0 would drop the finalizer and lose the last record
-// of a registration that does exist.
+// of a registration that does exist. Invalid IDs are errors, not evidence that
+// the runner was never registered.
 func (r *EphemeralRunnerReconciler) registeredRunnerID(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (int, error) {
-	if ephemeralRunner.Status.RunnerID != 0 {
+	if ephemeralRunner.Status.RunnerID < 0 {
+		return 0, fmt.Errorf("invalid runner ID in status: %d", ephemeralRunner.Status.RunnerID)
+	}
+	if ephemeralRunner.Status.RunnerID > 0 {
 		return ephemeralRunner.Status.RunnerID, nil
 	}
 
@@ -1136,6 +1141,9 @@ func (r *EphemeralRunnerReconciler) registeredRunnerID(ctx context.Context, ephe
 				ephemeralRunner.Spec.RunnerScaleSetID,
 			)
 		}
+		if existingRunner.ID <= 0 {
+			return 0, fmt.Errorf("invalid runner ID returned by the Actions service: %d", existingRunner.ID)
+		}
 
 		log.Info("Recovered the runner ID from the Actions service", "runnerId", existingRunner.ID)
 		return existingRunner.ID, nil
@@ -1143,10 +1151,10 @@ func (r *EphemeralRunnerReconciler) registeredRunnerID(ctx context.Context, ephe
 
 	runnerID, err := strconv.Atoi(string(secret.Data["runnerId"]))
 	if err != nil {
-		// Not retried, unlike a failed read. Nothing about waiting makes the
-		// value parse, and there is no other record of the registration.
-		log.Error(err, "Jitconfig secret of a runner without a recorded ID is corrupted; leaving the runner for the service to clean up")
-		return 0, nil
+		return 0, fmt.Errorf("invalid runner ID in jitconfig secret: %w", err)
+	}
+	if runnerID <= 0 {
+		return 0, fmt.Errorf("invalid runner ID in jitconfig secret: %d", runnerID)
 	}
 
 	log.Info("Recovered the runner ID from the jitconfig secret", "runnerId", runnerID)
@@ -1162,8 +1170,14 @@ func (r *EphemeralRunnerReconciler) registeredRunnerID(ctx context.Context, ephe
 // Nothing here waits on the service when the pod is gone, being deleted, or
 // has nothing left running.
 func (r *EphemeralRunnerReconciler) removeRunnerOfLivePod(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, runnerID int, log logr.Logger) (bool, error) {
+	if r.APIReader == nil {
+		return false, errors.New("APIReader is not configured, cannot confirm the runner pod state without reading through the cache")
+	}
+
+	// The cache can miss a newly created pod or still show its terminated
+	// predecessor. Neither is safe evidence for dropping finalizer protection.
 	pod := new(corev1.Pod)
-	if err := r.Get(ctx, types.NamespacedName{Namespace: ephemeralRunner.Namespace, Name: ephemeralRunner.Name}, pod); err != nil {
+	if err := r.APIReader.Get(ctx, types.NamespacedName{Namespace: ephemeralRunner.Namespace, Name: ephemeralRunner.Name}, pod); err != nil {
 		if kerrors.IsNotFound(err) {
 			return false, nil
 		}
@@ -1192,6 +1206,9 @@ func (r *EphemeralRunnerReconciler) removeRunnerOfLivePod(ctx context.Context, e
 // SetupWithManager sets up the controller with the Manager.
 func (r *EphemeralRunnerReconciler) SetupWithManager(mgr ctrl.Manager, opts ...Option) error {
 	r.ResourceBuilder.setSchemeIfUnset(r.Scheme)
+	if r.APIReader == nil {
+		r.APIReader = mgr.GetAPIReader()
+	}
 
 	if r.UnregistrationQueue == nil {
 		r.UnregistrationQueue = NewRunnerUnregistrationQueue(

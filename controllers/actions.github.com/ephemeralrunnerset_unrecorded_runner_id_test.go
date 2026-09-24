@@ -36,7 +36,7 @@ var errUnrecordedTestJobStillRunning = fmt.Errorf("%w: %w", scaleset.ConflictErr
 
 type unrecordedRunnerIDFixture struct {
 	t                *testing.T
-	c                client.Client
+	c                client.WithWatch
 	set              *v1alpha1.EphemeralRunnerSet
 	setController    *EphemeralRunnerSetReconciler
 	runnerController *EphemeralRunnerReconciler
@@ -138,6 +138,7 @@ func newUnrecordedRunnerIDFixture(t *testing.T, age time.Duration) *unrecordedRu
 	f.queue = NewRunnerUnregistrationQueue(logr.Discard(), resolver, 1)
 	f.runnerController = &EphemeralRunnerReconciler{
 		Client:              f.c,
+		APIReader:           f.c,
 		Scheme:              scheme,
 		Log:                 logr.Discard(),
 		ResourceBuilder:     resourceBuilder,

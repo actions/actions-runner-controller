@@ -1675,6 +1675,7 @@ var _ = Describe("EphemeralRunner", func() {
 
 			controller = &EphemeralRunnerReconciler{
 				Client:              k8sClient,
+				APIReader:           k8sClient,
 				Scheme:              mgr.GetScheme(),
 				Log:                 logf.Log,
 				UnregistrationQueue: queue,

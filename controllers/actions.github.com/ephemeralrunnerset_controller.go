@@ -796,9 +796,20 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 		return false, 0, nil
 	}
 
-	actionsClient, err := r.GetActionsService(ctx, ephemeralRunnerSet)
-	if err != nil {
-		return false, 0, err
+	getActionsClient := sync.OnceValues(func() (multiclient.Client, error) {
+		return r.GetActionsService(ctx, ephemeralRunnerSet)
+	})
+	deleteRunner := func(ephemeralRunner *v1alpha1.EphemeralRunner) error {
+		var actionsClient multiclient.Client
+		if ephemeralRunner.Status.RunnerID > 0 {
+			var err error
+			actionsClient, err = getActionsClient()
+			if err != nil {
+				return err
+			}
+		}
+		_, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
+		return err
 	}
 
 	now := time.Now()
@@ -821,9 +832,8 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 			continue
 		}
 
-		log.Info("Removing the ephemeral runner from the service", "name", ephemeralRunner.Name)
-		_, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
-		if err != nil {
+		log.Info("Cleaning up the ephemeral runner", "name", ephemeralRunner.Name)
+		if err := deleteRunner(ephemeralRunner); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -832,7 +842,7 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 		if waitForRunnerID(ephemeralRunner) {
 			continue
 		}
-		if ephemeralRunner.Status.RunnerID != 0 && ephemeralRunner.HasJob() {
+		if ephemeralRunner.Status.RunnerID > 0 && ephemeralRunner.HasJob() {
 			log.Info(
 				"Skipping ephemeral runner since it is running a job",
 				"name", ephemeralRunner.Name,
@@ -843,8 +853,7 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 		}
 
 		log.Info("Cleaning up the ephemeral runner", "name", ephemeralRunner.Name)
-		_, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
-		if err != nil {
+		if err := deleteRunner(ephemeralRunner); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -1106,6 +1115,9 @@ func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Co
 }
 
 func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunnerWithActionsClient(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, actionsClient multiclient.Client, log logr.Logger) (bool, error) {
+	if ephemeralRunner.Status.RunnerID < 0 {
+		return false, fmt.Errorf("invalid runner ID in status: %d", ephemeralRunner.Status.RunnerID)
+	}
 	if ephemeralRunner.Status.RunnerID == 0 {
 		// A zero is not a registration the service can be asked about, and the
 		// runner may already be registered and executing a job: the status
