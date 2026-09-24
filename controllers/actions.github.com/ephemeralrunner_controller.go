@@ -1170,7 +1170,7 @@ func (r *EphemeralRunnerReconciler) removeRunnerOfLivePod(ctx context.Context, e
 		return false, fmt.Errorf("failed to get the runner pod: %w", err)
 	}
 
-	if !pod.DeletionTimestamp.IsZero() || pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed || podTerminated(pod) {
+	if !pod.DeletionTimestamp.IsZero() || podTerminated(pod) {
 		return false, nil
 	}
 

@@ -328,3 +328,120 @@ func TestSetCleanupDeletesRunnerThatNeverRecordsItsID(t *testing.T) {
 		})
 	}
 }
+
+func TestSetCleanupHandlesJobReportedBeforeRunnerID(t *testing.T) {
+	for _, cleanup := range unrecordedRunnerIDCleanups {
+		t.Run(cleanup.name, func(t *testing.T) {
+			for _, tc := range []struct {
+				name string
+				age  time.Duration
+			}{
+				{name: "within grace period"},
+				{name: "past grace period", age: 2 * time.Minute},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					f := newUnrecordedRunnerIDFixture(t, tc.age)
+
+					// The listener patches the phase and job independently of the
+					// runner controller's registration identity patch.
+					runner := f.runner()
+					runner.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
+					runner.Status.JobID = "job-1"
+					require.NoError(t, f.c.Status().Update(t.Context(), runner))
+					f.startCleanup(cleanup.deleteSet)
+
+					result, err := f.reconcileSet()
+					require.NoError(t, err)
+					require.Empty(t, f.removals)
+					runner = f.runner()
+					require.NotNil(t, runner)
+					require.Zero(t, runner.Status.RunnerID)
+					require.True(t, runner.HasJob())
+					f.requirePodKept()
+
+					if tc.age == 0 {
+						require.Positive(t, result.RequeueAfter)
+						require.LessOrEqual(t, result.RequeueAfter, unrecordedRunnerIDGracePeriod)
+						require.True(t, runner.DeletionTimestamp.IsZero())
+						if !cleanup.deleteSet {
+							require.Zero(t, f.appliedActionableRevision())
+						}
+
+						_, err = f.reconcileRunner()
+						require.NoError(t, err)
+						require.Equal(t, unrecordedTestRunnerID, f.runner().Status.RunnerID)
+						require.True(t, f.runner().HasJob())
+
+						result, err = f.reconcileSet()
+						require.NoError(t, err)
+						require.Zero(t, result.RequeueAfter)
+						require.Empty(t, f.removals, "a registered runner with a reported job is skipped")
+						require.True(t, f.runner().DeletionTimestamp.IsZero())
+					} else {
+						require.Zero(t, result.RequeueAfter)
+						require.False(t, runner.DeletionTimestamp.IsZero())
+						require.Contains(t, runner.Finalizers, ephemeralRunnerActionsFinalizerName)
+
+						result, err = f.reconcileRunner()
+						require.NoError(t, err)
+						require.Equal(t, busyRunnerRequeueInterval, result.RequeueAfter)
+						require.Equal(t, []int64{unrecordedTestRunnerID}, f.removals)
+						require.NotNil(t, f.runner())
+					}
+					f.requirePodKept()
+					require.Empty(t, f.queue.queued())
+					if !cleanup.deleteSet {
+						require.Equal(t, int64(1), f.appliedActionableRevision())
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestRunnerFinalizerChecksContainerStatesInTerminalPods(t *testing.T) {
+	for _, phase := range []corev1.PodPhase{corev1.PodFailed, corev1.PodSucceeded} {
+		t.Run(string(phase), func(t *testing.T) {
+			for _, state := range []string{"running", "terminated"} {
+				t.Run(state, func(t *testing.T) {
+					f := newUnrecordedRunnerIDFixture(t, 0)
+					pod := f.pod()
+					pod.Status.Phase = phase
+					if state == "terminated" {
+						var exitCode int32
+						if phase == corev1.PodFailed {
+							exitCode = 1
+						}
+						pod.Status.ContainerStatuses[0].Ready = false
+						pod.Status.ContainerStatuses[0].State = corev1.ContainerState{
+							Terminated: &corev1.ContainerStateTerminated{ExitCode: exitCode},
+						}
+					}
+					require.NoError(t, f.c.Status().Update(t.Context(), pod))
+					require.NoError(t, f.c.Delete(t.Context(), f.runner()))
+
+					result, err := f.reconcileRunner()
+					require.NoError(t, err)
+					if state == "running" {
+						require.Equal(t, busyRunnerRequeueInterval, result.RequeueAfter)
+						require.Equal(t, []int64{unrecordedTestRunnerID}, f.removals)
+						f.requirePodKept()
+						runner := f.runner()
+						require.NotNil(t, runner)
+						require.Contains(t, runner.Finalizers, ephemeralRunnerFinalizerName)
+						require.Contains(t, runner.Finalizers, ephemeralRunnerActionsFinalizerName)
+						require.Empty(t, f.queue.queued())
+					} else {
+						require.Zero(t, result.RequeueAfter)
+						require.Empty(t, f.removals, "a stopped pod does not require a synchronous service call")
+						require.Nil(t, f.pod())
+						require.Nil(t, f.runner())
+						queued := f.queue.queued()
+						require.Len(t, queued, 1)
+						require.Equal(t, unrecordedTestRunnerID, queued[0].runnerID)
+					}
+				})
+			}
+		})
+	}
+}

@@ -749,8 +749,10 @@ func (r *EphemeralRunnerSetReconciler) cleanUpProxySecret(ctx context.Context, e
 	return nil
 }
 
-// cleanUpEphemeralRunners deletes the runners of the set that are not executing
-// a job, reporting whether none are left.
+// cleanUpEphemeralRunners deletes the runners of the set except registered
+// runners with reported jobs, reporting whether none are left. A runner whose
+// ID remains unrecorded past the grace period relies on its finalizer to
+// protect a live pod.
 //
 // A positive requeueAfter means runners that have not recorded their runner ID
 // were left alone, and is when the first of them has waited long enough to be
@@ -827,7 +829,10 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 	}
 
 	for _, ephemeralRunner := range ephemeralRunnerState.running {
-		if ephemeralRunner.HasJob() {
+		if waitForRunnerID(ephemeralRunner) {
+			continue
+		}
+		if ephemeralRunner.Status.RunnerID != 0 && ephemeralRunner.HasJob() {
 			log.Info(
 				"Skipping ephemeral runner since it is running a job",
 				"name", ephemeralRunner.Name,
@@ -836,11 +841,8 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 			)
 			continue
 		}
-		if waitForRunnerID(ephemeralRunner) {
-			continue
-		}
 
-		log.Info("Removing the idle ephemeral runner from the service", "name", ephemeralRunner.Name)
+		log.Info("Cleaning up the ephemeral runner", "name", ephemeralRunner.Name)
 		_, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
 		if err != nil {
 			errs = append(errs, err)
