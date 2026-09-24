@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
@@ -417,6 +418,70 @@ var _ = Describe("EphemeralRunner", func() {
 				ephemeralRunnerTimeout,
 				ephemeralRunnerInterval,
 			).Should(BeTrue(), "Pod should be re-created after init container failure")
+		})
+
+		It("It should fail the runner when its image can never be pulled", func() {
+			pod := new(corev1.Pod)
+			Eventually(func() error {
+				return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed(), "failed to get ephemeral runner pod")
+			oldPodUID := pod.UID
+
+			// A pod whose image reference is unusable stays Pending with the runner
+			// container waiting: it never terminates, so without handling this the
+			// runner would sit here forever holding a scale set slot.
+			pod.Status.Phase = corev1.PodPending
+			pod.Status.ContainerStatuses = []corev1.ContainerStatus{
+				{
+					Name:  v1alpha1.EphemeralRunnerContainerName,
+					Image: "ghcr.io/actions/actions-runner::bad",
+					State: corev1.ContainerState{
+						Waiting: &corev1.ContainerStateWaiting{
+							Reason:  "InvalidImageName",
+							Message: `couldn't parse image name "ghcr.io/actions/actions-runner::bad": invalid reference format`,
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Status().Update(ctx, pod)).To(BeNil(), "failed to update pod status")
+
+			Eventually(
+				func() (int, error) {
+					updated := new(v1alpha1.EphemeralRunner)
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated); err != nil {
+						return 0, err
+					}
+					return len(updated.Status.Failures), nil
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(BeNumerically(">=", 1), "the image error should be recorded as a runner failure")
+
+			// The pod is Pending, so pod.Status.Reason/Message are empty and the reason has to come off the
+			// container's waiting state; otherwise the runner reports a failure without saying what went wrong.
+			Eventually(
+				func() (string, error) {
+					updated := new(v1alpha1.EphemeralRunner)
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated); err != nil {
+						return "", err
+					}
+					return updated.Status.Reason, nil
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(Equal("InvalidImageName"), "the runner status should name the image error")
+
+			Eventually(
+				func() (bool, error) {
+					newPod := new(corev1.Pod)
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, newPod); err != nil {
+						return false, err
+					}
+					return newPod.UID != oldPodUID, nil
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(BeTrue(), "the pod should be re-created after an unrecoverable image error")
 		})
 
 		It("It should delete ephemeral runner when init container fails and job is assigned", func() {
@@ -1947,3 +2012,41 @@ var _ = Describe("EphemeralRunner", func() {
 		})
 	})
 })
+
+func TestImagePullFailure(t *testing.T) {
+	now := time.Now()
+	waiting := func(reason string) *corev1.ContainerStatus {
+		return &corev1.ContainerStatus{State: corev1.ContainerState{
+			Waiting: &corev1.ContainerStateWaiting{Reason: reason},
+		}}
+	}
+	podAged := func(age time.Duration) *corev1.Pod {
+		return &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+			CreationTimestamp: metav1.NewTime(now.Add(-age)),
+		}}
+	}
+
+	for _, tt := range []struct {
+		name    string
+		cs      *corev1.ContainerStatus
+		pod     *corev1.Pod
+		want    string
+		wantAct bool
+	}{
+		{"no container status", nil, podAged(time.Hour), "", false},
+		{"running", &corev1.ContainerStatus{State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}}, podAged(time.Hour), "", false},
+		{"creating", waiting("ContainerCreating"), podAged(time.Hour), "", false},
+		{"invalid name fails immediately", waiting("InvalidImageName"), podAged(time.Second), "InvalidImageName", true},
+		{"never pull fails immediately", waiting("ErrImageNeverPull"), podAged(time.Second), "ErrImageNeverPull", true},
+		{"backoff is given a grace period", waiting("ImagePullBackOff"), podAged(time.Minute), "ImagePullBackOff", false},
+		{"backoff fails after the grace period", waiting("ImagePullBackOff"), podAged(imagePullGracePeriod + time.Minute), "ImagePullBackOff", true},
+		{"pull error fails after the grace period", waiting("ErrImagePull"), podAged(imagePullGracePeriod + time.Minute), "ErrImagePull", true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			reason, act := imagePullFailure(tt.cs, tt.pod, now)
+			if reason != tt.want || act != tt.wantAct {
+				t.Fatalf("imagePullFailure() = (%q, %v), want (%q, %v)", reason, act, tt.want, tt.wantAct)
+			}
+		})
+	}
+}
