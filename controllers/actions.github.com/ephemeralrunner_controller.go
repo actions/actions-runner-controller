@@ -45,6 +45,10 @@ import (
 const (
 	ephemeralRunnerFinalizerName        = "ephemeralrunner.actions.github.com/finalizer"
 	ephemeralRunnerActionsFinalizerName = "ephemeralrunner.actions.github.com/runner-registration-finalizer"
+
+	// busyRunnerRequeueInterval is how long a runner being deleted while its
+	// pod is still executing a job waits before the service is asked again.
+	busyRunnerRequeueInterval = 30 * time.Second
 )
 
 // EphemeralRunnerReconciler reconciles a EphemeralRunner object
@@ -134,21 +138,20 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			// nothing left to ask the service to remove. That is the path every
 			// completed job takes, and it costs no API call at all.
 			//
-			// Every other runner may still hold a registration. Removing it is
-			// handed to background workers rather than done here, so that deleting
-			// the pod and the secret below is never held up by an external API.
-			// See RunnerUnregistrationQueue for what that costs.
+			// Every other runner may still hold a registration. While its pod is
+			// alive, the runner may be executing a job this controller has not
+			// heard about: the status records the runner ID only after the pod
+			// exists, and a job only once the listener reports it. So the service
+			// is asked to remove the runner before a live pod is deleted, and a
+			// runner that is still executing a job keeps its pod and is checked
+			// again later. That covers a runner the EphemeralRunnerSet deleted
+			// before its ID was recorded as well as one deleted by hand.
 			//
-			// Queueing is also what stops holding the pod alive when the service
-			// reports that the runner is still executing a job. That used to keep
-			// the runner pod of a job that is still running from being deleted out
-			// from under it, but only for deletions that reach this branch
-			// directly. The EphemeralRunnerSet does not rely on it: it refuses to
-			// delete a runner that has a job assigned, and removes a runner from
-			// the service before deleting it when it scales down. What is left is
-			// an EphemeralRunner deleted by hand, and there the deletion is taken
-			// at face value: the pod goes now, and the workers keep retrying the
-			// removal until the service accepts it.
+			// A pod with nothing left running cannot be executing a job, so for it,
+			// and for a runner without a pod, the removal is handed to background
+			// workers instead, so that deleting the pod and the secret below is
+			// never held up by an external API. See RunnerUnregistrationQueue for
+			// what that costs.
 			var runnerID int
 			if runnerSelfDeregistered(&ephemeralRunner) {
 				log.Info("Runner exited successfully and deregistered itself, skipping its removal from the service")
@@ -162,6 +165,20 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 					return ctrl.Result{}, err
 				}
 				runnerID = id
+			}
+
+			if runnerID != 0 {
+				removed, err := r.removeRunnerOfLivePod(ctx, &ephemeralRunner, runnerID, log)
+				switch {
+				case errors.Is(err, scaleset.JobStillRunningError):
+					log.Info("Runner is still running a job, keeping its pod", "runnerId", runnerID, "requeueAfter", busyRunnerRequeueInterval)
+					return ctrl.Result{RequeueAfter: busyRunnerRequeueInterval}, nil
+				case err != nil:
+					log.Error(err, "Failed to remove the runner of a live pod from the service", "runnerId", runnerID)
+					return ctrl.Result{}, err
+				case removed:
+					runnerID = 0
+				}
 			}
 
 			log.Info(
@@ -1134,6 +1151,42 @@ func (r *EphemeralRunnerReconciler) registeredRunnerID(ctx context.Context, ephe
 
 	log.Info("Recovered the runner ID from the jitconfig secret", "runnerId", runnerID)
 	return runnerID, nil
+}
+
+// removeRunnerOfLivePod removes the registration of a runner whose pod may
+// still be executing a job, reporting whether it did. A runner without such a
+// pod is left alone and reported as not removed.
+//
+// The service refuses to remove a runner that is executing a job, and that
+// refusal is returned as scaleset.JobStillRunningError so the pod can be kept.
+// Nothing here waits on the service when the pod is gone, being deleted, or
+// has nothing left running.
+func (r *EphemeralRunnerReconciler) removeRunnerOfLivePod(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, runnerID int, log logr.Logger) (bool, error) {
+	pod := new(corev1.Pod)
+	if err := r.Get(ctx, types.NamespacedName{Namespace: ephemeralRunner.Namespace, Name: ephemeralRunner.Name}, pod); err != nil {
+		if kerrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to get the runner pod: %w", err)
+	}
+
+	if !pod.DeletionTimestamp.IsZero() || pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed || podTerminated(pod) {
+		return false, nil
+	}
+
+	actionsClient, err := r.GetActionsService(ctx, ephemeralRunner)
+	if err != nil {
+		return false, fmt.Errorf("failed to get actions client: %w", err)
+	}
+
+	if err := actionsClient.RemoveRunner(ctx, int64(runnerID)); err != nil {
+		if !errors.Is(err, scaleset.RunnerNotFoundError) && !errors.Is(err, scaleset.NotFoundError) {
+			return false, err
+		}
+		log.Info("Runner is already removed from the service", "runnerId", runnerID)
+	}
+
+	return true, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

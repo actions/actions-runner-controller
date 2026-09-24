@@ -108,6 +108,9 @@ func createFinalizeBenchmarkRunner(b *testing.B, c client.Client, phase v1alpha1
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{{Name: v1alpha1.EphemeralRunnerContainerName, Image: "ghcr.io/actions/actions-runner"}},
 		},
+		// Finished, as the pod of a completed job is. The service is asked
+		// before a live pod is deleted, which is not the path measured here.
+		Status: corev1.PodStatus{Phase: corev1.PodSucceeded},
 	}))
 	require.NoError(b, c.Create(ctx, &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
@@ -127,9 +130,10 @@ func createFinalizeBenchmarkRunner(b *testing.B, c client.Client, phase v1alpha1
 //   - skipped: the runner exited cleanly, so its registration is already gone
 //     and nothing is queued. This is the path every completed job takes.
 //   - queued: the registration is handed to the workers. Present behaviour for
-//     a runner that may still be registered.
+//     a runner that may still be registered and whose pod has finished.
 //   - synchronous: the removal is issued inline before the local cleanup, which
-//     is the behaviour this replaced.
+//     is the behaviour this replaced. A runner whose pod is still live pays it,
+//     because its pod may be executing a job.
 //
 // The API server behind it is the controller runtime fake, which costs
 // milliseconds per reconcile and sets a floor well above what queueing or
