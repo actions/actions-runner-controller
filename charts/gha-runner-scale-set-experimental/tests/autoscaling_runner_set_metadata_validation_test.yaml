@@ -92,6 +92,7 @@ tests:
               sync-wave: 1
             annotations:
               enabled: true
+              quoted-unsafe-integer: "9007199254740993"
       runner:
         pod:
           metadata:
@@ -110,6 +111,95 @@ tests:
       - equal:
           path: spec.ephemeralRunnerMetadata.annotations["enabled"]
           value: "true"
+      - equal:
+          path: spec.ephemeralRunnerMetadata.annotations["quoted-unsafe-integer"]
+          value: "9007199254740993"
+
+  - it: should render the inclusive safe integer boundaries without an exponent
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        all:
+          metadata:
+            labels:
+              maximum-safe-integer: 9007199254740991
+            annotations:
+              maximum-safe-integer: 9007199254740991
+              minimum-safe-integer: -9007199254740991
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: metadata.labels["maximum-safe-integer"]
+          value: "9007199254740991"
+      - equal:
+          path: metadata.annotations["maximum-safe-integer"]
+          value: "9007199254740991"
+      - equal:
+          path: metadata.annotations["minimum-safe-integer"]
+          value: "-9007199254740991"
+
+  - it: should fail at the first unsafe positive integer
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        all:
+          metadata:
+            annotations:
+              unsafe-integer: 9007199254740992
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: '.Values.resource.all.metadata.annotations: invalid value for annotation "unsafe-integer": unquoted integers outside the IEEE 754 safe range must be quoted to preserve their exact value'
+
+  - it: should fail at the first unsafe negative integer
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        all:
+          metadata:
+            annotations:
+              unsafe-integer: -9007199254740992
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: '.Values.resource.all.metadata.annotations: invalid value for annotation "unsafe-integer": unquoted integers outside the IEEE 754 safe range must be quoted to preserve their exact value'
+
+  - it: should fail when an unquoted metadata integer is outside the IEEE 754 safe range
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      resource:
+        all:
+          metadata:
+            annotations:
+              unsafe-integer: 9007199254740993
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: '.Values.resource.all.metadata.annotations: invalid value for annotation "unsafe-integer": unquoted integers outside the IEEE 754 safe range must be quoted to preserve their exact value'
 
   - it: should fail when a metadata block is not a mapping
     set:
@@ -201,7 +291,28 @@ tests:
       - failedTemplate:
           errorMessage: '.Values.runner.pod.metadata.annotations: invalid value for annotation "nested": must be a scalar, got map. Quote the value if it is meant to be a string'
 
-  - it: should accept a prefix segment longer than 63 characters, matching Kubernetes
+  - it: should render a metadata prefix segment of exactly 63 characters
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        pod:
+          metadata:
+            labels:
+              ? "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.example.com/purpose"
+              : "yes"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.example.com/purpose"]
+          value: "yes"
+
+  - it: should fail when a metadata prefix segment is longer than 63 characters
     set:
       scaleset.name: "test"
       auth.url: "https://github.com/org"
@@ -218,9 +329,8 @@ tests:
       name: "test-name"
       namespace: "test-namespace"
     asserts:
-      - equal:
-          path: spec.template.metadata.labels["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.example.com/purpose"]
-          value: "yes"
+      - failedTemplate:
+          errorMessage: '.Values.runner.pod.metadata.labels: invalid label key "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.example.com/purpose": the prefix segment "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" must be no more than 63 characters'
 
   # A listener pod template carrying both metadata and spec used to render "true" and the
   # following "spec:" key onto the same line, producing invalid YAML.

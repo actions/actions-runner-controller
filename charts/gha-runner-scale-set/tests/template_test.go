@@ -3259,7 +3259,7 @@ func TestTemplateRenderedAutoScalingRunnerSet_ValidMetadataIsAccepted(t *testing
 
 // Kubernetes only accepts string label and annotation values. Values supplied as unquoted
 // YAML scalars parse as bools/numbers, so the chart has to coerce them when rendering.
-// SetValues always yields strings, so this has to come from a values file to be meaningful.
+// A values file exercises float64 integers rather than the int64 values produced by --set.
 func TestTemplateRenderedAutoScalingRunnerSet_ScalarMetadataValuesAreRenderedAsStrings(t *testing.T) {
 	t.Parallel()
 
@@ -3287,9 +3287,13 @@ func TestTemplateRenderedAutoScalingRunnerSet_ScalarMetadataValuesAreRenderedAsS
 
 	assert.Equal(t, "true", autoscalingRunnerSet.Labels["chart-bool"])
 	assert.Equal(t, "1", autoscalingRunnerSet.Labels["chart-int"])
+	assert.Equal(t, "9007199254740991", autoscalingRunnerSet.Labels["chart-max-safe-int"])
 	assert.Equal(t, "false", autoscalingRunnerSet.Annotations["chart-bool-annotation"])
 	assert.Equal(t, "1.5", autoscalingRunnerSet.Annotations["chart-float-annotation"])
 	assert.Equal(t, "12345678901234", autoscalingRunnerSet.Annotations["chart-big-int-annotation"])
+	assert.Equal(t, "9007199254740991", autoscalingRunnerSet.Annotations["chart-max-safe-int-annotation"])
+	assert.Equal(t, "-9007199254740991", autoscalingRunnerSet.Annotations["chart-min-safe-int-annotation"])
+	assert.Equal(t, "9007199254740993", autoscalingRunnerSet.Annotations["chart-quoted-unsafe-int-annotation"])
 
 	assert.Equal(t, "true", autoscalingRunnerSet.Spec.Template.Labels["pod-bool"])
 	assert.Equal(t, "42", autoscalingRunnerSet.Spec.Template.Labels["pod-int"])
@@ -3315,6 +3319,122 @@ func TestTemplateRenderedAutoScalingRunnerSet_ScalarMetadataValuesAreRenderedAsS
 	assert.Equal(t, "5", githubSecret.Labels["secret-int"])
 	assert.Equal(t, "true", githubSecret.Labels["chart-bool"])
 	assert.Equal(t, "1.5", githubSecret.Annotations["chart-float-annotation"])
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_UnsafeIntegerMetadataValueValidationError(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values_unsafe_metadata.yaml")
+	require.NoError(t, err)
+
+	options := &helm.Options{
+		Logger:         logger.Discard,
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", "test"),
+	}
+
+	_, err = helm.RenderTemplateContextE(t, t.Context(), options, helmChartPath, "test-runners", []string{"templates/autoscalingrunnerset.yaml"})
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `.Values.annotations: invalid value for annotation "unsafe-integer": unquoted integers outside the IEEE 754 safe range must be quoted to preserve their exact value`)
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_IntegerMetadataBoundariesFromSet(t *testing.T) {
+	t.Parallel()
+
+	charts := map[string]struct {
+		urlKey         string
+		tokenKey       string
+		annotationPath string
+		templateFile   string
+	}{
+		"gha-runner-scale-set": {
+			urlKey:         "githubConfigUrl",
+			tokenKey:       "githubConfigSecret.github_token",
+			annotationPath: "annotations",
+			templateFile:   "templates/autoscalingrunnerset.yaml",
+		},
+		"gha-runner-scale-set-experimental": {
+			urlKey:         "auth.url",
+			tokenKey:       "auth.githubToken",
+			annotationPath: "resource.all.metadata.annotations",
+			templateFile:   "templates/autoscalingrunnserset.yaml",
+		},
+	}
+
+	tt := map[string]struct {
+		value   string
+		invalid bool
+	}{
+		"maximum safe integer":            {value: "9007199254740991"},
+		"minimum safe integer":            {value: "-9007199254740991"},
+		"first unsafe positive integer":   {value: "9007199254740992", invalid: true},
+		"first unsafe negative integer":   {value: "-9007199254740992", invalid: true},
+		"rounded unsafe positive integer": {value: "9007199254740993", invalid: true},
+		"rounded unsafe negative integer": {value: "-9007199254740993", invalid: true},
+	}
+
+	// helm-unittest's set values are float64, so exercise --set's int64 path in both charts.
+	for chart, config := range charts {
+		t.Run(chart, func(t *testing.T) {
+			t.Parallel()
+
+			helmChartPath, err := filepath.Abs("../../" + chart)
+			require.NoError(t, err)
+
+			for name, tc := range tt {
+				t.Run(name, func(t *testing.T) {
+					t.Parallel()
+
+					options := &helm.Options{
+						Logger: logger.Discard,
+						SetValues: map[string]string{
+							config.urlKey:                               "https://github.com/actions",
+							config.tokenKey:                             "gh_token12345",
+							"controllerServiceAccount.name":             "arc",
+							"controllerServiceAccount.namespace":        "arc-system",
+							config.annotationPath + ".integer-boundary": tc.value,
+						},
+						KubectlOptions: k8s.NewKubectlOptions("", "", "test"),
+					}
+
+					output, err := helm.RenderTemplateContextE(t, t.Context(), options, helmChartPath, "test-runners", []string{config.templateFile})
+					if tc.invalid {
+						require.Error(t, err)
+						assert.ErrorContains(t, err, ".Values."+config.annotationPath+`: invalid value for annotation "integer-boundary": unquoted integers outside the IEEE 754 safe range must be quoted to preserve their exact value`)
+						return
+					}
+					require.NoError(t, err)
+
+					var autoscalingRunnerSet v1alpha1.AutoscalingRunnerSet
+					helm.UnmarshalK8SYaml(t, output, &autoscalingRunnerSet)
+					assert.Equal(t, tc.value, autoscalingRunnerSet.Annotations["integer-boundary"])
+				})
+			}
+		})
+	}
+}
+
+func TestTemplateRenderedAutoScalingRunnerSet_OverlongMetadataPrefixSegmentValidationError(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	testValuesPath, err := filepath.Abs("../tests/values_overlong_metadata_prefix.yaml")
+	require.NoError(t, err)
+
+	options := &helm.Options{
+		Logger:         logger.Discard,
+		ValuesFiles:    []string{testValuesPath},
+		KubectlOptions: k8s.NewKubectlOptions("", "", "test"),
+	}
+
+	_, err = helm.RenderTemplateContextE(t, t.Context(), options, helmChartPath, "test-runners", []string{"templates/autoscalingrunnerset.yaml"})
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `.Values.annotations: invalid annotation key "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.example.com/overlong-prefix": the prefix segment "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" must be no more than 63 characters`)
 }
 
 func TestTemplateRenderedAutoScalingRunnerSet_NonMapMetadataValidationError(t *testing.T) {
@@ -3431,35 +3551,45 @@ func TestTemplateRenderedAutoScalingRunnerSet_NonScalarMetadataValueValidationEr
 	assert.Contains(t, err.Error(), `.Values.template.metadata.annotations: invalid value for annotation "nested": must be a scalar, got map`)
 }
 
-// Kubernetes only bounds a label key prefix at 253 characters in total, so the chart must
-// not impose the stricter per-segment 63 character limit that applies to DNS labels.
-func TestTemplateRenderedAutoScalingRunnerSet_LongPrefixSegmentIsAccepted(t *testing.T) {
+func TestTemplateRenderedAutoScalingRunnerSet_MetadataPrefixSegmentLengthBoundary(t *testing.T) {
 	t.Parallel()
 
 	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
 	require.NoError(t, err)
 
-	releaseName := "test-runners"
-	namespaceName := "test-" + strings.ToLower(random.UniqueID())
+	for _, length := range []int{63, 64} {
+		t.Run(fmt.Sprintf("%d characters", length), func(t *testing.T) {
+			t.Parallel()
 
-	key := strings.Repeat("a", 64) + ".example.com/purpose"
+			releaseName := "test-runners"
+			namespaceName := "test-" + strings.ToLower(random.UniqueID())
 
-	options := &helm.Options{
-		Logger: logger.Discard,
-		SetValues: map[string]string{
-			"githubConfigUrl":                                                "https://github.com/actions",
-			"githubConfigSecret.github_token":                                "gh_token12345",
-			"controllerServiceAccount.name":                                  "arc",
-			"controllerServiceAccount.namespace":                             "arc-system",
-			"template.metadata.labels." + strings.ReplaceAll(key, ".", `\.`): "yes",
-		},
-		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+			segment := strings.Repeat("a", length)
+			key := segment + ".example.com/purpose"
+
+			options := &helm.Options{
+				Logger: logger.Discard,
+				SetValues: map[string]string{
+					"githubConfigUrl":                                                "https://github.com/actions",
+					"githubConfigSecret.github_token":                                "gh_token12345",
+					"controllerServiceAccount.name":                                  "arc",
+					"controllerServiceAccount.namespace":                             "arc-system",
+					"template.metadata.labels." + strings.ReplaceAll(key, ".", `\.`): "yes",
+				},
+				KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+			}
+
+			output, err := helm.RenderTemplateContextE(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+			if length == 64 {
+				require.Error(t, err)
+				assert.ErrorContains(t, err, `.Values.template.metadata.labels: invalid label key "`+key+`": the prefix segment "`+segment+`" must be no more than 63 characters`)
+				return
+			}
+			require.NoError(t, err)
+
+			var autoscalingRunnerSet v1alpha1.AutoscalingRunnerSet
+			helm.UnmarshalK8SYaml(t, output, &autoscalingRunnerSet)
+			assert.Equal(t, "yes", autoscalingRunnerSet.Spec.Template.Labels[key])
+		})
 	}
-
-	output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
-
-	var autoscalingRunnerSet v1alpha1.AutoscalingRunnerSet
-	helm.UnmarshalK8SYaml(t, output, &autoscalingRunnerSet)
-
-	assert.Equal(t, "yes", autoscalingRunnerSet.Spec.Template.Labels[key])
 }
