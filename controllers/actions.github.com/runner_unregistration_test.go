@@ -264,7 +264,9 @@ func TestRegisteredRunnerID(t *testing.T) {
 					SecretResolver: &stubSecretResolver{client: tc.actionsClient, err: tc.actionsErr},
 				},
 			}
-			runnerID, err := reconciler.registeredRunnerID(t.Context(), runner, logr.Discard())
+			runnerID, err := reconciler.registeredRunnerID(t.Context(), runner, func() (multiclient.Client, error) {
+				return reconciler.GetActionsService(t.Context(), runner)
+			}, logr.Discard())
 			if tc.wantErr {
 				require.Error(t, err)
 				return

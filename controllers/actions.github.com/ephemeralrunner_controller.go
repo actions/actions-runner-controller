@@ -27,6 +27,7 @@ import (
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/metrics"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/scaleset"
 	"github.com/go-logr/logr"
@@ -157,28 +158,31 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			if runnerSelfDeregistered(&ephemeralRunner) {
 				log.Info("Runner exited successfully and deregistered itself, skipping its removal from the service")
 			} else {
+				getActionsClient := sync.OnceValues(func() (multiclient.Client, error) {
+					return r.GetActionsService(ctx, &ephemeralRunner)
+				})
 				// Resolved before the finalizer goes, because recovering an ID the
 				// status never recorded reads the jitconfig secret, which the
 				// cleanup below deletes.
-				id, err := r.registeredRunnerID(ctx, &ephemeralRunner, log)
+				id, err := r.registeredRunnerID(ctx, &ephemeralRunner, getActionsClient, log)
 				if err != nil {
 					log.Error(err, "Failed to resolve the registration of an ephemeral runner being deleted")
 					return ctrl.Result{}, err
 				}
 				runnerID = id
-			}
 
-			if runnerID != 0 {
-				removed, err := r.removeRunnerOfLivePod(ctx, &ephemeralRunner, runnerID, log)
-				switch {
-				case errors.Is(err, scaleset.JobStillRunningError):
-					log.Info("Runner is still running a job, keeping its pod", "runnerId", runnerID, "requeueAfter", busyRunnerRequeueInterval)
-					return ctrl.Result{RequeueAfter: busyRunnerRequeueInterval}, nil
-				case err != nil:
-					log.Error(err, "Failed to remove the runner of a live pod from the service", "runnerId", runnerID)
-					return ctrl.Result{}, err
-				case removed:
-					runnerID = 0
+				if runnerID != 0 {
+					removed, err := r.removeRunnerOfLivePod(ctx, &ephemeralRunner, runnerID, getActionsClient, log)
+					switch {
+					case errors.Is(err, scaleset.JobStillRunningError):
+						log.Info("Runner is still running a job, keeping its pod", "runnerId", runnerID, "requeueAfter", busyRunnerRequeueInterval)
+						return ctrl.Result{RequeueAfter: busyRunnerRequeueInterval}, nil
+					case err != nil:
+						log.Error(err, "Failed to remove the runner of a live pod from the service", "runnerId", runnerID)
+						return ctrl.Result{}, err
+					case removed:
+						runnerID = 0
+					}
 				}
 			}
 
@@ -328,12 +332,24 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		initialRunnerName string
 	)
 	if ephemeralRunner.Status.RunnerID == 0 {
-		runnerID, err := strconv.Atoi(string(secret.Data["runnerId"]))
+		runnerID, err := runnerIDFromJITSecret(secret)
 		if err != nil {
-			log.Error(err, "Runner config secret is corrupted: missing runnerId")
+			log.Error(err, "Runner config secret contains an invalid runner ID")
+			// Replacing a secret already used by a pod could associate a new
+			// registration with a live runner. Only regenerate before it starts.
+			if r.APIReader == nil {
+				return ctrl.Result{}, fmt.Errorf("cannot safely replace jitconfig secret without APIReader: %w", err)
+			}
+			podErr := r.APIReader.Get(ctx, req.NamespacedName, new(corev1.Pod))
+			if podErr == nil {
+				return ctrl.Result{}, err
+			}
+			if !kerrors.IsNotFound(podErr) {
+				return ctrl.Result{}, fmt.Errorf("failed to check runner pod before replacing invalid jitconfig secret: %w", podErr)
+			}
 			log.Info("Deleting corrupted runner config secret")
 			if err := r.Delete(ctx, secret); err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to delete the corrupted runner config secret")
+				return ctrl.Result{}, fmt.Errorf("failed to delete the corrupted runner config secret: %w", err)
 			}
 			log.Info("Corrupted runner config secret has been deleted")
 			return ctrl.Result{RequeueAfter: 500 * time.Millisecond}, nil
@@ -732,7 +748,9 @@ func (r *EphemeralRunnerReconciler) queueUnregistration(ctx context.Context, eph
 	if runnerSelfDeregistered(ephemeralRunner) {
 		log.Info("Runner exited successfully and deregistered itself, skipping its removal from the service")
 	} else {
-		id, err := r.registeredRunnerID(ctx, ephemeralRunner, log)
+		id, err := r.registeredRunnerID(ctx, ephemeralRunner, func() (multiclient.Client, error) {
+			return r.GetActionsService(ctx, ephemeralRunner)
+		}, log)
 		if err != nil {
 			return err
 		}
@@ -1106,7 +1124,7 @@ func ephemeralRunnerMetricLabels(ephemeralRunner *v1alpha1.EphemeralRunner) (met
 // open, because answering 0 would drop the finalizer and lose the last record
 // of a registration that does exist. Invalid IDs are errors, not evidence that
 // the runner was never registered.
-func (r *EphemeralRunnerReconciler) registeredRunnerID(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) (int, error) {
+func (r *EphemeralRunnerReconciler) registeredRunnerID(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, getActionsClient func() (multiclient.Client, error), log logr.Logger) (int, error) {
 	if ephemeralRunner.Status.RunnerID < 0 {
 		return 0, fmt.Errorf("invalid runner ID in status: %d", ephemeralRunner.Status.RunnerID)
 	}
@@ -1120,7 +1138,7 @@ func (r *EphemeralRunnerReconciler) registeredRunnerID(ctx context.Context, ephe
 			return 0, fmt.Errorf("failed to read the jitconfig secret of a runner without a recorded ID: %w", err)
 		}
 
-		actionsClient, err := r.GetActionsService(ctx, ephemeralRunner)
+		actionsClient, err := getActionsClient()
 		if err != nil {
 			return 0, fmt.Errorf("failed to get actions client for a runner without a recorded ID or jitconfig secret: %w", err)
 		}
@@ -1149,6 +1167,16 @@ func (r *EphemeralRunnerReconciler) registeredRunnerID(ctx context.Context, ephe
 		return existingRunner.ID, nil
 	}
 
+	runnerID, err := runnerIDFromJITSecret(secret)
+	if err != nil {
+		return 0, err
+	}
+
+	log.Info("Recovered the runner ID from the jitconfig secret", "runnerId", runnerID)
+	return runnerID, nil
+}
+
+func runnerIDFromJITSecret(secret *corev1.Secret) (int, error) {
 	runnerID, err := strconv.Atoi(string(secret.Data["runnerId"]))
 	if err != nil {
 		return 0, fmt.Errorf("invalid runner ID in jitconfig secret: %w", err)
@@ -1156,8 +1184,6 @@ func (r *EphemeralRunnerReconciler) registeredRunnerID(ctx context.Context, ephe
 	if runnerID <= 0 {
 		return 0, fmt.Errorf("invalid runner ID in jitconfig secret: %d", runnerID)
 	}
-
-	log.Info("Recovered the runner ID from the jitconfig secret", "runnerId", runnerID)
 	return runnerID, nil
 }
 
@@ -1169,7 +1195,7 @@ func (r *EphemeralRunnerReconciler) registeredRunnerID(ctx context.Context, ephe
 // refusal is returned as scaleset.JobStillRunningError so the pod can be kept.
 // Nothing here waits on the service when the pod is gone, being deleted, or
 // has nothing left running.
-func (r *EphemeralRunnerReconciler) removeRunnerOfLivePod(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, runnerID int, log logr.Logger) (bool, error) {
+func (r *EphemeralRunnerReconciler) removeRunnerOfLivePod(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, runnerID int, getActionsClient func() (multiclient.Client, error), log logr.Logger) (bool, error) {
 	if r.APIReader == nil {
 		return false, errors.New("APIReader is not configured, cannot confirm the runner pod state without reading through the cache")
 	}
@@ -1188,7 +1214,7 @@ func (r *EphemeralRunnerReconciler) removeRunnerOfLivePod(ctx context.Context, e
 		return false, nil
 	}
 
-	actionsClient, err := r.GetActionsService(ctx, ephemeralRunner)
+	actionsClient, err := getActionsClient()
 	if err != nil {
 		return false, fmt.Errorf("failed to get actions client: %w", err)
 	}

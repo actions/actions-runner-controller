@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	scalefake "github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient/fake"
 	"github.com/actions/scaleset"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -15,6 +16,186 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 )
+
+func TestReconcileValidatesJITIdentityBeforePublication(t *testing.T) {
+	for _, podState := range []string{"absent", "live", "live but missing from cache"} {
+		t.Run(podState, func(t *testing.T) {
+			for _, value := range []string{"", "not-an-id", "0", "-1", "99999999999999999999999999"} {
+				t.Run("id="+value, func(t *testing.T) {
+					f := newUnrecordedRunnerIDFixture(t, 0)
+					if podState == "absent" {
+						require.NoError(t, f.c.Delete(t.Context(), f.pod()))
+					}
+					if podState == "live but missing from cache" {
+						f.runnerController.Client = interceptor.NewClient(f.c, interceptor.Funcs{
+							Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+								if _, ok := obj.(*corev1.Pod); ok {
+									return kerrors.NewNotFound(corev1.Resource("pods"), key.Name)
+								}
+								return c.Get(ctx, key, obj, opts...)
+							},
+						})
+					}
+					secret := new(corev1.Secret)
+					require.NoError(t, f.c.Get(t.Context(), f.runnerKey, secret))
+					secret.Data["runnerId"] = []byte(value)
+					require.NoError(t, f.c.Update(t.Context(), secret))
+
+					result, err := f.reconcileRunner()
+					if podState == "absent" {
+						require.NoError(t, err)
+						require.Equal(t, 500*time.Millisecond, result.RequeueAfter)
+						require.Nil(t, f.pod(), "invalid identity must not reach a new pod")
+						require.True(t, kerrors.IsNotFound(f.c.Get(t.Context(), f.runnerKey, new(corev1.Secret))))
+					} else {
+						require.ErrorContains(t, err, "invalid runner ID")
+						f.requirePodKept()
+						preserved := new(corev1.Secret)
+						require.NoError(t, f.c.Get(t.Context(), f.runnerKey, preserved))
+						require.Equal(t, value, string(preserved.Data["runnerId"]))
+					}
+					require.Zero(t, f.runner().Status.RunnerID, "invalid identity must not become sticky in status")
+					require.Empty(t, f.removals)
+					require.Empty(t, f.queue.queued())
+
+					secret.Data["runnerId"] = []byte("7")
+					if podState == "absent" {
+						secret.ResourceVersion = ""
+						require.NoError(t, f.c.Create(t.Context(), secret))
+					} else {
+						require.NoError(t, f.c.Update(t.Context(), secret))
+					}
+					f.runnerController.Client = f.c
+					if podState == "absent" {
+						_, err = f.reconcileRunner()
+						require.NoError(t, err)
+						require.NotNil(t, f.pod())
+						require.Zero(t, f.runner().Status.RunnerID)
+					}
+					_, err = f.reconcileRunner()
+					require.NoError(t, err)
+					require.Equal(t, unrecordedTestRunnerID, f.runner().Status.RunnerID)
+				})
+			}
+		})
+	}
+}
+
+func TestRunnerFinalizerReusesActionsClientRecoveredByName(t *testing.T) {
+	f := newUnrecordedRunnerIDFixture(t, 0)
+	secret := new(corev1.Secret)
+	require.NoError(t, f.c.Get(t.Context(), f.runnerKey, secret))
+	require.NoError(t, f.c.Delete(t.Context(), secret))
+	require.NoError(t, f.c.Delete(t.Context(), f.runner()))
+
+	for _, reply := range []error{errUnrecordedTestJobStillRunning, nil} {
+		service := scalefake.NewClient(
+			scalefake.WithGetRunnerByName(&scaleset.RunnerReference{
+				ID: unrecordedTestRunnerID, RunnerScaleSetID: 1, Name: f.runnerKey.Name,
+			}, nil),
+			scalefake.WithRemoveRunnerFunc(func(_ context.Context, id int64) error {
+				require.Equal(t, int64(unrecordedTestRunnerID), id)
+				f.removals = append(f.removals, id)
+				return reply
+			}),
+		)
+		resolver := NewMockSecretResolver(t)
+		resolver.EXPECT().GetActionsService(mock.Anything, mock.Anything).Return(service, nil).Once()
+		f.runnerController.SecretResolver = resolver
+
+		result, err := f.reconcileRunner()
+		require.NoError(t, err)
+		resolver.AssertExpectations(t)
+		require.Empty(t, f.queue.queued())
+		if reply != nil {
+			require.Equal(t, busyRunnerRequeueInterval, result.RequeueAfter)
+			f.requirePodKept()
+			require.Contains(t, f.runner().Finalizers, ephemeralRunnerActionsFinalizerName)
+		} else {
+			require.Zero(t, result.RequeueAfter)
+			require.Nil(t, f.pod())
+			require.Nil(t, f.runner())
+		}
+	}
+	require.Equal(t, []int64{unrecordedTestRunnerID, unrecordedTestRunnerID}, f.removals)
+}
+
+func TestReconcilePreservesInvalidJITSecretOnPodReadError(t *testing.T) {
+	for _, configured := range []bool{true, false} {
+		name := "reader not configured"
+		if configured {
+			name = "pod read failed"
+		}
+		t.Run(name, func(t *testing.T) {
+			f := newUnrecordedRunnerIDFixture(t, 0)
+			secret := new(corev1.Secret)
+			require.NoError(t, f.c.Get(t.Context(), f.runnerKey, secret))
+			secret.Data["runnerId"] = []byte("-1")
+			require.NoError(t, f.c.Update(t.Context(), secret))
+			readErr := kerrors.NewServiceUnavailable("pod state is unavailable")
+			if configured {
+				f.runnerController.APIReader = interceptor.NewClient(f.c, interceptor.Funcs{
+					Get: func(context.Context, client.WithWatch, client.ObjectKey, client.Object, ...client.GetOption) error {
+						return readErr
+					},
+				})
+			} else {
+				f.runnerController.APIReader = nil
+			}
+
+			_, err := f.reconcileRunner()
+			require.Error(t, err)
+			if configured {
+				require.ErrorIs(t, err, readErr)
+			}
+			require.NoError(t, f.c.Get(t.Context(), f.runnerKey, secret))
+			require.Equal(t, "-1", string(secret.Data["runnerId"]))
+			require.Zero(t, f.runner().Status.RunnerID)
+			f.requirePodKept()
+		})
+	}
+}
+
+func TestRunnerFinalizerDoesNotResolveUnusedActionsClient(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		runnerID  int
+		succeeded bool
+	}{
+		{name: "self deregistered", succeeded: true},
+		{name: "terminated pod with recorded ID", runnerID: unrecordedTestRunnerID},
+		{name: "terminated pod with ID in secret"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newUnrecordedRunnerIDFixture(t, 0)
+			runner := f.runner()
+			runner.Status.RunnerID = tc.runnerID
+			if tc.succeeded {
+				runner.Status.Phase = v1alpha1.EphemeralRunnerPhaseSucceeded
+			}
+			require.NoError(t, f.c.Status().Update(t.Context(), runner))
+			pod := f.pod()
+			pod.Status.ContainerStatuses[0].Ready = false
+			pod.Status.ContainerStatuses[0].State = corev1.ContainerState{
+				Terminated: &corev1.ContainerStateTerminated{},
+			}
+			require.NoError(t, f.c.Status().Update(t.Context(), pod))
+			f.runnerController.SecretResolver = NewMockSecretResolver(t)
+			require.NoError(t, f.c.Delete(t.Context(), runner))
+
+			_, err := f.reconcileRunner()
+			require.NoError(t, err)
+			require.Nil(t, f.runner())
+			require.Nil(t, f.pod())
+			if tc.succeeded {
+				require.Empty(t, f.queue.queued())
+			} else {
+				require.Len(t, f.queue.queued(), 1)
+				require.Equal(t, unrecordedTestRunnerID, f.queue.queued()[0].runnerID)
+			}
+		})
+	}
+}
 
 func TestRunnerFinalizerDoesNotTrustStalePodCache(t *testing.T) {
 	for _, cachedState := range []string{"missing", "terminated"} {
