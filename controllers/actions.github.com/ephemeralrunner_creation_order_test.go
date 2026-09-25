@@ -163,9 +163,10 @@ func TestReconcileRejectsMalformedJITSecretBeforeCreatingPod(t *testing.T) {
 		Build()
 
 	reconciler := &EphemeralRunnerReconciler{
-		Client: c,
-		Log:    logr.Discard(),
-		Scheme: scheme,
+		Client:    c,
+		APIReader: c,
+		Log:       logr.Discard(),
+		Scheme:    scheme,
 		ResourceBuilder: ResourceBuilder{
 			Scheme: scheme,
 		},

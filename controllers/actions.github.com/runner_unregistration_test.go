@@ -146,6 +146,10 @@ func TestRegisteredRunnerID(t *testing.T) {
 			runnerID: 1,
 			want:     1,
 		},
+		"negative status ID is not a registration": {
+			runnerID: -1,
+			wantErr:  true,
+		},
 		"the status is preferred over the secret": {
 			runnerID: 1,
 			secret:   map[string][]byte{"runnerId": []byte("7")},
@@ -182,13 +186,39 @@ func TestRegisteredRunnerID(t *testing.T) {
 			)),
 			wantErr: true,
 		},
+		"matching registration has a zero ID": {
+			actionsClient: fake.NewClient(fake.WithGetRunnerByName(
+				&scaleset.RunnerReference{RunnerScaleSetID: 1},
+				nil,
+			)),
+			wantErr: true,
+		},
+		"matching registration has a negative ID": {
+			actionsClient: fake.NewClient(fake.WithGetRunnerByName(
+				&scaleset.RunnerReference{ID: -1, RunnerScaleSetID: 1},
+				nil,
+			)),
+			wantErr: true,
+		},
 		"runner whose Actions client cannot be resolved": {
 			actionsErr: errors.New("configuration cannot be read"),
 			wantErr:    true,
 		},
 		"runner whose secret cannot name a registration": {
-			secret: map[string][]byte{"runnerId": []byte("not-a-number")},
-			want:   0,
+			secret:  map[string][]byte{"runnerId": []byte("not-a-number")},
+			wantErr: true,
+		},
+		"runner whose secret has no ID": {
+			secret:  map[string][]byte{},
+			wantErr: true,
+		},
+		"runner whose secret has a zero ID": {
+			secret:  map[string][]byte{"runnerId": []byte("0")},
+			wantErr: true,
+		},
+		"runner whose secret has a negative ID": {
+			secret:  map[string][]byte{"runnerId": []byte("-1")},
+			wantErr: true,
 		},
 		// An unreadable secret is not an answer. Reporting 0 would drop the
 		// finalizer and lose the last record of a registration that may exist.
@@ -234,7 +264,9 @@ func TestRegisteredRunnerID(t *testing.T) {
 					SecretResolver: &stubSecretResolver{client: tc.actionsClient, err: tc.actionsErr},
 				},
 			}
-			runnerID, err := reconciler.registeredRunnerID(t.Context(), runner, logr.Discard())
+			runnerID, err := reconciler.registeredRunnerID(t.Context(), runner, func() (multiclient.Client, error) {
+				return reconciler.GetActionsService(t.Context(), runner)
+			}, logr.Discard())
 			if tc.wantErr {
 				require.Error(t, err)
 				return

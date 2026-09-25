@@ -366,8 +366,25 @@ function retry() {
 }
 
 function install_openebs() {
-    log "Install openebs/dynamic-localpv-provisioner"
-    helm repo add openebs https://openebs.github.io/openebs
-    helm repo update
-    helm install openebs openebs/openebs -n openebs --create-namespace
+    log "Installing OpenEBS 4.6.1 with LocalPV Hostpath only"
+    helm repo add openebs https://openebs.github.io/openebs || return 1
+    helm repo update openebs || return 1
+
+    # The tests need openebs-hostpath, not the other storage engines or Loki/MinIO.
+    if ! helm install openebs openebs/openebs -n openebs --create-namespace \
+        --version 4.6.1 \
+        --set engines.local.lvm.enabled=false \
+        --set engines.local.zfs.enabled=false \
+        --set engines.replicated.mayastor.enabled=false \
+        --set loki.enabled=false \
+        --set alloy.enabled=false \
+        --wait --timeout 5m; then
+        log "OpenEBS installation failed; collecting diagnostics"
+        kubectl get pods,pvc,jobs -n openebs -o wide || log "Failed to list OpenEBS resources"
+        kubectl describe pods -n openebs || log "Failed to describe OpenEBS pods"
+        kubectl get events -n openebs --sort-by=.metadata.creationTimestamp || log "Failed to list OpenEBS events"
+        kubectl logs -n openebs -l openebs.io/component-name=openebs-localpv-provisioner \
+            --all-containers --tail=100 || log "Failed to get OpenEBS provisioner logs"
+        return 1
+    fi
 }
