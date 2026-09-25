@@ -38,8 +38,6 @@ The way the merge will work is:
    1. If the container name is "listener", values specified for that container are going to be merged with the default listener container spec. The name "listener" serves just as an indicator that the container spec should be merged with the listener container. Name will be overwritten by the controller. All fields are optional, and non-null fields are merged as described above.
    2. If the container name is **not** "listener", the spec provided for that container will be appended to the `pod.spec.containers` without any modifications. Fields that must be specified are the required fields for the kubernetes container spec.
 
-During reconciliation, regular containers are compared by name rather than position in `spec.containers`. Adding an admission-injected sidecar alone does not cause pod recreation, whether it is inserted before, between, or after the expected containers. Missing expected containers and mismatches in specified container fields still cause recreation. Init-container ordering remains significant.
-
 ### Pros:
 
 - Env `CONTROLLER_MANAGER_LISTENER_IMAGE_PULL_POLICY` can be removed as a global configuration for building Autoscaling listener resources
