@@ -100,6 +100,7 @@ secretResolution:
 #   runnerMountPath: /usr/local/share/ca-certificates/
 
 ## Resource object allows modifying resources created by the chart itself
+## Labels and annotations are independently optional for each resource.
 resource:
   # Specifies metadata that will be applied to all resources managed by ARC
   all:
