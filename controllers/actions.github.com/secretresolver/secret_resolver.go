@@ -56,12 +56,12 @@ func New(k8sClient client.Client, scalesetMultiClient multiclient.MultiClient, o
 func (sr *SecretResolver) GetAppConfig(ctx context.Context, obj object.ActionsGitHubObject) (*appconfig.AppConfig, error) {
 	resolver, err := sr.resolverForObject(ctx, obj)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get resolver for object: %v", err)
+		return nil, fmt.Errorf("failed to get resolver for object: %w", err)
 	}
 
 	appConfig, err := resolver.appConfig(ctx, obj.GitHubConfigSecret())
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve app config: %v", err)
+		return nil, fmt.Errorf("failed to resolve app config: %w", err)
 	}
 
 	return appConfig, nil
@@ -70,12 +70,12 @@ func (sr *SecretResolver) GetAppConfig(ctx context.Context, obj object.ActionsGi
 func (sr *SecretResolver) GetActionsService(ctx context.Context, obj object.ActionsGitHubObject) (multiclient.Client, error) {
 	resolver, err := sr.resolverForObject(ctx, obj)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get resolver for object: %v", err)
+		return nil, fmt.Errorf("failed to get resolver for object: %w", err)
 	}
 
 	appConfig, err := resolver.appConfig(ctx, obj.GitHubConfigSecret())
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve app config: %v", err)
+		return nil, fmt.Errorf("failed to resolve app config: %w", err)
 	}
 
 	var proxyFunc func(req *http.Request) (*url.URL, error)
@@ -93,7 +93,7 @@ func (sr *SecretResolver) GetActionsService(ctx context.Context, obj object.Acti
 			if ref := proxy.HTTP.CredentialSecretRef; ref != "" {
 				u.User, err = resolver.proxyCredentials(ctx, ref)
 				if err != nil {
-					return nil, fmt.Errorf("failed to resolve proxy credentials: %v", err)
+					return nil, fmt.Errorf("failed to resolve proxy credentials: %w", err)
 				}
 			}
 
@@ -109,7 +109,7 @@ func (sr *SecretResolver) GetActionsService(ctx context.Context, obj object.Acti
 			if ref := proxy.HTTPS.CredentialSecretRef; ref != "" {
 				u.User, err = resolver.proxyCredentials(ctx, ref)
 				if err != nil {
-					return nil, fmt.Errorf("failed to resolve proxy credentials: %v", err)
+					return nil, fmt.Errorf("failed to resolve proxy credentials: %w", err)
 				}
 			}
 
@@ -225,7 +225,7 @@ func (r *k8sResolver) appConfig(ctx context.Context, key string) (*appconfig.App
 		nsName,
 		secret,
 	); err != nil {
-		return nil, fmt.Errorf("failed to get kubernetes secret: %q", nsName.String())
+		return nil, fmt.Errorf("failed to get kubernetes secret %q: %w", nsName.String(), err)
 	}
 
 	return appconfig.FromSecret(secret)
@@ -239,7 +239,7 @@ func (r *k8sResolver) proxyCredentials(ctx context.Context, key string) (*url.Us
 		nsName,
 		secret,
 	); err != nil {
-		return nil, fmt.Errorf("failed to get kubernetes secret: %q", nsName.String())
+		return nil, fmt.Errorf("failed to get kubernetes secret %q: %w", nsName.String(), err)
 	}
 
 	return url.UserPassword(
