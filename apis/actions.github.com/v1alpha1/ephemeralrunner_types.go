@@ -182,6 +182,26 @@ type EphemeralRunnerStatus struct {
 
 	// +optional
 	JobDisplayName string `json:"jobDisplayName,omitempty"`
+
+	// JobEventName is the name of the event that triggered the workflow run of
+	// the job assigned to this runner, e.g. push, pull_request or schedule.
+	// +optional
+	JobEventName string `json:"jobEventName,omitempty"`
+
+	// JobQueuedAt is the time the Actions service queued the job assigned to
+	// this runner. It is left unset when the service does not report it.
+	// +optional
+	JobQueuedAt *metav1.Time `json:"jobQueuedAt,omitempty"`
+
+	// JobScaleSetAssignedAt is the time the Actions service assigned the job to
+	// the runner scale set. It is left unset when the service does not report it.
+	// +optional
+	JobScaleSetAssignedAt *metav1.Time `json:"jobScaleSetAssignedAt,omitempty"`
+
+	// JobRunnerAssignedAt is the time the Actions service assigned the job to
+	// this runner. It is left unset when the service does not report it.
+	// +optional
+	JobRunnerAssignedAt *metav1.Time `json:"jobRunnerAssignedAt,omitempty"`
 }
 
 // EphemeralRunnerPhase is the phase of the ephemeral runner.
