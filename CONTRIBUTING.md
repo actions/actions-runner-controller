@@ -101,6 +101,11 @@ NAME=$DOCKER_USER/actions-runner make \
 A set of example pipelines (./acceptance/pipelines) are provided in this repository which you can use to validate your runners are working as expected.
 When raising a PR please run the relevant suites to prove your change hasn't broken anything.
 
+Go chart tests and controller chart-contract tests require the `helm` CLI on `PATH`.
+Install the version listed under [Helm Version Changes](#helm-version-changes)
+before running `go test ./...` or `make test`. The make targets provision envtest,
+not Helm; the helm-unittest plugin is not required for Go tests.
+
 #### Running Ginkgo Tests
 You can run the integration test suite that is written in Ginkgo with:
 
@@ -201,7 +206,8 @@ Send PR, add issue number to description
 In general we ask you not to bump the version in your PR.
 The maintainers will manage releases and publishing new charts.
 
-The scale-set chart validation and publishing workflows use Helm CLI v4.2.2.
+The Go test job and scale-set chart validation and publishing workflows use
+Helm CLI v4.2.2.
 Keep their `HELM_VERSION` pins aligned when updating the CLI. Validation uses
 helm-unittest v1.1.2 from its signed release archive; the workflow verifies it
 with the pinned upstream signing key. Legacy ARC workflows retain their separate

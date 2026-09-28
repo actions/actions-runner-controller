@@ -5,15 +5,20 @@ on:
       - master
     paths:
       - ".github/workflows/go.yaml"
+      - "charts/gha-runner-scale-set*/**"
       - "**.go"
       - "go.mod"
       - "go.sum"
   pull_request:
     paths:
       - ".github/workflows/go.yaml"
+      - "charts/gha-runner-scale-set*/**"
       - "**.go"
       - "go.mod"
       - "go.sum"
+
+env:
+  HELM_VERSION: v4.2.2
 
 permissions:
   contents: read
@@ -86,6 +91,10 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: "go.mod"
+      - name: Set up Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310
+        with:
+          version: ${{ env.HELM_VERSION }}
       - run: make manifests
       - name: Check diff
         run: git diff --exit-code
