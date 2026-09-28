@@ -93,6 +93,8 @@ priorityClassName: ""
 ## This will disable metrics.
 ##
 ## To enable metrics, uncomment the following lines.
+## Set controllerManagerAddr to "0" to disable only controller metrics while
+## keeping listener metrics enabled; no controller metrics containerPort is emitted.
 # metrics:
 #   controllerManagerAddr: ":8080"
 #   listenerAddr: ":8080"
