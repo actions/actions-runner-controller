@@ -1675,6 +1675,7 @@ var _ = Describe("EphemeralRunner", func() {
 
 			controller = &EphemeralRunnerReconciler{
 				Client:              k8sClient,
+				APIReader:           k8sClient,
 				Scheme:              mgr.GetScheme(),
 				Log:                 logf.Log,
 				UnregistrationQueue: queue,
@@ -1788,12 +1789,17 @@ var _ = Describe("EphemeralRunner", func() {
 			ephemeralRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
 			Expect(k8sClient.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original))).To(Succeed())
 
-			Expect(k8sClient.Create(ctx, &corev1.Pod{
+			runnerPod := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: autoscalingNS.Name},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{Name: v1alpha1.EphemeralRunnerContainerName, Image: "ghcr.io/actions/actions-runner"}},
 				},
-			})).To(Succeed())
+			}
+			Expect(k8sClient.Create(ctx, runnerPod)).To(Succeed())
+			// Nothing is left running in the pod, so the removal is handed to the
+			// workers rather than asked for before the pod goes.
+			runnerPod.Status.Phase = corev1.PodFailed
+			Expect(k8sClient.Status().Update(ctx, runnerPod)).To(Succeed())
 			Expect(k8sClient.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: autoscalingNS.Name},
 				Data:       map[string][]byte{jitTokenKey: []byte("jit")},
