@@ -115,6 +115,7 @@ jobs:
             "${RUNNER_TEMP}/helm-unittest-key.asc"
           helm plugin install \
             "https://github.com/helm-unittest/helm-unittest/releases/download/v${HELM_UNITTEST_VERSION}/unittest-${HELM_UNITTEST_VERSION}.tgz" \
+            --verify \
             --keyring "${RUNNER_TEMP}/helm-unittest-keyring.gpg"
 
       - name: Run helm-unittest (gha-runner-scale-set-controller-experimental)
