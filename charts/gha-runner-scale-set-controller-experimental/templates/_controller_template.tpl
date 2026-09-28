@@ -97,8 +97,11 @@ args:
 {{- end }}
 {{- $ports := list -}}
 {{- if .Values.controller.metrics }}
-{{- $metricsPort := dict "containerPort" ((regexReplaceAll ":([0-9]+)" .Values.controller.metrics.controllerManagerAddr "${1}") | int) "protocol" "TCP" "name" "metrics" -}}
+{{- $port := include "gha-controller.metrics-port" .Values.controller.metrics.controllerManagerAddr -}}
+{{- if $port }}
+{{- $metricsPort := dict "containerPort" (int $port) "protocol" "TCP" "name" "metrics" -}}
 {{- $ports = append $ports $metricsPort -}}
+{{- end }}
 {{- end }}
 {{- with .Values.controller.manager.container.extraPorts }}
 {{- if kindIs "slice" . }}

@@ -18,7 +18,8 @@ on:
   workflow_dispatch:
 env:
   KUBE_SCORE_VERSION: 1.16.1
-  HELM_VERSION: v3.19.4
+  HELM_VERSION: v4.2.2
+  HELM_UNITTEST_VERSION: 1.1.2
 
 permissions:
   contents: read
@@ -105,7 +106,17 @@ jobs:
 
       - name: Install helm-unittest
         run: |
-          helm plugin install https://github.com/helm-unittest/helm-unittest.git
+          # Pin the upstream signing key independently of the release download.
+          curl --fail --silent --show-error --location \
+            https://raw.githubusercontent.com/helm-unittest/helm-unittest/33c48cac798e465deda9a66c8e6c07c0973cf53d/public-key.asc \
+            --output "${RUNNER_TEMP}/helm-unittest-key.asc"
+          gpg --batch --yes --dearmor \
+            --output "${RUNNER_TEMP}/helm-unittest-keyring.gpg" \
+            "${RUNNER_TEMP}/helm-unittest-key.asc"
+          helm plugin install \
+            "https://github.com/helm-unittest/helm-unittest/releases/download/v${HELM_UNITTEST_VERSION}/unittest-${HELM_UNITTEST_VERSION}.tgz" \
+            --verify \
+            --keyring "${RUNNER_TEMP}/helm-unittest-keyring.gpg"
 
       - name: Run helm-unittest (gha-runner-scale-set-controller-experimental)
         run: |
@@ -125,3 +136,6 @@ jobs:
 
       - name: Test gha-runner-scale-set-controller
         run: go test ./charts/gha-runner-scale-set-controller/...
+
+      - name: Test gha-runner-scale-set-experimental
+        run: go test ./charts/gha-runner-scale-set-experimental/...

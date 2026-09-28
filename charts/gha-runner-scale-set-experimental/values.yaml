@@ -41,7 +41,7 @@ secretResolution:
   # Name of the secret resolver to use.
   # Available values:
   # - "kubernetes" - use Kubernetes secrets
-  # - "azureKeyVault" - use Azure Key Vault
+  # - "azureKeyVault" - use Azure Key Vault (rendered as the API type "azure_key_vault")
   type: "kubernetes"
   ## Proxy settings when type is NOT "kubernetes"
   # proxy:
@@ -55,12 +55,15 @@ secretResolution:
   #     - example.com
   #     - example.org
 
-  ## Configuration for Azure Key Vault integration
+  ## Configuration for Azure Key Vault integration.
+  ## auth.secretName selects the Azure secret containing the GitHub app/token configuration.
+  ## azureKeyVault.secretKey is not supported; it was never used by the API/resolver
+  ## and is now rejected rather than silently ignored. Set auth.secretName explicitly.
   # azureKeyVault:
   #   url: ""
-  #   client_id: ""
-  #   tenant_id: ""
-  #   certificate_path: ""
+  #   clientId: ""
+  #   tenantId: ""
+  #   certificatePath: ""
 
 ## Proxy can be used to define proxy settings that will be used by the
 ## controller, the listener and the runner of this scale set.
@@ -226,6 +229,7 @@ runner:
     # - spec.containers: appended after the generated "runner" container (name "runner" is reserved)
     # - spec.initContainers: appended after any generated initContainers (e.g. dind mode)
     # - spec.volumes: appended after generated volumes
+    # - spec.restartPolicy: defaults to Never; an explicit Kubernetes restart policy is preserved
     #
     # Note: serviceAccountName is managed by the chart and cannot be overridden via runner.pod.spec.
     spec:
@@ -234,7 +238,15 @@ runner:
       initContainers: []
       volumes: []
 
-  # container field is applied to the container named "runner". You cannot override the name of the runner container
+  # Applied to the container named "runner" in every mode; its name cannot be overridden.
+  # image and command use the defaults below when omitted. Other container fields
+  # (e.g. resources, securityContext, args) are passed through, including false/zero values.
+  # env entries replace mode defaults by name; volumeMounts replace them by mountPath.
+  # Replacements are whole entries, not merged maps. Unspecified mode defaults remain.
+  # TLS defaults also respect an existing mount named github-server-tls-cert.
+  # Duplicate env names or mountPaths within a list are rejected.
+  # Overrides of Docker/hook env or mounts must remain compatible with the selected mode.
+  # In dind/kubernetes mode, the older runner.env is still read, but container.env takes precedence.
   container:
     image: "ghcr.io/actions/actions-runner:latest"
     command: ["/home/runner/run.sh"]

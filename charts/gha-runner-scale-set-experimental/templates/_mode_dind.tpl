@@ -1,21 +1,7 @@
 {{- define "runner-mode-dind.runner-container" -}}
-name: runner
-image: {{ include "runner.image" . | quote }}
-command: {{ include "runner.command" . }}
-env:
-  - {{ include "runner-mode-dind.env-docker-host" . | nindent 4 }}
-  - {{ include "runner-mode-dind.env-wait-for-docker-timeout" . | nindent 4 }}
-  {{/* TODO:: Should we skip DOCKER_HOST and RUNNER_WAIT_FOR_DOCKER_IN_SECONDS? */}}
-  {{- with .Values.runner.env }}
-    {{- toYaml . | nindent 2 }}
-  {{- end }}
-  {{ include "githubServerTLS.envItems" (dict "root" $ "existingEnv" (.Values.runner.env | default list)) | nindent 2 }}
-volumeMounts:
-  - name: work
-    mountPath: /home/runner/_work
-  - name: dind-sock
-    mountPath: {{ include "runner-mode-dind.sock-mount-dir" . | quote }}
-  {{ include "githubServerTLS.volumeMountItem" (dict "root" $ "existingVolumeMounts" (list)) | nindent 2 }}
+{{- $env := list (include "runner-mode-dind.env-docker-host" . | fromYaml) (include "runner-mode-dind.env-wait-for-docker-timeout" . | fromYaml) -}}
+{{- $mounts := list (dict "name" "work" "mountPath" "/home/runner/_work") (dict "name" "dind-sock" "mountPath" (include "runner-mode-dind.sock-mount-dir" .)) -}}
+{{- include "runner-container.render" (dict "root" . "env" $env "volumeMounts" $mounts "legacyEnv" .Values.runner.env) -}}
 {{- end }}
 
 {{- define "runner-mode-dind.dind-container" -}}
@@ -143,7 +129,10 @@ value: {{ $dockerSock | quote }}
 
 {{- define "runner-mode-dind.env-wait-for-docker-timeout" -}}
 {{- $dind := .Values.runner.dind | default dict -}}
-{{- $waitForDockerInSeconds := $dind.waitForDockerInSeconds | default 120 -}}
+{{- $waitForDockerInSeconds := 120 -}}
+{{- if hasKey $dind "waitForDockerInSeconds" -}}
+  {{- $waitForDockerInSeconds = $dind.waitForDockerInSeconds -}}
+{{- end -}}
 {{- if not (or (kindIs "int" $waitForDockerInSeconds) (kindIs "int64" $waitForDockerInSeconds) (kindIs "float64" $waitForDockerInSeconds)) -}}
   {{- fail "runner.dind.waitForDockerInSeconds must be a number" -}}
 {{- end -}}

@@ -40,7 +40,7 @@ on:
         default: false
 
 env:
-  HELM_VERSION: v3.8.0
+  HELM_VERSION: v4.2.2
 
 permissions:
   packages: write

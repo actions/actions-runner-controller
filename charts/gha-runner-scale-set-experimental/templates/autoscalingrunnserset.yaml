@@ -5,7 +5,7 @@
 {{- $dind := (index $runner "dind" | default dict) }}
 {{- $kubeDefaults := (index $kubeMode "default" | default true) }}
 {{- $kubeServiceAccountName := (index $kubeMode "serviceAccountName" | default "") }}
-{{- $usesKubernetesSecrets := or (not .Values.secretResolution) (eq .Values.secretResolution.type "kubernetes") }}
+{{- $usesKubernetesSecrets := eq (include "secret-resolution.type" .) "kubernetes" }}
 {{- /* All listener configuration lives under .Values.listener */ -}}
 {{- if hasKey .Values "listenerMetrics" }}
   {{- fail ".Values.listenerMetrics has moved to .Values.listener.metrics" }}
@@ -156,22 +156,20 @@ spec:
     {{- end }}
   {{- end }}
 
-  {{- if and .Values.secretResolution (ne .Values.secretResolution.type "kubernetes") }}
+  {{- if not $usesKubernetesSecrets }}
   vaultConfig:
-    type: {{ .Values.secretResolution.type }}
+    type: azure_key_vault
     {{- if .Values.secretResolution.proxy }}
     proxy: {{- toYaml .Values.secretResolution.proxy | nindent 6 }}
     {{- end }}
-    {{- if eq .Values.secretResolution.type "azureKeyVault" }}
+    {{- if hasKey (.Values.secretResolution.azureKeyVault | default dict) "secretKey" }}
+    {{- fail "secretResolution.azureKeyVault.secretKey is not supported; use auth.secretName to select the vault secret" }}
+    {{- end }}
     azureKeyVault:
       url: {{ .Values.secretResolution.azureKeyVault.url }}
       tenantId: {{ .Values.secretResolution.azureKeyVault.tenantId }}
       clientId: {{ .Values.secretResolution.azureKeyVault.clientId }}
       certificatePath: {{ .Values.secretResolution.azureKeyVault.certificatePath }}
-      secretKey: {{ .Values.secretResolution.azureKeyVault.secretKey }}
-    {{- else }}
-    {{- fail (printf "Unsupported keyVault type: %s" .Values.secretResolution.type) }}
-    {{- end }}
   {{- end }}
 
   {{- if .Values.proxy }}
@@ -310,6 +308,9 @@ spec:
     {{- end }}
     spec:
       serviceAccountName: {{ include "autoscaling-runner-set.template-service-account" . | quote }}
+      {{- if not (hasKey $runnerPodSpec "restartPolicy") }}
+      restartPolicy: Never
+      {{- end }}
       {{- if $hasInitContainers }}
       initContainers:
         {{- if and (eq $runnerMode "dind") $dind.copyRunnerExternals }}

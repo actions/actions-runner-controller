@@ -115,13 +115,19 @@ spec:
         {{- end }}
         command:
         - "/manager"
-        {{- if or .Values.metrics .Values.pprof.addr }}
+        {{- $controllerMetricsEnabled := false }}
+        {{- with .Values.metrics }}
+        {{- $controllerMetricsEnabled = ne (toString .controllerManagerAddr) "0" }}
+        {{- end }}
+        {{- if or $controllerMetricsEnabled .Values.pprof.addr }}
         ports:
         {{- end }}
+        {{- if $controllerMetricsEnabled }}
         {{- with .Values.metrics }}
         - containerPort: {{ required "Values.metrics.controllerManagerAddr must end with a numeric port" (regexFind "[0-9]+$" .controllerManagerAddr) }}
           protocol: TCP
           name: metrics
+        {{- end }}
         {{- end }}
         {{- if .Values.pprof.addr }}
         - containerPort: {{ required "Values.pprof.addr must end with a numeric port" (regexFind "[0-9]+$" .Values.pprof.addr) }}

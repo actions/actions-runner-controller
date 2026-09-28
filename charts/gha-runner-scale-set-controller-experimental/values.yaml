@@ -126,8 +126,10 @@ controller:
     volumeMounts: []
 
   # Metrics configuration. If omitted, metrics are disabled.
+  # controllerManagerAddr accepts host:port (e.g. ":8080", "127.0.0.1:8080",
+  # "[::]:8080", or "localhost:8080"), with a numeric port from 1 to 65535.
+  # Set it to "0" to disable controller metrics independently of listener metrics.
   # metrics:
   #   controllerManagerAddr: ":8080"
   #   listenerAddr: ":8080"
   #   listenerEndpoint: "/metrics"
-
