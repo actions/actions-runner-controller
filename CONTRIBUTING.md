@@ -201,6 +201,12 @@ Send PR, add issue number to description
 In general we ask you not to bump the version in your PR.
 The maintainers will manage releases and publishing new charts.
 
+The scale-set chart validation and publishing workflows use Helm CLI v4.2.2.
+Keep their `HELM_VERSION` pins aligned when updating the CLI. Validation uses
+helm-unittest v1.1.2 from its signed release archive; the workflow verifies it
+with the pinned upstream signing key. Legacy ARC workflows retain their separate
+Helm version. These CLI pins do not change chart versions or require Helm 4 for users.
+
 ## Testing Controller Built from a Pull Request
 
 We always appreciate your help in testing open pull requests by deploying custom builds of actions-runner-controller onto your own environment, so that we are extra sure we didn't break anything.
