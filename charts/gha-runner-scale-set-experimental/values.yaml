@@ -309,19 +309,13 @@ controllerServiceAccount:
 
 # listener specific configuration. This configuration is applied to the listener component of the chart.
 listener:
-  # scaler configures the listener's Kubernetes clients and job-event workers.
-  # All values must be integers greater than 0 and fit in a signed 64-bit integer.
+  # scaler is config applied to the kubernetes client component of the listener.
+  # Both values must be integers greater than 0.
   scaler:
-    # qps is the sustained Kubernetes API request rate for job-started event patches.
+    # qps is the sustained rate of requests the listener may issue to the Kubernetes API server.
     qps: 50
-    # burst is the burst limit for job-started event patches.
+    # burst is the number of requests the listener may issue to the Kubernetes API server in a burst.
     burst: 100
-    # The independent client publishing desired runner counts defaults to these
-    # values in the listener when omitted; it does not share the job-event budget.
-    # scaleQPS: 10
-    # scaleBurst: 20
-    # Maximum concurrent job-started event patches (listener default: 10).
-    # workers: 10
   ## podTemplate is the PodSpec for each listener Pod
   ## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
   # podTemplate:

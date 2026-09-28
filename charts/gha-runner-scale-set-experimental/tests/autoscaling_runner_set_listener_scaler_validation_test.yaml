@@ -8,15 +8,6 @@ set: &base
   controllerServiceAccount.name: "arc"
   controllerServiceAccount.namespace: "arc-system"
 tests:
-  - it: renders the separate scale client and worker settings alongside old settings
-    set:
-      <<: *base
-      listener.scaler: {qps: 30, burst: 60, scaleQPS: 25, scaleBurst: 50, workers: 8}
-    asserts:
-      - equal:
-          path: spec.listenerConfig.scaler
-          value: {qps: 30, burst: 60, scaleQPS: 25, scaleBurst: 50, workers: 8}
-
   - it: rejects zero qps
     set:
       <<: *base
@@ -103,7 +94,7 @@ tests:
       listener.scaler.qbs: 10
     asserts:
       - failedTemplate:
-          errorMessage: ".Values.listener.scaler.qbs is not a supported key; supported keys are: burst, qps, scaleBurst, scaleQPS, workers"
+          errorMessage: ".Values.listener.scaler.qbs is not a supported key; supported keys are: burst, qps"
 
   - it: rejects the legacy top-level listenerMetrics key
     set:

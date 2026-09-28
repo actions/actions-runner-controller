@@ -116,25 +116,6 @@ runner:
 		}
 	}
 
-	It("retains all supported scaler keys through API admission", func(ctx SpecContext) {
-		values := `
-auth:
-  url: https://github.com/example
-  secretName: existing-auth
-controllerServiceAccount:
-  name: controller
-  namespace: arc-system
-listener:
-  scaler: {qps: 30, burst: 60, scaleQPS: 25, scaleBurst: 50, workers: 8}
-`
-		var ars actionsv1alpha1.AutoscalingRunnerSet
-		Expect(yaml.UnmarshalStrict(renderAdmissionChart(ctx, "gha-runner-scale-set-experimental", "autoscalingrunnserset.yaml", namespace, values), &ars)).To(Succeed())
-		Expect(k8sClient.Create(ctx, &ars)).To(Succeed())
-		var live actionsv1alpha1.AutoscalingRunnerSet
-		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(&ars), &live)).To(Succeed())
-		Expect(live.Spec.ListenerConfig).To(Equal(ars.Spec.ListenerConfig))
-	})
-
 	for _, chart := range []string{"gha-runner-scale-set-controller", "gha-runner-scale-set-controller-experimental"} {
 		for _, address := range []string{"", ":8080", "127.0.0.1:8080", "[::]:8080", "localhost:8080", ":65535", "0"} {
 			It(fmt.Sprintf("admits %s metrics %q", chart, address), func(ctx SpecContext) {

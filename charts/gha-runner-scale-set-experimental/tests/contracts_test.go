@@ -2,7 +2,6 @@ package tests
 
 import (
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -280,57 +279,6 @@ func TestExperimentalRunnerRestartPolicy(t *testing.T) {
 			})
 		}
 	}
-}
-
-func TestExperimentalScaler(t *testing.T) {
-	for _, key := range []string{"qps", "burst", "scaleQPS", "scaleBurst", "workers"} {
-		for _, value := range []int{1, 25, 50, 8, 2147483647} {
-			t.Run(fmt.Sprintf("%s/%d", key, value), func(t *testing.T) {
-				output, err := renderContract(t, fmt.Sprintf("listener:\n  scaler:\n    %s: %d\n", key, value), nil)
-				require.NoError(t, err)
-				var ars actionsv1alpha1.AutoscalingRunnerSet
-				require.NoError(t, yaml.UnmarshalStrict([]byte(output), &ars))
-				scaler := ars.Spec.ListenerConfig.Scaler
-				got := map[string]*int{"qps": scaler.QPS, "burst": scaler.Burst, "scaleQPS": scaler.ScaleQPS, "scaleBurst": scaler.ScaleBurst, "workers": scaler.Workers}
-				require.NotNil(t, got[key])
-				assert.Equal(t, value, *got[key])
-			})
-		}
-		for _, key := range []string{"qps", "burst", "scaleQPS", "scaleBurst", "workers"} {
-			t.Run(key+"/maximum-integer", func(t *testing.T) {
-				output, err := renderContract(t, "", map[string]string{"listener.scaler." + key: "9223372036854775807"})
-				require.NoError(t, err)
-				var ars actionsv1alpha1.AutoscalingRunnerSet
-				require.NoError(t, yaml.UnmarshalStrict([]byte(output), &ars))
-				scaler := ars.Spec.ListenerConfig.Scaler
-				got := map[string]*int{"qps": scaler.QPS, "burst": scaler.Burst, "scaleQPS": scaler.ScaleQPS, "scaleBurst": scaler.ScaleBurst, "workers": scaler.Workers}
-				require.NotNil(t, got[key])
-				assert.Equal(t, int(math.MaxInt64), *got[key])
-			})
-		}
-		for _, value := range []string{`"25"`, "true", "[]", "{}", "0", "-1", "1.5", "9223372036854775808", "1e100"} {
-			t.Run(key+"/invalid/"+value, func(t *testing.T) {
-				_, err := renderContract(t, fmt.Sprintf("listener:\n  scaler:\n    %s: %s\n", key, value), nil)
-				require.ErrorContains(t, err, ".Values.listener.scaler."+key+" must be")
-				assert.NotContains(t, err.Error(), "not a supported key")
-			})
-		}
-	}
-	ars := runnerSetContract(t, "listener:\n  scaler: {qps: 30, burst: 60, scaleQPS: 25, scaleBurst: 50, workers: 8}\n", nil)
-	scaler := ars.Spec.ListenerConfig.Scaler
-	assert.Equal(t, 30, *scaler.QPS)
-	assert.Equal(t, 60, *scaler.Burst)
-	assert.Equal(t, 25, *scaler.ScaleQPS)
-	assert.Equal(t, 50, *scaler.ScaleBurst)
-	assert.Equal(t, 8, *scaler.Workers)
-	defaults := runnerSetContract(t, "", nil).Spec.ListenerConfig.Scaler
-	assert.Equal(t, 50, *defaults.QPS)
-	assert.Equal(t, 100, *defaults.Burst)
-	assert.Nil(t, defaults.ScaleQPS)
-	assert.Nil(t, defaults.ScaleBurst)
-	assert.Nil(t, defaults.Workers)
-	_, err := renderContract(t, "listener:\n  scaler: {unknown: 1}\n", nil)
-	require.ErrorContains(t, err, ".Values.listener.scaler.unknown is not a supported key")
 }
 
 func TestExperimentalRunnerIncludesDoNotMutateValues(t *testing.T) {

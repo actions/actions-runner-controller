@@ -33,7 +33,7 @@
 {{- if not (kindIs "map" $scaler) }}
   {{- fail ".Values.listener.scaler must be an object" }}
 {{- end }}
-{{- $scalerKeys := list "burst" "qps" "scaleBurst" "scaleQPS" "workers" }}
+{{- $scalerKeys := list "burst" "qps" }}
 {{- range $name, $_ := $scaler }}
   {{- if not (has $name $scalerKeys) }}
     {{- fail (printf ".Values.listener.scaler.%s is not a supported key; supported keys are: %s" $name (join ", " $scalerKeys)) }}
@@ -50,8 +50,6 @@
         {{- fail (printf ".Values.listener.scaler.%s must be an integer greater than 0" $name) }}
       {{- else if lt $number (float64 1) }}
         {{- fail (printf ".Values.listener.scaler.%s must be greater than 0" $name) }}
-      {{- else if and (kindIs "float64" $value) (ge $number (float64 "9223372036854775808")) }}
-        {{- fail (printf ".Values.listener.scaler.%s must be less than 9223372036854775808" $name) }}
       {{- end }}
     {{- end }}
   {{- end }}
