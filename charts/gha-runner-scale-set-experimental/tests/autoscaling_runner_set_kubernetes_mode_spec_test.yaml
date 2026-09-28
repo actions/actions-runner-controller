@@ -99,6 +99,171 @@ tests:
           path: spec.template.spec.volumes[0].ephemeral.volumeClaimTemplate.spec.resources.requests.storage
           value: 10Gi
 
+  - it: should pass extra fields from runner.container to the runner container in kubernetes mode
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "kubernetes"
+        container:
+          securityContext:
+            runAsUser: 1000
+          resources:
+            limits:
+              cpu: "250m"
+              memory: "64Mi"
+          imagePullPolicy: Always
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: runner
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsUser
+          value: 1000
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 250m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 64Mi
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: Always
+
+  - it: should silently ignore runner.container.name in kubernetes mode
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "kubernetes"
+        container:
+          name: not-runner
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: runner
+
+  - it: should fail when runner.container is not a map in kubernetes mode
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "kubernetes"
+        container: "invalid"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: runner.container must be a map/object
+
+  - it: should fail when runner.container.env is not a list in kubernetes mode
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "kubernetes"
+        container:
+          env: "not-a-list"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: runner.container.env must be a list
+
+  - it: should fail when runner.container.volumeMounts is not a list in kubernetes mode
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "kubernetes"
+        container:
+          volumeMounts: "not-a-list"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: runner.container.volumeMounts must be a list
+
+  - it: should fail when runner.container.volumes is set in kubernetes mode
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "kubernetes"
+        container:
+          volumes:
+            - name: cache
+              emptyDir: {}
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: runner.container.volumes is not supported; use runner.pod.spec.volumes
+
+  - it: should fail when runner.container.args is not a list in kubernetes mode
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "kubernetes"
+        container:
+          args: "not-a-list"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: runner.container.args must be a list
+
+  - it: should fail when runner.container.securityContext is not a map in kubernetes mode
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: "kubernetes"
+        container:
+          securityContext: "not-a-map"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: runner.container.securityContext must be a map/object
+
   - it: should include extraVolumes in kubernetes mode
     set:
       scaleset.name: "test"
