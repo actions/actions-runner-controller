@@ -249,7 +249,8 @@ func (w *Scaler) patchJobStarted(ctx context.Context, jobInfo *scaleset.JobStart
 }
 
 // optionalTime returns nil for the zero time, so a timestamp the Actions service
-// did not report is left out of the patch instead of being recorded as the zero time.
+// did not report is left out of the patch. A zero metav1.Time marshals as null,
+// which in a merge patch would clear a value recorded by an earlier JobStarted.
 func optionalTime(t time.Time) *metav1.Time {
 	if t.IsZero() {
 		return nil

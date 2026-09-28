@@ -264,7 +264,7 @@ func TestHandleJobStarted(t *testing.T) {
 // TestHandleJobStarted_JobContext asserts on the merge patch body rather than on
 // the stub's copy of the runner: the stub assigns the decoded patch field by field,
 // so only the body shows whether an unreported value was left out of the patch or
-// sent as an empty string or a zero time.
+// sent as null.
 func TestHandleJobStarted_JobContext(t *testing.T) {
 	queueTime := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
 	scaleSetAssignTime := queueTime.Add(2 * time.Second)
