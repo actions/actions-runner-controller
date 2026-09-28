@@ -167,11 +167,22 @@ func TestListenerPodSpecRequiresRecreation(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			desired := desiredListenerPod()
-			live := livePodFromDesired(desired)
-			tc.mutateDesired(desired)
+			for _, position := range []string{"no sidecar", "prepended sidecar", "appended sidecar"} {
+				t.Run(position, func(t *testing.T) {
+					desired := desiredListenerPod()
+					live := livePodFromDesired(desired)
+					sidecar := corev1.Container{Name: "injected", Image: "sidecar:latest"}
+					switch position {
+					case "prepended sidecar":
+						live.Spec.Containers = append([]corev1.Container{sidecar}, live.Spec.Containers...)
+					case "appended sidecar":
+						live.Spec.Containers = append(live.Spec.Containers, sidecar)
+					}
+					tc.mutateDesired(desired)
 
-			assert.Equal(t, tc.want, listenerPodSpecRequiresRecreation(live, desired), tc.why)
+					assert.Equal(t, tc.want, listenerPodSpecRequiresRecreation(live, desired), tc.why)
+				})
+			}
 		})
 	}
 
@@ -181,6 +192,117 @@ func TestListenerPodSpecRequiresRecreation(t *testing.T) {
 		assert.True(t, listenerPodSpecRequiresRecreation(nil, desired))
 		assert.True(t, listenerPodSpecRequiresRecreation(desired, nil))
 	})
+}
+
+func TestListenerPodSpecRequiresRecreation_Containers(t *testing.T) {
+	injected := corev1.Container{Name: "injected", Image: "sidecar:latest"}
+	tests := map[string]struct {
+		mutateLive func(*corev1.Pod)
+		want       bool
+	}{
+		"unchanged": {
+			mutateLive: func(*corev1.Pod) {},
+		},
+		"injected before desired containers": {
+			mutateLive: func(p *corev1.Pod) {
+				p.Spec.Containers = append([]corev1.Container{injected}, p.Spec.Containers...)
+			},
+		},
+		"injected between desired containers": {
+			mutateLive: func(p *corev1.Pod) {
+				p.Spec.Containers = []corev1.Container{p.Spec.Containers[0], injected, p.Spec.Containers[1]}
+			},
+		},
+		"injected after desired containers": {
+			mutateLive: func(p *corev1.Pod) {
+				p.Spec.Containers = append(p.Spec.Containers, injected)
+			},
+		},
+		"desired containers reordered": {
+			mutateLive: func(p *corev1.Pod) {
+				p.Spec.Containers[0], p.Spec.Containers[1] = p.Spec.Containers[1], p.Spec.Containers[0]
+			},
+		},
+		"desired containers reordered with injection": {
+			mutateLive: func(p *corev1.Pod) {
+				p.Spec.Containers = []corev1.Container{injected, p.Spec.Containers[1], p.Spec.Containers[0]}
+			},
+		},
+		"missing listener": {
+			mutateLive: func(p *corev1.Pod) {
+				p.Spec.Containers = p.Spec.Containers[1:]
+			},
+			want: true,
+		},
+		"missing template sidecar": {
+			mutateLive: func(p *corev1.Pod) {
+				p.Spec.Containers = []corev1.Container{p.Spec.Containers[0], injected}
+			},
+			want: true,
+		},
+		"missing all containers": {
+			mutateLive: func(p *corev1.Pod) {
+				p.Spec.Containers = nil
+			},
+			want: true,
+		},
+		"renamed listener": {
+			mutateLive: func(p *corev1.Pod) {
+				p.Spec.Containers[0].Name = "not-listener"
+			},
+			want: true,
+		},
+		"template sidecar image changed": {
+			mutateLive: func(p *corev1.Pod) {
+				p.Spec.Containers[1].Image = "sidecar:old"
+			},
+			want: true,
+		},
+		"template sidecar defaulted": {
+			mutateLive: func(p *corev1.Pod) {
+				p.Spec.Containers[1].ImagePullPolicy = corev1.PullIfNotPresent
+				p.Spec.Containers[1].TerminationMessagePath = corev1.TerminationMessagePathDefault
+			},
+		},
+		"template sidecar command reordered": {
+			mutateLive: func(p *corev1.Pod) {
+				p.Spec.Containers[1].Command = []string{"60", "sleep"}
+			},
+			want: true,
+		},
+		"init containers reordered": {
+			mutateLive: func(p *corev1.Pod) {
+				p.Spec.InitContainers[0], p.Spec.InitContainers[1] = p.Spec.InitContainers[1], p.Spec.InitContainers[0]
+			},
+			want: true,
+		},
+		"init container image changed": {
+			mutateLive: func(p *corev1.Pod) {
+				p.Spec.InitContainers[0].Image = "init:old"
+			},
+			want: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			desired := desiredListenerPod()
+			desired.Spec.Containers = append(desired.Spec.Containers, corev1.Container{
+				Name: "template-sidecar", Image: "sidecar:latest", Command: []string{"sleep", "60"},
+			})
+			desired.Spec.InitContainers = []corev1.Container{
+				{Name: "first", Image: "init:latest"},
+				{Name: "second", Image: "init:latest"},
+			}
+			live := livePodFromDesired(desired)
+			tc.mutateLive(live)
+			originalDesired, originalLive := desired.DeepCopy(), live.DeepCopy()
+
+			assert.Equal(t, tc.want, listenerPodSpecRequiresRecreation(live, desired))
+			assert.Equal(t, originalDesired, desired, "comparison must not mutate the cached desired pod")
+			assert.Equal(t, originalLive, live, "comparison must not mutate the live pod")
+		})
+	}
 }
 
 // TestListenerPodSpecRequiresRecreation_KnownDeepDerivativeLimits documents,

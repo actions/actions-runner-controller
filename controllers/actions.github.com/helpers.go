@@ -131,6 +131,11 @@ func ephemeralRunnerSetOutdatedForAppliedRevision(ephemeralRunnerSet *v1alpha1.E
 // defaults either, since nodeName is scheduler-assigned and the access-token
 // volume has a generated name. See TestListenerPodSpecRequiresRecreation.
 //
+// Regular containers are matched by name separately: DeepDerivative compares
+// slices by position, so an admission-injected sidecar before the listener would
+// otherwise look like drift. Extra live containers are ignored, while every
+// desired container must still match. Init-container ordering remains significant.
+//
 // The cost of DeepDerivative is that it ignores empty values on the desired side,
 // so a field being *removed* is invisible to it. For everything sourced from the
 // user-facing template that is harmless: the AutoscalingRunnerSet controller
@@ -151,11 +156,13 @@ func listenerPodSpecRequiresRecreation(current, desired *corev1.Pod) bool {
 		return true
 	}
 
-	if listenerContainerPortsRemoved(current, desired) {
+	if listenerContainersChanged(current, desired) {
 		return true
 	}
 
-	return !apiequality.Semantic.DeepDerivative(desired.Spec, current.Spec)
+	currentSpec, desiredSpec := current.Spec, desired.Spec
+	currentSpec.Containers, desiredSpec.Containers = nil, nil
+	return !apiequality.Semantic.DeepDerivative(desiredSpec, currentSpec)
 }
 
 func listenerConfigChanged(current, desired *corev1.Pod) bool {
@@ -170,16 +177,17 @@ func listenerConfigChanged(current, desired *corev1.Pod) bool {
 	return current.Annotations[AnnotationKeyListenerConfigResourceVersion] != desiredVersion
 }
 
-func listenerContainerPortsRemoved(current, desired *corev1.Pod) bool {
+func listenerContainersChanged(current, desired *corev1.Pod) bool {
 	for i := range desired.Spec.Containers {
 		desiredContainer := &desired.Spec.Containers[i]
 		currentContainer := findContainerByName(current.Spec.Containers, desiredContainer.Name)
 		if currentContainer == nil {
-			// A container the live pod does not have at all is drift that
-			// DeepDerivative already reports; nothing to decide here.
-			continue
+			return true
 		}
 		if len(desiredContainer.Ports) < len(currentContainer.Ports) {
+			return true
+		}
+		if !apiequality.Semantic.DeepDerivative(*desiredContainer, *currentContainer) {
 			return true
 		}
 	}
