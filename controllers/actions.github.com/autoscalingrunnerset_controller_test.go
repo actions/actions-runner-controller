@@ -32,6 +32,7 @@ import (
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient"
 	scalefake "github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient/fake"
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/secretresolver"
+	"github.com/actions/actions-runner-controller/vault"
 	"github.com/actions/scaleset"
 )
 
@@ -2953,6 +2954,82 @@ var _ = Describe("Test AutoscalingRunnerSet with a stale runner scale set", Orde
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
 			).Should(Succeed(), "deletion should complete once the GitHub config secret is usable again")
+		})
+	})
+
+	Context("When the vault proxy credential secret is gone before the AutoscalingRunnerSet is deleted", func() {
+		It("removes the finalizer instead of retrying forever", func() {
+			ctx := context.Background()
+			autoscalingNS, mgr := createNamespace(GinkgoT(), k8sClient)
+
+			controller := &AutoscalingRunnerSetReconciler{
+				Client:                             mgr.GetClient(),
+				Scheme:                             mgr.GetScheme(),
+				Log:                                logf.Log,
+				ControllerNamespace:                autoscalingNS.Name,
+				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
+				ResourceBuilder: ResourceBuilder{
+					ResourceCache:  newTestResourceCache(),
+					SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient()),
+				},
+			}
+			Expect(controller.SetupWithManager(mgr)).To(Succeed(), "failed to setup controller")
+			startManagers(GinkgoT(), mgr)
+
+			proxySecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "vault-proxy-credentials", Namespace: autoscalingNS.Name},
+				Data:       map[string][]byte{"username": []byte("user"), "password": []byte("pass")},
+			}
+			Expect(k8sClient.Create(ctx, proxySecret)).To(Succeed(), "failed to create the vault proxy credential secret")
+
+			// The vault is never reached: resolving the proxy credentials fails first.
+			autoscalingRunnerSet := newAutoscalingRunnerSet(autoscalingNS.Name, "github-config-in-vault", registeredAnnotations(freshRunnerScaleSetID))
+			autoscalingRunnerSet.Spec.VaultConfig = &v1alpha1.VaultConfig{
+				Type: vault.VaultTypeAzureKeyVault,
+				AzureKeyVault: &v1alpha1.AzureKeyVaultConfig{
+					URL:             "https://vault.example.com",
+					TenantID:        "tenant",
+					ClientID:        "client",
+					CertificatePath: "/nonexistent/cert.pem",
+				},
+				Proxy: &v1alpha1.ProxyConfig{
+					HTTPS: &v1alpha1.ProxyServerConfig{
+						Url:                 "http://proxy.example.com:3128",
+						CredentialSecretRef: proxySecret.Name,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, autoscalingRunnerSet)).To(Succeed(), "failed to create AutoScalingRunnerSet")
+
+			Eventually(
+				func() (bool, error) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current); err != nil {
+						return false, err
+					}
+					return controllerutil.ContainsFinalizer(current, autoscalingRunnerSetFinalizerName), nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(BeTrue(), "the finalizer should be added")
+
+			Expect(k8sClient.Delete(ctx, proxySecret)).To(Succeed(), "failed to delete the vault proxy credential secret")
+			Expect(k8sClient.Delete(ctx, autoscalingRunnerSet)).To(Succeed(), "failed to delete AutoScalingRunnerSet")
+
+			Eventually(
+				func() error {
+					err := k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), new(v1alpha1.AutoscalingRunnerSet))
+					if errors.IsNotFound(err) {
+						return nil
+					}
+					if err != nil {
+						return err
+					}
+					return fmt.Errorf("AutoScalingRunnerSet is not deleted")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "a missing vault proxy credential secret should not keep the AutoScalingRunnerSet in Terminating")
 		})
 	})
 })

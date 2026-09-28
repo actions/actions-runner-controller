@@ -178,7 +178,7 @@ func (sr *SecretResolver) resolverForObject(ctx context.Context, obj object.Acti
 			return &secret, nil
 		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to create proxy config: %v", err)
+			return nil, fmt.Errorf("failed to create proxy config: %w", err)
 		}
 		proxy = p
 	}
