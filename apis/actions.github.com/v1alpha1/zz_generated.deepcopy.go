@@ -580,16 +580,12 @@ func (in *EphemeralRunnerStatus) DeepCopyInto(out *EphemeralRunnerStatus) {
 			(*out)[key] = *val.DeepCopy()
 		}
 	}
-	if in.JobQueuedAt != nil {
-		in, out := &in.JobQueuedAt, &out.JobQueuedAt
+	if in.JobScaleSetAssignTime != nil {
+		in, out := &in.JobScaleSetAssignTime, &out.JobScaleSetAssignTime
 		*out = (*in).DeepCopy()
 	}
-	if in.JobScaleSetAssignedAt != nil {
-		in, out := &in.JobScaleSetAssignedAt, &out.JobScaleSetAssignedAt
-		*out = (*in).DeepCopy()
-	}
-	if in.JobRunnerAssignedAt != nil {
-		in, out := &in.JobRunnerAssignedAt, &out.JobRunnerAssignedAt
+	if in.JobRunnerAssignTime != nil {
+		in, out := &in.JobRunnerAssignTime, &out.JobRunnerAssignTime
 		*out = (*in).DeepCopy()
 	}
 }

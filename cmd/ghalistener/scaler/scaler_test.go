@@ -266,9 +266,8 @@ func TestHandleJobStarted(t *testing.T) {
 // so only the body shows whether an unreported value was left out of the patch or
 // sent as null.
 func TestHandleJobStarted_JobContext(t *testing.T) {
-	queueTime := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
-	scaleSetAssignTime := queueTime.Add(2 * time.Second)
-	runnerAssignTime := queueTime.Add(7 * time.Second)
+	scaleSetAssignTime := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
+	runnerAssignTime := scaleSetAssignTime.Add(5 * time.Second)
 
 	newJobInfo := func() *scaleset.JobStarted {
 		return &scaleset.JobStarted{
@@ -299,7 +298,6 @@ func TestHandleJobStarted_JobContext(t *testing.T) {
 	t.Run("records the event name and the service timestamps", func(t *testing.T) {
 		jobInfo := newJobInfo()
 		jobInfo.EventName = "pull_request"
-		jobInfo.QueueTime = queueTime
 		jobInfo.ScaleSetAssignTime = scaleSetAssignTime
 		jobInfo.RunnerAssignTime = runnerAssignTime
 
@@ -311,9 +309,8 @@ func TestHandleJobStarted_JobContext(t *testing.T) {
 
 		status := patchedStatus(t, *requests)
 		assert.Equal(t, "pull_request", status["jobEventName"])
-		assert.Equal(t, queueTime.Format(time.RFC3339), status["jobQueuedAt"])
-		assert.Equal(t, scaleSetAssignTime.Format(time.RFC3339), status["jobScaleSetAssignedAt"])
-		assert.Equal(t, runnerAssignTime.Format(time.RFC3339), status["jobRunnerAssignedAt"])
+		assert.Equal(t, scaleSetAssignTime.Format(time.RFC3339), status["jobScaleSetAssignTime"])
+		assert.Equal(t, runnerAssignTime.Format(time.RFC3339), status["jobRunnerAssignTime"])
 		assert.Equal(t, "Running", status["phase"])
 	})
 
@@ -329,11 +326,10 @@ func TestHandleJobStarted_JobContext(t *testing.T) {
 
 		status := patchedStatus(t, *requests)
 		assert.NotContains(t, status, "jobEventName")
-		assert.NotContains(t, status, "jobQueuedAt")
-		assert.NotContains(t, status, "jobScaleSetAssignedAt")
+		assert.NotContains(t, status, "jobScaleSetAssignTime")
 		// The timestamp that is reported is still recorded, so the absences above
 		// are the zero values being dropped rather than the fields never being set.
-		assert.Equal(t, runnerAssignTime.Format(time.RFC3339), status["jobRunnerAssignedAt"])
+		assert.Equal(t, runnerAssignTime.Format(time.RFC3339), status["jobRunnerAssignTime"])
 		assert.Equal(t, jobInfo.JobID, status["jobId"])
 	})
 }

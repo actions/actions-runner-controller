@@ -8641,26 +8641,20 @@ spec:
                   type: string
                 jobId:
                   type: string
-                jobQueuedAt:
-                  description: |-
-                    JobQueuedAt is the time the Actions service queued the job assigned to
-                    this runner. It is left unset when the service does not report it.
-                  format: date-time
-                  type: string
                 jobRepositoryName:
                   type: string
                 jobRequestId:
                   format: int64
                   type: integer
-                jobRunnerAssignedAt:
+                jobRunnerAssignTime:
                   description: |-
-                    JobRunnerAssignedAt is the time the Actions service assigned the job to
+                    JobRunnerAssignTime is the time the Actions service assigned the job to
                     this runner. It is left unset when the service does not report it.
                   format: date-time
                   type: string
-                jobScaleSetAssignedAt:
+                jobScaleSetAssignTime:
                   description: |-
-                    JobScaleSetAssignedAt is the time the Actions service assigned the job to
+                    JobScaleSetAssignTime is the time the Actions service assigned the job to
                     the runner scale set. It is left unset when the service does not report it.
                   format: date-time
                   type: string

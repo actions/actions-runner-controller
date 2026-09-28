@@ -144,18 +144,15 @@ func TestHandleJobStartedAgainstAPIServer(t *testing.T) {
 		jobInfo := *jobInfo
 		jobInfo.RunnerName = runner.Name
 		jobInfo.EventName = "pull_request"
-		jobInfo.QueueTime = time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
-		jobInfo.RunnerAssignTime = jobInfo.QueueTime.Add(7 * time.Second)
+		jobInfo.RunnerAssignTime = time.Date(2026, time.January, 2, 3, 4, 12, 0, time.UTC)
 
 		require.NoError(t, newScaler(t, nil).HandleJobStarted(ctx, &jobInfo))
 
 		require.NoError(t, k8sClient.Get(ctx, client.ObjectKeyFromObject(runner), runner))
 		assert.Equal(t, "pull_request", runner.Status.JobEventName)
-		require.NotNil(t, runner.Status.JobQueuedAt)
-		assert.True(t, jobInfo.QueueTime.Equal(runner.Status.JobQueuedAt.Time))
-		assert.Nil(t, runner.Status.JobScaleSetAssignedAt, "an unreported time is not recorded")
-		require.NotNil(t, runner.Status.JobRunnerAssignedAt)
-		assert.True(t, jobInfo.RunnerAssignTime.Equal(runner.Status.JobRunnerAssignedAt.Time))
+		assert.Nil(t, runner.Status.JobScaleSetAssignTime, "an unreported time is not recorded")
+		require.NotNil(t, runner.Status.JobRunnerAssignTime)
+		assert.True(t, jobInfo.RunnerAssignTime.Equal(runner.Status.JobRunnerAssignTime.Time))
 	})
 
 	t.Run("does not resurrect a runner that failed after the read", func(t *testing.T) {

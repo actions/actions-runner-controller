@@ -184,9 +184,8 @@ func (w *Scaler) patchJobStarted(ctx context.Context, jobInfo *scaleset.JobStart
 			JobDisplayName:    jobInfo.JobDisplayName,
 			JobEventName:      jobInfo.EventName,
 
-			JobQueuedAt:           optionalTime(jobInfo.QueueTime),
-			JobScaleSetAssignedAt: optionalTime(jobInfo.ScaleSetAssignTime),
-			JobRunnerAssignedAt:   optionalTime(jobInfo.RunnerAssignTime),
+			JobScaleSetAssignTime: optionalTime(jobInfo.ScaleSetAssignTime),
+			JobRunnerAssignTime:   optionalTime(jobInfo.RunnerAssignTime),
 		},
 	}
 
