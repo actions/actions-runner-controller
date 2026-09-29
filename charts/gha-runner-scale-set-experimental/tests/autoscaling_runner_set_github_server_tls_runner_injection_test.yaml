@@ -41,15 +41,68 @@ tests:
             name: github-server-tls-cert
             mountPath: "/usr/local/share/ca-certificates/"
             readOnly: true
-      - contains:
+      - equal:
           path: spec.template.spec.volumes
+          value:
+            - name: github-server-tls-cert
+              configMap:
+                name: "my-ca-config"
+                items:
+                  - key: "ca.crt"
+                    path: "ca.crt"
+
+  - it: should preserve custom volumes alongside the TLS volume in mode-empty
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      githubServerTLS:
+        runnerMountPath: "/usr/local/share/ca-certificates/"
+        certificateFrom:
+          configMapKeyRef:
+            name: "my-ca-config"
+            key: "ca.crt"
+      runner:
+        mode: ""
+        container:
+          volumeMounts:
+            - name: work
+              mountPath: /home/runner/_work
+        pod:
+          spec:
+            volumes:
+              - name: work
+                persistentVolumeClaim:
+                  claimName: runner-work
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes
+          value:
+            - name: github-server-tls-cert
+              configMap:
+                name: "my-ca-config"
+                items:
+                  - key: "ca.crt"
+                    path: "ca.crt"
+            - name: work
+              persistentVolumeClaim:
+                claimName: runner-work
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: work
+            mountPath: /home/runner/_work
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
           content:
             name: github-server-tls-cert
-            configMap:
-              name: "my-ca-config"
-              items:
-                - key: "ca.crt"
-                  path: "ca.crt"
+            mountPath: "/usr/local/share/ca-certificates/"
+            readOnly: true
 
   - it: should not override user-provided CA env + volumeMount in mode-empty
     set:
