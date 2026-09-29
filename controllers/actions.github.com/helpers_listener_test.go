@@ -309,7 +309,7 @@ func TestListenerPodSpecRequiresRecreation_Containers(t *testing.T) {
 // rather than asserts away, the removals DeepDerivative cannot see. These are
 // all sourced from the user-facing listener template, so they are handled
 // upstream: the AutoscalingRunnerSet controller compares the whole
-// AutoscalingListener spec with cmp.Equal and deletes the listener, which
+// AutoscalingListener spec with Semantic.DeepEqual and deletes the listener, which
 // deletes the pod. If that upstream behaviour ever changes to a derivative
 // comparison, these become real bugs.
 func TestListenerPodSpecRequiresRecreation_KnownDeepDerivativeLimits(t *testing.T) {
