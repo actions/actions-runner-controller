@@ -27,6 +27,7 @@ import (
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/build"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/secretresolver"
 	"github.com/actions/scaleset"
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
@@ -1222,7 +1223,7 @@ func (r *AutoscalingRunnerSetReconciler) deleteRunnerScaleSet(ctx context.Contex
 
 	actionsClient, err := r.GetActionsService(ctx, autoscalingRunnerSet)
 	switch {
-	case kerrors.IsNotFound(err):
+	case errors.Is(err, secretresolver.ErrNotFound):
 		// A secret or config map the client is built from is gone. Retrying cannot bring it back,
 		// so release the autoscaling runner set instead of leaving it stuck in Terminating.
 		logger.Error(

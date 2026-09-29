@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1/appconfig"
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient"
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/object"
@@ -17,9 +19,34 @@ import (
 	"github.com/actions/actions-runner-controller/vault/azurekeyvault"
 	"golang.org/x/net/http/httpproxy"
 	corev1 "k8s.io/api/core/v1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+type secretResolverError string
+
+func (e secretResolverError) Error() string { return string(e) }
+
+// ErrNotFound marks a secret or config map that no longer exists, whichever driver resolved it.
+const ErrNotFound = secretResolverError("not found")
+
+// wrapK8sNotFound tags a Kubernetes NotFound so callers need no knowledge of the driver.
+func wrapK8sNotFound(err error) error {
+	if kerrors.IsNotFound(err) {
+		return fmt.Errorf("%w: %w", ErrNotFound, err)
+	}
+	return err
+}
+
+// wrapVaultNotFound tags an Azure Key Vault 404; other vault errors keep their previous message only.
+func wrapVaultNotFound(err error) error {
+	var responseErr *azcore.ResponseError
+	if errors.As(err, &responseErr) && responseErr.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("%w: %w", ErrNotFound, err)
+	}
+	return fmt.Errorf("%v", err)
+}
 
 type SecretResolver struct {
 	k8sClient   client.Client
@@ -134,7 +161,7 @@ func (sr *SecretResolver) GetActionsService(ctx context.Context, obj object.Acti
 				&configmap,
 			)
 			if err != nil {
-				return nil, fmt.Errorf("failed to get configmap %s: %w", name, err)
+				return nil, fmt.Errorf("failed to get configmap %s: %w", name, wrapK8sNotFound(err))
 			}
 
 			return []byte(configmap.Data[key]), nil
@@ -173,7 +200,7 @@ func (sr *SecretResolver) resolverForObject(ctx context.Context, obj object.Acti
 			var secret corev1.Secret
 			err := sr.k8sClient.Get(ctx, types.NamespacedName{Name: s, Namespace: obj.GetNamespace()}, &secret)
 			if err != nil {
-				return nil, fmt.Errorf("failed to get secret %s: %w", s, err)
+				return nil, fmt.Errorf("failed to get secret %s: %w", s, wrapK8sNotFound(err))
 			}
 			return &secret, nil
 		})
@@ -225,7 +252,7 @@ func (r *k8sResolver) appConfig(ctx context.Context, key string) (*appconfig.App
 		nsName,
 		secret,
 	); err != nil {
-		return nil, fmt.Errorf("failed to get kubernetes secret %q: %w", nsName.String(), err)
+		return nil, fmt.Errorf("failed to get kubernetes secret %q: %w", nsName.String(), wrapK8sNotFound(err))
 	}
 
 	return appconfig.FromSecret(secret)
@@ -239,7 +266,7 @@ func (r *k8sResolver) proxyCredentials(ctx context.Context, key string) (*url.Us
 		nsName,
 		secret,
 	); err != nil {
-		return nil, fmt.Errorf("failed to get kubernetes secret %q: %w", nsName.String(), err)
+		return nil, fmt.Errorf("failed to get kubernetes secret %q: %w", nsName.String(), wrapK8sNotFound(err))
 	}
 
 	return url.UserPassword(
@@ -255,7 +282,7 @@ type vaultResolver struct {
 func (r *vaultResolver) appConfig(ctx context.Context, key string) (*appconfig.AppConfig, error) {
 	val, err := r.vault.GetSecret(ctx, key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve secret: %v", err)
+		return nil, fmt.Errorf("failed to resolve secret: %w", wrapVaultNotFound(err))
 	}
 
 	return appconfig.FromJSONString(val)
@@ -264,7 +291,7 @@ func (r *vaultResolver) appConfig(ctx context.Context, key string) (*appconfig.A
 func (r *vaultResolver) proxyCredentials(ctx context.Context, key string) (*url.Userinfo, error) {
 	val, err := r.vault.GetSecret(ctx, key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve secret: %v", err)
+		return nil, fmt.Errorf("failed to resolve secret: %w", wrapVaultNotFound(err))
 	}
 
 	type info struct {
