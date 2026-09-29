@@ -2414,7 +2414,7 @@ var _ = Describe("Test EphemeralRunnerSet actionable revision cleanup", func() {
 		}, time.Second, ephemeralRunnerSetTestInterval).Should(Equal(int64(0)))
 	})
 
-	It("deletes runner-a-idle, keeps runner-b-busy, and advances applied actionable revision 3 to 4", func() {
+	It("deletes runner-a-idle, keeps a job-bearing pending runner, and advances applied actionable revision 3 to 4", func() {
 		controller := &EphemeralRunnerSetReconciler{
 			Client:    mgr.GetClient(),
 			APIReader: mgr.GetAPIReader(),
@@ -2479,7 +2479,7 @@ var _ = Describe("Test EphemeralRunnerSet actionable revision cleanup", func() {
 		err = k8sClient.Get(ctx, client.ObjectKeyFromObject(busyRunner), busyCurrent)
 		Expect(err).NotTo(HaveOccurred())
 		busyUpdated := busyCurrent.DeepCopy()
-		busyUpdated.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
+		busyUpdated.Status.Phase = v1alpha1.EphemeralRunnerPhasePending
 		busyUpdated.Status.RunnerID = 102
 		busyUpdated.Status.JobID = "job-1"
 		busyUpdated.Status.WorkflowRunID = 9001

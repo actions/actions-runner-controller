@@ -444,21 +444,6 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 
-	// Validation above keeps malformed JIT secrets from reaching a Pod. The Pod
-	// only needs the valid secret, so publish the registration identity after
-	// the Pod exists. A retry can recover both fields from that secret.
-	if ephemeralRunner.Status.RunnerID == 0 {
-		log.Info("Updating ephemeral runner status with runnerId and runnerName")
-		original := ephemeralRunner.DeepCopy()
-		ephemeralRunner.Status.RunnerID = initialRunnerID
-		ephemeralRunner.Status.RunnerName = initialRunnerName
-
-		if err := r.Status().Patch(ctx, &ephemeralRunner, client.MergeFrom(original)); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to update runner status for RunnerId/RunnerName: %w", err)
-		}
-		log.Info("Updated ephemeral runner status with runnerId and runnerName")
-	}
-
 	cs := runnerContainerStatus(pod)
 	switch {
 	case pod.Status.Phase == corev1.PodFailed: // All containers are stopped
@@ -520,7 +505,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	case cs.State.Terminated == nil: // container is not terminated and pod phase is not failed, so runner is still running
 		log.Info("Runner container is still running; updating ephemeral runner status")
-		if err := r.updateRunStatusFromPod(ctx, &ephemeralRunner, pod, log); err != nil {
+		if err := r.updateRunStatusFromPod(ctx, &ephemeralRunner, pod, initialRunnerID, initialRunnerName, log); err != nil {
 			log.Info("Failed to update ephemeral runner status. Requeue to not miss this event")
 			return ctrl.Result{}, err
 		}
@@ -993,13 +978,13 @@ func (r *EphemeralRunnerReconciler) createSecret(ctx context.Context, runner *v1
 	return jitSecret, nil
 }
 
-// updateRunStatusFromPod is responsible for updating non-exiting statuses.
-// It should never update phase to Failed or Succeeded
-// It should never update phase to Running (the listener owns that transition)
+// updateRunStatusFromPod is responsible for updating non-terminal statuses.
+// It should never update phase to Failed or Succeeded.
 //
-// The event should not be re-queued since the termination status should be set
-// before proceeding with reconciliation logic
-func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, pod *corev1.Pod, log logr.Logger) error {
+// The JIT config secret is the durable registration record until the Pod first
+// reports a non-terminal status. Publishing identity with that status update
+// avoids a separate status-only reconciliation after Pod creation.
+func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, pod *corev1.Pod, initialRunnerID int, initialRunnerName string, log logr.Logger) error {
 	if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
 		return nil
 	}
@@ -1019,15 +1004,17 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 		phase = v1alpha1.EphemeralRunnerPhasePending
 	}
 
-	// The controller no longer promotes the runner to Running. The listener owns that
-	// transition and applies it when a job is assigned to this runner. The controller
-	// still publishes the initial Pending phase while the runner pod is starting.
-	// The patch below is optimistically locked so a stale cached copy of this runner
-	// cannot undo the listener's transition to Running.
+	// The listener writes only job metadata. The runner controller owns phase
+	// transitions and promotes an assigned Pending runner to Running without
+	// racing the listener's status patch.
+	if phase == v1alpha1.EphemeralRunnerPhasePending && ephemeralRunner.HasJob() {
+		phase = v1alpha1.EphemeralRunnerPhaseRunning
+	}
 	phaseChanged := phase != ephemeralRunner.Status.Phase
 	readyChanged := ready != ephemeralRunner.Status.Ready
+	identityChanged := ephemeralRunner.Status.RunnerID == 0
 
-	if !phaseChanged && !readyChanged {
+	if !phaseChanged && !readyChanged && !identityChanged {
 		return nil
 	}
 
@@ -1043,8 +1030,12 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 	ephemeralRunner.Status.Ready = ready
 	ephemeralRunner.Status.Reason = pod.Status.Reason
 	ephemeralRunner.Status.Message = pod.Status.Message
+	if identityChanged {
+		ephemeralRunner.Status.RunnerID = initialRunnerID
+		ephemeralRunner.Status.RunnerName = initialRunnerName
+	}
 
-	if err := r.Status().Patch(ctx, ephemeralRunner, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{})); err != nil {
+	if err := r.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil {
 		return fmt.Errorf("failed to update runner status for Phase/Reason/Message/Ready: %w", err)
 	}
 	r.publishEphemeralRunnerPhaseMetric(ephemeralRunner, ephemeralRunner.Status.Phase, log)
@@ -1249,7 +1240,7 @@ func (r *EphemeralRunnerReconciler) SetupWithManager(mgr ctrl.Manager, opts ...O
 
 	return builderWithOptions(
 		ctrl.NewControllerManagedBy(mgr).
-			For(&v1alpha1.EphemeralRunner{}).
+			For(&v1alpha1.EphemeralRunner{}, builder.WithPredicates(ephemeralRunnerPredicate())).
 			Owns(&corev1.Pod{}, builder.WithPredicates(ephemeralRunnerOwnedPodPredicate())).
 			WithEventFilter(predicate.ResourceVersionChangedPredicate{}),
 		opts,

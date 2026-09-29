@@ -16,11 +16,9 @@ import (
 	"github.com/actions/scaleset"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/util/retry"
 )
 
 var discardLogger = slog.New(slog.DiscardHandler)
@@ -147,7 +145,7 @@ func TestHandleJobStarted(t *testing.T) {
 		},
 	}
 
-	t.Run("patches job fields and running phase together", func(t *testing.T) {
+	t.Run("patches job fields without changing phase", func(t *testing.T) {
 		runner := newTestEphemeralRunner(jobInfo.RunnerName, "")
 		scaler, shutdown := newTestScaler(t, runner)
 		defer shutdown()
@@ -155,7 +153,7 @@ func TestHandleJobStarted(t *testing.T) {
 		require.NoError(t, scaler.HandleJobStarted(context.Background(), jobInfo))
 
 		assertJobStartedStatus(t, runner, jobInfo)
-		assert.Equal(t, v1alpha1.EphemeralRunnerPhaseRunning, runner.Status.Phase)
+		assert.Empty(t, runner.Status.Phase)
 	})
 
 	t.Run("repeated assignment remains idempotent", func(t *testing.T) {
@@ -189,10 +187,8 @@ func TestHandleJobStarted(t *testing.T) {
 		})
 	}
 
-	t.Run("retries against fresh state when a terminal write wins the race", func(t *testing.T) {
+	t.Run("preserves a terminal phase when it is written concurrently", func(t *testing.T) {
 		runner := newTestEphemeralRunner(jobInfo.RunnerName, v1alpha1.EphemeralRunnerPhasePending)
-		// A terminal update lands between the scaler's GET and its first patch, so
-		// the patch carries a stale resource version and is rejected with 409.
 		raceTerminalWrite := func() {
 			runner.Status.Phase = v1alpha1.EphemeralRunnerPhaseFailed
 			runner.ResourceVersion = strconv.Itoa(mustAtoi(t, runner.ResourceVersion) + 1)
@@ -202,8 +198,6 @@ func TestHandleJobStarted(t *testing.T) {
 
 		require.NoError(t, scaler.HandleJobStarted(context.Background(), jobInfo))
 
-		// The retry re-reads the now-terminal runner, so the job fields are recorded
-		// while the promotion to Running is abandoned rather than clobbering Failed.
 		assertJobStartedStatus(t, runner, jobInfo)
 		assert.Equal(t, v1alpha1.EphemeralRunnerPhaseFailed, runner.Status.Phase)
 	})
@@ -228,21 +222,16 @@ func TestHandleJobStarted(t *testing.T) {
 		})
 	}
 
-	t.Run("gives up when the runner keeps changing", func(t *testing.T) {
+	t.Run("does not conflict when the runner changes concurrently", func(t *testing.T) {
 		runner := newTestEphemeralRunner(jobInfo.RunnerName, v1alpha1.EphemeralRunnerPhasePending)
 		raceWrite := func() {
 			runner.ResourceVersion = strconv.Itoa(mustAtoi(t, runner.ResourceVersion) + 1)
 		}
-		onPatch := make([]func(), retry.DefaultRetry.Steps)
-		for i := range onPatch {
-			onPatch[i] = raceWrite
-		}
-		scaler, shutdown := newTestScaler(t, runner, onPatch...)
+		scaler, shutdown := newTestScaler(t, runner, raceWrite)
 		defer shutdown()
 
-		err := scaler.HandleJobStarted(context.Background(), jobInfo)
-		require.Error(t, err)
-		assert.True(t, kerrors.IsConflict(err), "expected a conflict error, got %v", err)
+		require.NoError(t, scaler.HandleJobStarted(context.Background(), jobInfo))
+		assertJobStartedStatus(t, runner, jobInfo)
 		assert.Equal(t, v1alpha1.EphemeralRunnerPhasePending, runner.Status.Phase)
 	})
 
@@ -273,11 +262,9 @@ func newTestEphemeralRunner(name string, phase v1alpha1.EphemeralRunnerPhase) *v
 	}
 }
 
-// newTestScaler serves the runner over a stub API server that enforces the
-// metadata.resourceVersion precondition the way the API server does, so that a
-// patch carrying a stale resource version is rejected with 409 Conflict.
-// Each onPatch hook runs before the corresponding patch is applied, which lets a
-// test interleave a competing write between the scaler's GET and its patch.
+// newTestScaler serves the runner over a stub API server. Each onPatch hook runs
+// before a patch is applied, which lets a test interleave a competing write
+// with the listener's metadata-only patch.
 func newTestScaler(t *testing.T, runner *v1alpha1.EphemeralRunner, onPatch ...func()) (*Scaler, func()) {
 	t.Helper()
 
@@ -778,17 +765,13 @@ func newRecordingScaler(t *testing.T, runner *v1alpha1.EphemeralRunner, notFound
 	}, requests, server.Close
 }
 
-// TestHandleJobStarted_NotFound covers the two paths that swallow a NotFound
-// and return nil. A deleted runner is an expected race rather than an error --
-// the listener learns a job started for a runner the controller has already
-// removed -- so the job info update is abandoned instead of failing the
-// message handler and being redelivered forever.
+// TestHandleJobStarted_NotFound covers the expected race where the listener
+// receives a job-started event after the runner has been removed. The listener
+// abandons the metadata update rather than failing the message handler and
+// redelivering it forever.
 //
-// Neither path produces any observable state change, which is exactly why they
-// had no coverage: there is nothing to assert on afterwards. Each case is
-// therefore asserted against the request log and paired with a positive
-// control, so an empty or short log is a measured absence rather than an
-// unasked question.
+// The listener writes job metadata directly, so a successful update and a
+// missing runner each require exactly one PATCH request.
 func TestHandleJobStarted_NotFound(t *testing.T) {
 	jobInfo := &scaleset.JobStarted{
 		RunnerName: "runner-1",
@@ -803,35 +786,16 @@ func TestHandleJobStarted_NotFound(t *testing.T) {
 		},
 	}
 
-	t.Run("positive control: the recorder observes a successful promotion", func(t *testing.T) {
+	t.Run("positive control: the recorder observes a successful metadata patch", func(t *testing.T) {
 		runner := newTestEphemeralRunner(jobInfo.RunnerName, v1alpha1.EphemeralRunnerPhasePending)
 		scaler, requests, shutdown := newRecordingScaler(t, runner, "")
 		defer shutdown()
 
 		require.NoError(t, scaler.HandleJobStarted(context.Background(), jobInfo))
 
-		require.Equal(t, []string{http.MethodGet, http.MethodPatch}, methodsOf(*requests))
-		// The recorded patch body is the load-bearing observation: it establishes
-		// that this recorder does capture a promotion when one is issued, which is
-		// what licenses reading its absence below as "no patch was sent".
-		assert.Contains(t, (*requests)[1].body, `"phase":"Running"`)
-		assert.Equal(t, "/apis/actions.github.com/v1alpha1/namespaces/default/ephemeralrunners/runner-1/status", (*requests)[1].path)
-		assert.Equal(t, v1alpha1.EphemeralRunnerPhaseRunning, runner.Status.Phase)
-	})
-
-	t.Run("get not found abandons the update without patching", func(t *testing.T) {
-		runner := newTestEphemeralRunner(jobInfo.RunnerName, v1alpha1.EphemeralRunnerPhasePending)
-		scaler, requests, shutdown := newRecordingScaler(t, runner, http.MethodGet)
-		defer shutdown()
-
-		require.NoError(t, scaler.HandleJobStarted(context.Background(), jobInfo))
-
-		// This swallow returns nil from inside the RetryOnConflict closure, so it
-		// ends the retry loop as a success. Pinning the exact request sequence is
-		// what distinguishes that from a silent retry or a patch against a runner
-		// that is known to be gone.
-		assert.Equal(t, []string{http.MethodGet}, methodsOf(*requests))
-		assert.Equal(t, "/apis/actions.github.com/v1alpha1/namespaces/default/ephemeralrunners/runner-1", (*requests)[0].path)
+		require.Equal(t, []string{http.MethodPatch}, methodsOf(*requests))
+		assert.Contains(t, (*requests)[0].body, `"jobId":"job-1"`)
+		assert.Equal(t, "/apis/actions.github.com/v1alpha1/namespaces/default/ephemeralrunners/runner-1/status", (*requests)[0].path)
 		assert.Equal(t, v1alpha1.EphemeralRunnerPhasePending, runner.Status.Phase)
 	})
 
@@ -844,10 +808,8 @@ func TestHandleJobStarted_NotFound(t *testing.T) {
 
 		// Exactly one patch: a 404 must not be mistaken for a conflict and retried
 		// against state that will never come back.
-		require.Equal(t, []string{http.MethodGet, http.MethodPatch}, methodsOf(*requests))
-		// The promotion really was attempted, so the unchanged phase below is the
-		// 404 being swallowed rather than the scaler declining to patch.
-		assert.Contains(t, (*requests)[1].body, `"phase":"Running"`)
+		require.Equal(t, []string{http.MethodPatch}, methodsOf(*requests))
+		assert.Contains(t, (*requests)[0].body, `"jobId":"job-1"`)
 		assert.Equal(t, v1alpha1.EphemeralRunnerPhasePending, runner.Status.Phase)
 	})
 }

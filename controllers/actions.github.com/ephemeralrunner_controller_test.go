@@ -796,7 +796,35 @@ var _ = Describe("EphemeralRunner", func() {
 			).Should(BeFalse(), "EphemeralRunner-owned resources should be removed from cache after deletion")
 		})
 
-		It("It should eventually have runner id set", func() {
+		It("It should record the runner identity with the first nonterminal pod status", func() {
+			pod := new(corev1.Pod)
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(Succeed())
+
+			Consistently(
+				func() (int, error) {
+					updatedEphemeralRunner := new(v1alpha1.EphemeralRunner)
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updatedEphemeralRunner); err != nil {
+						return 0, err
+					}
+					return updatedEphemeralRunner.Status.RunnerID, nil
+				},
+				ephemeralRunnerInterval*3,
+				ephemeralRunnerInterval,
+			).Should(BeZero(), "Pod creation alone must not publish runner identity")
+
+			pod.Status.Phase = corev1.PodPending
+			pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
+				Name:  v1alpha1.EphemeralRunnerContainerName,
+				State: corev1.ContainerState{},
+			}}
+			Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
+
 			Eventually(
 				func() (int, error) {
 					updatedEphemeralRunner := new(v1alpha1.EphemeralRunner)
@@ -1225,7 +1253,7 @@ var _ = Describe("EphemeralRunner", func() {
 			).Should(BeEquivalentTo(v1alpha1.EphemeralRunnerPhaseRunning))
 		})
 
-		It("Controller should not set Running phase from pod status - listener owns Running transition", func() {
+		It("Controller sets Running phase after the listener records a job assignment", func() {
 			pod := new(corev1.Pod)
 			Eventually(
 				func() (bool, error) {
@@ -1255,13 +1283,6 @@ var _ = Describe("EphemeralRunner", func() {
 			err := k8sClient.Status().Update(ctx, pod)
 			Expect(err).To(BeNil())
 
-			// Two-stage on purpose. Eventually establishes that the controller does
-			// publish Pending even though the pod was first observed already Running
-			// -- the common case once the image is cached, and the only chance the
-			// controller gets to publish an initial phase. Consistently then holds
-			// that it never advances to Running, which is the listener's transition
-			// to make. Asserting Pending is strictly stronger than asserting empty,
-			// because empty is also what a controller that never ran would leave.
 			updated := new(v1alpha1.EphemeralRunner)
 			Eventually(
 				func() (v1alpha1.EphemeralRunnerPhase, error) {
@@ -1274,7 +1295,13 @@ var _ = Describe("EphemeralRunner", func() {
 				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(v1alpha1.EphemeralRunnerPhasePending), "controller must publish the initial Pending phase")
 
-			Consistently(
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated)).To(Succeed())
+			assignment := updated.DeepCopy()
+			assignment.Status.JobID = "job-1"
+			assignment.Status.WorkflowRunID = 1
+			Expect(k8sClient.Status().Patch(ctx, assignment, client.MergeFrom(updated))).To(Succeed())
+
+			Eventually(
 				func() (v1alpha1.EphemeralRunnerPhase, error) {
 					updated := new(v1alpha1.EphemeralRunner)
 					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated); err != nil {
@@ -1283,7 +1310,8 @@ var _ = Describe("EphemeralRunner", func() {
 					return updated.Status.Phase, nil
 				},
 				ephemeralRunnerTimeout,
-			).Should(BeEquivalentTo(v1alpha1.EphemeralRunnerPhasePending), "controller must not set Running from pod status")
+				ephemeralRunnerInterval,
+			).Should(BeEquivalentTo(v1alpha1.EphemeralRunnerPhaseRunning))
 
 			Eventually(
 				func() (bool, error) {

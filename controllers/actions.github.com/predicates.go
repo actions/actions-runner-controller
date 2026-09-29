@@ -84,6 +84,28 @@ func ephemeralRunnerSetOwnedEphemeralRunnerPredicate() predicate.Predicate {
 	}
 }
 
+// ephemeralRunnerPredicate filters updates sent back to the EphemeralRunner
+// controller. Pod events trigger its own status writes; its only status input
+// from another writer is JobID, which the listener records on assignment.
+func ephemeralRunnerPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldRunner, oldOK := e.ObjectOld.(*v1alpha1.EphemeralRunner)
+			newRunner, newOK := e.ObjectNew.(*v1alpha1.EphemeralRunner)
+			if !oldOK || !newOK {
+				return true
+			}
+
+			if !equalReconciledObjectMeta(&oldRunner.ObjectMeta, &newRunner.ObjectMeta) ||
+				!equality.Semantic.DeepEqual(&oldRunner.Spec, &newRunner.Spec) {
+				return true
+			}
+
+			return oldRunner.Status.JobID != newRunner.Status.JobID
+		},
+	}
+}
+
 // ephemeralRunnerOwnedPodPredicate filters updates of the pod owned by an
 // EphemeralRunner.
 //

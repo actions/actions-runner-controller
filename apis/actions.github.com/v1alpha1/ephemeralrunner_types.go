@@ -147,9 +147,9 @@ type EphemeralRunnerStatus struct {
 	// The PodSucceded phase should be set only when confirmed that EphemeralRunner
 	// actually executed the job and has been removed from the service.
 	//
-	// The Running phase is owned by the listener and is set only when a job has
-	// been assigned to this EphemeralRunner. It does not mean the runner is merely
-	// online and waiting for work; an idle registered runner stays Pending.
+	// Running means a job has been assigned to this EphemeralRunner. It does not
+	// mean the runner is merely online and waiting for work; an idle registered
+	// runner stays Pending.
 	// +optional
 	Phase EphemeralRunnerPhase `json:"phase,omitempty"`
 	// +optional
@@ -193,8 +193,8 @@ const (
 	// the ephemeral runner. It covers both a runner that is still being provisioned
 	// and one that is already online and registered but idle.
 	EphemeralRunnerPhasePending EphemeralRunnerPhase = "Pending"
-	// EphemeralRunnerPhaseRunning is a phase set by the listener when a job has been
-	// assigned to this ephemeral runner and the runner is executing it.
+	// EphemeralRunnerPhaseRunning is set once a job has been assigned to this
+	// ephemeral runner and it is executing that job.
 	EphemeralRunnerPhaseRunning EphemeralRunnerPhase = "Running"
 	// EphemeralRunnerPhaseSucceeded is a phase set when the ephemeral runner
 	// successfully executed the job and has been removed from the service.

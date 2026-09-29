@@ -828,6 +828,15 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 	var errs []error
 	log.Info("Cleanup pending or running ephemeral runners")
 	for _, ephemeralRunner := range ephemeralRunnerState.pending {
+		if ephemeralRunner.HasJob() {
+			log.Info(
+				"Skipping ephemeral runner since it is running a job",
+				"name", ephemeralRunner.Name,
+				"workflowRunId", ephemeralRunner.Status.WorkflowRunID,
+				"jobId", ephemeralRunner.Status.JobID,
+			)
+			continue
+		}
 		if waitForRunnerID(ephemeralRunner) {
 			continue
 		}
