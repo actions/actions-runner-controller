@@ -1224,11 +1224,11 @@ func (r *AutoscalingRunnerSetReconciler) deleteRunnerScaleSet(ctx context.Contex
 	actionsClient, err := r.GetActionsService(ctx, autoscalingRunnerSet)
 	switch {
 	case errors.Is(err, secretresolver.ErrNotFound):
-		// A secret or config map the client is built from is gone. Retrying cannot bring it back,
+		// A secret or config map the client is built from is gone, from Kubernetes or the vault. Retrying cannot bring it back,
 		// so release the autoscaling runner set instead of leaving it stuck in Terminating.
 		logger.Error(
 			err,
-			"Kubernetes resource required to reach the Actions service no longer exists. The runner scale set cannot be deregistered and must be deleted manually from the Actions service",
+			"A secret or config map required to reach the Actions service no longer exists in Kubernetes or the configured vault. The runner scale set cannot be deregistered and must be deleted manually from the Actions service",
 			"runnerScaleSetId", runnerScaleSetID,
 		)
 		return r.removeRunnerScaleSetIDAnnotation(ctx, autoscalingRunnerSet, runnerScaleSetID, logger)
