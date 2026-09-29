@@ -7,8 +7,16 @@ import (
 	"testing"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/vault"
+	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 )
 
 type fakeVault struct{ err error }
@@ -48,6 +56,78 @@ func TestVaultResolverTagsOnlyA404AsNotFound(t *testing.T) {
 				if got := errors.Is(err, ErrNotFound); got != tt.notFound {
 					t.Fatalf("errors.Is(err, ErrNotFound) = %v, want %v: %v", got, tt.notFound, err)
 				}
+			}
+		})
+	}
+}
+
+func TestGetActionsServiceTagsEveryMissingDependency(t *testing.T) {
+	const ns = "arc-runners"
+	configSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "github-config", Namespace: ns},
+		Data:       map[string][]byte{"github_token": []byte("token")},
+	}
+	proxyWithCredentials := &v1alpha1.ProxyConfig{
+		HTTP: &v1alpha1.ProxyServerConfig{Url: "http://proxy.example.com:3128", CredentialSecretRef: "proxy-credentials"},
+	}
+	forbidden := interceptor.Funcs{
+		Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+			return kerrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, key.Name, errors.New("denied"))
+		},
+	}
+
+	tests := map[string]struct {
+		spec        v1alpha1.AutoscalingRunnerSetSpec
+		objects     []client.Object
+		interceptor *interceptor.Funcs
+		notFound    bool
+	}{
+		"github config secret missing": {
+			spec:     v1alpha1.AutoscalingRunnerSetSpec{GitHubConfigSecret: "github-config"},
+			notFound: true,
+		},
+		"proxy credential secret missing": {
+			spec:     v1alpha1.AutoscalingRunnerSetSpec{GitHubConfigSecret: "github-config", Proxy: proxyWithCredentials},
+			objects:  []client.Object{configSecret},
+			notFound: true,
+		},
+		"tls config map missing": {
+			spec: v1alpha1.AutoscalingRunnerSetSpec{
+				GitHubConfigSecret: "github-config",
+				GitHubServerTLS: &v1alpha1.TLSConfig{CertificateFrom: &v1alpha1.TLSCertificateSource{
+					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "ca"}, Key: "ca.crt"},
+				}},
+			},
+			objects:  []client.Object{configSecret},
+			notFound: true,
+		},
+		"vault proxy credential secret missing": {
+			spec: v1alpha1.AutoscalingRunnerSetSpec{
+				GitHubConfigSecret: "github-config",
+				VaultConfig:        &v1alpha1.VaultConfig{Type: vault.VaultTypeAzureKeyVault, Proxy: proxyWithCredentials},
+			},
+			notFound: true,
+		},
+		"forbidden is not missing": {
+			spec:        v1alpha1.AutoscalingRunnerSetSpec{GitHubConfigSecret: "github-config"},
+			interceptor: &forbidden,
+			notFound:    false,
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			builder := fake.NewClientBuilder().WithScheme(clientgoscheme.Scheme).WithObjects(tt.objects...)
+			if tt.interceptor != nil {
+				builder = builder.WithInterceptorFuncs(*tt.interceptor)
+			}
+			ars := &v1alpha1.AutoscalingRunnerSet{ObjectMeta: metav1.ObjectMeta{Name: "ars", Namespace: ns}, Spec: tt.spec}
+
+			_, err := New(builder.Build(), nil).GetActionsService(context.Background(), ars)
+			if err == nil {
+				t.Fatal("expected an error")
+			}
+			if got := errors.Is(err, ErrNotFound); got != tt.notFound {
+				t.Fatalf("errors.Is(err, ErrNotFound) = %v, want %v: %v", got, tt.notFound, err)
 			}
 		})
 	}

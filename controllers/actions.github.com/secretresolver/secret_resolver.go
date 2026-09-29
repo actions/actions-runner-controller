@@ -39,13 +39,13 @@ func wrapK8sNotFound(err error) error {
 	return err
 }
 
-// wrapVaultNotFound tags an Azure Key Vault 404; other vault errors keep their previous message only.
+// wrapVaultNotFound tags an Azure Key Vault 404, so a 403 or throttled read still requeues.
 func wrapVaultNotFound(err error) error {
 	var responseErr *azcore.ResponseError
 	if errors.As(err, &responseErr) && responseErr.StatusCode == http.StatusNotFound {
 		return fmt.Errorf("%w: %w", ErrNotFound, err)
 	}
-	return fmt.Errorf("%v", err)
+	return err
 }
 
 type SecretResolver struct {
