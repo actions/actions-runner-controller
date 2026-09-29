@@ -147,6 +147,60 @@ func TestEphemeralRunnerSetActionableSpecChanged_RealChangeStillDetected(t *test
 	})
 }
 
+func TestEphemeralRunnerSetDesiredSpecChanged_Metadata(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		current *v1alpha1.ResourceMeta
+		desired *v1alpha1.ResourceMeta
+		changed bool
+	}{
+		{name: "both omitted"},
+		{
+			name: "empty labels", current: &v1alpha1.ResourceMeta{},
+			desired: &v1alpha1.ResourceMeta{Labels: map[string]string{}},
+		},
+		{
+			name: "empty annotations", current: &v1alpha1.ResourceMeta{},
+			desired: &v1alpha1.ResourceMeta{Annotations: map[string]string{}},
+		},
+		{
+			name: "empty maps", current: &v1alpha1.ResourceMeta{},
+			desired: &v1alpha1.ResourceMeta{Labels: map[string]string{}, Annotations: map[string]string{}},
+		},
+		{
+			name: "metadata object added", desired: &v1alpha1.ResourceMeta{}, changed: true,
+		},
+		{
+			name: "label added", current: &v1alpha1.ResourceMeta{},
+			desired: &v1alpha1.ResourceMeta{Labels: map[string]string{"team": "arc"}}, changed: true,
+		},
+		{
+			name:    "label changed",
+			current: &v1alpha1.ResourceMeta{Labels: map[string]string{"team": "old"}},
+			desired: &v1alpha1.ResourceMeta{Labels: map[string]string{"team": "arc"}}, changed: true,
+		},
+		{
+			name: "annotation added", current: &v1alpha1.ResourceMeta{},
+			desired: &v1alpha1.ResourceMeta{Annotations: map[string]string{"team": "arc"}}, changed: true,
+		},
+		{
+			name:    "annotation changed",
+			current: &v1alpha1.ResourceMeta{Annotations: map[string]string{"team": "old"}},
+			desired: &v1alpha1.ResourceMeta{Annotations: map[string]string{"team": "arc"}}, changed: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			current := &v1alpha1.EphemeralRunnerSet{Spec: v1alpha1.EphemeralRunnerSetSpec{EphemeralRunnerMetadata: tc.current}}
+			desired := &v1alpha1.EphemeralRunnerSet{Spec: v1alpha1.EphemeralRunnerSetSpec{EphemeralRunnerMetadata: tc.desired}}
+			currentBefore, desiredBefore := current.DeepCopy(), desired.DeepCopy()
+			assert.Equal(t, tc.changed, ephemeralRunnerSetDesiredSpecChanged(current, desired))
+			assert.Equal(t, tc.changed, ephemeralRunnerSetDesiredSpecChanged(desired, current), "removals must also be detected")
+			assert.Equal(t, currentBefore, current)
+			assert.Equal(t, desiredBefore, desired)
+		})
+	}
+}
+
 type listenerEmptyCollectionTestCase struct {
 	name          string
 	runnerSetSpec string

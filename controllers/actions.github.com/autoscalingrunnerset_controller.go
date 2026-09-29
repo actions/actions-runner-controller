@@ -29,7 +29,6 @@ import (
 	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/scaleset"
 	"github.com/go-logr/logr"
-	"github.com/google/go-cmp/cmp"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
@@ -300,7 +299,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		desiredLabels := r.filterAndMergeLabels(ephemeralRunnerSet.Labels, desired.Labels)
 		desiredAnnotations := r.mergeAnnotations(ephemeralRunnerSet.Annotations, desired.Annotations)
 
-		ephemeralRunnerMetadataModified := !cmp.Equal(ephemeralRunnerSet.Spec.EphemeralRunnerMetadata, desired.Spec.EphemeralRunnerMetadata)
+		ephemeralRunnerMetadataModified := !apiequality.Semantic.DeepEqual(ephemeralRunnerSet.Spec.EphemeralRunnerMetadata, desired.Spec.EphemeralRunnerMetadata)
 		ephemeralRunnerLabelsModified := !maps.Equal(ephemeralRunnerSet.Labels, desiredLabels)
 		ephemeralRunnerAnnotationsModified := !maps.Equal(ephemeralRunnerSet.Annotations, desiredAnnotations)
 
@@ -380,8 +379,8 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		// instead re-creates the listener with the phase unset, which means
 		// running, so it comes back correct in one step.
 		if listenerSpecChanged(&listener, desired) ||
-			!cmp.Equal(listener.Labels, desired.Labels) ||
-			!cmp.Equal(listener.Annotations, desired.Annotations) {
+			!maps.Equal(listener.Labels, desired.Labels) ||
+			!maps.Equal(listener.Annotations, desired.Annotations) {
 			// The listener is about to be torn down and rebuilt, which is what
 			// the pending phase means. Report it here rather than relying on the
 			// generation check above: the desired listener is derived from the

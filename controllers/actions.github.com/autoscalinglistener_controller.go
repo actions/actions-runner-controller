@@ -17,13 +17,14 @@ limitations under the License.
 package actionsgithubcom
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"maps"
-	"reflect"
 	"time"
 
 	"github.com/go-logr/logr"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -242,7 +243,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		labelsModified := !maps.Equal(listenerRole.Labels, desiredLabels)
 		desiredAnnotations := r.mergeAnnotations(listenerRole.Annotations, desiredRole.Annotations)
 		annotationsModified := !maps.Equal(listenerRole.Annotations, desiredAnnotations)
-		rulesModified := !reflect.DeepEqual(listenerRole.Rules, desiredRole.Rules)
+		rulesModified := !apiequality.Semantic.DeepEqual(listenerRole.Rules, desiredRole.Rules)
 		if labelsModified || annotationsModified || rulesModified {
 			updatedRole := listenerRole.DeepCopy()
 			if labelsModified {
@@ -433,7 +434,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		labelsModified := !maps.Equal(listenerConfigSecret.Labels, desiredLabels)
 		desiredAnnotations := r.mergeAnnotations(listenerConfigSecret.Annotations, desiredSecret.Annotations)
 		annotationsModified := !maps.Equal(listenerConfigSecret.Annotations, desiredAnnotations)
-		dataModified := !reflect.DeepEqual(listenerConfigSecret.Data, desiredSecret.Data)
+		dataModified := !maps.EqualFunc(listenerConfigSecret.Data, desiredSecret.Data, bytes.Equal)
 
 		if labelsModified || annotationsModified || dataModified {
 			updatedSecret := listenerConfigSecret.DeepCopy()
