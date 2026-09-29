@@ -191,7 +191,6 @@ func TestHandleJobStarted(t *testing.T) {
 		runner := newTestEphemeralRunner(jobInfo.RunnerName, v1alpha1.EphemeralRunnerPhasePending)
 		raceTerminalWrite := func() {
 			runner.Status.Phase = v1alpha1.EphemeralRunnerPhaseFailed
-			runner.ResourceVersion = strconv.Itoa(mustAtoi(t, runner.ResourceVersion) + 1)
 		}
 		scaler, shutdown := newTestScaler(t, runner, raceTerminalWrite)
 		defer shutdown()
@@ -210,7 +209,6 @@ func TestHandleJobStarted(t *testing.T) {
 			runner := newTestEphemeralRunner(jobInfo.RunnerName, v1alpha1.EphemeralRunnerPhasePending)
 			raceTerminalWrite := func() {
 				runner.Status.Phase = phase
-				runner.ResourceVersion = strconv.Itoa(mustAtoi(t, runner.ResourceVersion) + 1)
 			}
 			scaler, shutdown := newTestScaler(t, runner, raceTerminalWrite)
 			defer shutdown()
@@ -224,9 +222,7 @@ func TestHandleJobStarted(t *testing.T) {
 
 	t.Run("does not conflict when the runner changes concurrently", func(t *testing.T) {
 		runner := newTestEphemeralRunner(jobInfo.RunnerName, v1alpha1.EphemeralRunnerPhasePending)
-		raceWrite := func() {
-			runner.ResourceVersion = strconv.Itoa(mustAtoi(t, runner.ResourceVersion) + 1)
-		}
+		raceWrite := func() { runner.Status.Ready = true }
 		scaler, shutdown := newTestScaler(t, runner, raceWrite)
 		defer shutdown()
 
@@ -252,9 +248,8 @@ func TestHandleJobStarted(t *testing.T) {
 func newTestEphemeralRunner(name string, phase v1alpha1.EphemeralRunnerPhase) *v1alpha1.EphemeralRunner {
 	return &v1alpha1.EphemeralRunner{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            name,
-			Namespace:       "default",
-			ResourceVersion: "1",
+			Name:      name,
+			Namespace: "default",
 		},
 		Status: v1alpha1.EphemeralRunnerStatus{
 			Phase: phase,
@@ -274,8 +269,6 @@ func newTestScaler(t *testing.T, runner *v1alpha1.EphemeralRunner, onPatch ...fu
 		w.Header().Set("Content-Type", "application/json")
 
 		switch r.Method {
-		case http.MethodGet:
-			require.NoError(t, json.NewEncoder(w).Encode(runner))
 		case http.MethodPatch:
 			var patch v1alpha1.EphemeralRunner
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&patch))
@@ -285,29 +278,12 @@ func newTestScaler(t *testing.T, runner *v1alpha1.EphemeralRunner, onPatch ...fu
 			}
 			patches++
 
-			if patch.ResourceVersion != "" && patch.ResourceVersion != runner.ResourceVersion {
-				w.WriteHeader(http.StatusConflict)
-				require.NoError(t, json.NewEncoder(w).Encode(&metav1.Status{
-					TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Status"},
-					Status:   metav1.StatusFailure,
-					Code:     http.StatusConflict,
-					Reason:   metav1.StatusReasonConflict,
-					Message: fmt.Sprintf("Operation cannot be fulfilled on ephemeralrunners.actions.github.com %q: the object has been modified",
-						runner.Name),
-				}))
-				return
-			}
-
 			runner.Status.JobRequestID = patch.Status.JobRequestID
 			runner.Status.JobRepositoryName = patch.Status.JobRepositoryName
 			runner.Status.JobID = patch.Status.JobID
 			runner.Status.WorkflowRunID = patch.Status.WorkflowRunID
 			runner.Status.JobWorkflowRef = patch.Status.JobWorkflowRef
 			runner.Status.JobDisplayName = patch.Status.JobDisplayName
-			if patch.Status.Phase != "" {
-				runner.Status.Phase = patch.Status.Phase
-			}
-			runner.ResourceVersion = strconv.Itoa(mustAtoi(t, runner.ResourceVersion) + 1)
 
 			require.NoError(t, json.NewEncoder(w).Encode(runner))
 		default:
@@ -327,14 +303,6 @@ func newTestScaler(t *testing.T, runner *v1alpha1.EphemeralRunner, onPatch ...fu
 		patchSeq:      -1,
 		logger:        discardLogger,
 	}, server.Close
-}
-
-func mustAtoi(t *testing.T, s string) int {
-	t.Helper()
-
-	n, err := strconv.Atoi(s)
-	require.NoError(t, err)
-	return n
 }
 
 func assertJobStartedStatus(t *testing.T, runner *v1alpha1.EphemeralRunner, jobInfo *scaleset.JobStarted) {
@@ -678,25 +646,10 @@ type recordedRequest struct {
 	body   string
 }
 
-func methodsOf(requests []recordedRequest) []string {
-	methods := make([]string, 0, len(requests))
-	for _, request := range requests {
-		methods = append(methods, request.method)
-	}
-	return methods
-}
-
-// newRecordingScaler serves runner over a stub API server that records every
-// request and answers the verb named by notFoundFor with a 404 (empty serves
-// both verbs normally).
-//
-// Recording the requests, rather than only the returned error, is what makes
-// the NotFound paths observable at all: both log and return nil, so "no error"
-// is equally consistent with the request having been skipped, having been
-// issued and rejected, or having been retried. Only the request log tells those
-// apart, and only a positive control proves an empty log is a real absence
-// rather than a recorder that never worked.
-func newRecordingScaler(t *testing.T, runner *v1alpha1.EphemeralRunner, notFoundFor string) (*Scaler, *[]recordedRequest, func()) {
+// newRecordingScaler serves the listener's sole API request: its status PATCH.
+// A missing runner is an expected race, so the caller can request a 404 response
+// and assert that it is handled without a retry.
+func newRecordingScaler(t *testing.T, runner *v1alpha1.EphemeralRunner, patchNotFound bool) (*Scaler, *[]recordedRequest, func()) {
 	t.Helper()
 
 	requests := &[]recordedRequest{}
@@ -714,7 +667,12 @@ func newRecordingScaler(t *testing.T, runner *v1alpha1.EphemeralRunner, notFound
 
 		w.Header().Set("Content-Type", "application/json")
 
-		if r.Method == notFoundFor {
+		if r.Method != http.MethodPatch {
+			http.Error(w, "unexpected method", http.StatusMethodNotAllowed)
+			return
+		}
+
+		if patchNotFound {
 			w.WriteHeader(http.StatusNotFound)
 			require.NoError(t, json.NewEncoder(w).Encode(&metav1.Status{
 				TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Status"},
@@ -727,28 +685,17 @@ func newRecordingScaler(t *testing.T, runner *v1alpha1.EphemeralRunner, notFound
 			return
 		}
 
-		switch r.Method {
-		case http.MethodGet:
-			require.NoError(t, json.NewEncoder(w).Encode(runner))
-		case http.MethodPatch:
-			var patch v1alpha1.EphemeralRunner
-			require.NoError(t, json.Unmarshal(body.Bytes(), &patch))
+		var patch v1alpha1.EphemeralRunner
+		require.NoError(t, json.Unmarshal(body.Bytes(), &patch))
 
-			runner.Status.JobRequestID = patch.Status.JobRequestID
-			runner.Status.JobRepositoryName = patch.Status.JobRepositoryName
-			runner.Status.JobID = patch.Status.JobID
-			runner.Status.WorkflowRunID = patch.Status.WorkflowRunID
-			runner.Status.JobWorkflowRef = patch.Status.JobWorkflowRef
-			runner.Status.JobDisplayName = patch.Status.JobDisplayName
-			if patch.Status.Phase != "" {
-				runner.Status.Phase = patch.Status.Phase
-			}
-			runner.ResourceVersion = strconv.Itoa(mustAtoi(t, runner.ResourceVersion) + 1)
+		runner.Status.JobRequestID = patch.Status.JobRequestID
+		runner.Status.JobRepositoryName = patch.Status.JobRepositoryName
+		runner.Status.JobID = patch.Status.JobID
+		runner.Status.WorkflowRunID = patch.Status.WorkflowRunID
+		runner.Status.JobWorkflowRef = patch.Status.JobWorkflowRef
+		runner.Status.JobDisplayName = patch.Status.JobDisplayName
 
-			require.NoError(t, json.NewEncoder(w).Encode(runner))
-		default:
-			http.Error(w, "unexpected method", http.StatusMethodNotAllowed)
-		}
+		require.NoError(t, json.NewEncoder(w).Encode(runner))
 	}))
 
 	clientset, err := kubernetes.NewForConfig(&rest.Config{Host: server.URL})
@@ -788,12 +735,13 @@ func TestHandleJobStarted_NotFound(t *testing.T) {
 
 	t.Run("positive control: the recorder observes a successful metadata patch", func(t *testing.T) {
 		runner := newTestEphemeralRunner(jobInfo.RunnerName, v1alpha1.EphemeralRunnerPhasePending)
-		scaler, requests, shutdown := newRecordingScaler(t, runner, "")
+		scaler, requests, shutdown := newRecordingScaler(t, runner, false)
 		defer shutdown()
 
 		require.NoError(t, scaler.HandleJobStarted(context.Background(), jobInfo))
 
-		require.Equal(t, []string{http.MethodPatch}, methodsOf(*requests))
+		require.Len(t, *requests, 1)
+		assert.Equal(t, http.MethodPatch, (*requests)[0].method)
 		assert.Contains(t, (*requests)[0].body, `"jobId":"job-1"`)
 		assert.Equal(t, "/apis/actions.github.com/v1alpha1/namespaces/default/ephemeralrunners/runner-1/status", (*requests)[0].path)
 		assert.Equal(t, v1alpha1.EphemeralRunnerPhasePending, runner.Status.Phase)
@@ -801,14 +749,15 @@ func TestHandleJobStarted_NotFound(t *testing.T) {
 
 	t.Run("patch not found is swallowed and not retried", func(t *testing.T) {
 		runner := newTestEphemeralRunner(jobInfo.RunnerName, v1alpha1.EphemeralRunnerPhasePending)
-		scaler, requests, shutdown := newRecordingScaler(t, runner, http.MethodPatch)
+		scaler, requests, shutdown := newRecordingScaler(t, runner, true)
 		defer shutdown()
 
 		require.NoError(t, scaler.HandleJobStarted(context.Background(), jobInfo))
 
 		// Exactly one patch: a 404 must not be mistaken for a conflict and retried
 		// against state that will never come back.
-		require.Equal(t, []string{http.MethodPatch}, methodsOf(*requests))
+		require.Len(t, *requests, 1)
+		assert.Equal(t, http.MethodPatch, (*requests)[0].method)
 		assert.Contains(t, (*requests)[0].body, `"jobId":"job-1"`)
 		assert.Equal(t, v1alpha1.EphemeralRunnerPhasePending, runner.Status.Phase)
 	})
