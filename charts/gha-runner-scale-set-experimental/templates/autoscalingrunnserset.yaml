@@ -341,8 +341,10 @@ spec:
       volumes:
         {{- if eq $runnerMode "kubernetes" }}
         {{- include "runner-mode-kubernetes.pod-volumes" . | nindent 8 }}
-        {{- else }}
+        {{- else if eq $runnerMode "dind" }}
         {{- include "runner-mode-dind.pod-volumes" . | nindent 8 }}
+        {{- else }}
+        {{- include "githubServerTLS.podVolumeItem" . | nindent 8 }}
         {{- end }}
         {{- if $extraVolumes }}
           {{- range $extraVolumes }}

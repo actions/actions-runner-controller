@@ -230,6 +230,8 @@ runner:
     # - spec.containers: appended after the generated "runner" container (name "runner" is reserved)
     # - spec.initContainers: appended after any generated initContainers (e.g. dind mode)
     # - spec.volumes: appended after generated volumes
+    #   In empty mode, only user-supplied volumes and the optional GitHub server TLS
+    #   volume are included.
     # - spec.restartPolicy: defaults to Never; an explicit Kubernetes restart policy is preserved
     #
     # Note: serviceAccountName is managed by the chart and cannot be overridden via runner.pod.spec.
