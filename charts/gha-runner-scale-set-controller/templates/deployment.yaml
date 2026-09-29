@@ -67,8 +67,20 @@ spec:
         {{- with .Values.flags.watchSingleNamespace }}
         - "--watch-single-namespace={{ . }}"
         {{- end }}
-        {{- with .Values.flags.runnerMaxConcurrentReconciles }}
-        - "--runner-max-concurrent-reconciles={{ . }}"
+        {{- with .Values.flags.autoscalingRunnerSetMaxConcurrentReconciles }}
+        - "--autoscaling-runner-set-max-concurrent-reconciles={{ . }}"
+        {{- end }}
+        {{- with .Values.flags.autoscalingListenerMaxConcurrentReconciles }}
+        - "--autoscaling-listener-max-concurrent-reconciles={{ . }}"
+        {{- end }}
+        {{- with .Values.flags.ephemeralRunnerSetMaxConcurrentReconciles }}
+        - "--ephemeral-runner-set-max-concurrent-reconciles={{ . }}"
+        {{- end }}
+        {{- with .Values.flags.ephemeralRunnerMaxConcurrentReconciles }}
+        - "--ephemeral-runner-max-concurrent-reconciles={{ . }}"
+        {{- end }}
+        {{- with .Values.flags.terminatedRunnerPodGracePeriodSeconds }}
+        - "--terminated-runner-pod-grace-period-seconds={{ . }}"
         {{- end }}
         {{- if .Values.metrics }}
         {{- with .Values.metrics }}
@@ -103,13 +115,19 @@ spec:
         {{- end }}
         command:
         - "/manager"
-        {{- if or .Values.metrics .Values.pprof.addr }}
+        {{- $controllerMetricsEnabled := false }}
+        {{- with .Values.metrics }}
+        {{- $controllerMetricsEnabled = ne (toString .controllerManagerAddr) "0" }}
+        {{- end }}
+        {{- if or $controllerMetricsEnabled .Values.pprof.addr }}
         ports:
         {{- end }}
+        {{- if $controllerMetricsEnabled }}
         {{- with .Values.metrics }}
         - containerPort: {{ required "Values.metrics.controllerManagerAddr must end with a numeric port" (regexFind "[0-9]+$" .controllerManagerAddr) }}
           protocol: TCP
           name: metrics
+        {{- end }}
         {{- end }}
         {{- if .Values.pprof.addr }}
         - containerPort: {{ required "Values.pprof.addr must end with a numeric port" (regexFind "[0-9]+$" .Values.pprof.addr) }}

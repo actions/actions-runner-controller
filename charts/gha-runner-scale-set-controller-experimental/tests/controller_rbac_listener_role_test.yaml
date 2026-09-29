@@ -25,6 +25,14 @@ tests:
           value: "pods"
         template: manager_listener_role.yaml
       - equal:
+          path: rules[0].verbs
+          value:
+            - create
+            - delete
+            - get
+            - patch
+        template: manager_listener_role.yaml
+      - equal:
           path: rules[1].resources[0]
           value: "pods/status"
         template: manager_listener_role.yaml

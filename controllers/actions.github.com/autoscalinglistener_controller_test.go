@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	ghalistenerconfig "github.com/actions/actions-runner-controller/cmd/ghalistener/config"
@@ -21,6 +23,7 @@ import (
 	. "github.com/onsi/gomega"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
@@ -38,6 +41,7 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 	var autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet
 	var configSecret *corev1.Secret
 	var autoscalingListener *v1alpha1.AutoscalingListener
+	var resourceCache *ResourceCache
 
 	BeforeEach(func() {
 		ctx = context.Background()
@@ -49,7 +53,9 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 			scalefake.NewMultiClient(),
 		)
 
+		resourceCache = newTestResourceCache()
 		rb := ResourceBuilder{
+			ResourceCache:  resourceCache,
 			SecretResolver: secretResolver,
 		}
 
@@ -230,6 +236,17 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 				autoscalingListenerTestTimeout,
 				autoscalingListenerTestInterval,
 			).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
+
+			Eventually(
+				func() bool {
+					return resourceCacheStateHasMainObjectEntries(resourceCache.listenerServiceAccount, created) &&
+						resourceCacheStateHasMainObjectEntries(resourceCache.listenerRole, created) &&
+						resourceCacheStateHasMainObjectEntries(resourceCache.listenerRoleBinding, created) &&
+						resourceCacheStateHasMainObjectEntries(resourceCache.listenerPod, created)
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(BeTrue(), "AutoScalingListener service account, role, role binding, and pod resources should be cached after reconciliation")
 		})
 	})
 
@@ -250,8 +267,22 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 				autoscalingListenerTestInterval,
 			).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
 
+			created := new(v1alpha1.AutoscalingListener)
+			err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, created)
+			Expect(err).NotTo(HaveOccurred(), "failed to get AutoScalingListener")
+			Eventually(
+				func() bool {
+					return resourceCacheStateHasMainObjectEntries(resourceCache.listenerServiceAccount, created) &&
+						resourceCacheStateHasMainObjectEntries(resourceCache.listenerRole, created) &&
+						resourceCacheStateHasMainObjectEntries(resourceCache.listenerRoleBinding, created) &&
+						resourceCacheStateHasMainObjectEntries(resourceCache.listenerPod, created)
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(BeTrue(), "AutoScalingListener service account, role, role binding, and pod resources should be cached before deletion")
+
 			// Delete the AutoScalingListener
-			err := k8sClient.Delete(ctx, autoscalingListener)
+			err = k8sClient.Delete(ctx, autoscalingListener)
 			Expect(err).NotTo(HaveOccurred(), "failed to delete test AutoScalingListener")
 
 			// Cleanup the listener pod
@@ -342,6 +373,17 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 				autoscalingListenerTestTimeout,
 				autoscalingListenerTestInterval,
 			).ShouldNot(Succeed(), "failed to delete AutoScalingListener")
+
+			Eventually(
+				func() bool {
+					return resourceCacheStateHasMainObjectEntries(resourceCache.listenerServiceAccount, created) ||
+						resourceCacheStateHasMainObjectEntries(resourceCache.listenerRole, created) ||
+						resourceCacheStateHasMainObjectEntries(resourceCache.listenerRoleBinding, created) ||
+						resourceCacheStateHasMainObjectEntries(resourceCache.listenerPod, created)
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(BeFalse(), "AutoScalingListener service account, role, role binding, and pod resources should be removed from cache after deletion")
 		})
 	})
 
@@ -382,6 +424,63 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 				autoscalingListenerTestTimeout,
 				autoscalingListenerTestInterval,
 			).Should(BeEquivalentTo(rulesForListenerRole([]string{updated.Spec.EphemeralRunnerSetName})), "Role should be updated")
+		})
+
+		It("updates listener scaler configuration and recreates the listener pod", func() {
+			pod := new(corev1.Pod)
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(Succeed(), "Listener pod should be created")
+			oldPodUID := pod.UID
+
+			current := new(v1alpha1.AutoscalingListener)
+			err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, current)
+			Expect(err).NotTo(HaveOccurred(), "failed to get AutoScalingListener")
+
+			qps := 75
+			burst := 150
+			updated := current.DeepCopy()
+			updated.Spec.ListenerConfig = &v1alpha1.ListenerConfig{
+				Scaler: &v1alpha1.ScalerConfig{
+					QPS:   &qps,
+					Burst: &burst,
+				},
+			}
+			err = k8sClient.Patch(ctx, updated, client.MergeFrom(current))
+			Expect(err).NotTo(HaveOccurred(), "failed to update listener scaler configuration")
+
+			secret := new(corev1.Secret)
+			Eventually(
+				func(g Gomega) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerConfigName(autoscalingListener), Namespace: autoscalingListener.Namespace}, secret)
+					g.Expect(err).NotTo(HaveOccurred(), "failed to get listener config Secret")
+
+					var config ghalistenerconfig.Config
+					err = json.Unmarshal(secret.Data["config.json"], &config)
+					g.Expect(err).NotTo(HaveOccurred(), "failed to parse listener configuration file")
+					g.Expect(config.ListenerConfig.GetScaler()).NotTo(BeNil())
+					g.Expect(config.ListenerConfig.GetScaler().QPS).NotTo(BeNil())
+					g.Expect(config.ListenerConfig.GetScaler().Burst).NotTo(BeNil())
+					g.Expect(*config.ListenerConfig.GetScaler().QPS).To(Equal(qps))
+					g.Expect(*config.ListenerConfig.GetScaler().Burst).To(Equal(burst))
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(Succeed(), "Listener config Secret should be updated")
+
+			Eventually(
+				func() (types.UID, error) {
+					pod := new(corev1.Pod)
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
+					return pod.UID, err
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).ShouldNot(Equal(oldPodUID), "Listener pod should be recreated with the updated configuration")
 		})
 
 		It("propagates updated listener metadata to owned resources", func() {
@@ -550,6 +649,94 @@ var _ = Describe("Test AutoScalingListener controller", func() {
 			).Should(BeEquivalentTo(oldSecretUID), "Config secret should persist (not be re-created)")
 		})
 	})
+
+	Context("When the listener is stopped", func() {
+		listenerKey := func() client.ObjectKey {
+			return client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}
+		}
+
+		// The child resources are the listener's whole footprint: the pod that
+		// acquires jobs, the config secret holding its credentials, and the RBAC
+		// it runs under.
+		//
+		// A pod counts as removed once its deletion has been requested. envtest
+		// runs no kubelet, so nothing confirms the delete and the pod lingers
+		// Terminating for its whole 60s grace period; the controller has already
+		// done everything it can at that point.
+		expectChildResources := func(exist bool) {
+			GinkgoHelper()
+
+			Eventually(
+				func(g Gomega) {
+					pod := new(corev1.Pod)
+					err := k8sClient.Get(ctx, listenerKey(), pod)
+					if exist {
+						g.Expect(err).NotTo(HaveOccurred(), "pod should exist")
+						g.Expect(pod.DeletionTimestamp).To(BeNil(), "pod should not be terminating")
+					} else {
+						g.Expect(kerrors.IsNotFound(err) || (err == nil && pod.DeletionTimestamp != nil)).
+							To(BeTrue(), "pod should be removed while the listener is stopped")
+					}
+
+					for _, resource := range []struct {
+						name   string
+						key    client.ObjectKey
+						object client.Object
+					}{
+						{"config secret", client.ObjectKey{Name: scaleSetListenerConfigName(autoscalingListener), Namespace: autoscalingListener.Namespace}, new(corev1.Secret)},
+						{"service account", listenerKey(), new(corev1.ServiceAccount)},
+						{"role", client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace}, new(rbacv1.Role)},
+						{"role binding", client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace}, new(rbacv1.RoleBinding)},
+					} {
+						err := k8sClient.Get(ctx, resource.key, resource.object)
+						if exist {
+							g.Expect(err).NotTo(HaveOccurred(), "%s should exist", resource.name)
+							continue
+						}
+						g.Expect(kerrors.IsNotFound(err)).To(BeTrue(), "%s should be removed while the listener is stopped", resource.name)
+					}
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(Succeed())
+		}
+
+		patchPhase := func(phase v1alpha1.AutoscalingListenerPhase) {
+			GinkgoHelper()
+
+			listener := new(v1alpha1.AutoscalingListener)
+			Expect(k8sClient.Get(ctx, listenerKey(), listener)).To(Succeed())
+			original := listener.DeepCopy()
+			listener.Spec.Phase = phase
+			Expect(k8sClient.Patch(ctx, listener, client.MergeFrom(original))).To(Succeed(), "failed to patch the listener phase")
+		}
+
+		It("removes the child resources but keeps the listener, and rebuilds them when started again", func() {
+			expectChildResources(true)
+
+			patchPhase(v1alpha1.AutoscalingListenerPhaseStopped)
+
+			expectChildResources(false)
+
+			// The listener itself is the record of a scale set that is meant to
+			// come back, so it survives with its finalizer and spec intact.
+			Consistently(
+				func(g Gomega) {
+					listener := new(v1alpha1.AutoscalingListener)
+					g.Expect(k8sClient.Get(ctx, listenerKey(), listener)).To(Succeed())
+					g.Expect(listener.DeletionTimestamp).To(BeNil(), "a stopped listener must not be deleted")
+					g.Expect(listener.Finalizers).To(ContainElement(autoscalingListenerFinalizerName))
+					g.Expect(listener.Spec.Phase).To(Equal(v1alpha1.AutoscalingListenerPhaseStopped))
+				},
+				2*time.Second,
+				autoscalingListenerTestInterval,
+			).Should(Succeed())
+
+			patchPhase(v1alpha1.AutoscalingListenerPhaseRunning)
+
+			expectChildResources(true)
+		})
+	})
 })
 
 var _ = Describe("Test AutoScalingListener customization", func() {
@@ -593,6 +780,7 @@ var _ = Describe("Test AutoScalingListener customization", func() {
 		secretResolver := secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient())
 
 		rb := ResourceBuilder{
+			ResourceCache:  newTestResourceCache(),
 			SecretResolver: secretResolver,
 		}
 
@@ -854,6 +1042,203 @@ var _ = Describe("Test AutoScalingListener customization", func() {
 	})
 })
 
+var _ = Describe("AutoscalingListener dead pod recovery", func() {
+	var (
+		ctx                   context.Context
+		mgr                   ctrl.Manager
+		autoscalingNS         *corev1.Namespace
+		autoscalingRunnerSet  *v1alpha1.AutoscalingRunnerSet
+		autoscalingListener   *v1alpha1.AutoscalingListener
+		configSecret          *corev1.Secret
+		reconcileRequest      ctrl.Request
+		newListenerReconciler func(client.Client) *AutoscalingListenerReconciler
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
+		configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
+
+		min := 1
+		max := 10
+		autoscalingRunnerSet = &v1alpha1.AutoscalingRunnerSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-asrs",
+				Namespace: autoscalingNS.Name,
+			},
+			Spec: v1alpha1.AutoscalingRunnerSetSpec{
+				GitHubConfigUrl:    "https://github.com/owner/repo",
+				GitHubConfigSecret: configSecret.Name,
+				MaxRunners:         &max,
+				MinRunners:         &min,
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "runner",
+								Image: "ghcr.io/actions/runner",
+							},
+						},
+					},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, autoscalingRunnerSet)).To(Succeed())
+
+		autoscalingListener = &v1alpha1.AutoscalingListener{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-asl",
+				Namespace: autoscalingNS.Name,
+				Labels: map[string]string{
+					"arc.test/listener-label": "desired",
+				},
+			},
+			Spec: v1alpha1.AutoscalingListenerSpec{
+				GitHubConfigURL:               "https://github.com/owner/repo",
+				GitHubConfigSecret:            configSecret.Name,
+				RunnerScaleSetID:              1,
+				AutoscalingRunnerSetNamespace: autoscalingRunnerSet.Namespace,
+				AutoscalingRunnerSetName:      autoscalingRunnerSet.Name,
+				EphemeralRunnerSetName:        "test-ers",
+				MaxRunners:                    10,
+				MinRunners:                    1,
+				Image:                         "ghcr.io/owner/repo",
+			},
+		}
+		Expect(k8sClient.Create(ctx, autoscalingListener)).To(Succeed())
+
+		reconcileRequest = ctrl.Request{NamespacedName: client.ObjectKeyFromObject(autoscalingListener)}
+		newListenerReconciler = func(c client.Client) *AutoscalingListenerReconciler {
+			return &AutoscalingListenerReconciler{
+				Client: c,
+				Scheme: mgr.GetScheme(),
+				Log:    logf.Log,
+				ResourceBuilder: ResourceBuilder{
+					ResourceCache:  newTestResourceCache(),
+					SecretResolver: secretresolver.New(c, scalefake.NewMultiClient()),
+					Scheme:         mgr.GetScheme(),
+				},
+			}
+		}
+	})
+
+	waitForListenerPod := func(reconciler *AutoscalingListenerReconciler) *corev1.Pod {
+		Eventually(
+			func() error {
+				_, err := reconciler.Reconcile(ctx, reconcileRequest)
+				if err != nil {
+					return err
+				}
+
+				return k8sClient.Get(ctx, reconcileRequest.NamespacedName, new(corev1.Pod))
+			},
+			autoscalingListenerTestTimeout,
+			autoscalingListenerTestInterval,
+		).Should(Succeed())
+
+		pod := new(corev1.Pod)
+		Expect(k8sClient.Get(ctx, reconcileRequest.NamespacedName, pod)).To(Succeed())
+		return pod
+	}
+
+	markPodDeadWithMetadataDrift := func(pod *corev1.Pod, evicted bool) {
+		original := pod.DeepCopy()
+		pod.Labels["arc.test/listener-label"] = "stale"
+		pod.Annotations[AnnotationKeyListenerConfigResourceVersion] = "stale"
+		Expect(k8sClient.Patch(ctx, pod, client.MergeFrom(original))).To(Succeed())
+
+		Expect(k8sClient.Get(ctx, reconcileRequest.NamespacedName, pod)).To(Succeed())
+		if evicted {
+			pod.Status.Reason = "Evicted"
+		} else {
+			pod.Status.ContainerStatuses = []corev1.ContainerStatus{
+				{
+					Name: autoscalingListenerContainerName,
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{ExitCode: 1},
+					},
+				},
+			}
+		}
+		Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
+	}
+
+	recoverDeadPod := func(evicted, forbidPodPatch bool) {
+		bootstrapReconciler := newListenerReconciler(k8sClient)
+		pod := waitForListenerPod(bootstrapReconciler)
+		oldPodUID := pod.UID
+		markPodDeadWithMetadataDrift(pod, evicted)
+
+		reconcilerClient := client.Client(k8sClient)
+		var podPatchAttempts atomic.Int32
+		if forbidPodPatch {
+			watchClient, err := client.NewWithWatch(cfg, client.Options{Scheme: mgr.GetScheme()})
+			Expect(err).NotTo(HaveOccurred())
+			reconcilerClient = interceptor.NewClient(watchClient, interceptor.Funcs{
+				Patch: func(ctx context.Context, c client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+					if _, ok := obj.(*corev1.Pod); ok {
+						podPatchAttempts.Add(1)
+						return kerrors.NewForbidden(schema.GroupResource{Resource: "pods"}, obj.GetName(), fmt.Errorf("pod patches are forbidden"))
+					}
+					return c.Patch(ctx, obj, patch, opts...)
+				},
+			})
+		}
+
+		reconciler := newListenerReconciler(reconcilerClient)
+		_, err := reconciler.Reconcile(ctx, reconcileRequest)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(podPatchAttempts.Load()).To(BeZero(), "dead listener pods must be deleted before metadata is patched")
+
+		Eventually(
+			func() error {
+				_, err := reconciler.Reconcile(ctx, reconcileRequest)
+				if err != nil {
+					return err
+				}
+
+				pod := new(corev1.Pod)
+				err = k8sClient.Get(ctx, reconcileRequest.NamespacedName, pod)
+				if kerrors.IsNotFound(err) {
+					return err
+				}
+				if err != nil {
+					return err
+				}
+				if !pod.DeletionTimestamp.IsZero() {
+					if err := k8sClient.Delete(ctx, pod, client.GracePeriodSeconds(0)); err != nil {
+						return err
+					}
+					return fmt.Errorf("listener pod is terminating")
+				}
+				if pod.UID == oldPodUID {
+					return fmt.Errorf("listener pod has not been recreated")
+				}
+				if pod.Labels["arc.test/listener-label"] != "desired" ||
+					pod.Annotations[AnnotationKeyListenerConfigResourceVersion] == "stale" {
+					return fmt.Errorf("replacement listener pod has stale metadata")
+				}
+				return nil
+			},
+			autoscalingListenerTestTimeout,
+			autoscalingListenerTestInterval,
+		).Should(Succeed())
+		Expect(podPatchAttempts.Load()).To(BeZero(), "the replacement listener pod should not need a metadata patch")
+	}
+
+	It("recreates an evicted listener pod with metadata drift when pod patches are forbidden", func() {
+		recoverDeadPod(true, true)
+	})
+
+	It("recreates a terminated listener pod with metadata drift when pod patches are forbidden", func() {
+		recoverDeadPod(false, true)
+	})
+
+	It("recreates a terminated listener pod with metadata drift without a patch failure", func() {
+		recoverDeadPod(false, false)
+	})
+})
+
 var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 	var ctx context.Context
 	var mgr ctrl.Manager
@@ -922,6 +1307,7 @@ var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 		secretResolver := secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient())
 
 		rb := ResourceBuilder{
+			ResourceCache:  newTestResourceCache(),
 			SecretResolver: secretResolver,
 		}
 
@@ -1127,6 +1513,7 @@ var _ = Describe("Test AutoScalingListener controller with template modification
 		secretResolver := secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient())
 
 		rb := ResourceBuilder{
+			ResourceCache:  newTestResourceCache(),
 			SecretResolver: secretResolver,
 		}
 
@@ -1232,6 +1619,7 @@ var _ = Describe("Test GitHub Server TLS configuration", func() {
 		secretResolver := secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient())
 
 		rb := ResourceBuilder{
+			ResourceCache:  newTestResourceCache(),
 			SecretResolver: secretResolver,
 		}
 

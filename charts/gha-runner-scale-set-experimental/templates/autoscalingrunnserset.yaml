@@ -1,10 +1,60 @@
 {{- $runner := (.Values.runner | default dict) }}
+{{- include "validate-all-metadata" . }}
 {{- $runnerMode := (index $runner "mode" | default "") }}
 {{- $kubeMode := (index $runner "kubernetesMode" | default dict) }}
 {{- $dind := (index $runner "dind" | default dict) }}
 {{- $kubeDefaults := (index $kubeMode "default" | default true) }}
 {{- $kubeServiceAccountName := (index $kubeMode "serviceAccountName" | default "") }}
-{{- $usesKubernetesSecrets := or (not .Values.secretResolution) (eq .Values.secretResolution.type "kubernetes") }}
+{{- $usesKubernetesSecrets := eq (include "secret-resolution.type" .) "kubernetes" }}
+{{- /* All listener configuration lives under .Values.listener */ -}}
+{{- if hasKey .Values "listenerMetrics" }}
+  {{- fail ".Values.listenerMetrics has moved to .Values.listener.metrics" }}
+{{- end }}
+{{- if hasKey .Values "listenerPodTemplate" }}
+  {{- fail ".Values.listenerPodTemplate has moved to .Values.listener.podTemplate" }}
+{{- end }}
+{{- $listener := .Values.listener | default dict }}
+{{- if not (kindIs "map" $listener) }}
+  {{- fail ".Values.listener must be an object" }}
+{{- end }}
+{{- $listenerKeys := list "metrics" "podTemplate" "scaler" }}
+{{- range $name, $_ := $listener }}
+  {{- if not (has $name $listenerKeys) }}
+    {{- fail (printf ".Values.listener.%s is not a supported key; supported keys are: %s" $name (join ", " $listenerKeys)) }}
+  {{- end }}
+{{- end }}
+{{- range $name := list "metrics" "podTemplate" }}
+  {{- $value := index $listener $name | default dict }}
+  {{- if not (kindIs "map" $value) }}
+    {{- fail (printf ".Values.listener.%s must be an object" $name) }}
+  {{- end }}
+{{- end }}
+{{- $scaler := $listener.scaler | default dict }}
+{{- if not (kindIs "map" $scaler) }}
+  {{- fail ".Values.listener.scaler must be an object" }}
+{{- end }}
+{{- $scalerKeys := list "burst" "qps" }}
+{{- range $name, $_ := $scaler }}
+  {{- if not (has $name $scalerKeys) }}
+    {{- fail (printf ".Values.listener.scaler.%s is not a supported key; supported keys are: %s" $name (join ", " $scalerKeys)) }}
+  {{- end }}
+{{- end }}
+{{- range $name := $scalerKeys }}
+  {{- if hasKey $scaler $name }}
+    {{- $value := index $scaler $name }}
+    {{- if not (or (kindIs "int" $value) (kindIs "int64" $value) (kindIs "float64" $value)) }}
+      {{- fail (printf ".Values.listener.scaler.%s must be an integer greater than 0" $name) }}
+    {{- else }}
+      {{- $number := float64 $value }}
+      {{- if ne $number (floor $number) }}
+        {{- fail (printf ".Values.listener.scaler.%s must be an integer greater than 0" $name) }}
+      {{- else if lt $number (float64 1) }}
+        {{- fail (printf ".Values.listener.scaler.%s must be greater than 0" $name) }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- $listenerPodTemplate := $listener.podTemplate | default dict }}
 
 {{- $runnerPod := (index $runner "pod" | default dict) -}}
 {{- if not (kindIs "map" $runnerPod) -}}
@@ -106,22 +156,20 @@ spec:
     {{- end }}
   {{- end }}
 
-  {{- if and .Values.secretResolution (ne .Values.secretResolution.type "kubernetes") }}
+  {{- if not $usesKubernetesSecrets }}
   vaultConfig:
-    type: {{ .Values.secretResolution.type }}
+    type: azure_key_vault
     {{- if .Values.secretResolution.proxy }}
     proxy: {{- toYaml .Values.secretResolution.proxy | nindent 6 }}
     {{- end }}
-    {{- if eq .Values.secretResolution.type "azureKeyVault" }}
+    {{- if hasKey (.Values.secretResolution.azureKeyVault | default dict) "secretKey" }}
+    {{- fail "secretResolution.azureKeyVault.secretKey is not supported; use auth.secretName to select the vault secret" }}
+    {{- end }}
     azureKeyVault:
       url: {{ .Values.secretResolution.azureKeyVault.url }}
       tenantId: {{ .Values.secretResolution.azureKeyVault.tenantId }}
       clientId: {{ .Values.secretResolution.azureKeyVault.clientId }}
       certificatePath: {{ .Values.secretResolution.azureKeyVault.certificatePath }}
-      secretKey: {{ .Values.secretResolution.azureKeyVault.secretKey }}
-    {{- else }}
-    {{- fail (printf "Unsupported keyVault type: %s" .Values.secretResolution.type) }}
-    {{- end }}
   {{- end }}
 
   {{- if .Values.proxy }}
@@ -165,12 +213,17 @@ spec:
   minRunners: {{ .Values.scaleset.minRunners | int }}
   {{- end }}
 
-  {{- if and .Values.listenerPodTemplate (or .Values.listenerPodTemplate.metadata .Values.listenerPodTemplate.spec) }}
+  {{- if or $listenerPodTemplate.metadata $listenerPodTemplate.spec }}
   listenerTemplate:
-    {{- include "listener-template.pod" . | nindent 4}}
+    {{- include "listener-template.pod" $listenerPodTemplate | nindent 4}}
   {{- end }}
 
-  {{- with .Values.listenerMetrics }}
+  {{- with $listener.scaler }}
+  listenerConfig:
+    scaler:
+      {{- toYaml . | nindent 6 }}
+  {{- end }}
+  {{- with $listener.metrics }}
   listenerMetrics:
     {{- toYaml . | nindent 4 }}
   {{- end }}
@@ -255,6 +308,9 @@ spec:
     {{- end }}
     spec:
       serviceAccountName: {{ include "autoscaling-runner-set.template-service-account" . | quote }}
+      {{- if not (hasKey $runnerPodSpec "restartPolicy") }}
+      restartPolicy: Never
+      {{- end }}
       {{- if $hasInitContainers }}
       initContainers:
         {{- if and (eq $runnerMode "dind") $dind.copyRunnerExternals }}
@@ -285,8 +341,10 @@ spec:
       volumes:
         {{- if eq $runnerMode "kubernetes" }}
         {{- include "runner-mode-kubernetes.pod-volumes" . | nindent 8 }}
-        {{- else }}
+        {{- else if eq $runnerMode "dind" }}
         {{- include "runner-mode-dind.pod-volumes" . | nindent 8 }}
+        {{- else }}
+        {{- include "githubServerTLS.podVolumeItem" . | nindent 8 }}
         {{- end }}
         {{- if $extraVolumes }}
           {{- range $extraVolumes }}
