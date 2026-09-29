@@ -71,6 +71,14 @@ func TestReconcileValidatesJITIdentityBeforePublication(t *testing.T) {
 						require.NoError(t, err)
 						require.NotNil(t, f.pod())
 						require.Zero(t, f.runner().Status.RunnerID)
+
+						pod := f.pod()
+						pod.Status.Phase = corev1.PodRunning
+						pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
+							Name:  v1alpha1.EphemeralRunnerContainerName,
+							State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+						}}
+						require.NoError(t, f.c.Status().Update(t.Context(), pod))
 					}
 					_, err = f.reconcileRunner()
 					require.NoError(t, err)
