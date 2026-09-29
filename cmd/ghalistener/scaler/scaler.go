@@ -15,7 +15,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/util/retry"
 )
 
 type Option func(*Scaler)
@@ -124,7 +123,6 @@ func (w *Scaler) applyDefaults() error {
 // It takes a context and a jobInfo parameter which contains the details of the started job.
 // This update marks the ephemeral runner so that the controller would have more context
 // about the ephemeral runner that should not be deleted when scaling down.
-// It also transitions the phase to Running if the runner is not in a terminal state.
 // It returns an error if there is any issue with updating the job information.
 func (w *Scaler) HandleJobStarted(ctx context.Context, jobInfo *scaleset.JobStarted) error {
 	w.logger.Info("Updating job info for the runner",
@@ -139,33 +137,10 @@ func (w *Scaler) HandleJobStarted(ctx context.Context, jobInfo *scaleset.JobStar
 
 	w.dirty = true
 
-	// The promotion to Running is guarded by an optimistic lock on the resource version
-	// observed by the GET below, so a terminal phase written between the read and the
-	// patch is never clobbered. Conflicts are retried against freshly read state.
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		return w.patchJobStarted(ctx, jobInfo)
-	})
+	return w.patchJobStarted(ctx, jobInfo)
 }
 
 func (w *Scaler) patchJobStarted(ctx context.Context, jobInfo *scaleset.JobStarted) error {
-	// Fetch current EphemeralRunner to check phase and deletion status
-	currentRunner := &v1alpha1.EphemeralRunner{}
-	err := w.clientset.RESTClient().
-		Get().
-		Prefix("apis", v1alpha1.GroupVersion.Group, v1alpha1.GroupVersion.Version).
-		Namespace(w.config.EphemeralRunnerSetNamespace).
-		Resource("ephemeralrunners").
-		Name(jobInfo.RunnerName).
-		Do(ctx).
-		Into(currentRunner)
-	if err != nil {
-		if kerrors.IsNotFound(err) {
-			w.logger.Info("Ephemeral runner not found, skipping job info update", "runnerName", jobInfo.RunnerName)
-			return nil
-		}
-		return fmt.Errorf("failed to get ephemeral runner: %w", err)
-	}
-
 	original, err := json.Marshal(&v1alpha1.EphemeralRunner{})
 	if err != nil {
 		return fmt.Errorf("failed to marshal empty ephemeral runner: %w", err)
@@ -181,24 +156,6 @@ func (w *Scaler) patchJobStarted(ctx context.Context, jobInfo *scaleset.JobStart
 			JobWorkflowRef:    jobInfo.JobWorkflowRef,
 			JobDisplayName:    jobInfo.JobDisplayName,
 		},
-	}
-
-	// Only set Running phase if current phase is not terminal/failure and deletion is not in progress.
-	//
-	// The phase is the only field derived from the state read above, so the observed
-	// resourceVersion is attached to the patch as a precondition. Without it, a terminal
-	// phase written between the read and the patch would be silently overwritten with
-	// Running, resurrecting a runner that already finished. The job fields carry no such
-	// precondition: they are write-once metadata that the runner set only consults for
-	// runners that are neither done nor being deleted, so patching them unconditionally
-	// cannot change any scaling decision.
-	if currentRunner.DeletionTimestamp == nil &&
-		currentRunner.Status.Phase != v1alpha1.EphemeralRunnerPhaseFailed &&
-		currentRunner.Status.Phase != v1alpha1.EphemeralRunnerPhaseSucceeded &&
-		currentRunner.Status.Phase != v1alpha1.EphemeralRunnerPhaseOutdated {
-		patchRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
-		// Optimistic lock: reject the promotion if the runner changed since the GET.
-		patchRunner.ResourceVersion = currentRunner.ResourceVersion
 	}
 
 	patch, err := json.Marshal(patchRunner)
@@ -228,10 +185,6 @@ func (w *Scaler) patchJobStarted(ctx context.Context, jobInfo *scaleset.JobStart
 		if kerrors.IsNotFound(err) {
 			w.logger.Info("Ephemeral runner not found, skipping patching of ephemeral runner status", "runnerName", jobInfo.RunnerName)
 			return nil
-		}
-		if kerrors.IsConflict(err) {
-			w.logger.Info("Ephemeral runner changed while patching job info, retrying", "runnerName", jobInfo.RunnerName)
-			return err
 		}
 		return fmt.Errorf("could not patch ephemeral runner status, patch JSON: %s, error: %w", string(mergePatch), err)
 	}

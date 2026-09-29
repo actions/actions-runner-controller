@@ -37,7 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 )
 
-func TestReconcileDefersRunnerIdentityUntilPodExists(t *testing.T) {
+func TestReconcileDefersRunnerIdentityUntilPodReportsStatus(t *testing.T) {
 	ctx := context.Background()
 	key := types.NamespacedName{Namespace: "default", Name: "test-runner"}
 
@@ -73,7 +73,7 @@ func TestReconcileDefersRunnerIdentityUntilPodExists(t *testing.T) {
 	c := ctrlfake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(runner, secret).
-		WithStatusSubresource(&v1alpha1.EphemeralRunner{}).
+		WithStatusSubresource(&v1alpha1.EphemeralRunner{}, &corev1.Pod{}).
 		WithInterceptorFuncs(interceptor.Funcs{
 			SubResourcePatch: func(ctx context.Context, clt client.Client, subResourceName string, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
 				if _, ok := obj.(*v1alpha1.EphemeralRunner); ok {
@@ -121,12 +121,20 @@ func TestReconcileDefersRunnerIdentityUntilPodExists(t *testing.T) {
 	assert.Empty(t, getRunner().Status.RunnerName)
 	assert.Zero(t, statusPatchAttempts, "the runner identity must not delay Pod creation")
 
-	// This is the same state after a controller crash following Pod creation:
-	// the next reconcile finds the Pod and restores the identity from the JIT
-	// secret. A transient patch failure returns an error for reconciliation to
-	// retry without creating another Pod.
+	// Identity remains deferred until the Pod reports a non-terminal container
+	// status. A transient failure of that coalesced status patch returns an
+	// error for reconciliation to retry without creating another Pod.
+	pod := new(corev1.Pod)
+	require.NoError(t, c.Get(ctx, key, pod))
+	pod.Status.Phase = corev1.PodRunning
+	pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
+		Name:  v1alpha1.EphemeralRunnerContainerName,
+		State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+	}}
+	require.NoError(t, c.Status().Update(ctx, pod))
+
 	_, err = newReconciler().Reconcile(ctx, ctrl.Request{NamespacedName: key})
-	require.ErrorContains(t, err, "failed to update runner status for RunnerId/RunnerName")
+	require.ErrorContains(t, err, "failed to update runner status for Phase/Reason/Message/Ready")
 	assert.Equal(t, 1, podCount())
 	assert.Zero(t, getRunner().Status.RunnerID)
 	assert.Empty(t, getRunner().Status.RunnerName)

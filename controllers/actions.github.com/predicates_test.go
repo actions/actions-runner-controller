@@ -156,6 +156,66 @@ func TestEphemeralRunnerSetOwnedEphemeralRunnerPredicate(t *testing.T) {
 	})
 }
 
+func TestEphemeralRunnerPredicate(t *testing.T) {
+	base := func() *v1alpha1.EphemeralRunner {
+		return &v1alpha1.EphemeralRunner{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "runner",
+				Namespace:  "default",
+				Generation: 1,
+				Finalizers: []string{"finalizer"},
+			},
+			Spec: v1alpha1.EphemeralRunnerSpec{GitHubConfigURL: "https://github.com/org/repo"},
+			Status: v1alpha1.EphemeralRunnerStatus{
+				Phase:    v1alpha1.EphemeralRunnerPhasePending,
+				Ready:    true,
+				RunnerID: 42,
+			},
+		}
+	}
+
+	t.Run("reconciles on listener job assignment", func(t *testing.T) {
+		old, updated := base(), base()
+		updated.Status.JobID = "job"
+
+		assert.True(t, ephemeralRunnerPredicate().Update(event.UpdateEvent{ObjectOld: old, ObjectNew: updated}))
+	})
+
+	t.Run("reconciles on metadata and spec changes", func(t *testing.T) {
+		for name, mutate := range map[string]func(*v1alpha1.EphemeralRunner){
+			"finalizer": func(r *v1alpha1.EphemeralRunner) { r.Finalizers = nil },
+			"spec":      func(r *v1alpha1.EphemeralRunner) { r.Spec.GitHubConfigURL = "https://github.com/other/repo" },
+		} {
+			t.Run(name, func(t *testing.T) {
+				old, updated := base(), base()
+				mutate(updated)
+
+				assert.True(t, ephemeralRunnerPredicate().Update(event.UpdateEvent{ObjectOld: old, ObjectNew: updated}))
+			})
+		}
+	})
+
+	t.Run("ignores controller-owned status writes", func(t *testing.T) {
+		old, updated := base(), base()
+		updated.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
+		updated.Status.Ready = false
+		updated.Status.Reason = "reason"
+		updated.Status.Message = "message"
+		updated.Status.RunnerID = 43
+		updated.Status.RunnerName = "runner-name"
+		updated.Status.Failures = map[string]metav1.Time{"pod": metav1.Now()}
+
+		assert.False(t, ephemeralRunnerPredicate().Update(event.UpdateEvent{ObjectOld: old, ObjectNew: updated}))
+	})
+
+	t.Run("reconciles on unexpected types", func(t *testing.T) {
+		assert.True(t, ephemeralRunnerPredicate().Update(event.UpdateEvent{
+			ObjectOld: &corev1.Pod{},
+			ObjectNew: &corev1.Pod{},
+		}))
+	})
+}
+
 func TestEphemeralRunnerOwnedPodPredicate(t *testing.T) {
 	base := func() *corev1.Pod {
 		return &corev1.Pod{
