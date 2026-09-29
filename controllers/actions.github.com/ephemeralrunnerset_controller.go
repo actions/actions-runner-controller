@@ -22,8 +22,10 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 	"sort"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
@@ -31,11 +33,14 @@ import (
 	"github.com/actions/scaleset"
 	"github.com/go-logr/logr"
 	"go.uber.org/multierr"
+	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -44,13 +49,50 @@ import (
 const (
 	// EphemeralRunnerSetFinalizerName is the finalizer name used in EphemeralRunnerSet resource to protect the cleanup process of the child ephemeral runners and proxy secret.
 	EphemeralRunnerSetFinalizerName = "ephemeralrunnerset.actions.github.com/finalizer"
+
+	// runnerBatchConcurrency is how many runners of a single EphemeralRunnerSet
+	// are created or deleted at the same time.
+	//
+	// A set reconciles as one object, and controller-runtime serialises
+	// reconciles per object, so every runner a burst of jobs asks for is created
+	// by one reconcile and every finished runner it leaves behind is deleted by
+	// one reconcile. Done one at a time, the round trip to the API server is
+	// paid once per runner in sequence, and the last runner of a scale up waits
+	// for all the ones before it. The requests are independent, so they are
+	// issued in a batch instead.
+	//
+	// The bound exists because these are writes, and an unbounded fan-out would
+	// hand the whole burst to the client rate limiter at once, where it would
+	// queue in front of the reconciles of every other controller rather than in
+	// front of itself.
+	runnerBatchConcurrency = 8
 )
+
+// unrecordedRunnerIDGracePeriod is how long cleanup waits for a runner to
+// record its runner ID before deleting it without one.
+//
+// The runner controller records the ID only after it has created the pod,
+// so for a moment a runner can be executing a job while its status still
+// says 0, and 0 is not a registration the service can be asked about.
+// Cleanup leaves such a runner until the ID is recorded, which updates the
+// runner and so reconciles the set again, and then treats it like any other.
+// A runner that goes on without one usually cannot register or cannot start
+// its pod, and waiting on it forever would hold up the cleanup behind it. It
+// is deleted instead, and finalizing it asks the service before a live pod
+// goes.
+var unrecordedRunnerIDGracePeriod = time.Minute
 
 // EphemeralRunnerSetReconciler reconciles a EphemeralRunnerSet object
 type EphemeralRunnerSetReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
+	// APIReader reads straight from the API server, bypassing the manager's
+	// cache. It is needed where the controller has to observe a status field it
+	// wrote itself in an earlier reconcile, because the informer cache is not
+	// guaranteed to have caught up by the time the next reconcile runs.
+	// SetupWithManager fills this in from the manager when it is left unset.
+	APIReader client.Reader
 	ResourceBuilder
 }
 
@@ -79,7 +121,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 	if err := r.Get(ctx, req.NamespacedName, &ephemeralRunnerSet); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	original := ephemeralRunnerSet.DeepCopy()
+	runnerSet := newLazyCopy(&ephemeralRunnerSet)
 
 	// Requested deletion does not need reconciled.
 	if !ephemeralRunnerSet.DeletionTimestamp.IsZero() {
@@ -88,14 +130,14 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 
 		log.Info("Deleting resources")
-		done, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log)
+		done, requeueAfter, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log)
 		if err != nil {
 			log.Error(err, "Failed to clean up EphemeralRunners")
 			return ctrl.Result{}, err
 		}
 		if !done {
 			log.Info("Waiting for resources to be deleted")
-			return ctrl.Result{}, nil
+			return ctrl.Result{RequeueAfter: requeueAfter}, nil
 		}
 
 		done, err = r.cleanUpEphemeralRunnerSetProxySecret(ctx, &ephemeralRunnerSet, log)
@@ -109,21 +151,23 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 
 		log.Info("Removing finalizer")
-		if controllerutil.RemoveFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName) {
-			if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
+		if controllerutil.RemoveFinalizer(runnerSet.Mutate(), EphemeralRunnerSetFinalizerName) {
+			if err := r.Patch(ctx, &ephemeralRunnerSet, runnerSet.MergeFrom()); err != nil {
 				log.Error(err, "Failed to update ephemeral runner set with removed finalizer")
 				return ctrl.Result{}, err
 			}
 		}
 
 		log.Info("Successfully removed finalizer after cleanup")
+		r.ResourceCache.Delete(&ephemeralRunnerSet)
 		return ctrl.Result{}, nil
 	}
 
 	// Add finalizer if not present
-	if controllerutil.AddFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName) {
+	if !controllerutil.ContainsFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName) {
+		controllerutil.AddFinalizer(runnerSet.Mutate(), EphemeralRunnerSetFinalizerName)
 		log.Info("Adding finalizer")
-		if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
+		if err := r.Patch(ctx, &ephemeralRunnerSet, runnerSet.MergeFrom()); err != nil {
 			log.Error(err, "Failed to update ephemeral runner set with new finalizer")
 			return ctrl.Result{}, err
 		}
@@ -132,12 +176,17 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, nil
 	}
 
-	// If hash spec has changed, delete idle ephemeral runners
-	// in order to apply the change to the runners that did not yet receive a job.
-	ephemeralRunnerIntegrityHash := ephemeralRunnerSetIntegrityHash(&ephemeralRunnerSet)
-	if ephemeralRunnerSet.Annotations[annotationKeyIntegrityHash] != ephemeralRunnerIntegrityHash {
-		log.Info("EphemeralRunnerSpec has changed, deleting idle ephemeral runners to apply the new spec")
-		if _, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log); err != nil {
+	// If the runner spec revision has advanced past the one that was last
+	// successfully applied, delete idle and pending ephemeral runners so they are
+	// rebuilt from the new spec.
+	if ephemeralRunnerSet.Spec.ActionableRevision > ephemeralRunnerSet.Status.AppliedActionableRevision {
+		log.Info(
+			"EphemeralRunnerSpec revision has changed, deleting idle or pending ephemeral runners to apply the new spec",
+			"specActionableRevision", ephemeralRunnerSet.Spec.ActionableRevision,
+			"statusAppliedActionableRevision", ephemeralRunnerSet.Status.AppliedActionableRevision,
+		)
+		_, requeueAfter, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log)
+		if err != nil {
 			log.Error(err, "Failed to clean up EphemeralRunners")
 			return ctrl.Result{}, err
 		}
@@ -147,38 +196,39 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 			return ctrl.Result{}, err
 		}
 
-		log.Info("Updating EphemeralRunnerSet with new spec hash")
-		original := ephemeralRunnerSet.DeepCopy()
-		if ephemeralRunnerSet.Annotations == nil {
-			ephemeralRunnerSet.Annotations = make(map[string]string)
+		// A runner left to record its runner ID is still built from the previous
+		// spec, and nothing revisits it once the applied revision catches up.
+		if requeueAfter > 0 {
+			log.Info("Waiting for ephemeral runners to record their runner ID before marking the new spec applied", "requeueAfter", requeueAfter)
+			return ctrl.Result{RequeueAfter: requeueAfter}, nil
 		}
-		ephemeralRunnerSet.Annotations[annotationKeyIntegrityHash] = ephemeralRunnerIntegrityHash
-		if err := r.Patch(ctx, &ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
-			log.Error(err, "Failed to update ephemeral runner set with new spec hash")
+
+		if err := r.patchAppliedActionableRevisionStatus(ctx, req.NamespacedName, ephemeralRunnerSet.Spec.ActionableRevision); err != nil {
+			log.Error(err, "Failed to update EphemeralRunnerSet applied actionable revision status")
 			return ctrl.Result{}, err
 		}
 
-		log.Info("Updated ephemeral runner set with new spec hash")
+		log.Info("Updated EphemeralRunnerSet applied actionable revision status", "appliedActionableRevision", ephemeralRunnerSet.Spec.ActionableRevision)
 		return ctrl.Result{}, nil
 	}
 
 	if ephemeralRunnerSet.Status.Phase == v1alpha1.EphemeralRunnerSetPhaseOutdated {
-		if _, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log); err != nil {
+		_, requeueAfter, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log)
+		if err != nil {
 			log.Error(err, "Failed to clean up EphemeralRunners")
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{RequeueAfter: requeueAfter}, nil
 	}
 
-	// Create or update proxy secret if needed
-	if _, updated, err := r.reconcileEphemeralRunnerSetProxySecret(ctx, &ephemeralRunnerSet, log); err != nil {
+	// Create or update proxy secret if needed. Secrets are not watched and
+	// runners only reference the proxy secret by name, so carry on in the same
+	// reconcile after writing it instead of delaying the scaling below.
+	if _, _, err := r.reconcileEphemeralRunnerSetProxySecret(ctx, &ephemeralRunnerSet, log); err != nil {
 		log.Error(err, "Unable to reconcile ephemeralRunnerSet proxy secret", "namespace", ephemeralRunnerSet.Namespace, "name", proxyEphemeralRunnerSetSecretName(&ephemeralRunnerSet))
 		return ctrl.Result{}, err
-	} else if updated {
-		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 	}
 
-	// Find all EphemeralRunner with matching namespace and own by this EphemeralRunnerSet.
 	var ephemeralRunnerList v1alpha1.EphemeralRunnerList
 	if err := r.List(
 		ctx,
@@ -190,11 +240,12 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, err
 	}
 
-	ephemeralRunnersByState := newEphemeralRunnersByStates(&ephemeralRunnerList)
+	ephemeralRunnersByState := newEphemeralRunnersByStates(&ephemeralRunnerList, ephemeralRunnerSet.Status.AppliedActionableRevision)
 
 	log.Info(
 		"Ephemeral runner counts",
 		"outdated", len(ephemeralRunnersByState.outdated),
+		"staleOutdated", len(ephemeralRunnersByState.staleOutdated),
 		"pending", len(ephemeralRunnersByState.pending),
 		"running", len(ephemeralRunnersByState.running),
 		"finished", len(ephemeralRunnersByState.finished),
@@ -202,17 +253,106 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		"deleting", len(ephemeralRunnersByState.deleting),
 	)
 
+	// Runners that reported Outdated against a runner spec that has since been
+	// replaced are not evidence about the current spec. Drop them so the scaling
+	// logic below replaces them with runners built from the current spec, instead
+	// of letting them hold the set in the Outdated phase forever.
+	if len(ephemeralRunnersByState.staleOutdated) > 0 {
+		log.Info(
+			"Deleting outdated ephemeral runners created before the last spec update so they can be replaced",
+			"count", len(ephemeralRunnersByState.staleOutdated),
+			"appliedActionableRevision", ephemeralRunnerSet.Status.AppliedActionableRevision,
+		)
+		if err := r.deleteTerminatedEphemeralRunners(ctx, ephemeralRunnersByState.staleOutdated, log); err != nil {
+			log.Error(err, "failed to delete stale outdated ephemeral runners")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, r.updateStatus(ctx, &ephemeralRunnerSet, ephemeralRunnersByState, log)
+	}
+
+	// A runner that rejected the spec it was given settles the question the
+	// target count was asking. Spec.Replicas is what the listener wanted,
+	// computed from queued jobs before anything was known to be wrong with the
+	// spec those runners would be built from; acting on it now would create
+	// runners that reject it in exactly the same way. Release what can be
+	// released and record the rejection, rather than falling through to the
+	// scaling block below.
+	//
+	// The recorded phase is not enough to enforce this on its own. It only turns
+	// Outdated at the end of this reconcile, so the pass that discovers the
+	// rejection would otherwise scale up against a spec already known to be bad,
+	// and only the pass after it would take the early return above.
+	//
+	// The phase is recorded before the runners are released, not after. The
+	// cleanup deletes the outdated runners themselves, so a failure part way
+	// through would otherwise leave a set with no recorded rejection and fewer
+	// runners to rediscover it from. With the phase written first, the early
+	// return above picks the work up instead.
+	if len(ephemeralRunnersByState.outdated) > 0 {
+		log.Info(
+			"Ephemeral runners rejected the runner spec. Releasing runners instead of applying the target count",
+			"outdated", len(ephemeralRunnersByState.outdated),
+			"desired", ephemeralRunnerSet.Spec.Replicas,
+		)
+		if err := r.updateStatus(ctx, &ephemeralRunnerSet, ephemeralRunnersByState, log); err != nil {
+			log.Error(err, "Failed to record the outdated phase")
+			return ctrl.Result{}, err
+		}
+
+		_, requeueAfter, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log)
+		if err != nil {
+			log.Error(err, "Failed to clean up EphemeralRunners")
+			return ctrl.Result{}, err
+		}
+
+		return ctrl.Result{RequeueAfter: requeueAfter}, nil
+	}
+
 	total := ephemeralRunnersByState.scaleTotal()
 	if ephemeralRunnerSet.Spec.PatchID == 0 || ephemeralRunnerSet.Spec.PatchID != ephemeralRunnersByState.latestPatchID {
-		defer func() {
-			if err := r.cleanupFinishedEphemeralRunners(ctx, ephemeralRunnersByState.finished, log); err != nil {
-				log.Error(err, "failed to cleanup finished ephemeral runners")
+		// Spec.Replicas is the count the listener asked for when it published
+		// Spec.PatchID. Deleting finished runners here changes the live count that
+		// the count was computed against, so satisfying it in the same pass would
+		// create runners to replace jobs that have already completed. Record the
+		// patch ID the cleanup belongs to and return, leaving the scaling decision
+		// to the next reconcile, which sees the post-cleanup state.
+		if len(ephemeralRunnersByState.finished) > 0 {
+			if err := r.patchFinishedRunnerCleanupPatchIDStatus(ctx, req.NamespacedName, ephemeralRunnerSet.Spec.PatchID); err != nil {
+				log.Error(err, "failed to update finished runner cleanup patch ID status")
+				return ctrl.Result{}, err
 			}
-		}()
-		log.Info("Scaling comparison", "current", total, "desired", ephemeralRunnerSet.Spec.Replicas)
+			if err := r.deleteTerminatedEphemeralRunners(ctx, ephemeralRunnersByState.finished, log); err != nil {
+				log.Error(err, "failed to delete terminated ephemeral runners")
+				return ctrl.Result{}, err
+			}
+			ephemeralRunnerSet.Status.FinishedRunnerCleanupPatchID = ephemeralRunnerSet.Spec.PatchID
+
+			log.Info("Finished ephemeral runners were cleaned up, deferring scaling decision")
+			return ctrl.Result{}, r.updateStatus(ctx, &ephemeralRunnerSet, ephemeralRunnersByState, log)
+		}
+
+		// Runners that are being deleted still exist and still hold their
+		// registration, so counting only the live ones would let the controller
+		// create replacements for runners that have not gone away yet.
+		scaleUpTotal := total + len(ephemeralRunnersByState.deleting)
+		log.Info("Scaling comparison", "current", total, "deleting", len(ephemeralRunnersByState.deleting), "desired", ephemeralRunnerSet.Spec.Replicas)
 		switch {
-		case total < ephemeralRunnerSet.Spec.Replicas: // Handle scale up
-			count := ephemeralRunnerSet.Spec.Replicas - total
+		case scaleUpTotal < ephemeralRunnerSet.Spec.Replicas: // Handle scale up
+			// The gap below Spec.Replicas is the one the cleanup above opened for
+			// this patch ID, not new demand. Wait for the listener to publish a
+			// fresh desired state before acting on it.
+			suppressed, err := r.scaleUpServicedByFinishedRunnerCleanup(ctx, req.NamespacedName, &ephemeralRunnerSet)
+			if err != nil {
+				log.Error(err, "failed to determine whether scale up was already serviced by finished runner cleanup")
+				return ctrl.Result{}, err
+			}
+			if suppressed {
+				ephemeralRunnerSet.Status.FinishedRunnerCleanupPatchID = ephemeralRunnerSet.Spec.PatchID
+				log.Info("Skipping scale up until listener publishes a fresh desired state after finished runner cleanup", "patchID", ephemeralRunnerSet.Spec.PatchID)
+				return ctrl.Result{}, r.updateStatus(ctx, &ephemeralRunnerSet, ephemeralRunnersByState, log)
+			}
+
+			count := ephemeralRunnerSet.Spec.Replicas - scaleUpTotal
 			log.Info("Creating new ephemeral runners (scale up)", "count", count)
 			if err := r.createEphemeralRunners(ctx, &ephemeralRunnerSet, count, log); err != nil {
 				log.Error(err, "failed to make ephemeral runner")
@@ -244,8 +384,283 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 	return ctrl.Result{}, r.updateStatus(ctx, &ephemeralRunnerSet, ephemeralRunnersByState, log)
 }
 
+// patchAppliedActionableRevisionStatus brings status into line with the runner
+// spec carried by targetAppliedRevision once that spec has been fully applied.
+// It records the applied revision, clears the scale-up suppression marker when
+// the revision actually advances, and re-derives Status.Phase from the child
+// runners.
+//
+// The marker lives in status rather than in an annotation on the spec, and it is
+// written only once the cleanup above has actually succeeded. If the controller
+// dies part-way through deleting the idle and pending runners, the applied
+// revision is still behind the spec revision when it comes back, so the work is
+// redone rather than skipped. Writing the marker first, or writing it together
+// with the spec, would let a crash leave runners alive that are running a spec
+// nobody will ever revisit.
+//
+// The object is re-fetched inside the retry rather than reusing the copy the
+// reconciler already has, because the cleanup can take long enough for that copy
+// to go stale, and a conflicting write must not be resolved by replaying an old
+// status.
+//
+// The read bypasses the cache because this also clears
+// FinishedRunnerCleanupPatchID, and the patch is computed as a diff against the
+// object that was read. A cached read that still showed the field as 0 while the
+// API server held a recorded marker would produce a patch with no entry for the
+// field, silently leaving the stale marker in place.
+//
+// The patch carries an optimistic lock so that the re-fetch actually means
+// something. A plain merge patch has no resourceVersion precondition, so the API
+// server can never reject it as conflicting: RetryOnConflict would never fire,
+// and a patch computed from a stale read could move the applied revision
+// backwards, re-satisfying the spec > applied comparison above and deleting the
+// idle runners all over again. With the lock, the server accepts the write only
+// if the re-fetched object is still the live one, so a successful patch proves
+// the monotonicity check above was evaluated against live data. A stale attempt
+// conflicts and is retried or requeued instead of regressing the marker.
+//
+// The lock covers the EphemeralRunnerSet object and nothing else. The phase is
+// derived from a separate list of the child runners, which no precondition on
+// this patch can vouch for, so that list is read through the same authoritative
+// reader rather than the cache.
+func (r *EphemeralRunnerSetReconciler) patchAppliedActionableRevisionStatus(ctx context.Context, key types.NamespacedName, targetAppliedRevision int64) error {
+	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		var ephemeralRunnerSet v1alpha1.EphemeralRunnerSet
+		reader := r.APIReader
+		if reader == nil {
+			reader = r.Client
+		}
+		if err := reader.Get(ctx, key, &ephemeralRunnerSet); err != nil {
+			return err
+		}
+
+		// Mutations go through this rather than into a separate desired-status
+		// value. Writing to a copy while reading from the original is how the
+		// revision below came to be judged against a superseded value: the write
+		// moved and the read stayed, and because the read was textually unchanged
+		// nothing in the diff pointed at it. Mutate returns the live object, so
+		// every read below observes the writes above it, and the applied revision
+		// only ever lives in one place.
+		//
+		// It also leaves the object uncopied on the common path where nothing
+		// changes, which is why a plain DeepCopy is not taken here.
+		runnerSet := newLazyCopy(&ephemeralRunnerSet)
+
+		// Only an advance means the idle and pending runners were just deleted and
+		// the listener restarted. Guarding both writes on it keeps this callable
+		// as a plain "make sure status reflects revision N" without disturbing a
+		// marker that still describes the live patch sequence.
+		if ephemeralRunnerSet.Status.AppliedActionableRevision < targetAppliedRevision {
+			status := &runnerSet.Mutate().Status
+			status.AppliedActionableRevision = targetAppliedRevision
+
+			// The marker records a patch ID from the sequence that was current
+			// before this spec change. Applying a new revision deletes the idle and
+			// pending runners, so the shortfall that follows belongs to the new spec
+			// and must be filled. Worse, a spec change restarts the listener, and a
+			// restarted listener numbers its patches from 0 upwards, counting
+			// through every integer. It therefore passes through a leftover marker
+			// value with near-certainty, and would suppress the very scale up that
+			// rebuilds the pool.
+			status.FinishedRunnerCleanupPatchID = 0
+		}
+
+		ephemeralRunnerList := new(v1alpha1.EphemeralRunnerList)
+		// Listed through the same authoritative reader as the Get above. The
+		// optimistic lock on the patch below covers the EphemeralRunnerSet object
+		// only, so it cannot vouch for a separately-read list: deriving the phase
+		// from the cache would let a successful, lock-protected write carry a
+		// value the lock says nothing about. The list also sits inside
+		// RetryOnConflict, and a cached list can return the same stale data on
+		// every attempt, spending the whole backoff re-deriving one wrong phase.
+		//
+		// resourceOwnerKey cannot be used here. It is a client-side index
+		// registered on the manager's cache, and the API server rejects it as an
+		// unsupported field label, so the ownership filter has to be applied in
+		// this process instead.
+		//
+		// Narrowing server-side by label is not a safe alternative either. Label
+		// propagation is operator-configurable through
+		// --exclude-label-propagation-prefix, so the scale set labels are not
+		// guaranteed to reach the runners, and a selector that silently matched
+		// none of them would derive the phase from an empty list rather than
+		// fail. A namespace can hold more than one scale set, so this does read
+		// runners that are not ours, but it only runs when a revision actually
+		// advances rather than on every reconcile.
+		if err := reader.List(ctx, ephemeralRunnerList, client.InNamespace(ephemeralRunnerSet.Namespace)); err != nil {
+			return fmt.Errorf("failed to list child ephemeral runners: %w", err)
+		}
+		ephemeralRunnerList.Items = slices.DeleteFunc(ephemeralRunnerList.Items, func(runner v1alpha1.EphemeralRunner) bool {
+			return !isControlledBy(&runner, "EphemeralRunnerSet", ephemeralRunnerSet.Name)
+		})
+
+		// Judge the runners against the revision the set has now applied, rather
+		// than the one this call was asked to apply: every runner created before
+		// that revision is stale by definition, so its Outdated report says
+		// nothing about the current spec. This is what lets a spec update clear
+		// the Outdated phase immediately rather than waiting for the pre-update
+		// runners to be collected.
+		//
+		// This must stay below the guard, which is what makes the field read here
+		// max(live, target) rather than just the live value. The two differ in a
+		// case that matters in both directions.
+		//
+		// Reading a value behind the live marker rates a runner left over from a
+		// superseded revision as current and flips a set that has already moved on
+		// back to Outdated. The caller reads the spec from the cache while this
+		// function re-reads the status from the API server, so a lagging reconcile
+		// can arrive with a target behind the live marker; the guard is what stops
+		// that target being used.
+		//
+		// Reading a value behind the one being applied does the same thing to the
+		// advance itself. A runner missed by the cleanup, whose list is read
+		// through the cache, carries the pre-advance revision, so judging it
+		// against that revision counts it as current and saves Outdated alongside
+		// the freshly advanced marker.
+		//
+		// Neither is self-correcting. The Outdated phase is absorbing here:
+		// Reconcile returns on that path before reaching updateStatus, and this
+		// function only runs while spec is ahead of applied, so nothing recomputes
+		// the phase and the set stays switched off until the next spec change.
+		state := newEphemeralRunnersByStates(ephemeralRunnerList, ephemeralRunnerSet.Status.AppliedActionableRevision)
+
+		// Set the phase in both directions. This function returns early from
+		// Reconcile without reaching updateStatus, so leaving the phase untouched
+		// would let a stale value survive: a stale Running would hide genuinely
+		// outdated runners from the cleanup path, and a stale Outdated would keep
+		// the set switched off after the spec that caused it was replaced.
+		phase := v1alpha1.EphemeralRunnerSetPhaseRunning
+		if len(state.outdated) > 0 {
+			phase = v1alpha1.EphemeralRunnerSetPhaseOutdated
+		}
+		if ephemeralRunnerSet.Status.Phase != phase {
+			runnerSet.Mutate().Status.Phase = phase
+		}
+
+		// Every write above is guarded on the value actually changing, so an
+		// unmodified lazyCopy means the status already says what this call wanted
+		// it to say. Clearing the marker alone still counts as a change.
+		if !runnerSet.Modified() {
+			return nil
+		}
+
+		// The lock covers the object this patch was computed against, so the
+		// snapshot has to be the one taken before the first mutation above.
+		return r.Status().Patch(ctx, &ephemeralRunnerSet, runnerSet.MergeFrom(client.MergeFromWithOptimisticLock{}))
+	})
+}
+
+// scaleUpServicedByFinishedRunnerCleanup reports whether the shortfall against
+// Spec.Replicas was created by this controller cleaning up finished runners for
+// the patch ID currently in the spec, rather than by new demand from the
+// listener.
+//
+// The marker is written by an earlier reconcile and then read back here, so the
+// cached copy handed to Reconcile cannot be trusted: deleting the finished
+// runners triggers watch events that schedule the next reconcile, and that
+// reconcile can be served from an informer cache that has not yet observed the
+// controller's own status write. The decision is therefore always made against
+// an uncached read. That confines the extra API call to scale-up decisions,
+// where the controller is about to issue creates anyway.
+//
+// An earlier version short-circuited on a cached hit, on the reasoning that the
+// marker was only ever set and so a hit could never be a false positive. That
+// reasoning no longer holds: applying a new actionable revision clears the
+// marker, so a lagging cache can show a recorded marker that the API server has
+// already cleared, and trusting it would suppress exactly the scale up that
+// rebuilds the pool after a spec change.
+//
+// One window remains. A listener that restarts without a spec change keeps the
+// marker but starts its patch sequence again from 0 and counts up through every
+// integer, so it passes through the recorded value with near-certainty rather
+// than by coincidence. If that collision lands on a reconcile that needs to
+// scale up, that reconcile is suppressed.
+//
+// That is a hiccup rather than an outage. The listener calls back into scaling
+// on every long-poll timeout, not only when something changes, and once the set
+// is idle at its minimum with no job completed it publishes the collapsed patch
+// ID 0, which is never suppressed. So the shortfall is filled on the next
+// long-poll cycle.
+func (r *EphemeralRunnerSetReconciler) scaleUpServicedByFinishedRunnerCleanup(ctx context.Context, key types.NamespacedName, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet) (bool, error) {
+	if ephemeralRunnerSet.Spec.PatchID == 0 {
+		return false, nil
+	}
+
+	if r.APIReader == nil {
+		return false, errors.New("APIReader is not configured, cannot confirm the finished runner cleanup patch ID without reading through the cache")
+	}
+
+	var latest v1alpha1.EphemeralRunnerSet
+	if err := r.APIReader.Get(ctx, key, &latest); err != nil {
+		return false, fmt.Errorf("failed to read EphemeralRunnerSet without the cache: %w", err)
+	}
+
+	return latest.Status.FinishedRunnerCleanupPatchID == ephemeralRunnerSet.Spec.PatchID, nil
+}
+
+// patchFinishedRunnerCleanupPatchIDStatus records that finished runners were
+// deleted while serving patchID, so a later reconcile can tell the resulting gap
+// below Spec.Replicas apart from genuine new demand.
+//
+// Like the applied revision above, this is written after the deletions succeed
+// and re-fetches the object inside the retry, so a conflicting write is never
+// resolved by replaying a status that predates the cleanup.
+//
+// The patch carries an optimistic lock for the same reason, and the exposure
+// here is if anything worse: the check below is an equality test rather than a
+// monotonicity test, so this helper is willing to move the marker to whatever
+// patch ID the reconcile is carrying, including backwards. Without a
+// resourceVersion precondition the API server cannot reject the write, so
+// RetryOnConflict can never fire and a reconcile serving an older patch ID can
+// overwrite a marker recorded for a newer one. The guard would then stop
+// suppressing for the patch ID that was actually serviced, and the controller
+// would create the replacement runners this layer exists to prevent.
+//
+// Re-fetching through the API reader narrows that window to the gap between the
+// read and the patch rather than closing it, because the decision is only as
+// fresh as the moment it was taken. The lock is what makes the write conditional
+// on that decision still holding.
+//
+// The check below is deliberately an equality test and must not be relaxed into
+// the >= monotonicity test the applied revision uses. Applied revisions derive
+// from metadata.generation and only ever climb, but listener patch IDs do not:
+// setDesiredWorkerState publishes 0 whenever the set is idle at MinRunners with
+// nothing dirty, restarts its sequence from 0 when the listener restarts, and
+// wraps explicitly at math.MaxInt32. So Spec.PatchID legitimately moves
+// backwards, and the marker has to follow it. Refusing to record a lower patch
+// ID would strand the marker above every value the listener goes on to publish,
+// and since the scale-up guard suppresses only on an exact match, suppression
+// would never fire again -- disabling the behaviour this layer exists to add.
+//
+// That is also why the lock is the right fix rather than a stricter comparison.
+// It cannot make an older patch ID unwritable, because the retry re-reads and
+// re-applies the same argument; recording the patch ID whose cleanup actually
+// happened is a true statement regardless of ordering, and the next cleanup
+// re-records. What the lock prevents is a write decided against state that has
+// since changed.
+func (r *EphemeralRunnerSetReconciler) patchFinishedRunnerCleanupPatchIDStatus(ctx context.Context, key types.NamespacedName, patchID int) error {
+	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		var latest v1alpha1.EphemeralRunnerSet
+		reader := r.APIReader
+		if reader == nil {
+			reader = r.Client
+		}
+		if err := reader.Get(ctx, key, &latest); err != nil {
+			return err
+		}
+
+		if latest.Status.FinishedRunnerCleanupPatchID == patchID {
+			return nil
+		}
+
+		original := latest.DeepCopy()
+		latest.Status.FinishedRunnerCleanupPatchID = patchID
+
+		return r.Status().Patch(ctx, &latest, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{}))
+	})
+}
+
 func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, state *ephemeralRunnersByState, log logr.Logger) error {
-	original := ephemeralRunnerSet.DeepCopy()
 	var phase v1alpha1.EphemeralRunnerSetPhase
 	switch {
 	case len(state.outdated) > 0:
@@ -256,11 +671,14 @@ func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemer
 		phase = ephemeralRunnerSet.Status.Phase
 	}
 	desiredStatus := v1alpha1.EphemeralRunnerSetStatus{
-		Phase: phase,
+		Phase:                        phase,
+		AppliedActionableRevision:    ephemeralRunnerSet.Status.AppliedActionableRevision,
+		FinishedRunnerCleanupPatchID: ephemeralRunnerSet.Status.FinishedRunnerCleanupPatchID,
 	}
 
 	// Update the status if needed.
 	if ephemeralRunnerSet.Status != desiredStatus {
+		original := ephemeralRunnerSet.DeepCopy()
 		ephemeralRunnerSet.Status = desiredStatus
 		if err := r.Status().Patch(ctx, ephemeralRunnerSet, client.MergeFrom(original)); err != nil {
 			log.Error(err, "Failed to update EphemeralRunnerSet status")
@@ -272,17 +690,42 @@ func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemer
 	return nil
 }
 
-func (r *EphemeralRunnerSetReconciler) cleanupFinishedEphemeralRunners(ctx context.Context, finishedEphemeralRunners []*v1alpha1.EphemeralRunner, log logr.Logger) error {
-	// cleanup finished runners and proceed
-	var errs []error
-	for i := range finishedEphemeralRunners {
-		log.Info("Deleting finished ephemeral runner", "name", finishedEphemeralRunners[i].Name)
-		if err := r.Delete(ctx, finishedEphemeralRunners[i]); err != nil {
-			if !kerrors.IsNotFound(err) {
-				errs = append(errs, err)
-			}
-		}
+// deleteTerminatedEphemeralRunners deletes runners that have reached a terminal
+// state and are no longer useful, so that the scaling logic can replace them.
+//
+// The deletions are issued in a batch. Each one is an independent request, and
+// the pods they release are what the jobs waiting behind them need, so there is
+// nothing to be gained by making the hundredth runner of a burst wait for the
+// ninety-nine round trips before it.
+func (r *EphemeralRunnerSetReconciler) deleteTerminatedEphemeralRunners(ctx context.Context, ephemeralRunners []*v1alpha1.EphemeralRunner, log logr.Logger) error {
+	return r.deleteEphemeralRunnersInBatches(ctx, ephemeralRunners, log)
+}
+
+// deleteEphemeralRunnersInBatches deletes the given runners with a bounded
+// number of requests in flight, and reports every failure rather than the first.
+func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunnersInBatches(ctx context.Context, ephemeralRunners []*v1alpha1.EphemeralRunner, log logr.Logger) error {
+	if len(ephemeralRunners) == 0 {
+		return nil
 	}
+
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(runnerBatchConcurrency)
+
+	var mu sync.Mutex
+	var errs []error
+	for i := range ephemeralRunners {
+		ephemeralRunner := ephemeralRunners[i]
+		g.Go(func() error {
+			log.Info("Deleting terminated ephemeral runner", "name", ephemeralRunner.Name, "phase", ephemeralRunner.Status.Phase)
+			if err := r.Delete(ctx, ephemeralRunner); err != nil && !kerrors.IsNotFound(err) {
+				mu.Lock()
+				errs = append(errs, err)
+				mu.Unlock()
+			}
+			return nil
+		})
+	}
+	_ = g.Wait()
 
 	return multierr.Combine(errs...)
 }
@@ -306,24 +749,31 @@ func (r *EphemeralRunnerSetReconciler) cleanUpProxySecret(ctx context.Context, e
 	return nil
 }
 
-func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) (bool, error) {
+// cleanUpEphemeralRunners deletes the runners of the set except registered
+// runners with reported jobs, reporting whether none are left. A runner whose
+// ID remains unrecorded past the grace period relies on its finalizer to
+// protect a live pod.
+//
+// A positive requeueAfter means runners that have not recorded their runner ID
+// were left alone, and is when the first of them has waited long enough to be
+// deleted without one. See unrecordedRunnerIDGracePeriod.
+func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) (done bool, requeueAfter time.Duration, err error) {
 	ephemeralRunnerList := new(v1alpha1.EphemeralRunnerList)
-	err := r.List(ctx, ephemeralRunnerList, client.InNamespace(ephemeralRunnerSet.Namespace), client.MatchingFields{resourceOwnerKey: ephemeralRunnerSet.Name})
-	if err != nil {
-		return false, fmt.Errorf("failed to list child ephemeral runners: %w", err)
+	if err := r.List(ctx, ephemeralRunnerList, client.InNamespace(ephemeralRunnerSet.Namespace), client.MatchingFields{resourceOwnerKey: ephemeralRunnerSet.Name}); err != nil {
+		return false, 0, fmt.Errorf("failed to list child ephemeral runners: %w", err)
 	}
 
 	// only if there are no ephemeral runners left, return true
 	if len(ephemeralRunnerList.Items) == 0 {
 		err := r.cleanUpProxySecret(ctx, ephemeralRunnerSet, log)
 		if err != nil {
-			return false, err
+			return false, 0, err
 		}
 		log.Info("All ephemeral runners are deleted")
-		return true, nil
+		return true, 0, nil
 	}
 
-	ephemeralRunnerState := newEphemeralRunnersByStates(ephemeralRunnerList)
+	ephemeralRunnerState := newEphemeralRunnersByStates(ephemeralRunnerList, ephemeralRunnerSet.Status.AppliedActionableRevision)
 
 	log.Info(
 		"Clean up runner counts",
@@ -336,41 +786,48 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 	)
 
 	log.Info("Cleanup terminated ephemeral runners")
-	var errs []error
-	for _, ephemeralRunner := range ephemeralRunnerState.terminated() {
-		log.Info("Deleting ephemeral runner", "name", ephemeralRunner.Name)
-		if err := r.Delete(ctx, ephemeralRunner); err != nil && !kerrors.IsNotFound(err) {
-			errs = append(errs, err)
-		}
-	}
-
-	if len(errs) > 0 {
-		mergedErrs := multierr.Combine(errs...)
-		log.Error(mergedErrs, "Failed to delete ephemeral runners")
-		return false, mergedErrs
+	if err := r.deleteEphemeralRunnersInBatches(ctx, ephemeralRunnerState.terminated(), log); err != nil {
+		log.Error(err, "Failed to delete ephemeral runners")
+		return false, 0, err
 	}
 
 	// avoid fetching the client if we have nothing left to do
 	if len(ephemeralRunnerState.running) == 0 && len(ephemeralRunnerState.pending) == 0 {
-		return false, nil
+		return false, 0, nil
 	}
 
-	actionsClient, err := r.GetActionsService(ctx, ephemeralRunnerSet)
-	if err != nil {
-		return false, err
-	}
-
-	log.Info("Cleanup pending or running ephemeral runners")
-	errs = errs[0:0]
-	for _, ephemeralRunner := range ephemeralRunnerState.pending {
-		log.Info("Removing the ephemeral runner from the service", "name", ephemeralRunner.Name)
-		_, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
-		if err != nil {
-			errs = append(errs, err)
+	getActionsClient := sync.OnceValues(func() (multiclient.Client, error) {
+		return r.GetActionsService(ctx, ephemeralRunnerSet)
+	})
+	deleteRunner := func(ephemeralRunner *v1alpha1.EphemeralRunner) error {
+		var actionsClient multiclient.Client
+		if ephemeralRunner.Status.RunnerID > 0 {
+			var err error
+			actionsClient, err = getActionsClient()
+			if err != nil {
+				return err
+			}
 		}
+		_, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
+		return err
 	}
 
-	for _, ephemeralRunner := range ephemeralRunnerState.running {
+	now := time.Now()
+	waitForRunnerID := func(ephemeralRunner *v1alpha1.EphemeralRunner) bool {
+		wait := unrecordedRunnerIDWait(ephemeralRunner, now)
+		if wait <= 0 {
+			return false
+		}
+		log.Info("Skipping ephemeral runner since its runner ID is not recorded yet", "name", ephemeralRunner.Name, "retryAfter", wait)
+		if requeueAfter == 0 || wait < requeueAfter {
+			requeueAfter = wait
+		}
+		return true
+	}
+
+	var errs []error
+	log.Info("Cleanup pending or running ephemeral runners")
+	for _, ephemeralRunner := range ephemeralRunnerState.pending {
 		if ephemeralRunner.HasJob() {
 			log.Info(
 				"Skipping ephemeral runner since it is running a job",
@@ -380,10 +837,32 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 			)
 			continue
 		}
+		if waitForRunnerID(ephemeralRunner) {
+			continue
+		}
 
-		log.Info("Removing the idle ephemeral runner from the service", "name", ephemeralRunner.Name)
-		_, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
-		if err != nil {
+		log.Info("Cleaning up the ephemeral runner", "name", ephemeralRunner.Name)
+		if err := deleteRunner(ephemeralRunner); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	for _, ephemeralRunner := range ephemeralRunnerState.running {
+		if waitForRunnerID(ephemeralRunner) {
+			continue
+		}
+		if ephemeralRunner.Status.RunnerID > 0 && ephemeralRunner.HasJob() {
+			log.Info(
+				"Skipping ephemeral runner since it is running a job",
+				"name", ephemeralRunner.Name,
+				"workflowRunId", ephemeralRunner.Status.WorkflowRunID,
+				"jobId", ephemeralRunner.Status.JobID,
+			)
+			continue
+		}
+
+		log.Info("Cleaning up the ephemeral runner", "name", ephemeralRunner.Name)
+		if err := deleteRunner(ephemeralRunner); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -391,10 +870,19 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 	if len(errs) > 0 {
 		mergedErrs := multierr.Combine(errs...)
 		log.Error(mergedErrs, "Failed to remove ephemeral runners from the service")
-		return false, mergedErrs
+		return false, 0, mergedErrs
 	}
 
-	return false, nil
+	return false, requeueAfter, nil
+}
+
+// unrecordedRunnerIDWait reports how much longer cleanup leaves a runner alone
+// for it to record its runner ID, or 0 if it does not.
+func unrecordedRunnerIDWait(ephemeralRunner *v1alpha1.EphemeralRunner, now time.Time) time.Duration {
+	if ephemeralRunner.Status.RunnerID != 0 {
+		return 0
+	}
+	return max(ephemeralRunner.CreationTimestamp.Add(unrecordedRunnerIDGracePeriod).Sub(now), 0)
 }
 
 func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunnerSetProxySecret(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) (done bool, err error) {
@@ -501,29 +989,52 @@ func (r *EphemeralRunnerSetReconciler) reconcileEphemeralRunnerSetProxySecret(ct
 }
 
 // createEphemeralRunners provisions `count` number of v1alpha1.EphemeralRunner resources in the cluster.
+//
+// The creations are issued in a batch for the same reason the deletions are:
+// they are independent of one another, they all belong to one reconcile of one
+// object, and a job waiting for the last runner of a scale up should not also
+// be waiting for the round trips of every runner created before it.
 func (r *EphemeralRunnerSetReconciler) createEphemeralRunners(ctx context.Context, runnerSet *v1alpha1.EphemeralRunnerSet, count int, log logr.Logger) error {
-	// Track multiple errors at once and return the bundle.
-	errs := make([]error, 0)
-	for i := range count {
-		ephemeralRunner, err := r.newEphemeralRunner(runnerSet)
-		if err != nil {
-			log.Error(err, "failed to build ephemeral runner")
-			errs = append(errs, err)
-			continue
-		}
-		if runnerSet.Spec.EphemeralRunnerSpec.Proxy != nil {
-			ephemeralRunner.Spec.ProxySecretRef = proxyEphemeralRunnerSetSecretName(runnerSet)
-		}
-
-		log.Info("Creating new ephemeral runner", "progress", i+1, "total", count)
-		if err := r.Create(ctx, ephemeralRunner); err != nil {
-			log.Error(err, "failed to make ephemeral runner")
-			errs = append(errs, err)
-			continue
-		}
-
-		log.Info("Created new ephemeral runner", "runner", ephemeralRunner.Name)
+	if count <= 0 {
+		return nil
 	}
+
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(runnerBatchConcurrency)
+
+	// Track multiple errors at once and return the bundle.
+	var mu sync.Mutex
+	var errs []error
+	addErr := func(err error) {
+		mu.Lock()
+		errs = append(errs, err)
+		mu.Unlock()
+	}
+
+	for i := range count {
+		g.Go(func() error {
+			ephemeralRunner, err := r.newEphemeralRunner(runnerSet)
+			if err != nil {
+				log.Error(err, "failed to build ephemeral runner")
+				addErr(err)
+				return nil
+			}
+			if runnerSet.Spec.EphemeralRunnerSpec.Proxy != nil {
+				ephemeralRunner.Spec.ProxySecretRef = proxyEphemeralRunnerSetSecretName(runnerSet)
+			}
+
+			log.Info("Creating new ephemeral runner", "progress", i+1, "total", count)
+			if err := r.Create(ctx, ephemeralRunner); err != nil {
+				log.Error(err, "failed to make ephemeral runner")
+				addErr(err)
+				return nil
+			}
+
+			log.Info("Created new ephemeral runner", "runner", ephemeralRunner.Name)
+			return nil
+		})
+	}
+	_ = g.Wait()
 
 	return multierr.Combine(errs...)
 }
@@ -613,13 +1124,50 @@ func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Co
 }
 
 func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunnerWithActionsClient(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, actionsClient multiclient.Client, log logr.Logger) (bool, error) {
+	if ephemeralRunner.Status.RunnerID < 0 {
+		return false, fmt.Errorf("invalid runner ID in status: %d", ephemeralRunner.Status.RunnerID)
+	}
+	if ephemeralRunner.Status.RunnerID == 0 {
+		// A zero is not a registration the service can be asked about, and the
+		// runner may already be registered and executing a job: the status
+		// records the runner ID only after the pod exists. Delete it with the
+		// registration finalizer kept, so finalizing resolves the real
+		// registration and asks the service before a live pod goes.
+		log.Info("Deleting ephemeral runner without a recorded runner ID", "name", ephemeralRunner.Name)
+		if err := r.Delete(ctx, ephemeralRunner); err != nil && !kerrors.IsNotFound(err) {
+			return false, err
+		}
+		return true, nil
+	}
+
 	if err := actionsClient.RemoveRunner(ctx, int64(ephemeralRunner.Status.RunnerID)); err != nil {
-		if errors.Is(err, scaleset.JobStillRunningError) {
+		switch {
+		case errors.Is(err, scaleset.JobStillRunningError):
 			log.Info("Runner is still running a job, skipping deletion", "name", ephemeralRunner.Name, "runnerId", ephemeralRunner.Status.RunnerID)
 			return false, nil
-		}
 
-		return false, err
+		case errors.Is(err, scaleset.RunnerNotFoundError), errors.Is(err, scaleset.NotFoundError):
+			// The registration is gone, which is all this call wanted. Reached by
+			// retrying after the removal landed but the deletion below did not,
+			// and treating it as a failure would leave the runner stuck behind a
+			// call that can never succeed again.
+			log.Info("Runner is already removed from the service", "name", ephemeralRunner.Name, "runnerId", ephemeralRunner.Status.RunnerID)
+
+		default:
+			return false, err
+		}
+	}
+
+	// The registration is gone, so drop the finalizer that exists to remove it.
+	// Otherwise deleting the runner below queues a second removal for a runner
+	// the service has already forgotten, which is one wasted API call for every
+	// runner a scale down takes.
+	if controllerutil.ContainsFinalizer(ephemeralRunner, ephemeralRunnerActionsFinalizerName) {
+		original := ephemeralRunner.DeepCopy()
+		controllerutil.RemoveFinalizer(ephemeralRunner, ephemeralRunnerActionsFinalizerName)
+		if err := r.Patch(ctx, ephemeralRunner, client.MergeFrom(original)); err != nil && !kerrors.IsNotFound(err) {
+			return false, fmt.Errorf("failed to remove the runner registration finalizer: %w", err)
+		}
 	}
 
 	log.Info("Deleting ephemeral runner after removing from the service", "name", ephemeralRunner.Name, "runnerId", ephemeralRunner.Status.RunnerID)
@@ -635,10 +1183,14 @@ func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunnerWithActionsClient(ct
 func (r *EphemeralRunnerSetReconciler) SetupWithManager(mgr ctrl.Manager, opts ...Option) error {
 	r.setSchemeIfUnset(r.Scheme)
 
+	if r.APIReader == nil {
+		r.APIReader = mgr.GetAPIReader()
+	}
+
 	return builderWithOptions(
 		ctrl.NewControllerManagedBy(mgr).
 			For(&v1alpha1.EphemeralRunnerSet{}).
-			Owns(&v1alpha1.EphemeralRunner{}).
+			Owns(&v1alpha1.EphemeralRunner{}, builder.WithPredicates(ephemeralRunnerSetOwnedEphemeralRunnerPredicate())).
 			WithEventFilter(predicate.ResourceVersionChangedPredicate{}),
 		opts,
 	).Complete(r)
@@ -694,12 +1246,27 @@ type ephemeralRunnersByState struct {
 	finished []*v1alpha1.EphemeralRunner
 	failed   []*v1alpha1.EphemeralRunner
 	deleting []*v1alpha1.EphemeralRunner
+	// outdated holds runners that reported Outdated against the runner spec that
+	// is currently applied. They are evidence that the current spec is still
+	// rejected by the service, so they drive the set into the Outdated phase.
 	outdated []*v1alpha1.EphemeralRunner
+	// staleOutdated holds runners that reported Outdated against a runner spec
+	// that has since been replaced. They say nothing about the current spec, so
+	// they must not drive the set into the Outdated phase; they are deleted and
+	// replaced by runners built from the current spec instead.
+	staleOutdated []*v1alpha1.EphemeralRunner
 
 	latestPatchID int
 }
 
-func newEphemeralRunnersByStates(ephemeralRunnerList *v1alpha1.EphemeralRunnerList) *ephemeralRunnersByState {
+// newEphemeralRunnersByStates groups the child runners by state.
+//
+// appliedActionableRevision is the EphemeralRunnerSet revision the runners are
+// being judged against. A runner that reported Outdated before that revision was
+// applied is classified as stale rather than outdated, so that updating the
+// runner spec clears the Outdated phase immediately instead of waiting for the
+// pre-update runners to disappear.
+func newEphemeralRunnersByStates(ephemeralRunnerList *v1alpha1.EphemeralRunnerList, appliedActionableRevision int64) *ephemeralRunnersByState {
 	var ephemeralRunnerState ephemeralRunnersByState
 
 	for i := range ephemeralRunnerList.Items {
@@ -721,7 +1288,11 @@ func newEphemeralRunnersByStates(ephemeralRunnerList *v1alpha1.EphemeralRunnerLi
 		case v1alpha1.EphemeralRunnerPhaseFailed:
 			ephemeralRunnerState.failed = append(ephemeralRunnerState.failed, r)
 		case v1alpha1.EphemeralRunnerPhaseOutdated:
-			ephemeralRunnerState.outdated = append(ephemeralRunnerState.outdated, r)
+			if ephemeralRunnerActionableRevision(r) < appliedActionableRevision {
+				ephemeralRunnerState.staleOutdated = append(ephemeralRunnerState.staleOutdated, r)
+			} else {
+				ephemeralRunnerState.outdated = append(ephemeralRunnerState.outdated, r)
+			}
 		default:
 			// Pending or no phase should be considered as pending.
 			//
@@ -733,8 +1304,25 @@ func newEphemeralRunnersByStates(ephemeralRunnerList *v1alpha1.EphemeralRunnerLi
 	return &ephemeralRunnerState
 }
 
+// ephemeralRunnerActionableRevision reports the EphemeralRunnerSet revision the
+// runner was created from. Runners created before this annotation existed report
+// 0, which matches the zero value of Status.AppliedActionableRevision, so they
+// are treated as current until the spec is updated for the first time.
+func ephemeralRunnerActionableRevision(ephemeralRunner *v1alpha1.EphemeralRunner) int64 {
+	revision, err := strconv.ParseInt(ephemeralRunner.Annotations[AnnotationKeyActionableRevision], 10, 64)
+	if err != nil {
+		return 0
+	}
+	return revision
+}
+
 func (s *ephemeralRunnersByState) terminated() []*v1alpha1.EphemeralRunner {
-	return append(s.finished, append(s.failed, s.outdated...)...)
+	terminated := make([]*v1alpha1.EphemeralRunner, 0, len(s.finished)+len(s.failed)+len(s.outdated)+len(s.staleOutdated))
+	terminated = append(terminated, s.finished...)
+	terminated = append(terminated, s.failed...)
+	terminated = append(terminated, s.outdated...)
+	terminated = append(terminated, s.staleOutdated...)
+	return terminated
 }
 
 func (s *ephemeralRunnersByState) scaleTotal() int {

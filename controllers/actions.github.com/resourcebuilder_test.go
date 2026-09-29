@@ -3,6 +3,7 @@ package actionsgithubcom
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
@@ -16,8 +17,9 @@ import (
 func TestMetadataPropagation(t *testing.T) {
 	autoscalingRunnerSet := v1alpha1.AutoscalingRunnerSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-scale-set",
-			Namespace: "test-ns",
+			Name:       "test-scale-set",
+			Namespace:  "test-ns",
+			Generation: 7,
 			Labels: map[string]string{
 				LabelKeyKubernetesPartOf:          labelValueKubernetesPartOf,
 				LabelKeyKubernetesVersion:         "0.2.0",
@@ -102,18 +104,20 @@ func TestMetadataPropagation(t *testing.T) {
 		},
 	}
 
+	cache := NewResourceCache()
 	b := ResourceBuilder{
 		ExcludeLabelPropagationPrefixes: []string{
 			"example.com/",
 			"directly.excluded.org/label",
 		},
+		ResourceCache: &cache,
 	}
 	ephemeralRunnerSet, err := b.newEphemeralRunnerSet(&autoscalingRunnerSet)
 	require.NoError(t, err)
 	assert.Equal(t, labelValueKubernetesPartOf, ephemeralRunnerSet.Labels[LabelKeyKubernetesPartOf])
 	assert.Equal(t, "runner-set", ephemeralRunnerSet.Labels[LabelKeyKubernetesComponent])
 	assert.Equal(t, autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion], ephemeralRunnerSet.Labels[LabelKeyKubernetesVersion])
-	assert.NotEmpty(t, ephemeralRunnerSet.Annotations[annotationKeyIntegrityHash])
+	assert.NotContains(t, ephemeralRunnerSet.Annotations, "actions.github.com/integrity-hash")
 	assert.Equal(t, autoscalingRunnerSet.Name, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName])
 	assert.Equal(t, autoscalingRunnerSet.Namespace, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace])
 	assert.Equal(t, "", ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise])
@@ -121,6 +125,7 @@ func TestMetadataPropagation(t *testing.T) {
 	assert.Equal(t, "repo", ephemeralRunnerSet.Labels[LabelKeyGitHubRepository])
 	assert.Equal(t, autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName], ephemeralRunnerSet.Annotations[AnnotationKeyGitHubRunnerGroupName])
 	assert.Equal(t, autoscalingRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName], ephemeralRunnerSet.Annotations[AnnotationKeyGitHubRunnerScaleSetName])
+	assert.Equal(t, "7", ephemeralRunnerSet.Annotations[AnnotationKeyAutoscalingRunnerSetGeneration])
 	assert.Equal(t, autoscalingRunnerSet.Labels["arbitrary-label"], ephemeralRunnerSet.Labels["arbitrary-label"])
 	assert.Equal(t, "ephemeral-runner-set-label", ephemeralRunnerSet.Labels["test.com/ephemeral-runner-set-label"])
 	assert.Equal(t, "ephemeral-runner-set-annotation", ephemeralRunnerSet.Annotations["test.com/ephemeral-runner-set-annotation"])
@@ -130,7 +135,7 @@ func TestMetadataPropagation(t *testing.T) {
 	assert.Equal(t, labelValueKubernetesPartOf, listener.Labels[LabelKeyKubernetesPartOf])
 	assert.Equal(t, "runner-scale-set-listener", listener.Labels[LabelKeyKubernetesComponent])
 	assert.Equal(t, autoscalingRunnerSet.Labels[LabelKeyKubernetesVersion], listener.Labels[LabelKeyKubernetesVersion])
-	assert.NotEmpty(t, ephemeralRunnerSet.Annotations[annotationKeyIntegrityHash])
+	assert.NotContains(t, listener.Annotations, "actions.github.com/integrity-hash")
 	assert.Equal(t, autoscalingRunnerSet.Name, listener.Labels[LabelKeyGitHubScaleSetName])
 	assert.Equal(t, autoscalingRunnerSet.Namespace, listener.Labels[LabelKeyGitHubScaleSetNamespace])
 	assert.Equal(t, "", listener.Labels[LabelKeyGitHubEnterprise])
@@ -171,6 +176,7 @@ func TestMetadataPropagation(t *testing.T) {
 
 	ephemeralRunner, err := b.newEphemeralRunner(ephemeralRunnerSet)
 	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName}, ephemeralRunner.Finalizers)
 
 	for _, key := range commonLabelKeys {
 		if key == LabelKeyKubernetesComponent {
@@ -203,7 +209,7 @@ func TestMetadataPropagation(t *testing.T) {
 	}
 }
 
-func TestEphemeralRunnerSetProxySecretZIdentityHash(t *testing.T) {
+func TestEphemeralRunnerSetProxySecretMetadata(t *testing.T) {
 	ephemeralRunnerSet := &v1alpha1.EphemeralRunnerSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-scale-set",
@@ -221,13 +227,11 @@ func TestEphemeralRunnerSetProxySecretZIdentityHash(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	actualHash := proxySecret.Annotations[annotationKeyIntegrityHash]
-	assert.NotEmpty(t, actualHash)
-	assert.Equal(t, ephemeralRunnerSetProxySecretZIdentityHash(proxySecret), actualHash)
-
-	changedProxySecret := proxySecret.DeepCopy()
-	changedProxySecret.Data["http_proxy"] = []byte("http://updated-proxy.example.com")
-	assert.NotEqual(t, actualHash, ephemeralRunnerSetProxySecretZIdentityHash(changedProxySecret))
+	assert.Equal(t, proxyEphemeralRunnerSetSecretName(ephemeralRunnerSet), proxySecret.Name)
+	assert.Equal(t, ephemeralRunnerSet.Namespace, proxySecret.Namespace)
+	assert.Equal(t, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetName], proxySecret.Labels[LabelKeyGitHubScaleSetName])
+	assert.Equal(t, ephemeralRunnerSet.Labels[LabelKeyGitHubScaleSetNamespace], proxySecret.Labels[LabelKeyGitHubScaleSetNamespace])
+	assert.NotContains(t, proxySecret.Annotations, "actions.github.com/integrity-hash")
 }
 
 func TestGitHubURLTrimLabelValues(t *testing.T) {
@@ -257,7 +261,8 @@ func TestGitHubURLTrimLabelValues(t *testing.T) {
 			GitHubConfigUrl: fmt.Sprintf("https://github.com/%s/%s", organization, repository),
 		}
 
-		var b ResourceBuilder
+		cache := NewResourceCache()
+		b := ResourceBuilder{ResourceCache: &cache}
 		ephemeralRunnerSet, err := b.newEphemeralRunnerSet(autoscalingRunnerSet)
 		require.NoError(t, err)
 		assert.Len(t, ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise], 0)
@@ -281,7 +286,8 @@ func TestGitHubURLTrimLabelValues(t *testing.T) {
 			GitHubConfigUrl: fmt.Sprintf("https://github.com/enterprises/%s", enterprise),
 		}
 
-		var b ResourceBuilder
+		cache := NewResourceCache()
+		b := ResourceBuilder{ResourceCache: &cache}
 		ephemeralRunnerSet, err := b.newEphemeralRunnerSet(autoscalingRunnerSet)
 		require.NoError(t, err)
 		assert.Len(t, ephemeralRunnerSet.Labels[LabelKeyGitHubEnterprise], 63)
@@ -313,7 +319,6 @@ func TestOwnershipRelationships(t *testing.T) {
 				runnerScaleSetIDAnnotationKey:         "1",
 				AnnotationKeyGitHubRunnerGroupName:    "test-group",
 				AnnotationKeyGitHubRunnerScaleSetName: "test-scale-set",
-				annotationKeyIntegrityHash:            "test-hash",
 			},
 		},
 		Spec: v1alpha1.AutoscalingRunnerSetSpec{
@@ -322,7 +327,8 @@ func TestOwnershipRelationships(t *testing.T) {
 	}
 
 	// Initialize ResourceBuilder
-	b := ResourceBuilder{}
+	cache := NewResourceCache()
+	b := ResourceBuilder{ResourceCache: &cache}
 
 	// Create EphemeralRunnerSet
 	ephemeralRunnerSet, err := b.newEphemeralRunnerSet(&autoscalingRunnerSet)
@@ -421,7 +427,8 @@ func TestListenerPodNodeSelector(t *testing.T) {
 		},
 	}
 
-	b := ResourceBuilder{}
+	cache := NewResourceCache()
+	b := ResourceBuilder{ResourceCache: &cache}
 	ephemeralRunnerSet, err := b.newEphemeralRunnerSet(&autoscalingRunnerSet)
 	require.NoError(t, err)
 
@@ -541,4 +548,193 @@ func TestListenerPodNodeSelector(t *testing.T) {
 		assert.Empty(t, pod.Spec.NodeSelector,
 			"explicitly empty nodeSelector should override the linux default")
 	})
+}
+
+// TestNewEphemeralRunnerStampsActionableRevision pins the annotation the
+// Outdated lifecycle is built on. The controller compares a runner's actionable
+// revision against the set's applied revision to decide whether an Outdated
+// report concerns the current runner spec or one that has since been replaced.
+// A runner that lost this annotation would parse as revision 0 and be treated as
+// stale, so it would be deleted and replaced instead of holding the set
+// Outdated, and the set would never stop scaling.
+func TestNewEphemeralRunnerStampsActionableRevision(t *testing.T) {
+	newSet := func(revision int64, metadata *v1alpha1.ResourceMeta) *v1alpha1.EphemeralRunnerSet {
+		return &v1alpha1.EphemeralRunnerSet{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-ers", Namespace: "test-ns"},
+			Spec: v1alpha1.EphemeralRunnerSetSpec{
+				ActionableRevision:      revision,
+				EphemeralRunnerMetadata: metadata,
+			},
+		}
+	}
+
+	var b ResourceBuilder
+
+	t.Run("stamps the set's actionable revision", func(t *testing.T) {
+		runner, err := b.newEphemeralRunner(newSet(7, nil))
+		require.NoError(t, err)
+		assert.Equal(t, "7", runner.Annotations[AnnotationKeyActionableRevision])
+	})
+
+	// The zero value is what an unupgraded set carries, and it has to round-trip
+	// as "0" rather than being omitted: the classifier parses a missing
+	// annotation as 0 too, so an absent stamp would be indistinguishable from a
+	// genuine revision 0 and upgrades would silently rely on that coincidence.
+	t.Run("stamps the zero revision explicitly", func(t *testing.T) {
+		runner, err := b.newEphemeralRunner(newSet(0, nil))
+		require.NoError(t, err)
+		assert.Equal(t, "0", runner.Annotations[AnnotationKeyActionableRevision])
+	})
+
+	// User-supplied runner annotations are merged underneath the controller's
+	// own, so they cannot forge a revision. If this inverted, a user annotation
+	// could make every runner look stale and the set would delete and recreate
+	// runners forever.
+	t.Run("user metadata cannot override it", func(t *testing.T) {
+		runner, err := b.newEphemeralRunner(newSet(7, &v1alpha1.ResourceMeta{
+			Annotations: map[string]string{AnnotationKeyActionableRevision: "1"},
+		}))
+		require.NoError(t, err)
+		assert.Equal(t, "7", runner.Annotations[AnnotationKeyActionableRevision])
+	})
+}
+
+// TestNewEphemeralRunnerDoesNotShareItsSpec pins that every runner built from a
+// set owns its spec outright.
+//
+// Creating a runner hands the object to the API server and decodes the reply
+// back into it, and the decoder writes into the maps and slice elements it
+// already finds rather than allocating new ones. Runners are built and created
+// in parallel, so a spec shared between two of them is memory two goroutines
+// write at the same time, which takes the process down rather than failing a
+// request. The set is read by all of them at once, so its own copy has to come
+// through untouched too.
+func TestNewEphemeralRunnerDoesNotShareItsSpec(t *testing.T) {
+	b := &ResourceBuilder{}
+	set := &v1alpha1.EphemeralRunnerSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "test-set",
+			Namespace:   "test-ns",
+			Labels:      map[string]string{"set-label": "original"},
+			Annotations: map[string]string{"set-annotation": "original"},
+		},
+		Spec: v1alpha1.EphemeralRunnerSetSpec{
+			Replicas: 2,
+			EphemeralRunnerSpec: v1alpha1.EphemeralRunnerSpec{
+				GitHubConfigURL: "https://github.com/org/repo",
+				Proxy: &v1alpha1.ProxyConfig{
+					HTTP:    &v1alpha1.ProxyServerConfig{Url: "http://original"},
+					NoProxy: []string{"original"},
+				},
+				EphemeralRunnerConfigSecretMetadata: &v1alpha1.ResourceMeta{
+					Labels: map[string]string{"secret-label": "original"},
+				},
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels:      map[string]string{"pod-label": "original"},
+						Annotations: map[string]string{"pod-annotation": "original"},
+					},
+					Spec: corev1.PodSpec{
+						NodeSelector: map[string]string{"node": "original"},
+						Volumes:      []corev1.Volume{{Name: "original"}},
+						Containers: []corev1.Container{{
+							Name:  v1alpha1.EphemeralRunnerContainerName,
+							Image: "original",
+							Env:   []corev1.EnvVar{{Name: "KEY", Value: "original"}},
+						}},
+					},
+				},
+			},
+		},
+	}
+	unchanged := set.DeepCopy()
+
+	first, err := b.newEphemeralRunner(set)
+	require.NoError(t, err)
+	second, err := b.newEphemeralRunner(set)
+	require.NoError(t, err)
+
+	// Write over everything the decoder would reach on its way through the
+	// reply, as it would for the runner that happened to be created first.
+	first.Spec.Spec.Containers[0].Image = "decoded"
+	first.Spec.Spec.Containers[0].Env[0].Value = "decoded"
+	first.Spec.Spec.Volumes[0].Name = "decoded"
+	first.Spec.Spec.NodeSelector["node"] = "decoded"
+	first.Spec.Labels["pod-label"] = "decoded"
+	first.Spec.Annotations["pod-annotation"] = "decoded"
+	first.Spec.Proxy.HTTP.Url = "decoded"
+	first.Spec.Proxy.NoProxy[0] = "decoded"
+	first.Spec.EphemeralRunnerConfigSecretMetadata.Labels["secret-label"] = "decoded"
+	first.Labels["set-label"] = "decoded"
+	first.Annotations["set-annotation"] = "decoded"
+
+	assert.Equal(t, "original", second.Spec.Spec.Containers[0].Image)
+	assert.Equal(t, "original", second.Spec.Spec.Containers[0].Env[0].Value)
+	assert.Equal(t, "original", second.Spec.Spec.Volumes[0].Name)
+	assert.Equal(t, "original", second.Spec.Spec.NodeSelector["node"])
+	assert.Equal(t, "original", second.Spec.Labels["pod-label"])
+	assert.Equal(t, "original", second.Spec.Annotations["pod-annotation"])
+	assert.Equal(t, "http://original", second.Spec.Proxy.HTTP.Url)
+	assert.Equal(t, "original", second.Spec.Proxy.NoProxy[0])
+	assert.Equal(t, "original", second.Spec.EphemeralRunnerConfigSecretMetadata.Labels["secret-label"])
+	assert.Equal(t, "original", second.Labels["set-label"])
+	assert.Equal(t, "original", second.Annotations["set-annotation"])
+
+	assert.Equal(t, unchanged.Spec, set.Spec, "the set a runner was built from was written into")
+	assert.Equal(t, unchanged.Labels, set.Labels)
+	assert.Equal(t, unchanged.Annotations, set.Annotations)
+}
+
+// TestNewEphemeralRunnerIsSafeToBuildConcurrentlyWithoutAScheme pins that a
+// builder that was never given a scheme can still build runners in parallel.
+//
+// Runners are built concurrently, and the ownership reference needs a scheme to
+// resolve the owner's kind. A builder without one falls back to a scheme it
+// makes itself, and doing that by assigning to the builder would be a write
+// every other goroutine is reading at the same time: they would race on the
+// field, and one could pick up a scheme another had allocated but not yet
+// registered the types on, which fails the build with an unknown kind rather
+// than racing quietly. Every runner here has to come back owned, whichever
+// goroutine got there first. The race itself is only reported under -race.
+func TestNewEphemeralRunnerIsSafeToBuildConcurrentlyWithoutAScheme(t *testing.T) {
+	b := &ResourceBuilder{}
+	require.Nil(t, b.Scheme, "the fallback only runs for a builder without a scheme")
+
+	set := &v1alpha1.EphemeralRunnerSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-set", Namespace: "test-ns"},
+		Spec: v1alpha1.EphemeralRunnerSetSpec{
+			EphemeralRunnerSpec: v1alpha1.EphemeralRunnerSpec{
+				GitHubConfigURL: "https://github.com/org/repo",
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: v1alpha1.EphemeralRunnerContainerName}},
+					},
+				},
+			},
+		},
+	}
+
+	const runners = 32
+	var wg sync.WaitGroup
+	built := make([]*v1alpha1.EphemeralRunner, runners)
+	errs := make([]error, runners)
+
+	start := make(chan struct{})
+	for i := range runners {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			built[i], errs[i] = b.newEphemeralRunner(set)
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	for i := range runners {
+		require.NoError(t, errs[i])
+		require.Len(t, built[i].OwnerReferences, 1, "the runner has to come back owned by the set")
+		assert.Equal(t, set.Name, built[i].OwnerReferences[0].Name)
+		assert.Equal(t, "EphemeralRunnerSet", built[i].OwnerReferences[0].Kind)
+	}
 }

@@ -26,6 +26,13 @@ func WithGetRunnerScaleSetByID(result *scaleset.RunnerScaleSet, err error) Clien
 	}
 }
 
+// WithGetRunnerScaleSetByIDFunc configures a function to handle GetRunnerScaleSetByID calls dynamically
+func WithGetRunnerScaleSetByIDFunc(fn func(context.Context, int) (*scaleset.RunnerScaleSet, error)) ClientOption {
+	return func(c *Client) {
+		c.getRunnerScaleSetByIDFunc = fn
+	}
+}
+
 // WithGetRunnerGroupByName configures the result of GetRunnerGroupByName
 func WithGetRunnerGroupByName(result *scaleset.RunnerGroup, err error) ClientOption {
 	return func(c *Client) {
@@ -68,6 +75,13 @@ func WithDeleteRunnerScaleSet(err error) ClientOption {
 func WithRemoveRunner(err error) ClientOption {
 	return func(c *Client) {
 		c.removeRunnerResult.err = err
+	}
+}
+
+// WithRemoveRunnerFunc configures a function to handle RemoveRunner calls dynamically
+func WithRemoveRunnerFunc(fn func(context.Context, int64) error) ClientOption {
+	return func(c *Client) {
+		c.removeRunnerFunc = fn
 	}
 }
 
@@ -121,6 +135,7 @@ type Client struct {
 	systemInfo               scaleset.SystemInfo
 	createRunnerScaleSetFunc func(context.Context, *scaleset.RunnerScaleSet) (*scaleset.RunnerScaleSet, error)
 	updateRunnerScaleSetFunc func(context.Context, int, *scaleset.RunnerScaleSet) (*scaleset.RunnerScaleSet, error)
+	removeRunnerFunc         func(context.Context, int64) error
 
 	getRunnerScaleSetResult struct {
 		*scaleset.RunnerScaleSet
@@ -135,6 +150,7 @@ type Client struct {
 		err error
 	}
 	getRunnerGroupByNameFunc   func(context.Context, string) (*scaleset.RunnerGroup, error)
+	getRunnerScaleSetByIDFunc  func(context.Context, int) (*scaleset.RunnerScaleSet, error)
 	createRunnerScaleSetResult struct {
 		*scaleset.RunnerScaleSet
 		err error
@@ -204,6 +220,9 @@ func (c *Client) GetRunnerByName(ctx context.Context, runnerName string) (*scale
 }
 
 func (c *Client) RemoveRunner(ctx context.Context, runnerID int64) error {
+	if c.removeRunnerFunc != nil {
+		return c.removeRunnerFunc(ctx, runnerID)
+	}
 	return c.removeRunnerResult.err
 }
 
@@ -219,6 +238,9 @@ func (c *Client) GetRunnerScaleSet(ctx context.Context, runnerGroupID int, runne
 }
 
 func (c *Client) GetRunnerScaleSetByID(ctx context.Context, runnerScaleSetID int) (*scaleset.RunnerScaleSet, error) {
+	if c.getRunnerScaleSetByIDFunc != nil {
+		return c.getRunnerScaleSetByIDFunc(ctx, runnerScaleSetID)
+	}
 	return c.getRunnerScaleSetByIDResult.RunnerScaleSet, c.getRunnerScaleSetByIDResult.err
 }
 

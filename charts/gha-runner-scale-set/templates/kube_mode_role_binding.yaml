@@ -1,3 +1,4 @@
+{{- include "gha-runner-scale-set.validateMetadata" . }}
 {{- $containerMode := .Values.containerMode }}
 {{- $hasCustomResourceMeta := (and .Values.resourceMeta .Values.resourceMeta.kubernetesModeRoleBinding) }}
 {{- if and (or (eq $containerMode.type "kubernetes") (eq $containerMode.type "kubernetes-novolume")) (not .Values.template.spec.serviceAccountName) }}
@@ -13,24 +14,24 @@ metadata:
     {{- with .Values.labels }}
     {{- range $k, $v := . }}
     {{- if not (or (hasKey $reserved $k) (hasPrefix "actions.github.com/" $k)) }}
-    {{ $k }}: {{ $v | quote }}
+    {{ $k }}: {{ include "gha-runner-scale-set.metadataValue" $v | quote }}
     {{- end }}
     {{- end }}
     {{- end }}
     {{- if $hasCustomResourceMeta }}
     {{- with .Values.resourceMeta.kubernetesModeRoleBinding.labels }}
-    {{- toYaml . | nindent 4 }}
+    {{- include "gha-runner-scale-set.stringMap" . | nindent 4 }}
     {{- end }}
     {{- end }}
     {{- include "gha-runner-scale-set.labels" . | nindent 4 }}
 
   annotations:
     {{- with .Values.annotations }}
-    {{- toYaml . | nindent 4 }}
+    {{- include "gha-runner-scale-set.stringMap" . | nindent 4 }}
     {{- end }}
     {{- if $hasCustomResourceMeta }}
     {{- with .Values.resourceMeta.kubernetesModeRoleBinding.annotations }}
-    {{- toYaml . | nindent 4 }}
+    {{- include "gha-runner-scale-set.stringMap" . | nindent 4 }}
     {{- end }}
     {{- end }}
   finalizers:

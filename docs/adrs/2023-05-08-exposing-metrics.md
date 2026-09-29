@@ -158,13 +158,14 @@ started.
 To get a better understanding of health and workings of the cluster
 resources, we need to expose the following metrics:
 
-- `pending_ephemeral_runners` - Number of ephemeral runners in a pending state.
-  This information can show the latency between creating an `EphemeralRunner`
-  resource, and having an ephemeral runner pod started and ready to receive a
-  job.
-- `running_ephemeral_runners` - Number of ephemeral runners currently running.
-  This information is helpful to see how many ephemeral runner pods are running
-  at any given time.
+- `pending_ephemeral_runners` - Number of ephemeral runners that have not been
+  assigned a job yet. This covers both runners whose pod has not finished
+  starting and runners that are registered and idle, so with a non-zero
+  `minRunners` it does not drop to zero.
+- `running_ephemeral_runners` - Number of ephemeral runners that have been
+  assigned a job. This information is helpful to see how many ephemeral runners
+  are executing a workflow job at any given time. It reflects job assignment,
+  not pod liveness.
 - `failed_ephemeral_runners` - Number of ephemeral runners in a `Failed` state.
   This information is helpful to catch the faulty image, or some underlying
   problem. When the ephemeral runner controller is not able to start the

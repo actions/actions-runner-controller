@@ -17,6 +17,8 @@ rules:
   - persistentvolumeclaims
   - pods
   - pods/finalizers
+  - secrets
+  - serviceaccounts
   verbs:
   - create
   - delete
@@ -42,18 +44,6 @@ rules:
   - pods/status
   verbs:
   - get
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  - serviceaccounts
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - update
-  - watch
 - apiGroups:
   - actions.github.com
   resources:
@@ -167,5 +157,6 @@ rules:
   - delete
   - get
   - list
+  - patch
   - update
   - watch

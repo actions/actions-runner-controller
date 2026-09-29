@@ -14,4 +14,8 @@ packages:
       all: true
   github.com/actions/actions-runner-controller/controllers/actions.github.com:
     config:
-      all: true
+      all: false
+      include-interface-regex: ".*"
+      # deepCopyObject is a generic type constraint, not a collaborator, so it
+      # must not be mocked.
+      exclude-interface-regex: "^deepCopyObject$"
