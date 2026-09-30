@@ -446,3 +446,204 @@ func TestRunnerFinalizerChecksContainerStatesInTerminalPods(t *testing.T) {
 		})
 	}
 }
+
+// scaleToZero is the listener publishing an idle set with no runners wanted.
+func (f *unrecordedRunnerIDFixture) scaleToZero() {
+	set := new(v1alpha1.EphemeralRunnerSet)
+	require.NoError(f.t, f.c.Get(f.t.Context(), client.ObjectKeyFromObject(f.set), set))
+	set.Spec.Replicas = 0
+	set.Spec.PatchID = 0
+	require.NoError(f.t, f.c.Update(f.t.Context(), set))
+}
+
+// makePodUnschedulable leaves the pod as the scheduler does when no node fits
+// it: pending, with no container status for the runner controller to publish
+// the runner ID with.
+func (f *unrecordedRunnerIDFixture) makePodUnschedulable() {
+	pod := f.pod()
+	pod.Status.Phase = corev1.PodPending
+	pod.Status.ContainerStatuses = nil
+	pod.Status.Conditions = []corev1.PodCondition{{
+		Type:   corev1.PodScheduled,
+		Status: corev1.ConditionFalse,
+		Reason: corev1.PodReasonUnschedulable,
+	}}
+	require.NoError(f.t, f.c.Status().Update(f.t.Context(), pod))
+
+	_, err := f.reconcileRunner()
+	require.NoError(f.t, err)
+	require.Zero(f.t, f.runner().Status.RunnerID, "a pod without a runner container status must not publish the runner ID")
+}
+
+func TestSetScaleDownRetiresRunnerWhosePodCannotStart(t *testing.T) {
+	t.Run("unschedulable pod never records the runner ID", func(t *testing.T) {
+		f := newUnrecordedRunnerIDFixture(t, 2*time.Minute)
+		f.reply = nil
+		f.makePodUnschedulable()
+		f.scaleToZero()
+
+		result, err := f.reconcileSet()
+		require.NoError(t, err)
+		require.Zero(t, result.RequeueAfter)
+
+		require.Empty(t, f.removals, "a runner without a recorded ID must not be asked about")
+		runner := f.runner()
+		require.NotNil(t, runner)
+		require.False(t, runner.DeletionTimestamp.IsZero(), "scale down left a runner that can never start")
+		require.Contains(t, runner.Finalizers, ephemeralRunnerActionsFinalizerName)
+
+		// Finalizing asks about the registration in the jitconfig secret before
+		// the pod goes.
+		_, err = f.reconcileRunner()
+		require.NoError(t, err)
+		require.Equal(t, []int64{unrecordedTestRunnerID}, f.removals)
+		require.Nil(t, f.pod())
+		require.Nil(t, f.runner())
+		require.Empty(t, f.queue.queued(), "the registration was already removed")
+	})
+
+	t.Run("pod waiting on its container records the runner ID", func(t *testing.T) {
+		f := newUnrecordedRunnerIDFixture(t, 2*time.Minute)
+		f.reply = nil
+		pod := f.pod()
+		pod.Status.Phase = corev1.PodPending
+		pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
+			Name:  v1alpha1.EphemeralRunnerContainerName,
+			State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "ContainerCreating"}},
+		}}
+		require.NoError(t, f.c.Status().Update(t.Context(), pod))
+		_, err := f.reconcileRunner()
+		require.NoError(t, err)
+		require.Equal(t, unrecordedTestRunnerID, f.runner().Status.RunnerID)
+		f.scaleToZero()
+
+		result, err := f.reconcileSet()
+		require.NoError(t, err)
+		require.Zero(t, result.RequeueAfter)
+
+		require.Equal(t, []int64{unrecordedTestRunnerID}, f.removals)
+		runner := f.runner()
+		require.NotNil(t, runner)
+		require.False(t, runner.DeletionTimestamp.IsZero())
+		require.NotContains(t, runner.Finalizers, ephemeralRunnerActionsFinalizerName, "the registration was already removed")
+
+		_, err = f.reconcileRunner()
+		require.NoError(t, err)
+		require.Equal(t, []int64{unrecordedTestRunnerID}, f.removals)
+		require.Nil(t, f.pod())
+		require.Nil(t, f.runner())
+		require.Empty(t, f.queue.queued())
+	})
+}
+
+func TestSetScaleDownWaitsForRunnerToRecordItsIDBeforeRetiringIt(t *testing.T) {
+	f := newUnrecordedRunnerIDFixture(t, 0)
+	f.reply = nil
+	f.makePodUnschedulable()
+	f.scaleToZero()
+
+	result, err := f.reconcileSet()
+	require.NoError(t, err)
+	require.Positive(t, result.RequeueAfter, "nothing else wakes the set for a runner that never records its ID")
+	require.LessOrEqual(t, result.RequeueAfter, unrecordedRunnerIDGracePeriod)
+	require.Empty(t, f.removals)
+	require.True(t, f.runner().DeletionTimestamp.IsZero(), "a runner still within its grace period was retired")
+	f.requirePodKept()
+
+	unrecordedRunnerIDGracePeriod = 0
+
+	result, err = f.reconcileSet()
+	require.NoError(t, err)
+	require.Zero(t, result.RequeueAfter)
+	require.False(t, f.runner().DeletionTimestamp.IsZero())
+
+	_, err = f.reconcileRunner()
+	require.NoError(t, err)
+	require.Nil(t, f.pod())
+	require.Nil(t, f.runner())
+}
+
+func TestSetScaleDownKeepsBusyRunnerWithoutRecordedID(t *testing.T) {
+	for _, phase := range []v1alpha1.EphemeralRunnerPhase{"", v1alpha1.EphemeralRunnerPhaseRunning} {
+		t.Run("phase="+string(phase), func(t *testing.T) {
+			f := newUnrecordedRunnerIDFixture(t, 2*time.Minute)
+			if phase != "" {
+				runner := f.runner()
+				runner.Status.Phase = phase
+				require.NoError(t, f.c.Status().Update(t.Context(), runner))
+			}
+			f.scaleToZero()
+
+			result, err := f.reconcileSet()
+			require.NoError(t, err)
+			require.Zero(t, result.RequeueAfter)
+			require.Empty(t, f.removals, "a runner without a recorded ID must not be asked about")
+			runner := f.runner()
+			require.NotNil(t, runner)
+			require.Zero(t, runner.Status.RunnerID)
+			require.False(t, runner.HasJob())
+			require.Contains(t, runner.Finalizers, ephemeralRunnerActionsFinalizerName)
+			f.requirePodKept()
+
+			// The service still reports the registration busy, so finalizing
+			// keeps the live pod and asks again later.
+			result, err = f.reconcileRunner()
+			require.NoError(t, err)
+			require.Equal(t, busyRunnerRequeueInterval, result.RequeueAfter)
+			require.Equal(t, []int64{unrecordedTestRunnerID}, f.removals)
+			require.NotNil(t, f.runner())
+			f.requirePodKept()
+			require.Empty(t, f.queue.queued())
+
+			// The job finished and the service let go of the runner.
+			f.reply = nil
+			_, err = f.reconcileRunner()
+			require.NoError(t, err)
+			require.Nil(t, f.pod())
+			require.Nil(t, f.runner())
+		})
+	}
+}
+
+func TestSetScaleDownKeepsBusyRunnerUntilItRecordsItsID(t *testing.T) {
+	f := newUnrecordedRunnerIDFixture(t, 0)
+	f.scaleToZero()
+
+	result, err := f.reconcileSet()
+	require.NoError(t, err)
+	require.Positive(t, result.RequeueAfter)
+	require.Empty(t, f.removals)
+	require.True(t, f.runner().DeletionTimestamp.IsZero())
+	f.requirePodKept()
+
+	_, err = f.reconcileRunner()
+	require.NoError(t, err)
+	require.Equal(t, unrecordedTestRunnerID, f.runner().Status.RunnerID)
+
+	// With the ID recorded the set asks the service itself, and a runner it
+	// reports busy is neither deleted nor left in the deleting state.
+	result, err = f.reconcileSet()
+	require.NoError(t, err)
+	require.Zero(t, result.RequeueAfter)
+	require.Equal(t, []int64{unrecordedTestRunnerID}, f.removals)
+	require.True(t, f.runner().DeletionTimestamp.IsZero(), "a runner executing a job was retired")
+	f.requirePodKept()
+}
+
+func TestSetScaleDownKeepsRunnerWithReportedJobAndNoRecordedID(t *testing.T) {
+	f := newUnrecordedRunnerIDFixture(t, 2*time.Minute)
+	runner := f.runner()
+	runner.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
+	runner.Status.JobID = "job-1"
+	require.NoError(t, f.c.Status().Update(t.Context(), runner))
+	f.scaleToZero()
+
+	result, err := f.reconcileSet()
+	require.NoError(t, err)
+	require.Zero(t, result.RequeueAfter)
+	require.Empty(t, f.removals)
+	runner = f.runner()
+	require.NotNil(t, runner)
+	require.True(t, runner.DeletionTimestamp.IsZero(), "a runner with a reported job was retired")
+	f.requirePodKept()
+}
