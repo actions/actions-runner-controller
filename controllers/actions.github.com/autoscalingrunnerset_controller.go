@@ -27,6 +27,7 @@ import (
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/build"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/secretresolver"
 	"github.com/actions/scaleset"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -1220,7 +1221,17 @@ func (r *AutoscalingRunnerSetReconciler) deleteRunnerScaleSet(ctx context.Contex
 	}
 
 	actionsClient, err := r.GetActionsService(ctx, autoscalingRunnerSet)
-	if err != nil {
+	switch {
+	case errors.Is(err, secretresolver.ErrNotFound):
+		// A secret or config map the client is built from is gone, from Kubernetes or the vault. Retrying cannot bring it back,
+		// so release the autoscaling runner set instead of leaving it stuck in Terminating.
+		logger.Error(
+			err,
+			"A secret or config map required to reach the Actions service no longer exists in Kubernetes or the configured vault. The runner scale set cannot be deregistered and must be deleted manually from the Actions service",
+			"runnerScaleSetId", runnerScaleSetID,
+		)
+		return r.removeRunnerScaleSetIDAnnotation(ctx, autoscalingRunnerSet, runnerScaleSetID, logger)
+	case err != nil:
 		logger.Error(err, "Failed to initialize Actions service client for updating a existing runner scale set")
 		return err
 	}
@@ -1235,15 +1246,23 @@ func (r *AutoscalingRunnerSetReconciler) deleteRunnerScaleSet(ctx context.Contex
 		return err
 	}
 
-	original := autoscalingRunnerSet.DeepCopy()
-	delete(autoscalingRunnerSet.Annotations, runnerScaleSetIDAnnotationKey)
-
-	if err := r.Patch(ctx, autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
-		logger.Error(err, "Failed to remove runner scale set ID annotation after deleting the runner scale set", "runnerScaleSetId", runnerScaleSetID)
+	if err := r.removeRunnerScaleSetIDAnnotation(ctx, autoscalingRunnerSet, runnerScaleSetID, logger); err != nil {
 		return err
 	}
 
 	logger.Info("Deleted the runner scale set from Actions service")
+	return nil
+}
+
+func (r *AutoscalingRunnerSetReconciler) removeRunnerScaleSetIDAnnotation(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, runnerScaleSetID int, logger logr.Logger) error {
+	original := autoscalingRunnerSet.DeepCopy()
+	delete(autoscalingRunnerSet.Annotations, runnerScaleSetIDAnnotationKey)
+
+	if err := r.Patch(ctx, autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
+		logger.Error(err, "Failed to remove runner scale set ID annotation", "runnerScaleSetId", runnerScaleSetID)
+		return err
+	}
+
 	return nil
 }
 

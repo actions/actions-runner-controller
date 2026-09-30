@@ -32,6 +32,7 @@ import (
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient"
 	scalefake "github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient/fake"
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/secretresolver"
+	"github.com/actions/actions-runner-controller/vault"
 	"github.com/actions/scaleset"
 )
 
@@ -2851,6 +2852,184 @@ var _ = Describe("Test AutoscalingRunnerSet with a stale runner scale set", Orde
 				autoscalingRunnerSetTestTimeout,
 				autoscalingRunnerSetTestInterval,
 			).Should(Succeed(), "the finalizer should be removed even though the runner scale set is already gone")
+		})
+	})
+
+	Context("When the GitHub config secret is gone before the AutoscalingRunnerSet is deleted", func() {
+		var ctx context.Context
+		var mgr ctrl.Manager
+		var autoscalingNS *corev1.Namespace
+		var configSecret *corev1.Secret
+		var autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
+			configSecret = createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
+
+			controller := &AutoscalingRunnerSetReconciler{
+				Client:                             mgr.GetClient(),
+				Scheme:                             mgr.GetScheme(),
+				Log:                                logf.Log,
+				ControllerNamespace:                autoscalingNS.Name,
+				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
+				ResourceBuilder: ResourceBuilder{
+					ResourceCache: newTestResourceCache(),
+					SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient(
+						scalefake.WithClient(
+							scalefake.NewClient(
+								scalefake.WithGetRunnerGroupByName(&scaleset.RunnerGroup{ID: 1, Name: "testgroup"}, nil),
+								scalefake.WithGetRunnerScaleSetByIDFunc(func(_ context.Context, runnerScaleSetID int) (*scaleset.RunnerScaleSet, error) {
+									return &scaleset.RunnerScaleSet{ID: runnerScaleSetID, Name: "test-asrs", RunnerGroupID: 1, RunnerGroupName: "testgroup"}, nil
+								}),
+								scalefake.WithGetRunnerScaleSet(nil, nil),
+								scalefake.WithCreateRunnerScaleSet(&scaleset.RunnerScaleSet{ID: freshRunnerScaleSetID, Name: "test-asrs", RunnerGroupID: 1, RunnerGroupName: "testgroup"}, nil),
+							),
+						),
+					)),
+				},
+			}
+			Expect(controller.SetupWithManager(mgr)).To(Succeed(), "failed to setup controller")
+			startManagers(GinkgoT(), mgr)
+
+			autoscalingRunnerSet = newAutoscalingRunnerSet(autoscalingNS.Name, configSecret.Name, nil)
+			Expect(k8sClient.Create(ctx, autoscalingRunnerSet)).To(Succeed(), "failed to create AutoScalingRunnerSet")
+
+			Eventually(
+				func() (string, error) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current); err != nil {
+						return "", err
+					}
+					return current.Annotations[runnerScaleSetIDAnnotationKey], nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Equal(strconv.Itoa(freshRunnerScaleSetID)), "the runner scale set should be registered")
+		})
+
+		arsGone := func() error {
+			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), new(v1alpha1.AutoscalingRunnerSet))
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("AutoScalingRunnerSet is not deleted")
+		}
+
+		It("removes the finalizer instead of retrying forever", func() {
+			Expect(k8sClient.Delete(ctx, configSecret)).To(Succeed(), "failed to delete the GitHub config secret")
+			Expect(k8sClient.Delete(ctx, autoscalingRunnerSet)).To(Succeed(), "failed to delete AutoScalingRunnerSet")
+
+			Eventually(
+				arsGone,
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "a missing GitHub config secret should not keep the AutoScalingRunnerSet in Terminating")
+		})
+
+		It("keeps the finalizer when the Actions client fails for any other reason", func() {
+			broken := configSecret.DeepCopy()
+			broken.Data = map[string][]byte{}
+			Expect(k8sClient.Update(ctx, broken)).To(Succeed(), "failed to break the GitHub config secret")
+			Expect(k8sClient.Delete(ctx, autoscalingRunnerSet)).To(Succeed(), "failed to delete AutoScalingRunnerSet")
+
+			Consistently(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), new(v1alpha1.AutoscalingRunnerSet))
+				},
+				3*time.Second,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "a secret that exists but cannot be used should keep the AutoScalingRunnerSet in Terminating")
+
+			restored := new(corev1.Secret)
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(configSecret), restored)).To(Succeed(), "failed to get the GitHub config secret")
+			restored.Data = configSecret.Data
+			Expect(k8sClient.Update(ctx, restored)).To(Succeed(), "failed to restore the GitHub config secret")
+
+			Eventually(
+				arsGone,
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "deletion should complete once the GitHub config secret is usable again")
+		})
+	})
+
+	Context("When the vault proxy credential secret is gone before the AutoscalingRunnerSet is deleted", func() {
+		It("removes the finalizer instead of retrying forever", func() {
+			ctx := context.Background()
+			autoscalingNS, mgr := createNamespace(GinkgoT(), k8sClient)
+
+			controller := &AutoscalingRunnerSetReconciler{
+				Client:                             mgr.GetClient(),
+				Scheme:                             mgr.GetScheme(),
+				Log:                                logf.Log,
+				ControllerNamespace:                autoscalingNS.Name,
+				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
+				ResourceBuilder: ResourceBuilder{
+					ResourceCache:  newTestResourceCache(),
+					SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient()),
+				},
+			}
+			Expect(controller.SetupWithManager(mgr)).To(Succeed(), "failed to setup controller")
+			startManagers(GinkgoT(), mgr)
+
+			proxySecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "vault-proxy-credentials", Namespace: autoscalingNS.Name},
+				Data:       map[string][]byte{"username": []byte("user"), "password": []byte("pass")},
+			}
+			Expect(k8sClient.Create(ctx, proxySecret)).To(Succeed(), "failed to create the vault proxy credential secret")
+
+			// The vault is never reached: resolving the proxy credentials fails first.
+			autoscalingRunnerSet := newAutoscalingRunnerSet(autoscalingNS.Name, "github-config-in-vault", registeredAnnotations(freshRunnerScaleSetID))
+			autoscalingRunnerSet.Spec.VaultConfig = &v1alpha1.VaultConfig{
+				Type: vault.VaultTypeAzureKeyVault,
+				AzureKeyVault: &v1alpha1.AzureKeyVaultConfig{
+					URL:             "https://vault.example.com",
+					TenantID:        "tenant",
+					ClientID:        "client",
+					CertificatePath: "/nonexistent/cert.pem",
+				},
+				Proxy: &v1alpha1.ProxyConfig{
+					HTTPS: &v1alpha1.ProxyServerConfig{
+						Url:                 "http://proxy.example.com:3128",
+						CredentialSecretRef: proxySecret.Name,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, autoscalingRunnerSet)).To(Succeed(), "failed to create AutoScalingRunnerSet")
+
+			Eventually(
+				func() (bool, error) {
+					current := new(v1alpha1.AutoscalingRunnerSet)
+					if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), current); err != nil {
+						return false, err
+					}
+					return controllerutil.ContainsFinalizer(current, autoscalingRunnerSetFinalizerName), nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(BeTrue(), "the finalizer should be added")
+
+			Expect(k8sClient.Delete(ctx, proxySecret)).To(Succeed(), "failed to delete the vault proxy credential secret")
+			Expect(k8sClient.Delete(ctx, autoscalingRunnerSet)).To(Succeed(), "failed to delete AutoScalingRunnerSet")
+
+			Eventually(
+				func() error {
+					err := k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingRunnerSet), new(v1alpha1.AutoscalingRunnerSet))
+					if errors.IsNotFound(err) {
+						return nil
+					}
+					if err != nil {
+						return err
+					}
+					return fmt.Errorf("AutoScalingRunnerSet is not deleted")
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(Succeed(), "a missing vault proxy credential secret should not keep the AutoScalingRunnerSet in Terminating")
 		})
 	})
 })

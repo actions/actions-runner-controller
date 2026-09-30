@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1/appconfig"
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient"
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/object"
@@ -17,9 +19,34 @@ import (
 	"github.com/actions/actions-runner-controller/vault/azurekeyvault"
 	"golang.org/x/net/http/httpproxy"
 	corev1 "k8s.io/api/core/v1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+type secretResolverError string
+
+func (e secretResolverError) Error() string { return string(e) }
+
+// ErrNotFound marks a secret or config map that no longer exists, whichever driver resolved it.
+const ErrNotFound = secretResolverError("not found")
+
+// wrapKubernetesError tags a Kubernetes NotFound so callers need no knowledge of the driver.
+func wrapKubernetesError(err error) error {
+	if kerrors.IsNotFound(err) {
+		return fmt.Errorf("%w: %w", ErrNotFound, err)
+	}
+	return err
+}
+
+// wrapAzureKeyVaultError tags only a missing Azure Key Vault secret, so a 403 or throttled read still requeues.
+func wrapAzureKeyVaultError(err error) error {
+	var responseErr *azcore.ResponseError
+	if errors.As(err, &responseErr) && responseErr.StatusCode == http.StatusNotFound && responseErr.ErrorCode == "SecretNotFound" {
+		return fmt.Errorf("%w: %w", ErrNotFound, err)
+	}
+	return err
+}
 
 type SecretResolver struct {
 	k8sClient   client.Client
@@ -56,12 +83,12 @@ func New(k8sClient client.Client, scalesetMultiClient multiclient.MultiClient, o
 func (sr *SecretResolver) GetAppConfig(ctx context.Context, obj object.ActionsGitHubObject) (*appconfig.AppConfig, error) {
 	resolver, err := sr.resolverForObject(ctx, obj)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get resolver for object: %v", err)
+		return nil, fmt.Errorf("failed to get resolver for object: %w", err)
 	}
 
 	appConfig, err := resolver.appConfig(ctx, obj.GitHubConfigSecret())
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve app config: %v", err)
+		return nil, fmt.Errorf("failed to resolve app config: %w", err)
 	}
 
 	return appConfig, nil
@@ -70,12 +97,12 @@ func (sr *SecretResolver) GetAppConfig(ctx context.Context, obj object.ActionsGi
 func (sr *SecretResolver) GetActionsService(ctx context.Context, obj object.ActionsGitHubObject) (multiclient.Client, error) {
 	resolver, err := sr.resolverForObject(ctx, obj)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get resolver for object: %v", err)
+		return nil, fmt.Errorf("failed to get resolver for object: %w", err)
 	}
 
 	appConfig, err := resolver.appConfig(ctx, obj.GitHubConfigSecret())
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve app config: %v", err)
+		return nil, fmt.Errorf("failed to resolve app config: %w", err)
 	}
 
 	var proxyFunc func(req *http.Request) (*url.URL, error)
@@ -93,7 +120,7 @@ func (sr *SecretResolver) GetActionsService(ctx context.Context, obj object.Acti
 			if ref := proxy.HTTP.CredentialSecretRef; ref != "" {
 				u.User, err = resolver.proxyCredentials(ctx, ref)
 				if err != nil {
-					return nil, fmt.Errorf("failed to resolve proxy credentials: %v", err)
+					return nil, fmt.Errorf("failed to resolve proxy credentials: %w", err)
 				}
 			}
 
@@ -109,7 +136,7 @@ func (sr *SecretResolver) GetActionsService(ctx context.Context, obj object.Acti
 			if ref := proxy.HTTPS.CredentialSecretRef; ref != "" {
 				u.User, err = resolver.proxyCredentials(ctx, ref)
 				if err != nil {
-					return nil, fmt.Errorf("failed to resolve proxy credentials: %v", err)
+					return nil, fmt.Errorf("failed to resolve proxy credentials: %w", err)
 				}
 			}
 
@@ -134,7 +161,7 @@ func (sr *SecretResolver) GetActionsService(ctx context.Context, obj object.Acti
 				&configmap,
 			)
 			if err != nil {
-				return nil, fmt.Errorf("failed to get configmap %s: %w", name, err)
+				return nil, fmt.Errorf("failed to get configmap %s: %w", name, wrapKubernetesError(err))
 			}
 
 			return []byte(configmap.Data[key]), nil
@@ -173,12 +200,12 @@ func (sr *SecretResolver) resolverForObject(ctx context.Context, obj object.Acti
 			var secret corev1.Secret
 			err := sr.k8sClient.Get(ctx, types.NamespacedName{Name: s, Namespace: obj.GetNamespace()}, &secret)
 			if err != nil {
-				return nil, fmt.Errorf("failed to get secret %s: %w", s, err)
+				return nil, fmt.Errorf("failed to get secret %s: %w", s, wrapKubernetesError(err))
 			}
 			return &secret, nil
 		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to create proxy config: %v", err)
+			return nil, fmt.Errorf("failed to create proxy config: %w", err)
 		}
 		proxy = p
 	}
@@ -225,7 +252,7 @@ func (r *k8sResolver) appConfig(ctx context.Context, key string) (*appconfig.App
 		nsName,
 		secret,
 	); err != nil {
-		return nil, fmt.Errorf("failed to get kubernetes secret: %q", nsName.String())
+		return nil, fmt.Errorf("failed to get kubernetes secret %q: %w", nsName.String(), wrapKubernetesError(err))
 	}
 
 	return appconfig.FromSecret(secret)
@@ -239,7 +266,7 @@ func (r *k8sResolver) proxyCredentials(ctx context.Context, key string) (*url.Us
 		nsName,
 		secret,
 	); err != nil {
-		return nil, fmt.Errorf("failed to get kubernetes secret: %q", nsName.String())
+		return nil, fmt.Errorf("failed to get kubernetes secret %q: %w", nsName.String(), wrapKubernetesError(err))
 	}
 
 	return url.UserPassword(
@@ -255,7 +282,7 @@ type vaultResolver struct {
 func (r *vaultResolver) appConfig(ctx context.Context, key string) (*appconfig.AppConfig, error) {
 	val, err := r.vault.GetSecret(ctx, key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve secret: %v", err)
+		return nil, fmt.Errorf("failed to resolve secret: %w", wrapAzureKeyVaultError(err))
 	}
 
 	return appconfig.FromJSONString(val)
@@ -264,7 +291,7 @@ func (r *vaultResolver) appConfig(ctx context.Context, key string) (*appconfig.A
 func (r *vaultResolver) proxyCredentials(ctx context.Context, key string) (*url.Userinfo, error) {
 	val, err := r.vault.GetSecret(ctx, key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve secret: %v", err)
+		return nil, fmt.Errorf("failed to resolve secret: %w", wrapAzureKeyVaultError(err))
 	}
 
 	type info struct {
