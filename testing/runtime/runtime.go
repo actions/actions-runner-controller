@@ -26,6 +26,6 @@ func (k Cmdr) CombinedOutput(cmd *exec.Cmd) (string, error) {
 	return string(o), nil
 }
 
-func (k Cmdr) Errorf(f string, args ...interface{}) {
+func (k Cmdr) Errorf(f string, args ...any) {
 	fmt.Fprintf(os.Stderr, f+"\n", args...)
 }
