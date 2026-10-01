@@ -17,7 +17,7 @@ This new autoscaling mode brings numerous enhancements (described in the followi
 8. Once the runner pod is created, the runner application in the pod uses the JIT configuration token to register itself with the `Actions Service`. It then establishes another HTTPS long poll connection to receive the job details it needs to execute.
 9. The `Actions Service` acknowledges the runner registration and dispatches the job run details.
 10. Throughout the job run execution, the runner continuously communicates the logs and job run status back to the `Actions Service`.
-11. When the runner completes its job successfully, the `EphemeralRunner Controller` checks with the `Actions Service` to see if runner can be deleted. If it can, the `Ephemeral RunnerSet` deletes the runner.
+11. When the runner completes its job successfully, the `EphemeralRunner Controller` checks with the `Actions Service` to see if the runner can be deleted. If it can, the `Ephemeral RunnerSet` deletes the runner.
 
 In addition to the increased reliability of the automatic scaling, we have worked on these improvements:
 
