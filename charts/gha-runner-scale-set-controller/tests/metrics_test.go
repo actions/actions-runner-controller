@@ -66,7 +66,7 @@ func TestControllerMetricsAddress(t *testing.T) {
 
 func indentMetricsValues(values string) string {
 	result := ""
-	for _, line := range strings.Split(strings.TrimSuffix(values, "\n"), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSuffix(values, "\n"), "\n") {
 		result += "  " + line + "\n"
 	}
 	return result
