@@ -1847,7 +1847,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum by (controller) (controller_runtime_active_workers)",
+          "expr": "sum by (controller) (controller_runtime_active_workers{namespace=\"$SystemNamespace\"})",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A",
