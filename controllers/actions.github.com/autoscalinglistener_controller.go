@@ -527,6 +527,12 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 
 		if listenerPodIsDead(&listenerPod) {
 			logDeadListenerPod(&listenerPod, log)
+			if delay := listenerRestartDelay(&listenerPod, time.Now()); delay > 0 {
+				// The pod's restart policy is Never, so this delay is the only thing
+				// pacing restarts of a listener that keeps failing on startup.
+				log.Info("Listener pod failed, delaying its recreation", "namespace", listenerPod.Namespace, "name", listenerPod.Name, "delay", delay)
+				return ctrl.Result{RequeueAfter: delay}, nil
+			}
 			return ctrl.Result{}, r.deleteListenerPod(ctx, &autoscalingListener, &listenerPod, log)
 		}
 
@@ -983,6 +989,27 @@ func listenerPodIsDead(pod *corev1.Pod) bool {
 
 	cs := listenerContainerStatus(pod)
 	return cs != nil && cs.State.Terminated != nil
+}
+
+// listenerFailedRestartDelay is the minimum time a listener pod that exited with
+// a non-zero code is kept around before it is deleted and recreated.
+const listenerFailedRestartDelay = 15 * time.Second
+
+// listenerRestartDelay returns how much longer the controller must wait before
+// deleting a dead listener pod so it gets recreated. Only a container that
+// exited with a non-zero code is delayed. Without it, a listener that fails
+// deterministically (revoked token, exhausted API rate limit) is recreated
+// immediately, and every attempt spends more GitHub API quota.
+func listenerRestartDelay(pod *corev1.Pod, now time.Time) time.Duration {
+	cs := listenerContainerStatus(pod)
+	if cs == nil || cs.State.Terminated == nil {
+		return 0
+	}
+	terminated := cs.State.Terminated
+	if terminated.ExitCode == 0 || terminated.FinishedAt.IsZero() {
+		return 0
+	}
+	return max(terminated.FinishedAt.Add(listenerFailedRestartDelay).Sub(now), 0)
 }
 
 func logDeadListenerPod(pod *corev1.Pod, log logr.Logger) {
