@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/scaleset"
@@ -242,6 +243,79 @@ func TestHandleJobStarted(t *testing.T) {
 
 		assertJobStartedStatus(t, runner, jobInfo)
 		assert.Equal(t, v1alpha1.EphemeralRunnerPhasePending, runner.Status.Phase)
+	})
+}
+
+// TestHandleJobStarted_JobContext asserts on the merge patch body rather than on
+// the stub's copy of the runner: the stub assigns the decoded patch field by field,
+// so only the body shows whether an unreported value was left out of the patch or
+// sent as null.
+func TestHandleJobStarted_JobContext(t *testing.T) {
+	scaleSetAssignTime := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
+	runnerAssignTime := scaleSetAssignTime.Add(5 * time.Second)
+
+	newJobInfo := func() *scaleset.JobStarted {
+		return &scaleset.JobStarted{
+			RunnerName: "runner-1",
+			JobMessageBase: scaleset.JobMessageBase{
+				OwnerName:       "actions",
+				RepositoryName:  "actions-runner-controller",
+				JobID:           "job-1",
+				WorkflowRunID:   456,
+				JobWorkflowRef:  "actions/actions-runner-controller/.github/workflows/ci.yaml@refs/heads/main",
+				JobDisplayName:  "build",
+				RunnerRequestID: 123,
+			},
+		}
+	}
+
+	patchedStatus := func(t *testing.T, requests []recordedRequest) map[string]any {
+		t.Helper()
+
+		require.Equal(t, []string{http.MethodGet, http.MethodPatch}, methodsOf(requests))
+		var patch map[string]any
+		require.NoError(t, json.Unmarshal([]byte(requests[1].body), &patch))
+		status, ok := patch["status"].(map[string]any)
+		require.True(t, ok, "patch has no status: %s", requests[1].body)
+		return status
+	}
+
+	t.Run("records the event name and the service timestamps", func(t *testing.T) {
+		jobInfo := newJobInfo()
+		jobInfo.EventName = "pull_request"
+		jobInfo.ScaleSetAssignTime = scaleSetAssignTime
+		jobInfo.RunnerAssignTime = runnerAssignTime
+
+		runner := newTestEphemeralRunner(jobInfo.RunnerName, v1alpha1.EphemeralRunnerPhasePending)
+		scaler, requests, shutdown := newRecordingScaler(t, runner, "")
+		defer shutdown()
+
+		require.NoError(t, scaler.HandleJobStarted(context.Background(), jobInfo))
+
+		status := patchedStatus(t, *requests)
+		assert.Equal(t, "pull_request", status["jobEventName"])
+		assert.Equal(t, scaleSetAssignTime.Format(time.RFC3339), status["jobScaleSetAssignTime"])
+		assert.Equal(t, runnerAssignTime.Format(time.RFC3339), status["jobRunnerAssignTime"])
+		assert.Equal(t, "Running", status["phase"])
+	})
+
+	t.Run("leaves out the event name and timestamps the message does not carry", func(t *testing.T) {
+		jobInfo := newJobInfo()
+		jobInfo.RunnerAssignTime = runnerAssignTime
+
+		runner := newTestEphemeralRunner(jobInfo.RunnerName, v1alpha1.EphemeralRunnerPhasePending)
+		scaler, requests, shutdown := newRecordingScaler(t, runner, "")
+		defer shutdown()
+
+		require.NoError(t, scaler.HandleJobStarted(context.Background(), jobInfo))
+
+		status := patchedStatus(t, *requests)
+		assert.NotContains(t, status, "jobEventName")
+		assert.NotContains(t, status, "jobScaleSetAssignTime")
+		// The timestamp that is reported is still recorded, so the absences above
+		// are the zero values being dropped rather than the fields never being set.
+		assert.Equal(t, runnerAssignTime.Format(time.RFC3339), status["jobRunnerAssignTime"])
+		assert.Equal(t, jobInfo.JobID, status["jobId"])
 	})
 }
 

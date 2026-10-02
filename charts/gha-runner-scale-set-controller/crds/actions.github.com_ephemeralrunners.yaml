@@ -8634,6 +8634,11 @@ spec:
                   type: object
                 jobDisplayName:
                   type: string
+                jobEventName:
+                  description: |-
+                    JobEventName is the name of the event that triggered the workflow run of
+                    the job assigned to this runner, e.g. push, pull_request or schedule.
+                  type: string
                 jobId:
                   type: string
                 jobRepositoryName:
@@ -8641,6 +8646,18 @@ spec:
                 jobRequestId:
                   format: int64
                   type: integer
+                jobRunnerAssignTime:
+                  description: |-
+                    JobRunnerAssignTime is the time the Actions service assigned the job to
+                    this runner. It is left unset when the service does not report it.
+                  format: date-time
+                  type: string
+                jobScaleSetAssignTime:
+                  description: |-
+                    JobScaleSetAssignTime is the time the Actions service assigned the job to
+                    the runner scale set. It is left unset when the service does not report it.
+                  format: date-time
+                  type: string
                 jobWorkflowRef:
                   type: string
                 message:

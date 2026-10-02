@@ -144,6 +144,9 @@ func TestEphemeralRunnerSetOwnedEphemeralRunnerPredicate(t *testing.T) {
 		updated.Status.JobRepositoryName = "org/repo"
 		updated.Status.JobWorkflowRef = "ref"
 		updated.Status.WorkflowRunID = 12
+		updated.Status.JobEventName = "push"
+		updated.Status.JobScaleSetAssignTime = &metav1.Time{Time: time.Now()}
+		updated.Status.JobRunnerAssignTime = &metav1.Time{Time: time.Now()}
 		updated.ResourceVersion = "2"
 		assert.False(t, ephemeralRunnerSetOwnedEphemeralRunnerPredicate().Update(event.UpdateEvent{ObjectOld: old, ObjectNew: updated}))
 	})
@@ -489,9 +492,12 @@ func TestPredicateProjectionsCoverEveryStatusField(t *testing.T) {
 		assert.Equal(t, []string{
 			"Failures",
 			"JobDisplayName",
+			"JobEventName",
 			"JobID",
 			"JobRepositoryName",
 			"JobRequestID",
+			"JobRunnerAssignTime",
+			"JobScaleSetAssignTime",
 			"JobWorkflowRef",
 			"Message",
 			"Phase",
