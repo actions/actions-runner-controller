@@ -1319,6 +1319,11 @@ func (r *AutoscalingRunnerSetReconciler) createAutoScalingListenerForRunnerSet(c
 
 	log.Info("Creating a new AutoscalingListener resource", "name", autoscalingListener.Name, "namespace", autoscalingListener.Namespace)
 	if err := r.Create(ctx, autoscalingListener); err != nil {
+		if kerrors.IsAlreadyExists(err) {
+			// The previous listener was just recreated and the cache has not caught up yet.
+			log.Info("AutoscalingListener already exists. Waiting for the cache to catch up", "name", autoscalingListener.Name, "namespace", autoscalingListener.Namespace)
+			return ctrl.Result{RequeueAfter: time.Second}, nil
+		}
 		log.Error(err, "Failed to create AutoscalingListener resource")
 		return ctrl.Result{}, err
 	}
