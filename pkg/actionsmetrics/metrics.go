@@ -13,6 +13,7 @@ func init() {
 	metrics.Registry.MustRegister(
 		githubWorkflowJobQueueDurationSeconds,
 		githubWorkflowJobRunDurationSeconds,
+		githubWorkflowJobInProgressDurationSeconds,
 		githubWorkflowJobConclusionsTotal,
 		githubWorkflowJobsQueuedTotal,
 		githubWorkflowJobsStartedTotal,
@@ -90,6 +91,13 @@ var (
 			Buckets: runtimeBuckets,
 		},
 		metricLabels("job_conclusion"),
+	)
+	githubWorkflowJobInProgressDurationSeconds = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "github_workflow_job_in_progress_duration_seconds",
+			Help: "In progress run times for workflow jobs in seconds",
+		},
+		metricLabels(),
 	)
 	githubWorkflowJobConclusionsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
