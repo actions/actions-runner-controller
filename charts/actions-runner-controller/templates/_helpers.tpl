@@ -126,3 +126,15 @@ Create the name of the service account to use
 {{- define "actions-runner-controller.pdbName" -}}
 {{- include "actions-runner-controller.fullname" . | trunc 59 }}-pdb
 {{- end }}
+
+{{- define "actions-runner-controller.aggregateViewRoleName" -}}
+{{- include "actions-runner-controller.fullname" . }}-aggregate-to-view
+{{- end }}
+
+{{- define "actions-runner-controller.aggregateEditRoleName" -}}
+{{- include "actions-runner-controller.fullname" . }}-aggregate-to-edit
+{{- end }}
+
+{{- define "actions-runner-controller.aggregateReadSensitiveRoleName" -}}
+{{- include "actions-runner-controller.fullname" . }}-aggregate-to-read-sensitive
+{{- end }}

@@ -83,6 +83,12 @@ controller:
       # Extra container ports (metrics port is derived from controller.metrics).
       extraPorts: []
 
+  rbac:
+    aggregateRoles:
+      # Create the `aggregate-to-view` and `aggregate-to-edit` ClusterRoles that extend the builtin
+      # `view`, `edit` and `admin` roles with read/write access to the ARC custom resources.
+      enabled: true
+
   serviceAccount:
     # Specifies whether a service account should be created.
     create: true
