@@ -1339,3 +1339,100 @@ func TestNamespaceOverride(t *testing.T) {
 		})
 	}
 }
+
+func TestTemplate_AggregateClusterRoles(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set-controller")
+	require.NoError(t, err)
+
+	releaseName := "test-arc"
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
+
+	options := &helm.Options{
+		Logger:         logger.Discard,
+		SetValues:      map[string]string{},
+		KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+	}
+
+	const (
+		viewLabel  = "rbac.authorization.k8s.io/aggregate-to-view"
+		editLabel  = "rbac.authorization.k8s.io/aggregate-to-edit"
+		adminLabel = "rbac.authorization.k8s.io/aggregate-to-admin"
+	)
+
+	readVerbs := []string{"get", "list", "watch"}
+
+	for _, tc := range []struct {
+		template string
+		name     string
+		labels   []string
+	}{
+		{template: "templates/aggregate_view_cluster_role.yaml", name: "test-arc-gha-rs-controller-aggregate-to-view", labels: []string{viewLabel, editLabel, adminLabel}},
+		{template: "templates/aggregate_edit_cluster_role.yaml", name: "test-arc-gha-rs-controller-aggregate-to-edit", labels: []string{editLabel, adminLabel}},
+	} {
+		output := helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{tc.template})
+
+		var role rbacv1.ClusterRole
+		helm.UnmarshalK8SYaml(t, output, &role)
+
+		assert.Empty(t, role.Namespace, "ClusterRole should not have a namespace")
+		assert.Equal(t, tc.name, role.Name)
+		for _, label := range tc.labels {
+			assert.Equal(t, "true", role.Labels[label], tc.name)
+		}
+		for _, rule := range role.Rules {
+			assert.Equal(t, []string{"actions.github.com"}, rule.APIGroups)
+			for _, verb := range rule.Verbs {
+				if strings.HasSuffix(tc.name, "-aggregate-to-view") {
+					assert.Contains(t, readVerbs, verb, "view role must carry read verbs only")
+				} else {
+					assert.NotContains(t, readVerbs, verb, "edit role must carry write verbs only")
+				}
+			}
+		}
+	}
+}
+
+func TestTemplate_AggregateClusterRoles_Labels(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set-controller")
+	require.NoError(t, err)
+
+	options := &helm.Options{
+		Logger:         logger.Discard,
+		SetValues:      map[string]string{},
+		KubectlOptions: k8s.NewKubectlOptions("", "", "test-"+strings.ToLower(random.UniqueID())),
+	}
+
+	output := helm.RenderTemplate(t, options, helmChartPath, "test-arc", []string{"templates/aggregate_edit_cluster_role.yaml"})
+	var edit rbacv1.ClusterRole
+	helm.UnmarshalK8SYaml(t, output, &edit)
+	assert.Equal(t, "true", edit.Labels["rbac.authorization.k8s.io/aggregate-to-admin"])
+	assert.NotEmpty(t, edit.Labels["helm.sh/chart"])
+
+	output = helm.RenderTemplate(t, options, helmChartPath, "test-arc", []string{"templates/aggregate_view_cluster_role.yaml"})
+	var view rbacv1.ClusterRole
+	helm.UnmarshalK8SYaml(t, output, &view)
+	assert.NotEmpty(t, view.Labels["helm.sh/chart"])
+}
+
+func TestTemplate_AggregateClusterRoles_Disabled(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set-controller")
+	require.NoError(t, err)
+
+	options := &helm.Options{
+		Logger:         logger.Discard,
+		SetValues:      map[string]string{"rbac.aggregateRoles.enabled": "false"},
+		KubectlOptions: k8s.NewKubectlOptions("", "", "test-"+strings.ToLower(random.UniqueID())),
+	}
+
+	for _, tmpl := range []string{"templates/aggregate_view_cluster_role.yaml", "templates/aggregate_edit_cluster_role.yaml"} {
+		_, err := helm.RenderTemplateE(t, options, helmChartPath, "test-arc", []string{tmpl})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "could not find template")
+	}
+}

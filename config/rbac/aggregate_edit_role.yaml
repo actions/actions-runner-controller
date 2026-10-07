@@ -1,0 +1,49 @@
+# write permissions aggregated into the builtin `edit` and `admin` ClusterRoles
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: aggregate-to-edit-role
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+- apiGroups:
+  - actions.github.com
+  resources:
+  - autoscalingrunnersets
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - patch
+  - update
+- apiGroups:
+  - actions.github.com
+  resources:
+  - ephemeralrunners
+  verbs:
+  - delete
+  - deletecollection
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - runnerdeployments
+  - runnerreplicasets
+  - runnersets
+  - horizontalrunnerautoscalers
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - patch
+  - update
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - runners
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - patch
+  - update

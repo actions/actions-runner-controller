@@ -67,7 +67,10 @@ runner:
     enabled: false
 
 rbac:
-  {}
+  aggregateRoles:
+    # Create the `aggregate-to-view`, `aggregate-to-edit` and `aggregate-to-read-sensitive` ClusterRoles that extend the builtin
+    # `view`, `edit` and `admin` roles with read/write access to the ARC custom resources.
+    enabled: true
   # # This allows ARC to dynamically create a ServiceAccount and a Role for each Runner pod that uses "kubernetes" container mode,
   # # by extending ARC's manager role to have the same permissions required by the pod runs the runner agent in "kubernetes" container mode.
   # # Without this, Kubernetes blocks ARC to create the role to prevent a privilege escalation.
