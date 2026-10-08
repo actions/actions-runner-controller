@@ -1832,6 +1832,7 @@ var _ = Describe("EphemeralRunner phase metrics", func() {
 		Expect(err).NotTo(HaveOccurred(), "failed to get ephemeral runner before listener-owned running patch")
 		runnerRunningOriginal := runnerRunning.DeepCopy()
 		runnerRunning.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
+		runnerRunning.Status.JobID = "job-id"
 		err = k8sClient.Status().Patch(ctx, runnerRunning, client.MergeFrom(runnerRunningOriginal))
 		Expect(err).NotTo(HaveOccurred(), "failed to simulate listener running phase patch")
 
