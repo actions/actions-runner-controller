@@ -156,7 +156,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			// what that costs.
 			var runnerID int
 			if runnerSelfDeregistered(&ephemeralRunner) {
-				log.Info("Runner exited successfully after running a job and deregistered itself, skipping its removal from the service")
+				log.Info("Runner exited successfully after running a job and its registration was removed by the service, skipping its removal")
 			} else {
 				getActionsClient := sync.OnceValues(func() (multiclient.Client, error) {
 					return r.GetActionsService(ctx, &ephemeralRunner)
