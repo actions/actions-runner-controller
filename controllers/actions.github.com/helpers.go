@@ -29,7 +29,12 @@ func ephemeralRunnerSetActionableSpecChanged(current, desired *v1alpha1.Ephemera
 		return current != desired
 	}
 
-	return !apiequality.Semantic.DeepEqual(current.Spec.EphemeralRunnerSpec, desired.Spec.EphemeralRunnerSpec)
+	// Replicas is defaulted to 1 by the CRD and pruned by older CRDs, so whether
+	// it is set says nothing about what the runners were asked to run.
+	currentSpec, desiredSpec := current.Spec.EphemeralRunnerSpec, desired.Spec.EphemeralRunnerSpec
+	currentSpec.Replicas, desiredSpec.Replicas = 0, 0
+
+	return !apiequality.Semantic.DeepEqual(currentSpec, desiredSpec)
 }
 
 // ephemeralRunnerSetDesiredSpecChanged reports whether anything the

@@ -164,6 +164,17 @@ spec:
                   type: object
                 proxySecretRef:
                   type: string
+                replicas:
+                  default: 1
+                  description: |-
+                    Replicas is always 1: an EphemeralRunner represents exactly one runner pod.
+                    It exists so that the scale subresource is served, which lets the Kubernetes
+                    disruption controller resolve a PodDisruptionBudget for runner pods owned by
+                    this resource. Scaling is done through the EphemeralRunnerSet, not here.
+                  enum:
+                    - 1
+                  format: int32
+                  type: integer
                 runnerScaleSetId:
                   type: integer
                 spec:
@@ -8666,6 +8677,11 @@ spec:
                   type: boolean
                 reason:
                   type: string
+                replicas:
+                  default: 1
+                  description: Replicas is always 1. It is reported through the scale subresource.
+                  format: int32
+                  type: integer
                 runnerId:
                   type: integer
                 runnerName:
@@ -8678,4 +8694,7 @@ spec:
       served: true
       storage: true
       subresources:
+        scale:
+          specReplicasPath: .spec.replicas
+          statusReplicasPath: .status.replicas
         status: {}
