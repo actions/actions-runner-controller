@@ -497,6 +497,7 @@ func TestPredicateProjectionsCoverEveryStatusField(t *testing.T) {
 			"Phase",
 			"Ready",
 			"Reason",
+			"Replicas",
 			"RunnerID",
 			"RunnerName",
 			"WorkflowRunID",
