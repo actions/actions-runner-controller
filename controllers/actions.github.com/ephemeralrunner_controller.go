@@ -414,10 +414,11 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		case kerrors.IsForbidden(err):
 			if status, ok := err.(kerrors.APIStatus); ok || errors.As(err, &status) {
 				isResourceQuotaExceeded := strings.Contains(status.Status().Message, "exceeded quota:")
+				isTransient := isTransientForbidden(status.Status().Message)
 				isAboutToExpire := ephemeralRunner.CreationTimestamp.Time.Add(10 * time.Minute).Before(time.Now())
 				switch {
-				case isResourceQuotaExceeded && isAboutToExpire:
-					log.Error(err, "Failed to create a pod due to resource quota exceeded and the ephemeral runner is about to expire; re-creating the ephemeral runner")
+				case (isResourceQuotaExceeded || isTransient) && isAboutToExpire:
+					log.Error(err, "Failed to create a pod due to a temporary forbidden error and the ephemeral runner is about to expire; re-creating the ephemeral runner")
 					if err := r.Delete(ctx, &ephemeralRunner); err != nil {
 						log.Error(err, "Failed to delete the ephemeral runner")
 						return ctrl.Result{}, err
@@ -425,6 +426,9 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 					return ctrl.Result{}, nil
 				case isResourceQuotaExceeded:
 					log.Error(err, "Resource quota is exceeded; requeue in 30s to retry pod creation")
+					return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+				case isTransient:
+					log.Error(err, "Pod creation was rejected because a backend of the API server failed; requeue in 30s to retry pod creation")
 					return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 				default:
 					// other forbidden errors
@@ -688,6 +692,17 @@ func (r *EphemeralRunnerReconciler) cleanupRunnerLinkedSecrets(ctx context.Conte
 	}
 
 	return errors.Join(errs...)
+}
+
+// isTransientForbidden reports whether a Forbidden message carries the gRPC status of a
+// failed backend call (for example a throttled admission plugin), not a decision on the pod.
+func isTransientForbidden(message string) bool {
+	for _, code := range []string{"ResourceExhausted", "Unavailable", "DeadlineExceeded"} {
+		if strings.Contains(message, "rpc error: code = "+code) {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *EphemeralRunnerReconciler) markAsFailed(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, errMessage string, reason string, log logr.Logger) error {
