@@ -294,10 +294,11 @@ func main() {
 			os.Exit(1)
 		}
 
-		// controller-runtime disables its metrics server when BindAddress is
-		// "0"; treat both "0" and "" as metrics disabled so registration and
-		// publishing stay consistent.
-		metricsEnabled := metricsAddr != "" && metricsAddr != "0"
+		// controller-runtime only skips its metrics server when BindAddress is
+		// "0"; an empty address falls back to ":8080". Register and publish
+		// under the same rule so a live endpoint never misses the scale set
+		// metrics and a disabled one never accumulates unregistered series.
+		metricsEnabled := metricsAddr != "0"
 		if metricsEnabled {
 			log.Info("Registering scale set metrics")
 			actionsgithubcommetrics.RegisterMetrics()
@@ -402,6 +403,7 @@ func main() {
 			Scheme:                  mgr.GetScheme(),
 			ListenerMetricsAddr:     listenerMetricsAddr,
 			ListenerMetricsEndpoint: listenerMetricsEndpoint,
+			PublishMetrics:          metricsEnabled,
 			ResourceBuilder:         rb,
 		}).SetupWithManager(mgr, autoscalingListenerOpts...); err != nil {
 			log.Error(err, "unable to create controller", "controller", "AutoscalingListener")
