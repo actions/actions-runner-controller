@@ -353,6 +353,23 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 				return ctrl.Result{}, r.updateStatus(ctx, &ephemeralRunnerSet, ephemeralRunnersByState, log)
 			}
 
+			// The cached list can miss runners this controller created in the
+			// reconcile just before this one: the watch event of the first created
+			// runner requeues the set before the cache holds the others. Count again
+			// without the cache so those runners are not created a second time.
+			confirmedTotal, err := r.uncachedScaleUpTotal(ctx, &ephemeralRunnerSet)
+			if err != nil {
+				log.Error(err, "failed to confirm the runner count without the cache")
+				return ctrl.Result{}, err
+			}
+			if confirmedTotal != scaleUpTotal {
+				log.Info("Uncached runner count differs from the cached count", "cached", scaleUpTotal, "uncached", confirmedTotal, "desired", ephemeralRunnerSet.Spec.Replicas)
+				scaleUpTotal = confirmedTotal
+			}
+			if scaleUpTotal >= ephemeralRunnerSet.Spec.Replicas {
+				break
+			}
+
 			count := ephemeralRunnerSet.Spec.Replicas - scaleUpTotal
 			log.Info("Creating new ephemeral runners (scale up)", "count", count)
 			if err := r.createEphemeralRunners(ctx, &ephemeralRunnerSet, count, log); err != nil {
@@ -997,6 +1014,25 @@ func (r *EphemeralRunnerSetReconciler) reconcileEphemeralRunnerSetProxySecret(ct
 // they are independent of one another, they all belong to one reconcile of one
 // object, and a job waiting for the last runner of a scale up should not also
 // be waiting for the round trips of every runner created before it.
+// uncachedScaleUpTotal counts the runners of the set the way the scale up
+// does, from a list read straight from the API server. resourceOwnerKey is a
+// cache-only index, so ownership is filtered here, as in
+// patchAppliedActionableRevisionStatus.
+func (r *EphemeralRunnerSetReconciler) uncachedScaleUpTotal(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet) (int, error) {
+	if r.APIReader == nil {
+		return 0, errors.New("APIReader is not configured, cannot count ephemeral runners without the cache")
+	}
+	ephemeralRunnerList := new(v1alpha1.EphemeralRunnerList)
+	if err := r.APIReader.List(ctx, ephemeralRunnerList, client.InNamespace(ephemeralRunnerSet.Namespace)); err != nil {
+		return 0, fmt.Errorf("failed to list child ephemeral runners without the cache: %w", err)
+	}
+	ephemeralRunnerList.Items = slices.DeleteFunc(ephemeralRunnerList.Items, func(runner v1alpha1.EphemeralRunner) bool {
+		return !isControlledBy(&runner, "EphemeralRunnerSet", ephemeralRunnerSet.Name)
+	})
+	state := newEphemeralRunnersByStates(ephemeralRunnerList, ephemeralRunnerSet.Status.AppliedActionableRevision)
+	return state.scaleTotal() + len(state.deleting), nil
+}
+
 func (r *EphemeralRunnerSetReconciler) createEphemeralRunners(ctx context.Context, runnerSet *v1alpha1.EphemeralRunnerSet, count int, log logr.Logger) error {
 	if count <= 0 {
 		return nil
