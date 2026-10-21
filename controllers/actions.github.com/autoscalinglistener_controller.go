@@ -63,6 +63,7 @@ type AutoscalingListenerReconciler struct {
 	// If it is set to "0", the metrics server is not started.
 	ListenerMetricsAddr     string
 	ListenerMetricsEndpoint string
+	PublishMetrics          bool
 
 	ResourceBuilder
 }
@@ -903,6 +904,10 @@ func (r *AutoscalingListenerReconciler) createRoleBindingForListener(ctx context
 }
 
 func (r *AutoscalingListenerReconciler) publishRunningListener(autoscalingListener *v1alpha1.AutoscalingListener, isUp bool) error {
+	if !r.PublishMetrics {
+		return nil
+	}
+
 	githubConfigURL := autoscalingListener.Spec.GitHubConfigURL
 	parsedURL, err := actions.ParseGitHubConfigFromURL(githubConfigURL)
 	if err != nil {
