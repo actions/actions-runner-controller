@@ -41,11 +41,11 @@ You can follow [this quickstart guide](https://docs.github.com/en/actions/hostin
 
 You can follow [this troubleshooting guide](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners-with-actions-runner-controller/troubleshooting-actions-runner-controller-errors) for troubleshooting steps.
 
-Controller HTTP requests are not retried inside the client. Each service call has a 10-second deadline covering authentication, HTTP requests, and reading the response. Background unregistration uses the same bounds and client pool; Kubernetes reconciliation itself is not given this deadline. On a rate limit, the controller immediately releases its worker and requeues reconciliation after the server's `Retry-After` delay (or the primary rate-limit reset). When no usable delay is provided, it waits one minute. Other failures in a cleanup batch are logged without overriding a rate-limit cooldown. This also applies to JIT configuration requests, so throttled registrations do not hold workers through retry waits while completed runners await cleanup. The listener retains the SDK's default retry policy.
+Controller HTTP requests are not retried inside the client. Each service call has a 10-second deadline covering authentication, HTTP requests, and reading the response. Background unregistration uses the same bounds and client pool; Kubernetes reconciliation itself is not given this deadline. On a rate limit, the controller immediately releases its worker and requeues reconciliation after the server's `Retry-After` delay (or the primary rate-limit reset). When no usable delay is provided, it waits 30 seconds. Other failures in a cleanup batch are logged without overriding a rate-limit cooldown. This also applies to JIT configuration requests, so throttled registrations do not hold workers through retry waits while completed runners await cleanup. The listener retains the SDK's default retry policy.
 
 Each concurrent service call leases a separate SDK client, so slow authentication in one call cannot block another on the SDK's authentication mutex. Idle clients retain their authentication tokens for reuse, and clients for the same configuration share an HTTP transport.
 
-Ordinary reconciliation failures, including service-call timeouts, use exponential error backoff capped at one minute. This applies to both workqueue rate-limiter settings and does not shorten server-provided `Retry-After` delays.
+Ordinary reconciliation failures, including service-call timeouts, use exponential error backoff capped at 30 seconds. This applies to both workqueue rate-limiter settings and does not shorten server-provided `Retry-After` delays.
 
 ## Changelog
 

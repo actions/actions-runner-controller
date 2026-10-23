@@ -121,10 +121,10 @@ func newControllerOptions(opts []Option) controller.Options {
 		if controllerOpts.UsePriorityQueue != nil && !*controllerOpts.UsePriorityQueue {
 			controllerOpts.RateLimiter = workqueue.DefaultTypedControllerRateLimiter[reconcile.Request]()
 		} else {
-			controllerOpts.RateLimiter = workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](5*time.Millisecond, time.Minute)
+			controllerOpts.RateLimiter = workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](5*time.Millisecond, 30*time.Second)
 		}
 	}
-	controllerOpts.RateLimiter = workqueue.NewTypedWithMaxWaitRateLimiter(controllerOpts.RateLimiter, time.Minute)
+	controllerOpts.RateLimiter = workqueue.NewTypedWithMaxWaitRateLimiter(controllerOpts.RateLimiter, 30*time.Second)
 
 	return controllerOpts
 }

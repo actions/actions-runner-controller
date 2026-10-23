@@ -66,7 +66,7 @@ func TestOptionsResolve(t *testing.T) {
 	})
 }
 
-func TestControllerErrorBackoffIsCappedAtOneMinute(t *testing.T) {
+func TestControllerErrorBackoffIsCappedAtThirtySeconds(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		options []Option
@@ -90,7 +90,7 @@ func TestControllerErrorBackoffIsCappedAtOneMinute(t *testing.T) {
 			require.NotNil(t, opts.RateLimiter)
 			var request reconcile.Request
 			for failure := range 32 {
-				want := min(tc.initial*time.Duration(1<<failure), time.Minute)
+				want := min(tc.initial*time.Duration(1<<failure), 30*time.Second)
 				require.Equal(t, want, opts.RateLimiter.When(request), "failure %d", failure+1)
 			}
 			require.Equal(t, 32, opts.RateLimiter.NumRequeues(request))

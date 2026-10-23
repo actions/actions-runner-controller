@@ -28,7 +28,7 @@ func rateLimitDelay(err error) time.Duration {
 		if rateLimit.RetryAfter > 0 {
 			return rateLimit.RetryAfter
 		}
-		return time.Minute
+		return 30 * time.Second
 	}
 	if combined, ok := err.(interface{ Unwrap() []error }); ok {
 		var wait time.Duration
