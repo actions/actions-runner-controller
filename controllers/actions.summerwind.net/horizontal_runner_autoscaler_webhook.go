@@ -77,10 +77,45 @@ type HorizontalRunnerAutoscalerGitHubWebhook struct {
 
 	worker     *worker
 	workerInit sync.Once
+
+	scaledDownForMu sync.Mutex
+	scaledDownFor   map[int64]time.Time
 }
 
 func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Reconcile(_ context.Context, request reconcile.Request) (reconcile.Result, error) {
 	return ctrl.Result{}, nil
+}
+
+// scaledDownForDedupWindow bounds how long we remember a job ID we've already scaled
+// down for. GitHub resends "completed" events for jobs from an earlier run when only
+// some jobs are re-run, but a job ID only ever completes once. See #4315.
+const scaledDownForDedupWindow = time.Hour
+
+// markScaledDownFor returns true the first time it sees a job ID, false on any repeat
+// within scaledDownForDedupWindow.
+func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) markScaledDownFor(workflowJobID int64) bool {
+	now := time.Now()
+
+	autoscaler.scaledDownForMu.Lock()
+	defer autoscaler.scaledDownForMu.Unlock()
+
+	if autoscaler.scaledDownFor == nil {
+		autoscaler.scaledDownFor = map[int64]time.Time{}
+	}
+
+	for id, seenAt := range autoscaler.scaledDownFor {
+		if now.Sub(seenAt) > scaledDownForDedupWindow {
+			delete(autoscaler.scaledDownFor, id)
+		}
+	}
+
+	if _, seen := autoscaler.scaledDownFor[workflowJobID]; seen {
+		return false
+	}
+
+	autoscaler.scaledDownFor[workflowJobID] = now
+
+	return true
 }
 
 // +kubebuilder:rbac:groups=actions.summerwind.dev,resources=horizontalrunnerautoscalers,verbs=get;list;watch;create;update;patch;delete
@@ -219,6 +254,9 @@ func (autoscaler *HorizontalRunnerAutoscalerGitHubWebhook) Handle(w http.Respons
 				// See example check run completion at https://gist.github.com/nathanklick/268fea6496a4d7b14cecb2999747ef84
 				if e.GetWorkflowJob().GetConclusion() == "success" && e.GetWorkflowJob().RunnerID == nil {
 					log.V(1).Info("Ignoring workflow_job event because it does not relate to a self-hosted runner")
+				} else if jobID := e.GetWorkflowJob().GetID(); !autoscaler.markScaledDownFor(jobID) {
+					// See scaledDownForDedupWindow: this job ID already scaled us down once.
+					log.V(1).Info("Ignoring duplicate workflow_job completed event for a job we already scaled down for", "workflowJob.ID", jobID)
 				} else {
 					// A negative amount is processed in the tryScale func as a scale-down request,
 					// that erases the oldest CapacityReservation with the same amount.
