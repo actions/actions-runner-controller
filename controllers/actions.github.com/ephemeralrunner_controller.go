@@ -28,6 +28,7 @@ import (
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/metrics"
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/multiclient"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/secretresolver"
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/scaleset"
 	"github.com/go-logr/logr"
@@ -1130,6 +1131,12 @@ func (r *EphemeralRunnerReconciler) registeredRunnerID(ctx context.Context, ephe
 		}
 
 		actionsClient, err := getActionsClient()
+		if errors.Is(err, secretresolver.ErrNotFound) {
+			// The secret the client is built from is gone, so the runner can never
+			// have registered, and retrying cannot bring the secret back.
+			log.Info("Runner was never registered with the service, its GitHub config secret does not exist", "reason", err.Error())
+			return 0, nil
+		}
 		if err != nil {
 			return 0, fmt.Errorf("failed to get actions client for a runner without a recorded ID or jitconfig secret: %w", err)
 		}
