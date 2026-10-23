@@ -47,6 +47,7 @@ You can follow [this troubleshooting guide](https://docs.github.com/en/actions/h
 
 Upgrading the controller from 0.15.0 to 0.15.1 does not require updating the installed CRDs. The ARC API fields, served/storage versions, and conversion settings are unchanged. The generated scale-set CRD changes only update the controller-gen version annotation and tighten validation for embedded Pod `evictionResponders` (non-empty names, priorities from 0 to 100000, and at most 10 responders). Existing 0.15.0 CRDs remain compatible with the 0.15.1 controller; no CRD replacement or ARC resource recreation is required.
 
+1. Requeue rate-limited scale-set requests without client retries [#4726](https://github.com/actions/actions-runner-controller/pull/4726)
 1. Remove succeeded ephemeral runners that never ran a job from the service [#4709](https://github.com/actions/actions-runner-controller/pull/4709)
 1. Bump Go to 1.27.3 and update Go dependencies [#4725](https://github.com/actions/actions-runner-controller/pull/4725)
 1. Updates: runner to v2.338.1 [#4724](https://github.com/actions/actions-runner-controller/pull/4724)
