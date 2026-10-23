@@ -17,10 +17,19 @@ func NewMockRecorder(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockRecorder {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockRecorder{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -51,7 +60,7 @@ type MockRecorder_RecordDesiredRunners_Call struct {
 
 // RecordDesiredRunners is a helper method to define mock.On call
 //   - count int
-func (_e *MockRecorder_Expecter) RecordDesiredRunners(count interface{}) *MockRecorder_RecordDesiredRunners_Call {
+func (_e *MockRecorder_Expecter) RecordDesiredRunners(count any) *MockRecorder_RecordDesiredRunners_Call {
 	return &MockRecorder_RecordDesiredRunners_Call{Call: _e.mock.On("RecordDesiredRunners", count)}
 }
 
@@ -91,7 +100,7 @@ type MockRecorder_RecordJobCompleted_Call struct {
 
 // RecordJobCompleted is a helper method to define mock.On call
 //   - msg *scaleset.JobCompleted
-func (_e *MockRecorder_Expecter) RecordJobCompleted(msg interface{}) *MockRecorder_RecordJobCompleted_Call {
+func (_e *MockRecorder_Expecter) RecordJobCompleted(msg any) *MockRecorder_RecordJobCompleted_Call {
 	return &MockRecorder_RecordJobCompleted_Call{Call: _e.mock.On("RecordJobCompleted", msg)}
 }
 
@@ -131,7 +140,7 @@ type MockRecorder_RecordJobStarted_Call struct {
 
 // RecordJobStarted is a helper method to define mock.On call
 //   - msg *scaleset.JobStarted
-func (_e *MockRecorder_Expecter) RecordJobStarted(msg interface{}) *MockRecorder_RecordJobStarted_Call {
+func (_e *MockRecorder_Expecter) RecordJobStarted(msg any) *MockRecorder_RecordJobStarted_Call {
 	return &MockRecorder_RecordJobStarted_Call{Call: _e.mock.On("RecordJobStarted", msg)}
 }
 
@@ -172,7 +181,7 @@ type MockRecorder_RecordStatic_Call struct {
 // RecordStatic is a helper method to define mock.On call
 //   - min int
 //   - max int
-func (_e *MockRecorder_Expecter) RecordStatic(min interface{}, max interface{}) *MockRecorder_RecordStatic_Call {
+func (_e *MockRecorder_Expecter) RecordStatic(min any, max any) *MockRecorder_RecordStatic_Call {
 	return &MockRecorder_RecordStatic_Call{Call: _e.mock.On("RecordStatic", min, max)}
 }
 
@@ -217,7 +226,7 @@ type MockRecorder_RecordStatistics_Call struct {
 
 // RecordStatistics is a helper method to define mock.On call
 //   - stats *scaleset.RunnerScaleSetStatistic
-func (_e *MockRecorder_Expecter) RecordStatistics(stats interface{}) *MockRecorder_RecordStatistics_Call {
+func (_e *MockRecorder_Expecter) RecordStatistics(stats any) *MockRecorder_RecordStatistics_Call {
 	return &MockRecorder_RecordStatistics_Call{Call: _e.mock.On("RecordStatistics", stats)}
 }
 
@@ -250,10 +259,19 @@ func NewMockServerExporter(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockServerExporter {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockServerExporter{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -295,7 +313,7 @@ type MockServerExporter_ListenAndServe_Call struct {
 
 // ListenAndServe is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockServerExporter_Expecter) ListenAndServe(ctx interface{}) *MockServerExporter_ListenAndServe_Call {
+func (_e *MockServerExporter_Expecter) ListenAndServe(ctx any) *MockServerExporter_ListenAndServe_Call {
 	return &MockServerExporter_ListenAndServe_Call{Call: _e.mock.On("ListenAndServe", ctx)}
 }
 
@@ -335,7 +353,7 @@ type MockServerExporter_RecordDesiredRunners_Call struct {
 
 // RecordDesiredRunners is a helper method to define mock.On call
 //   - count int
-func (_e *MockServerExporter_Expecter) RecordDesiredRunners(count interface{}) *MockServerExporter_RecordDesiredRunners_Call {
+func (_e *MockServerExporter_Expecter) RecordDesiredRunners(count any) *MockServerExporter_RecordDesiredRunners_Call {
 	return &MockServerExporter_RecordDesiredRunners_Call{Call: _e.mock.On("RecordDesiredRunners", count)}
 }
 
@@ -375,7 +393,7 @@ type MockServerExporter_RecordJobCompleted_Call struct {
 
 // RecordJobCompleted is a helper method to define mock.On call
 //   - msg *scaleset.JobCompleted
-func (_e *MockServerExporter_Expecter) RecordJobCompleted(msg interface{}) *MockServerExporter_RecordJobCompleted_Call {
+func (_e *MockServerExporter_Expecter) RecordJobCompleted(msg any) *MockServerExporter_RecordJobCompleted_Call {
 	return &MockServerExporter_RecordJobCompleted_Call{Call: _e.mock.On("RecordJobCompleted", msg)}
 }
 
@@ -415,7 +433,7 @@ type MockServerExporter_RecordJobStarted_Call struct {
 
 // RecordJobStarted is a helper method to define mock.On call
 //   - msg *scaleset.JobStarted
-func (_e *MockServerExporter_Expecter) RecordJobStarted(msg interface{}) *MockServerExporter_RecordJobStarted_Call {
+func (_e *MockServerExporter_Expecter) RecordJobStarted(msg any) *MockServerExporter_RecordJobStarted_Call {
 	return &MockServerExporter_RecordJobStarted_Call{Call: _e.mock.On("RecordJobStarted", msg)}
 }
 
@@ -456,7 +474,7 @@ type MockServerExporter_RecordStatic_Call struct {
 // RecordStatic is a helper method to define mock.On call
 //   - min int
 //   - max int
-func (_e *MockServerExporter_Expecter) RecordStatic(min interface{}, max interface{}) *MockServerExporter_RecordStatic_Call {
+func (_e *MockServerExporter_Expecter) RecordStatic(min any, max any) *MockServerExporter_RecordStatic_Call {
 	return &MockServerExporter_RecordStatic_Call{Call: _e.mock.On("RecordStatic", min, max)}
 }
 
@@ -501,7 +519,7 @@ type MockServerExporter_RecordStatistics_Call struct {
 
 // RecordStatistics is a helper method to define mock.On call
 //   - stats *scaleset.RunnerScaleSetStatistic
-func (_e *MockServerExporter_Expecter) RecordStatistics(stats interface{}) *MockServerExporter_RecordStatistics_Call {
+func (_e *MockServerExporter_Expecter) RecordStatistics(stats any) *MockServerExporter_RecordStatistics_Call {
 	return &MockServerExporter_RecordStatistics_Call{Call: _e.mock.On("RecordStatistics", stats)}
 }
 
