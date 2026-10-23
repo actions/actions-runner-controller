@@ -1150,6 +1150,25 @@ func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunnerWithActionsClient(ct
 		return true, nil
 	}
 
+	// Dropping the finalizer below wakes the next reconcile, which can run before
+	// the cache has seen the deletion that follows it. Read past the cache so a
+	// runner already on its way out is not removed from the service again.
+	reader := r.APIReader
+	if reader == nil {
+		reader = r.Client
+	}
+	var latest v1alpha1.EphemeralRunner
+	if err := reader.Get(ctx, client.ObjectKeyFromObject(ephemeralRunner), &latest); err != nil {
+		if kerrors.IsNotFound(err) {
+			return true, nil
+		}
+		return false, fmt.Errorf("failed to get the latest ephemeral runner: %w", err)
+	}
+	if !latest.DeletionTimestamp.IsZero() {
+		log.Info("Ephemeral runner is already being deleted, skipping its removal from the service", "name", ephemeralRunner.Name, "runnerId", ephemeralRunner.Status.RunnerID)
+		return true, nil
+	}
+
 	if err := actionsClient.RemoveRunner(ctx, int64(ephemeralRunner.Status.RunnerID)); err != nil {
 		switch {
 		case errors.Is(err, scaleset.JobStillRunningError):
