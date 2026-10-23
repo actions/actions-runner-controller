@@ -56,7 +56,7 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a
         with:
           only-new-issues: true
-          version: v2.13.2
+          version: v2.15.0
 
   generate:
     runs-on: ubuntu-latest
