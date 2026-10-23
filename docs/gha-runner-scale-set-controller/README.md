@@ -11,7 +11,7 @@ This new autoscaling mode brings numerous enhancements (described in the followi
 2. The `AutoScalingRunnerSet` controller calls the APIs one more time to either fetch or create a runner scale set in the `Actions Service` before creating the `Runner ScaleSet Listener` resource.
 3. A `Runner ScaleSet Listener` pod is deployed by the `AutoScaling Listener Controller`. In this pod, the listener application connects to the `Actions Service` to authenticate and establish a long poll HTTPS connection. The listener stays idle until it receives a `Job Available` message from the `Actions Service`.
 4. When a workflow run is triggered from a repository, the `Actions Service` dispatches individual job runs to the runners or runner scalesets where the `runs-on` property matches the name of the runner scaleset or labels of self-hosted runners.
-5. When the `Runner ScaleSet Listener` receives the `Job Available` message, it checks whether it can scale up to the desired count. If it can, the `Runner ScaleSet Listener` acknowledges the message.
+5. When the `Runner ScaleSet Listener` receives the `Job Available` message, it acquires the available jobs within its advertised capacity. Messages are acknowledged only after their job updates and desired runner count have been successfully handled, so failed processing can be retried.
 6. The `Runner ScaleSet Listener` uses a `Service Account` and a `Role` bound to that account to make an HTTPS call through the Kubernetes APIs to patch the `EphemeralRunner Set` resource with the number of desired replicas count.
 7. The `EphemeralRunner Set` attempts to create new runners and the `EphemeralRunner Controller` requests a JIT configuration token to register these runners. The controller attempts to create runner pods. If the pod's status is `failed`, the controller retries up to 5 times. After 24 hours the `Actions Service` unassigns the job if no runner accepts it.
 8. Once the runner pod is created, the runner application in the pod uses the JIT configuration token to register itself with the `Actions Service`. It then establishes another HTTPS long poll connection to receive the job details it needs to execute.
@@ -40,6 +40,10 @@ You can follow [this quickstart guide](https://docs.github.com/en/actions/hostin
 ## Troubleshooting
 
 You can follow [this troubleshooting guide](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners-with-actions-runner-controller/troubleshooting-actions-runner-controller-errors) for troubleshooting steps.
+
+Controller HTTP requests use at most two retries after the initial attempt. Each service call has a 10-second deadline covering authentication, HTTP attempts, retry waits, and reading the response. Background unregistration uses the same bounds and client pool; Kubernetes reconciliation itself is not given this deadline. If a rate limit cannot be retried within these bounds, the controller releases its worker and requeues reconciliation after the server's `Retry-After` delay (or the primary rate-limit reset). When no usable delay is provided, it waits one minute. Other failures in a cleanup batch are logged without overriding a rate-limit cooldown. This also applies to JIT configuration requests, so throttled registrations do not hold workers through long retry waits while completed runners await cleanup. The listener retains the SDK's default retry policy.
+
+Each concurrent service call leases a separate SDK client, so slow authentication in one call cannot block another on the SDK's authentication mutex. Idle clients retain their authentication tokens for reuse, and clients for the same configuration share an HTTP transport.
 
 ## Changelog
 

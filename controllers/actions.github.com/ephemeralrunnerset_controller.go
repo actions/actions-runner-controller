@@ -114,8 +114,11 @@ type EphemeralRunnerSetReconciler struct {
 // risk the same issue of patching the status. Responsibility of this controller should only
 // be to bring the count of EphemeralRunners to the desired one, not to patch this resource
 // until it is safe to do so
-func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	log := r.Log.WithValues("ephemeralrunnerset", req.NamespacedName)
+	defer func() {
+		result, err = requeueOnRateLimit(ctx, result, err, log)
+	}()
 
 	var ephemeralRunnerSet v1alpha1.EphemeralRunnerSet
 	if err := r.Get(ctx, req.NamespacedName, &ephemeralRunnerSet); err != nil {
@@ -847,6 +850,10 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 		log.Info("Cleaning up the ephemeral runner", "name", ephemeralRunner.Name)
 		if err := deleteRunner(ephemeralRunner); err != nil {
 			errs = append(errs, err)
+			var rateLimit *scaleset.RateLimitError
+			if errors.As(err, &rateLimit) {
+				return false, 0, multierr.Combine(errs...)
+			}
 		}
 	}
 
@@ -867,6 +874,10 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 		log.Info("Cleaning up the ephemeral runner", "name", ephemeralRunner.Name)
 		if err := deleteRunner(ephemeralRunner); err != nil {
 			errs = append(errs, err)
+			var rateLimit *scaleset.RateLimitError
+			if errors.As(err, &rateLimit) {
+				return false, 0, multierr.Combine(errs...)
+			}
 		}
 	}
 
@@ -1119,6 +1130,10 @@ func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Co
 		ok, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
 		if err != nil {
 			errs = append(errs, err)
+			var rateLimit *scaleset.RateLimitError
+			if errors.As(err, &rateLimit) {
+				return 0, multierr.Combine(errs...)
+			}
 		}
 		if !ok {
 			continue
