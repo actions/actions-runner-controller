@@ -180,6 +180,7 @@ func TestRunnerFinalizerDoesNotResolveUnusedActionsClient(t *testing.T) {
 			runner.Status.RunnerID = tc.runnerID
 			if tc.succeeded {
 				runner.Status.Phase = v1alpha1.EphemeralRunnerPhaseSucceeded
+				runner.Status.JobID = "job-id"
 			}
 			require.NoError(t, f.c.Status().Update(t.Context(), runner))
 			pod := f.pod()
@@ -483,6 +484,9 @@ func TestSetCleanupDoesNotDelayTerminalZeroIDRunners(t *testing.T) {
 			f := newUnrecordedRunnerIDFixture(t, 0)
 			runner := f.runner()
 			runner.Status.Phase = phase
+			if phase == v1alpha1.EphemeralRunnerPhaseSucceeded {
+				runner.Status.JobID = "job-id"
+			}
 			require.NoError(t, f.c.Status().Update(t.Context(), runner))
 			pod := f.pod()
 			exitCode := int32(1)

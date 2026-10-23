@@ -52,16 +52,27 @@ const (
 // leaks a registration.
 //
 // The Succeeded phase is set from a single observation: the runner container
-// terminated with exit code 0. Runners are configured as ephemeral, so a runner
-// that reaches a clean exit has already removed its own registration on the way
-// out, and asking the service to remove it again is a wasted round trip on the
-// hottest path the controller has.
+// terminated with exit code 0. On its own that is not enough. The registration
+// of an ephemeral runner is removed by the service once the runner finishes the
+// job it took, so only a runner that exited 0 after running a job is known to
+// be gone, and asking the service to remove it again is a wasted round trip on
+// the hottest path the controller has.
+//
+// A runner also exits 0 without ever running a job. When the service answers
+// its poll with "runner not found", for example after marking it as used by a
+// job assignment that was already requeued elsewhere, the runner only deletes
+// its local configuration and exits cleanly, leaving the registration in
+// place. So a succeeded runner with no job recorded is still removed.
+//
+// The job is recorded by the listener when the runner reports it started. A
+// short job can finish before that lands, which only costs a removal call that
+// the service answers with "not found".
 //
 // Every other phase is reachable with the registration still in place. A runner
 // that never started, was killed, exited non-zero, or was found to be outdated
 // did not get to deregister itself.
 func runnerSelfDeregistered(ephemeralRunner *v1alpha1.EphemeralRunner) bool {
-	return ephemeralRunner.Status.Phase == v1alpha1.EphemeralRunnerPhaseSucceeded
+	return ephemeralRunner.Status.Phase == v1alpha1.EphemeralRunnerPhaseSucceeded && ephemeralRunner.HasJob()
 }
 
 // runnerUnregistration is a single queued attempt to remove one runner from the
