@@ -251,6 +251,7 @@ annotations:
 {{- range $i, $val := .Values.template.spec.containers }}
   {{- if eq $val.name "runner" }}
 image: {{ $val.image }}
+imagePullPolicy: {{ $val.imagePullPolicy }}
 command: ["cp"]
 args: ["-r", "/home/runner/externals/.", "/home/runner/tmpDir/"]
 volumeMounts:
@@ -261,7 +262,11 @@ volumeMounts:
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-container" -}}
-image: docker:dind
+{{- $root := . -}}
+{{- range $i, $val := .Values.template.spec.dindContainers }}
+  {{- if eq $val.name "dind" }}
+image: {{ $val.image }}
+imagePullPolicy: {{ $val.imagePullPolicy }}
 args:
   - dockerd
   - --host=unix:///var/run/docker.sock
@@ -271,7 +276,7 @@ env:
     value: "123"
 securityContext:
   privileged: true
-{{- if (ge (.Capabilities.KubeVersion.Minor | int) 29) }}
+{{- if (ge ($root.Capabilities.KubeVersion.Minor | int) 29) }}
 restartPolicy: Always
 startupProbe:
   exec:
@@ -289,6 +294,8 @@ volumeMounts:
     mountPath: /var/run
   - name: dind-externals
     mountPath: /home/runner/externals
+  {{- end }}
+{{- end }}
 {{- end }}
 
 {{- define "gha-runner-scale-set.dind-volume" -}}
