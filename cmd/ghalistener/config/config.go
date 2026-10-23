@@ -154,6 +154,7 @@ func (c *Config) ActionsClient(logger *slog.Logger, clientOptions ...scaleset.HT
 		scaleset.WithLogger(logger),
 	}, clientOptions...)
 
+	var httpConfig scaleset.HTTPClientConfig
 	if c.ServerRootCA != "" {
 		systemPool, err := x509.SystemCertPool()
 		if err != nil {
@@ -165,13 +166,14 @@ func (c *Config) ActionsClient(logger *slog.Logger, clientOptions ...scaleset.HT
 			return nil, fmt.Errorf("failed to parse root certificate")
 		}
 
-		options = append(options, scaleset.WithRootCAs(pool))
+		httpConfig.RootCAs = pool
 	}
 
 	proxyFunc := httpproxy.FromEnvironment().ProxyFunc()
-	options = append(options, scaleset.WithProxy(func(req *http.Request) (*url.URL, error) {
+	httpConfig.Proxy = func(req *http.Request) (*url.URL, error) {
 		return proxyFunc(req.URL)
-	}))
+	}
+	options = append(options, scaleset.WithHTTPClient(scaleset.NewHTTPClient(httpConfig)))
 
 	var client *scaleset.Client
 	switch c.Token {

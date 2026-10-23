@@ -113,8 +113,11 @@ const maxFailures = 5
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.6.4/pkg/reconcile
-func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	log := r.Log.WithValues("ephemeralrunner", req.NamespacedName)
+	defer func() {
+		result, err = requeueOnRateLimit(ctx, result, err, log)
+	}()
 
 	var ephemeralRunner v1alpha1.EphemeralRunner
 	if err := r.Get(ctx, req.NamespacedName, &ephemeralRunner); err != nil {
