@@ -504,6 +504,10 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 
 	case cs.State.Terminated == nil: // container is not terminated and pod phase is not failed, so runner is still running
+		if err := r.syncRunnerBusyLabel(ctx, &ephemeralRunner, pod, log); err != nil {
+			log.Error(err, "Failed to sync the runner busy label on the pod")
+			return ctrl.Result{}, err
+		}
 		log.Info("Runner container is still running; updating ephemeral runner status")
 		if err := r.updateRunStatusFromPod(ctx, &ephemeralRunner, pod, initialRunnerID, initialRunnerName, log); err != nil {
 			log.Info("Failed to update ephemeral runner status. Requeue to not miss this event")
@@ -534,6 +538,28 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 		return ctrl.Result{}, nil
 	}
+}
+
+// syncRunnerBusyLabel marks the runner pod as busy once its EphemeralRunner has a
+// job assigned, so that a PodDisruptionBudget can protect in-flight jobs from
+// voluntary evictions (node drain, node auto-upgrade) without also pinning idle runners.
+// Runner pods are single-use, so the label is never removed.
+func (r *EphemeralRunnerReconciler) syncRunnerBusyLabel(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, pod *corev1.Pod, log logr.Logger) error {
+	if !ephemeralRunner.HasJob() || pod.Labels[LabelKeyRunnerBusy] == "true" {
+		return nil
+	}
+
+	original := pod.DeepCopy()
+	if pod.Labels == nil {
+		pod.Labels = map[string]string{}
+	}
+	pod.Labels[LabelKeyRunnerBusy] = "true"
+
+	if err := r.Patch(ctx, pod, client.MergeFrom(original)); err != nil {
+		return fmt.Errorf("failed to patch runner busy label: %w", err)
+	}
+	log.Info("Labeled runner pod as busy")
+	return nil
 }
 
 func (r *EphemeralRunnerReconciler) deleteEphemeralRunnerOrPod(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, pod *corev1.Pod, log logr.Logger) error {
@@ -1013,8 +1039,9 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 	phaseChanged := phase != ephemeralRunner.Status.Phase
 	readyChanged := ready != ephemeralRunner.Status.Ready
 	identityChanged := ephemeralRunner.Status.RunnerID == 0
+	replicasChanged := ephemeralRunner.Status.Replicas != 1
 
-	if !phaseChanged && !readyChanged && !identityChanged {
+	if !phaseChanged && !readyChanged && !identityChanged && !replicasChanged {
 		return nil
 	}
 
@@ -1028,6 +1055,7 @@ func (r *EphemeralRunnerReconciler) updateRunStatusFromPod(ctx context.Context, 
 	original := ephemeralRunner.DeepCopy()
 	ephemeralRunner.Status.Phase = phase
 	ephemeralRunner.Status.Ready = ready
+	ephemeralRunner.Status.Replicas = 1
 	ephemeralRunner.Status.Reason = pod.Status.Reason
 	ephemeralRunner.Status.Message = pod.Status.Message
 	if identityChanged {

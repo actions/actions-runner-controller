@@ -33,6 +33,10 @@ const (
 	LabelKeyGitHubEnterprise        = "actions.github.com/enterprise"
 	LabelKeyGitHubOrganization      = "actions.github.com/organization"
 	LabelKeyGitHubRepository        = "actions.github.com/repository"
+
+	// LabelKeyRunnerBusy is set to "true" on a runner pod while its EphemeralRunner
+	// has a job assigned. It lets a PodDisruptionBudget select busy runners only.
+	LabelKeyRunnerBusy = "actions.github.com/runner-busy"
 )
 
 // AutoscalingRunnerSetCleanupFinalizerName is a finalizer used to protect resources
