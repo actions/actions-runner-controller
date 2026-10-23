@@ -54,6 +54,7 @@ func TestJITRateLimitReleasesReconcileWorker(t *testing.T) {
 	completed.ResourceVersion = ""
 	completed.UID = ""
 	completed.Status.Phase = v1alpha1.EphemeralRunnerPhaseSucceeded
+	completed.Status.JobID = "1"
 	require.NoError(t, f.c.Create(t.Context(), completed))
 	require.NoError(t, f.c.Status().Update(t.Context(), completed))
 	completedKey := client.ObjectKeyFromObject(completed)
