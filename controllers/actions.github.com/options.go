@@ -1,6 +1,8 @@
 package actionsgithubcom
 
 import (
+	"time"
+
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -101,20 +103,28 @@ func WithTypedRateLimiter(rateLimiter workqueue.TypedRateLimiter[reconcile.Reque
 	}
 }
 
-// builderWithOptions applies the given options to the provided builder, if any.
+// builderWithOptions applies the controller defaults and given options to the provided builder.
 // This is a helper function to avoid the need to import the controller-runtime package in every reconciler source file
 // and the command package that creates the controller.
 // This is also useful for reducing code duplication around setting controller options in
 // multiple reconcilers.
 func builderWithOptions(b *builder.Builder, opts []Option) *builder.Builder {
-	if len(opts) == 0 {
-		return b
-	}
+	return b.WithOptions(newControllerOptions(opts))
+}
 
+func newControllerOptions(opts []Option) controller.Options {
 	var controllerOpts controller.Options
 	for _, opt := range opts {
 		opt(&controllerOpts)
 	}
+	if controllerOpts.RateLimiter == nil {
+		if controllerOpts.UsePriorityQueue != nil && !*controllerOpts.UsePriorityQueue {
+			controllerOpts.RateLimiter = workqueue.DefaultTypedControllerRateLimiter[reconcile.Request]()
+		} else {
+			controllerOpts.RateLimiter = workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](5*time.Millisecond, 30*time.Second)
+		}
+	}
+	controllerOpts.RateLimiter = workqueue.NewTypedWithMaxWaitRateLimiter(controllerOpts.RateLimiter, 30*time.Second)
 
-	return b.WithOptions(controllerOpts)
+	return controllerOpts
 }

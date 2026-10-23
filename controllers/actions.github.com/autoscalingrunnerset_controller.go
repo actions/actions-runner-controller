@@ -70,8 +70,11 @@ type AutoscalingRunnerSetReconciler struct {
 // +kubebuilder:rbac:groups=actions.github.com,resources=autoscalinglisteners/status,verbs=get;update;patch
 
 // Reconcile a AutoscalingRunnerSet resource to meet its desired spec.
-func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	log := r.Log.WithValues("autoscalingrunnerset", req.NamespacedName)
+	defer func() {
+		result, err = requeueOnRateLimit(ctx, result, err, log)
+	}()
 
 	var autoscalingRunnerSet v1alpha1.AutoscalingRunnerSet
 	if err := r.Get(ctx, req.NamespacedName, &autoscalingRunnerSet); err != nil {
@@ -223,7 +226,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	var ephemeralRunnerSet v1alpha1.EphemeralRunnerSet
-	err := r.Get(
+	err = r.Get(
 		ctx,
 		types.NamespacedName{
 			Namespace: autoscalingRunnerSet.Namespace,

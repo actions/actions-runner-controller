@@ -8,6 +8,7 @@ import (
 	"math"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/cmd/ghalistener/metrics"
 	"github.com/actions/scaleset"
 	"github.com/actions/scaleset/listener"
 	jsonpatch "github.com/evanphx/json-patch"
@@ -48,15 +49,27 @@ type Scaler struct {
 	// dirty is set when there are any events handled before the desired count is called.
 	dirty  bool
 	logger *slog.Logger
+
+	messageClient    listener.Client
+	recorder         metrics.Recorder
+	latestStatistics *scaleset.RunnerScaleSetStatistic
 }
 
 var _ listener.Scaler = (*Scaler)(nil)
 
-func New(config Config, options ...Option) (*Scaler, error) {
+func New(config Config, messageClient listener.Client, recorder metrics.Recorder, options ...Option) (*Scaler, error) {
+	if messageClient == nil {
+		return nil, fmt.Errorf("message client is required")
+	}
+	if recorder == nil {
+		recorder = metrics.Discard
+	}
 	w := &Scaler{
 		config:        config,
 		targetRunners: -1,
 		patchSeq:      -1,
+		messageClient: messageClient,
+		recorder:      recorder,
 	}
 	for _, option := range options {
 		option(w)
@@ -116,6 +129,54 @@ func (w *Scaler) applyDefaults() error {
 		w.logger = slog.New(slog.DiscardHandler)
 	}
 
+	return nil
+}
+
+func (w *Scaler) Scale(ctx context.Context, message *scaleset.RunnerScaleSetMessage) error {
+	if message != nil {
+		if message.Statistics == nil {
+			return fmt.Errorf("message statistics are required")
+		}
+		w.latestStatistics = message.Statistics
+		w.recorder.RecordStatistics(message.Statistics)
+
+		if len(message.JobAvailableMessages) > 0 {
+			ids := make([]int64, 0, len(message.JobAvailableMessages))
+			for _, job := range message.JobAvailableMessages {
+				ids = append(ids, job.RunnerRequestID)
+			}
+			w.logger.Info("Acquiring jobs", "count", len(ids))
+			acquired, err := w.messageClient.AcquireJobs(ctx, ids)
+			if err != nil {
+				return fmt.Errorf("failed to acquire available jobs: %w", err)
+			}
+			w.logger.Info("Jobs acquired", "count", len(acquired))
+		}
+
+		for _, job := range message.JobStartedMessages {
+			w.recorder.RecordJobStarted(job)
+			if err := w.HandleJobStarted(ctx, job); err != nil {
+				return fmt.Errorf("failed to handle job started: %w", err)
+			}
+		}
+		for _, job := range message.JobCompletedMessages {
+			w.recorder.RecordJobCompleted(job)
+			if err := w.HandleJobCompleted(ctx, job); err != nil {
+				return fmt.Errorf("failed to handle job completed: %w", err)
+			}
+		}
+	}
+
+	if w.latestStatistics == nil {
+		return fmt.Errorf("initial message statistics are required")
+	}
+	desiredCount, err := w.HandleDesiredRunnerCount(ctx, w.latestStatistics.TotalAssignedJobs)
+	if err != nil {
+		return fmt.Errorf("failed to handle desired runner count: %w", err)
+	}
+	if message != nil {
+		w.recorder.RecordDesiredRunners(desiredCount)
+	}
 	return nil
 }
 
