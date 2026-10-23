@@ -134,11 +134,11 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			// This finalizer exists to release the runner's registration with the
 			// Actions service. There are two ways that happens.
 			//
-			// A runner that exited with code 0 already removed its own
-			// registration on the way out. Runners are ephemeral, so a clean exit
-			// means the agent deregistered itself before it stopped, and there is
-			// nothing left to ask the service to remove. That is the path every
-			// completed job takes, and it costs no API call at all.
+			// A runner that exited with code 0 after running a job no longer has
+			// a registration: the service removes an ephemeral runner once its job
+			// is done, so there is nothing left to ask it to remove. That is the
+			// path every completed job takes, and it costs no API call at all. See
+			// runnerSelfDeregistered for why a clean exit alone is not enough.
 			//
 			// Every other runner may still hold a registration. While its pod is
 			// alive, the runner may be executing a job this controller has not
@@ -156,7 +156,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			// what that costs.
 			var runnerID int
 			if runnerSelfDeregistered(&ephemeralRunner) {
-				log.Info("Runner exited successfully and deregistered itself, skipping its removal from the service")
+				log.Info("Runner exited successfully after running a job and its registration was removed by the service, skipping its removal")
 			} else {
 				getActionsClient := sync.OnceValues(func() (multiclient.Client, error) {
 					return r.GetActionsService(ctx, &ephemeralRunner)
@@ -717,8 +717,8 @@ func (r *EphemeralRunnerReconciler) markAsFailed(ctx context.Context, ephemeralR
 // service: it hands the removal to the background workers and drops the
 // finalizer that exists to make it happen.
 //
-// A runner that exited with code 0 deregistered itself, so it has nothing to
-// hand over and only the finalizer goes.
+// A runner that exited with code 0 after running a job deregistered itself, so
+// it has nothing to hand over and only the finalizer goes.
 //
 // Dropping the finalizer is also what keeps this to a single removal. Without
 // it the deletion that eventually follows would queue the same runner again.
@@ -731,7 +731,7 @@ func (r *EphemeralRunnerReconciler) queueUnregistration(ctx context.Context, eph
 
 	var runnerID int
 	if runnerSelfDeregistered(ephemeralRunner) {
-		log.Info("Runner exited successfully and deregistered itself, skipping its removal from the service")
+		log.Info("Runner exited successfully after running a job and deregistered itself, skipping its removal from the service")
 	} else {
 		id, err := r.registeredRunnerID(ctx, ephemeralRunner, func() (multiclient.Client, error) {
 			return r.GetActionsService(ctx, ephemeralRunner)
