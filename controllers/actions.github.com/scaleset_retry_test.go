@@ -59,27 +59,26 @@ func newRetryTestClientForServer(t *testing.T, server *httptest.Server) multicli
 	return client
 }
 
-func TestScalesetRetryPolicy(t *testing.T) {
+func TestScalesetRequestsDoNotRetry(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		status     int
 		retryAfter string
 		reset      bool
 		slow       bool
-		attempts   int32
-		retries    int
 		minElapsed time.Duration
 		maxElapsed time.Duration
 	}{
-		{name: "long secondary limit", status: 429, retryAfter: "60", attempts: 1, maxElapsed: 2 * time.Second},
-		{name: "wait reaches budget", status: 429, retryAfter: "10", attempts: 1, maxElapsed: 2 * time.Second},
-		{name: "primary reset", status: 403, reset: true, attempts: 1, maxElapsed: 2 * time.Second},
-		{name: "secondary forbidden", status: 403, retryAfter: "60", attempts: 1, maxElapsed: 2 * time.Second},
-		{name: "two short retries", status: 429, retryAfter: "1", attempts: 3, retries: 2, minElapsed: 2 * time.Second, maxElapsed: 5 * time.Second},
-		{name: "total budget", status: 429, retryAfter: "6", attempts: 2, retries: 1, minElapsed: 6 * time.Second, maxElapsed: 9 * time.Second},
-		{name: "no delay hint", status: 429, attempts: 3, retries: 2, maxElapsed: 6 * time.Second},
-		{name: "transient server failure", status: 503, attempts: 3, minElapsed: 3 * time.Second, maxElapsed: 6 * time.Second},
-		{name: "slow attempt", slow: true, attempts: 1, minElapsed: 10 * time.Second, maxElapsed: 13 * time.Second},
+		{name: "long secondary limit", status: 429, retryAfter: "60", maxElapsed: 2 * time.Second},
+		{name: "delay equals budget", status: 429, retryAfter: "10", maxElapsed: 2 * time.Second},
+		{name: "primary reset", status: 403, reset: true, maxElapsed: 2 * time.Second},
+		{name: "secondary forbidden", status: 403, retryAfter: "1", maxElapsed: 2 * time.Second},
+		{name: "short delay", status: 429, retryAfter: "1", maxElapsed: 2 * time.Second},
+		{name: "medium delay", status: 429, retryAfter: "6", maxElapsed: 2 * time.Second},
+		{name: "no delay hint", status: 429, maxElapsed: 2 * time.Second},
+		{name: "transient server failure", status: 503, maxElapsed: 2 * time.Second},
+		{name: "server failure with delay", status: 503, retryAfter: "1", maxElapsed: 2 * time.Second},
+		{name: "slow attempt", slow: true, minElapsed: 10 * time.Second, maxElapsed: 13 * time.Second},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -107,7 +106,7 @@ func TestScalesetRetryPolicy(t *testing.T) {
 			_, err := client.GenerateJitRunnerConfig(t.Context(), &scaleset.RunnerScaleSetJitRunnerSetting{Name: "runner"}, 1)
 			elapsed := time.Since(start)
 			require.Error(t, err)
-			require.Equal(t, tc.attempts, attempts.Load())
+			require.EqualValues(t, 1, attempts.Load())
 			require.GreaterOrEqual(t, elapsed, tc.minElapsed)
 			require.Less(t, elapsed, tc.maxElapsed)
 			if tc.slow {
@@ -115,7 +114,7 @@ func TestScalesetRetryPolicy(t *testing.T) {
 			} else if tc.status != 503 {
 				var rateLimit *scaleset.RateLimitError
 				require.ErrorAs(t, err, &rateLimit)
-				require.Equal(t, tc.retries, rateLimit.Retries)
+				require.Zero(t, rateLimit.Retries)
 				if tc.retryAfter != "" {
 					want, parseErr := time.ParseDuration(tc.retryAfter + "s")
 					require.NoError(t, parseErr)
@@ -342,36 +341,42 @@ func TestScalesetServiceCallsRespectCallerDeadline(t *testing.T) {
 	}
 }
 
-func TestScalesetRetryDuringAuthentication(t *testing.T) {
-	for _, stage := range []string{"registration token", "admin token"} {
-		t.Run(stage, func(t *testing.T) {
-			var attempts atomic.Int32
-			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if stage == "admin token" && strings.HasSuffix(r.URL.Path, "/runners/registration-token") {
-					w.WriteHeader(http.StatusCreated)
-					_, _ = w.Write([]byte(`{"token":"registration-token"}`))
-					return
-				}
-				attempts.Add(1)
-				w.Header().Set("Retry-After", "60")
-				w.WriteHeader(http.StatusTooManyRequests)
-			}))
-			defer server.Close()
-			pool := x509.NewCertPool()
-			pool.AddCert(server.Certificate())
-			client, err := multiclient.NewScaleset().GetClientFor(t.Context(), &multiclient.ClientForOptions{
-				GithubConfigURL: server.URL + "/org", Namespace: "default",
-				AppConfig: appconfig.AppConfig{Token: "token"}, RootCAs: pool,
-			})
-			require.NoError(t, err)
+func TestScalesetRequestsDoNotRetryDuringAuthentication(t *testing.T) {
+	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusTooManyRequests, http.StatusServiceUnavailable} {
+		for _, stage := range []string{"registration token", "admin token"} {
+			t.Run(fmt.Sprintf("%s/%d", stage, status), func(t *testing.T) {
+				var attempts atomic.Int32
+				server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if stage == "admin token" && strings.HasSuffix(r.URL.Path, "/runners/registration-token") {
+						w.WriteHeader(http.StatusCreated)
+						_, _ = w.Write([]byte(`{"token":"registration-token"}`))
+						return
+					}
+					attempts.Add(1)
+					w.Header().Set("Retry-After", "1")
+					w.WriteHeader(status)
+				}))
+				defer server.Close()
+				pool := x509.NewCertPool()
+				pool.AddCert(server.Certificate())
+				client, err := multiclient.NewScaleset().GetClientFor(t.Context(), &multiclient.ClientForOptions{
+					GithubConfigURL: server.URL + "/org", Namespace: "default",
+					AppConfig: appconfig.AppConfig{Token: "token"}, RootCAs: pool,
+				})
+				require.NoError(t, err)
 
-			start := time.Now()
-			_, err = client.GenerateJitRunnerConfig(t.Context(), &scaleset.RunnerScaleSetJitRunnerSetting{Name: "runner"}, 1)
-			var limited *scaleset.RateLimitError
-			require.ErrorAs(t, err, &limited)
-			require.Equal(t, time.Minute, limited.RetryAfter)
-			require.EqualValues(t, 1, attempts.Load())
-			require.Less(t, time.Since(start), 2*time.Second)
-		})
+				start := time.Now()
+				_, err = client.GenerateJitRunnerConfig(t.Context(), &scaleset.RunnerScaleSetJitRunnerSetting{Name: "runner"}, 1)
+				require.Error(t, err)
+				if status == http.StatusForbidden || status == http.StatusTooManyRequests {
+					var limited *scaleset.RateLimitError
+					require.ErrorAs(t, err, &limited)
+					require.Equal(t, time.Second, limited.RetryAfter)
+					require.Zero(t, limited.Retries)
+				}
+				require.EqualValues(t, 1, attempts.Load())
+				require.Less(t, time.Since(start), 2*time.Second)
+			})
+		}
 	}
 }

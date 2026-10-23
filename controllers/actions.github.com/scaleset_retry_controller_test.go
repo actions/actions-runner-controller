@@ -33,7 +33,7 @@ func TestJITRateLimitReleasesReconcileWorker(t *testing.T) {
 	var attempts atomic.Int32
 	service := newRetryTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		attempts.Add(1)
-		w.Header().Set("Retry-After", "60")
+		w.Header().Set("Retry-After", "1")
 		w.WriteHeader(http.StatusTooManyRequests)
 	})
 	f.runnerController.SecretResolver = &stubSecretResolver{client: service}
@@ -41,7 +41,7 @@ func TestJITRateLimitReleasesReconcileWorker(t *testing.T) {
 	start := time.Now()
 	result, err := f.reconcileRunner()
 	require.NoError(t, err)
-	require.Equal(t, time.Minute, result.RequeueAfter)
+	require.Equal(t, time.Second, result.RequeueAfter)
 	require.Less(t, time.Since(start), 2*time.Second)
 	require.EqualValues(t, 1, attempts.Load())
 	require.True(t, kerrors.IsNotFound(f.c.Get(t.Context(), f.runnerKey, new(corev1.Secret))))

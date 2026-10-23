@@ -53,10 +53,8 @@ func (c *boundedClient) release(service *scaleset.Client) {
 func requestContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	ctx = scaleset.WithRequestRetry(ctx, func(retry *scaleset.RetryConfig) {
-		retry.Max = 2
+		retry.Max = 0
 		retry.MaxElapsed = requestTimeout
-		rule := scaleset.RateLimitRule{MaxRetries: 2, MaxWait: requestTimeout}
-		retry.OnRateLimit = scaleset.RateLimitRetries(rule, rule)
 	})
 	return ctx, cancel
 }
