@@ -2,8 +2,13 @@ package actionsgithubcom
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"k8s.io/client-go/util/workqueue"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 func TestOptionsResolve(t *testing.T) {
@@ -59,4 +64,39 @@ func TestOptionsResolve(t *testing.T) {
 		assert.Equal(t, 2, got.AutoscalingRunnerSetMaxConcurrentReconciles)
 		assert.Equal(t, 2, got.EphemeralRunnerSetMaxConcurrentReconciles)
 	})
+}
+
+func TestControllerErrorBackoffIsCappedAtOneMinute(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		options []Option
+		initial time.Duration
+	}{
+		{name: "default", initial: 5 * time.Millisecond},
+		{
+			name: "typed rate limiter", initial: time.Millisecond,
+			options: []Option{WithTypedRateLimiter(workqueue.DefaultTypedItemBasedRateLimiter[reconcile.Request]())},
+		},
+		{
+			name: "non-priority queue", initial: 5 * time.Millisecond,
+			options: []Option{func(opts *controller.Options) {
+				disabled := false
+				opts.UsePriorityQueue = &disabled
+			}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := newControllerOptions(tc.options)
+			require.NotNil(t, opts.RateLimiter)
+			var request reconcile.Request
+			for failure := range 32 {
+				want := min(tc.initial*time.Duration(1<<failure), time.Minute)
+				require.Equal(t, want, opts.RateLimiter.When(request), "failure %d", failure+1)
+			}
+			require.Equal(t, 32, opts.RateLimiter.NumRequeues(request))
+			opts.RateLimiter.Forget(request)
+			require.Zero(t, opts.RateLimiter.NumRequeues(request))
+			require.Equal(t, tc.initial, opts.RateLimiter.When(request))
+		})
+	}
 }

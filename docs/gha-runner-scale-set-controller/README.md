@@ -45,6 +45,8 @@ Controller HTTP requests are not retried inside the client. Each service call ha
 
 Each concurrent service call leases a separate SDK client, so slow authentication in one call cannot block another on the SDK's authentication mutex. Idle clients retain their authentication tokens for reuse, and clients for the same configuration share an HTTP transport.
 
+Ordinary reconciliation failures, including service-call timeouts, use exponential error backoff capped at one minute. This applies to both workqueue rate-limiter settings and does not shorten server-provided `Retry-After` delays.
+
 ## Changelog
 
 ### 0.15.0
