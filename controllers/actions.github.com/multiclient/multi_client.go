@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1/appconfig"
 	"github.com/actions/actions-runner-controller/build"
@@ -135,7 +136,10 @@ func (o *ClientForOptions) newClient() (*scaleset.Client, error) {
 		Subsystem:  "gha-scale-set-controller",
 	}
 
-	var options []scaleset.HTTPOption
+	options := []scaleset.HTTPOption{
+		scaleset.WithTimeout(30 * time.Second),
+		scaleset.WithRetryMax(2),
+	}
 	if o.RootCAs != nil {
 		options = append(options, scaleset.WithRootCAs(o.RootCAs))
 	}
