@@ -328,3 +328,19 @@ spec:
       dockerVarRunVolumeSizeLimit: 50M
       env: []
 ```
+
+### Runner pods terminate immediately after starting
+
+**Problem**
+
+If your runner-controller-listener pods are functioning correctly but the runner pods terminate immediately after starting, you may need to debug the issue using the default Docker image. Use the ghcr.io/actions/actions-runner:latest image and check the runner logs before the pods terminate.
+
+You can use the following command as a boilerplate to retrieve the logs:`kubectl logs $(kubectl get pods --namespace=<your-namespace> | grep '<pod-name-prefix>' | awk '{print $1}') --namespace=<your-namespace>`
+
+If you see anything like this `POST request to https://pipelinesghubeus23.actions.githubusercontent.com/#TOKEN#/_apis/oauth2/token failed. HTTP Status: BadRequest` this may apply.
+
+**Solution**
+
+Ensure that the system time on all individual Kubernetes nodes is synchronized. The GitHub API that creates the JIT tokens checks the HTTP headers' time, and even a 10-minute clock skew can cause the API to fail.
+
+You can synchronize the time on your nodes using `timedatectl set-ntp yes`. This command will enable NTP (Network Time Protocol) on your node, ensuring that the system time is accurate.
