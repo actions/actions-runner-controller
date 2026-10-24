@@ -334,7 +334,14 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		)
 		switch {
 		case err == nil:
-			desiredListenerProxy, err := r.newAutoscalingListenerProxySecret(&autoscalingListener, proxySecret.Data)
+			// Resolve the referenced credentials again rather than reusing the
+			// mirror's current data, otherwise a rotated credential secret never
+			// reaches the mirror.
+			proxySecretData, err := r.proxySecretData(ctx, &autoscalingListener)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			desiredListenerProxy, err := r.newAutoscalingListenerProxySecret(&autoscalingListener, proxySecretData)
 			if err != nil {
 				log.Error(err, "Failed to build desired listener proxy secret")
 				return ctrl.Result{}, err
@@ -343,13 +350,17 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			labelsModified := !maps.Equal(proxySecret.Labels, desiredLabels)
 			desiredAnnotations := r.mergeAnnotations(proxySecret.Annotations, desiredListenerProxy.Annotations)
 			annotationsModified := !maps.Equal(proxySecret.Annotations, desiredAnnotations)
-			if labelsModified || annotationsModified {
+			dataModified := !maps.EqualFunc(proxySecret.Data, desiredListenerProxy.Data, bytes.Equal)
+			if labelsModified || annotationsModified || dataModified {
 				updatedProxySecret := proxySecret.DeepCopy()
 				if labelsModified {
 					updatedProxySecret.Labels = desiredLabels
 				}
 				if annotationsModified {
 					updatedProxySecret.Annotations = desiredAnnotations
+				}
+				if dataModified {
+					updatedProxySecret.Data = desiredListenerProxy.Data
 				}
 				log.Info("Updating listener proxy secret")
 				if err := r.Patch(ctx, updatedProxySecret, client.MergeFrom(&proxySecret)); err != nil {
@@ -829,7 +840,9 @@ func (r *AutoscalingListenerReconciler) certificate(ctx context.Context, autosca
 	return certificate, nil
 }
 
-func (r *AutoscalingListenerReconciler) createProxySecret(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) error {
+// proxySecretData resolves the proxy credentials referenced by the listener
+// spec into the data of its mirror secret.
+func (r *AutoscalingListenerReconciler) proxySecretData(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener) (map[string][]byte, error) {
 	data, err := autoscalingListener.Spec.Proxy.ToSecretData(func(s string) (*corev1.Secret, error) {
 		var secret corev1.Secret
 		err := r.Get(ctx, types.NamespacedName{Name: s, Namespace: autoscalingListener.Spec.AutoscalingRunnerSetNamespace}, &secret)
@@ -839,7 +852,15 @@ func (r *AutoscalingListenerReconciler) createProxySecret(ctx context.Context, a
 		return &secret, nil
 	})
 	if err != nil {
-		return fmt.Errorf("failed to convert proxy config to secret data: %w", err)
+		return nil, fmt.Errorf("failed to convert proxy config to secret data: %w", err)
+	}
+	return data, nil
+}
+
+func (r *AutoscalingListenerReconciler) createProxySecret(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) error {
+	data, err := r.proxySecretData(ctx, autoscalingListener)
+	if err != nil {
+		return err
 	}
 
 	newProxySecret, err := r.newAutoscalingListenerProxySecret(autoscalingListener, data)
