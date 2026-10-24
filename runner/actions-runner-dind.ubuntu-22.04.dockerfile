@@ -22,6 +22,7 @@ RUN apt-get update -y \
     git \
     iptables \
     jq \
+    net-tools \
     software-properties-common \
     sudo \
     unzip \
