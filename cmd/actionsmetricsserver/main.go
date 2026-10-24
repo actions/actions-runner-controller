@@ -134,9 +134,10 @@ func main() {
 	}
 
 	eventReader := &actionsmetrics.EventReader{
-		Log:          ctrl.Log.WithName("workflowjobmetrics-eventreader"),
-		GitHubClient: ghClient,
-		Events:       make(chan interface{}, 1024*1024),
+		Log:            ctrl.Log.WithName("workflowjobmetrics-eventreader"),
+		GitHubClient:   ghClient,
+		Events:         make(chan interface{}, 1024*1024),
+		InProgressJobs: make(map[int64]actionsmetrics.InProgressJob),
 	}
 
 	webhookServer := &actionsmetrics.WebhookServer{
