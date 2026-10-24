@@ -87,6 +87,10 @@ if [ "${DISABLE_RUNNER_UPDATE:-}" == "true" ]; then
   config_args+=(--disableupdate)
   log.debug 'Passing --disableupdate to config.sh to disable automatic runner updates.'
 fi
+if [ "${RUNNER_NO_DEFAULT_LABELS:-}" == "true" ]; then
+  config_args+=(--no-default-labels)
+  log.debug 'Passing --no-default-labels to config.sh to disable the default labels'
+fi
 
 update-status "Registering"
 
