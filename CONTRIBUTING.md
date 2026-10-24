@@ -40,10 +40,17 @@ For significantly large and/or complex features, we may request that you write u
 
 Please use the [template](/docs/adrs/yyyy-mm-dd-TEMPLATE) as guidance.
 
-<!-- 
-  TODO: Add a pre-requisite section describing what developers should
-  install in order get started on ARC.
--->
+## Prerequisites
+
+To contribute to or build ARC locally, make sure you have the following tools installed:
+
+- **Go**: Matching the version defined in `go.mod` (Go 1.22+ recommended).
+- **Docker**: For building and packaging container images.
+- **kubectl**: The Kubernetes command-line tool.
+- **Helm 3**: For managing and packaging ARC Helm charts.
+- **kind**: [Kubernetes IN Docker](https://kind.sigs.k8s.io/) for creating local test clusters.
+- **setup-envtest**: Used for running integration tests locally (`go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest`).
+- **golangci-lint**: For static code analysis and linting (`make lint`).
 
 ## How to Contribute a Patch
 
