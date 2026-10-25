@@ -321,6 +321,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 	}
 
 	// Create a secret containing proxy config if specified
+	var mirrorProxySecret *corev1.Secret
 	if autoscalingListener.Spec.Proxy != nil {
 		var proxySecret corev1.Secret
 		err := r.Get(
@@ -350,6 +351,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 			desiredAnnotations := r.mergeAnnotations(proxySecret.Annotations, desiredListenerProxy.Annotations)
 			annotationsModified := !maps.Equal(proxySecret.Annotations, desiredAnnotations)
 			dataModified := !maps.EqualFunc(proxySecret.Data, desiredListenerProxy.Data, bytes.Equal)
+			mirrorProxySecret = &proxySecret
 			if labelsModified || annotationsModified || dataModified {
 				updatedProxySecret := proxySecret.DeepCopy()
 				if labelsModified {
@@ -366,18 +368,22 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 					log.Error(err, "Failed to update listener proxy secret")
 					return ctrl.Result{}, err
 				}
-				// Secrets are not watched, so nothing would bring us back.
-				// The listener pod only references the proxy secret by name,
-				// so carry on in the same reconcile.
+				// Secrets are not watched, so nothing would bring us back. The
+				// patch response carries the new resource version, which is
+				// what the listener pod is compared against below, so carry on
+				// with it in the same reconcile.
+				mirrorProxySecret = updatedProxySecret
 			}
 		case kerrors.IsNotFound(err):
 			// Create a mirror secret for the listener pod in the Controller namespace for listener pod to use
 			log.Info("Creating a listener proxy secret for the listener pod")
-			if err := r.createProxySecret(ctx, &autoscalingListener, log); err != nil {
+			created, err := r.createProxySecret(ctx, &autoscalingListener, log)
+			if err != nil {
 				return ctrl.Result{}, err
 			}
 			// Secrets are not watched and reads of them bypass the cache, so
 			// carry on in the same reconcile instead of requeueing.
+			mirrorProxySecret = created
 		default: // error
 			log.Error(err, "Unable to get listener proxy secret", "namespace", autoscalingListener.Namespace, "name", proxyListenerSecretName(&autoscalingListener))
 			return ctrl.Result{}, err
@@ -515,6 +521,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		desiredPod, err := r.newScaleSetListenerPod(
 			&autoscalingListener,
 			&listenerConfigSecret,
+			mirrorProxySecret,
 			&serviceAccount,
 			&listenerRole,
 			&listenerRoleBinding,
@@ -576,6 +583,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		desiredPod, err := r.newScaleSetListenerPod(
 			&autoscalingListener,
 			&listenerConfigSecret,
+			mirrorProxySecret,
 			&serviceAccount,
 			&listenerRole,
 			&listenerRoleBinding,
@@ -856,26 +864,26 @@ func (r *AutoscalingListenerReconciler) proxySecretData(ctx context.Context, aut
 	return data, nil
 }
 
-func (r *AutoscalingListenerReconciler) createProxySecret(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) error {
+func (r *AutoscalingListenerReconciler) createProxySecret(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) (*corev1.Secret, error) {
 	data, err := r.proxySecretData(ctx, autoscalingListener)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	newProxySecret, err := r.newAutoscalingListenerProxySecret(autoscalingListener, data)
 	if err != nil {
-		return fmt.Errorf("failed to build listener proxy secret: %w", err)
+		return nil, fmt.Errorf("failed to build listener proxy secret: %w", err)
 	}
 
 	logger.Info("Creating listener proxy secret", "namespace", newProxySecret.Namespace, "name", newProxySecret.Name)
 	if err := r.Create(ctx, newProxySecret); err != nil {
 		logger.Error(err, "Unable to create listener secret", "namespace", newProxySecret.Namespace, "name", newProxySecret.Name)
-		return err
+		return nil, err
 	}
 
 	logger.Info("Created listener proxy secret", "namespace", newProxySecret.Namespace, "name", newProxySecret.Name)
 
-	return nil
+	return newProxySecret, nil
 }
 
 func (r *AutoscalingListenerReconciler) createRoleForListener(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, logger logr.Logger) (ctrl.Result, error) {

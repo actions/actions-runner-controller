@@ -1443,7 +1443,7 @@ var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 		).Should(Succeed(), "failed to delete secret with proxy details")
 	})
 
-	It("should propagate rotated proxy credentials into the mirror proxy secret", func() {
+	It("should propagate rotated proxy credentials into the mirror proxy secret and recreate the listener pod", func() {
 		proxyCredentials := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "proxy-credentials",
@@ -1475,9 +1475,9 @@ var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 
 		createRunnerSetAndListener(proxy)
 
+		var proxySecret corev1.Secret
 		Eventually(
 			func(g Gomega) {
-				var proxySecret corev1.Secret
 				err := k8sClient.Get(
 					ctx,
 					types.NamespacedName{Name: proxyListenerSecretName(autoscalingListener), Namespace: autoscalingNS.Name},
@@ -1488,6 +1488,22 @@ var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 			autoscalingListenerTestTimeout,
 			autoscalingListenerTestInterval,
 		).Should(Succeed(), "failed to create secret with proxy details")
+
+		// The pod must exist before the rotation, otherwise there is nothing
+		// to recreate and the test would pass against a controller that only
+		// updates the secret.
+		pod := new(corev1.Pod)
+		Eventually(
+			func(g Gomega) {
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
+				g.Expect(err).NotTo(HaveOccurred(), "failed to get listener pod")
+				g.Expect(pod.Annotations).To(HaveKeyWithValue(AnnotationKeyListenerProxySecretResourceVersion, proxySecret.ResourceVersion),
+					"listener pod should record the proxy secret it was created from")
+			},
+			autoscalingListenerTestTimeout,
+			autoscalingListenerTestInterval,
+		).Should(Succeed(), "failed to create listener pod")
+		oldPodUID := pod.UID
 
 		currentCredentials := new(corev1.Secret)
 		err = k8sClient.Get(ctx, types.NamespacedName{Name: proxyCredentials.Name, Namespace: autoscalingNS.Name}, currentCredentials)
@@ -1515,9 +1531,9 @@ var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 		})
 		Expect(err).NotTo(HaveOccurred(), "failed to convert proxy config to secret data")
 
+		var rotatedProxySecret corev1.Secret
 		Eventually(
 			func(g Gomega) {
-				var rotatedProxySecret corev1.Secret
 				err := k8sClient.Get(
 					ctx,
 					types.NamespacedName{Name: proxyListenerSecretName(autoscalingListener), Namespace: autoscalingNS.Name},
@@ -1529,6 +1545,19 @@ var _ = Describe("Test AutoScalingListener controller with proxy", func() {
 			autoscalingListenerTestTimeout,
 			autoscalingListenerTestInterval,
 		).Should(Succeed(), "failed to propagate rotated proxy credentials")
+
+		Eventually(
+			func(g Gomega) {
+				pod := new(corev1.Pod)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
+				g.Expect(err).NotTo(HaveOccurred(), "failed to get listener pod")
+				g.Expect(pod.UID).NotTo(Equal(oldPodUID), "listener pod should be recreated after the proxy credentials rotate")
+				g.Expect(pod.Annotations).To(HaveKeyWithValue(AnnotationKeyListenerProxySecretResourceVersion, rotatedProxySecret.ResourceVersion),
+					"recreated listener pod should record the rotated proxy secret")
+			},
+			autoscalingListenerTestTimeout,
+			autoscalingListenerTestInterval,
+		).Should(Succeed(), "failed to recreate the listener pod with the rotated proxy credentials")
 	})
 })
 

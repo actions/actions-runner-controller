@@ -63,6 +63,13 @@ const (
 	// visible in the pod spec, which references the secret by name, so the
 	// resource version is carried on the pod to make the drift observable.
 	AnnotationKeyListenerConfigResourceVersion = "actions.github.com/listener-config-resource-version"
+	// AnnotationKeyListenerProxySecretResourceVersion records the resource
+	// version of the listener proxy secret the listener pod was created from.
+	// The pod injects the proxy credentials through SecretKeyRef environment
+	// variables, which the kubelet resolves once at container start, so a
+	// rotated credential in the mirror secret is invisible in the pod spec and
+	// only takes effect after a restart.
+	AnnotationKeyListenerProxySecretResourceVersion = "actions.github.com/listener-proxy-secret-resource-version"
 )
 
 // Labels applied to listener roles
