@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/config"
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/metrics"
@@ -16,6 +17,10 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
 )
+
+// Session release must finish within the pod's termination grace period even
+// when the broker or authentication service is unavailable.
+const sessionCleanupTimeout = 10 * time.Second
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -85,7 +90,9 @@ func run(ctx context.Context, config *config.Config) error {
 		return fmt.Errorf("failed to create actions message session client: %w", err)
 	}
 	defer func() {
-		if err := sessionClient.Close(context.Background()); err != nil {
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), sessionCleanupTimeout)
+		defer cancel()
+		if err := sessionClient.Close(cleanupCtx); err != nil {
 			logger.Error("Failed to close session client", "error", err)
 		}
 	}()
@@ -95,7 +102,7 @@ func run(ctx context.Context, config *config.Config) error {
 	}
 
 	listener, err := listener.New(
-		sessionClient,
+		&brokerMessageClient{MessageSessionClient: sessionClient},
 		listener.Config{
 			ScaleSetID: config.RunnerScaleSetID,
 			MaxRunners: config.MaxRunners,
@@ -124,10 +131,14 @@ func run(ctx context.Context, config *config.Config) error {
 
 	g, ctx := errgroup.WithContext(ctx)
 	metricsCtx, cancelMetrics := context.WithCancelCause(ctx)
+	defer cancelMetrics(nil)
 
 	g.Go(func() error {
 		logger.Info("Starting listener")
 		listnerErr := listener.Run(ctx, scaler)
+		if listnerErr != nil {
+			logger.Error("Listener stopped", "error", listnerErr)
+		}
 		cancelMetrics(fmt.Errorf("listener exited: %w", listnerErr))
 		return listnerErr
 	})
