@@ -405,6 +405,10 @@ env:
   - name: RUNNER_WAIT_FOR_DOCKER_IN_SECONDS
     value: "120"
     {{- end }}
+    {{- if $.Values.logForwarding.enabled }}
+  - name: FORWARD_BUILD_LOGS
+    value: "true"
+    {{- end }}
     {{- if $setNodeExtraCaCerts }}
   - name: NODE_EXTRA_CA_CERTS
     value: {{ clean (print $tlsConfig.runnerMountPath "/" $tlsConfig.certificateFrom.configMapKeyRef.key) }}
@@ -502,6 +506,10 @@ env:
     {{- end }}
     {{- if $setRequireJobContainer }}
   - name: ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER
+    value: "true"
+    {{- end }}
+    {{- if $.Values.logForwarding.enabled }}
+  - name: FORWARD_BUILD_LOGS
     value: "true"
     {{- end }}
     {{- if $setNodeExtraCaCerts }}
@@ -607,6 +615,10 @@ env:
   - name: ACTIONS_RUNNER_IMAGE
     value: "{{- $setRunnerImage -}}"
     {{- end }}
+    {{- if $.Values.logForwarding.enabled }}
+  - name: FORWARD_BUILD_LOGS
+    value: "true"
+    {{- end }}
     {{- if $setNodeExtraCaCerts }}
   - name: NODE_EXTRA_CA_CERTS
     value: {{ clean (print $tlsConfig.runnerMountPath "/" $tlsConfig.certificateFrom.configMapKeyRef.key) }}
@@ -661,7 +673,7 @@ volumeMounts: []
   {{- end }}
 
   {{- $mountGitHubServerTLS := 0 }}
-  {{- if or $container.env $setNodeExtraCaCerts $setRunnerUpdateCaCerts }}
+  {{- if or $container.env $setNodeExtraCaCerts $setRunnerUpdateCaCerts $.Values.logForwarding.enabled }}
   env:
     {{- with $container.env }}
       {{- range $i, $env := . }}
@@ -673,6 +685,10 @@ volumeMounts: []
         {{- end }}
     - {{ $env | toYaml | nindent 6 }}
       {{- end }}
+    {{- end }}
+    {{- if $.Values.logForwarding.enabled }}
+    - name: FORWARD_BUILD_LOGS
+      value: "true"
     {{- end }}
     {{- if $setNodeExtraCaCerts }}
     - name: NODE_EXTRA_CA_CERTS
