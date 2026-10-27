@@ -1,0 +1,27 @@
+{{- if .Values.rbac.aggregateRoles.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "actions-runner-controller.aggregateViewRoleName" . }}
+  labels:
+    {{- include "actions-runner-controller.labels" . | nindent 4 }}
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - runnerdeployments
+  - runnerdeployments/status
+  - runnerreplicasets
+  - runnerreplicasets/status
+  - runnersets
+  - runnersets/status
+  - horizontalrunnerautoscalers
+  - horizontalrunnerautoscalers/status
+  verbs:
+  - get
+  - list
+  - watch
+{{- end }}

@@ -1,0 +1,19 @@
+# read permissions for kinds that hold secret material (`runners`: status.registration.token), aggregated into the
+# builtin `edit` and `admin` ClusterRoles only. Deliberately NOT labelled aggregate-to-view, so `view` cannot read them.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: aggregate-to-read-sensitive-role
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - runners
+  - runners/status
+  verbs:
+  - get
+  - list
+  - watch

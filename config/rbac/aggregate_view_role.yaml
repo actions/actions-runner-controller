@@ -1,0 +1,41 @@
+# read permissions aggregated into the builtin `view`, `edit` and `admin` ClusterRoles.
+# `runners` is deliberately excluded: status.registration.token holds a runner registration token.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: aggregate-to-view-role
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+- apiGroups:
+  - actions.github.com
+  resources:
+  - autoscalingrunnersets
+  - autoscalingrunnersets/status
+  - autoscalinglisteners
+  - autoscalinglisteners/status
+  - ephemeralrunnersets
+  - ephemeralrunnersets/status
+  - ephemeralrunners
+  - ephemeralrunners/status
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - actions.summerwind.dev
+  resources:
+  - runnerdeployments
+  - runnerdeployments/status
+  - runnerreplicasets
+  - runnerreplicasets/status
+  - runnersets
+  - runnersets/status
+  - horizontalrunnerautoscalers
+  - horizontalrunnerautoscalers/status
+  verbs:
+  - get
+  - list
+  - watch
