@@ -123,7 +123,7 @@ func TestMetadataPropagationWithoutAnnotations(t *testing.T) {
 			binding := b.newScaleSetListenerRoleBinding(listener, role, sa)
 			config, err := b.newScaleSetListenerConfig(listener, &appconfig.AppConfig{Token: "test-token"}, nil, "")
 			require.NoError(t, err)
-			listenerPod, err := b.newScaleSetListenerPod(listener, config, sa, role, binding, nil)
+			listenerPod, err := b.newScaleSetListenerPod(listener, config, nil, sa, role, binding, nil)
 			require.NoError(t, err)
 			ers.Spec.PatchID = 3
 			ers.Spec.ActionableRevision = 2
