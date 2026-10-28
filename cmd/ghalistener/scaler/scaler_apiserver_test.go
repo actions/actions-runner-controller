@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/scaleset"
@@ -132,6 +133,22 @@ func TestHandleJobStartedAgainstAPIServer(t *testing.T) {
 		require.NoError(t, k8sClient.Get(ctx, client.ObjectKeyFromObject(runner), runner))
 		assert.Empty(t, runner.Status.Phase)
 		assert.Equal(t, jobInfo.JobID, runner.Status.JobID)
+	})
+
+	t.Run("records the job context the message carries", func(t *testing.T) {
+		runner := newRunner(t, "runner-job-context")
+		jobInfo := *jobInfo
+		jobInfo.RunnerName = runner.Name
+		jobInfo.EventName = "pull_request"
+		jobInfo.RunnerAssignTime = time.Date(2026, time.January, 2, 3, 4, 12, 0, time.UTC)
+
+		require.NoError(t, newScaler(t, nil).HandleJobStarted(ctx, &jobInfo))
+
+		require.NoError(t, k8sClient.Get(ctx, client.ObjectKeyFromObject(runner), runner))
+		assert.Equal(t, "pull_request", runner.Status.JobEventName)
+		assert.Nil(t, runner.Status.JobScaleSetAssignTime, "an unreported time is not recorded")
+		require.NotNil(t, runner.Status.JobRunnerAssignTime)
+		assert.True(t, jobInfo.RunnerAssignTime.Equal(runner.Status.JobRunnerAssignTime.Time))
 	})
 
 	t.Run("does not resurrect a runner that failed after the read", func(t *testing.T) {
