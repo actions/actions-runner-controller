@@ -1,0 +1,28 @@
+githubConfigUrl: https://github.com/actions/actions-runner-controller
+githubConfigSecret:
+  github_token: test
+template:
+  spec:
+    initContainers:
+    - name: init-dind-externals
+      image: should-not-appear:latest
+      resources:
+        requests:
+          cpu: "50m"
+    - name: dind
+      image: should-not-appear:latest
+      resources:
+        requests:
+          cpu: "75m"
+    - name: custom-init
+      image: custom-init:latest
+      command: ["echo", "hello"]
+    containers:
+    - name: runner
+      image: runner-image:latest
+    - name: dind
+      resources:
+        requests:
+          cpu: "100m"
+containerMode:
+  type: dind
