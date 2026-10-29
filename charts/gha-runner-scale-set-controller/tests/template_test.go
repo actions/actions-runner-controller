@@ -1033,7 +1033,7 @@ func TestTemplate_CreateManagerSingleNamespaceRole(t *testing.T) {
 
 	assert.Equal(t, "test-arc-gha-rs-controller-single-namespace", managerSingleNamespaceControllerRole.Name)
 	assert.Equal(t, namespaceName, managerSingleNamespaceControllerRole.Namespace)
-	assert.Equal(t, 10, len(managerSingleNamespaceControllerRole.Rules))
+	assert.Equal(t, 12, len(managerSingleNamespaceControllerRole.Rules))
 
 	output = helm.RenderTemplateContext(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/manager_single_namespace_watch_role.yaml"})
 
@@ -1042,7 +1042,7 @@ func TestTemplate_CreateManagerSingleNamespaceRole(t *testing.T) {
 
 	assert.Equal(t, "test-arc-gha-rs-controller-single-namespace-watch", managerSingleNamespaceWatchRole.Name)
 	assert.Equal(t, "demo", managerSingleNamespaceWatchRole.Namespace)
-	assert.Equal(t, 14, len(managerSingleNamespaceWatchRole.Rules))
+	assert.Equal(t, 16, len(managerSingleNamespaceWatchRole.Rules))
 }
 
 func TestTemplate_ManagerSingleNamespaceRoleBinding(t *testing.T) {
