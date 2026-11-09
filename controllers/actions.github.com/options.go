@@ -1,6 +1,8 @@
 package actionsgithubcom
 
 import (
+	"time"
+
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -10,18 +12,61 @@ import (
 // Options is the optional configuration for the controllers, which can be
 // set via command-line flags or environment variables.
 type Options struct {
-	// RunnerMaxConcurrentReconciles is the maximum number of concurrent Reconciles which can be run
-	// by the EphemeralRunnerController.
-	RunnerMaxConcurrentReconciles int
+	// AutoscalingRunnerSetMaxConcurrentReconciles is the maximum number of concurrent Reconciles
+	// which can be run by the AutoscalingRunnerSetController. Values of zero or less are replaced
+	// by the shipped default in Resolve.
+	AutoscalingRunnerSetMaxConcurrentReconciles int
+
+	// AutoscalingListenerMaxConcurrentReconciles is the maximum number of concurrent Reconciles
+	// which can be run by the AutoscalingListenerController. Values of zero or less are replaced
+	// by the shipped default in Resolve.
+	AutoscalingListenerMaxConcurrentReconciles int
+
+	// EphemeralRunnerSetMaxConcurrentReconciles is the maximum number of concurrent Reconciles
+	// which can be run by the EphemeralRunnerSetController. Values of zero or less are replaced
+	// by the shipped default in Resolve.
+	EphemeralRunnerSetMaxConcurrentReconciles int
+
+	// EphemeralRunnerMaxConcurrentReconciles is the maximum number of concurrent Reconciles
+	// which can be run by the EphemeralRunnerController. Values of zero or less are replaced
+	// by the shipped default in Resolve.
+	EphemeralRunnerMaxConcurrentReconciles int
 }
 
 // OptionsWithDefault returns the default options.
 // This is here to maintain the options and their default values in one place,
 // rather than having to correlate those in multiple places.
+//
+// The EphemeralRunner controller gets a higher value than the rest because it
+// is the only one of the four that routinely has many distinct objects to
+// reconcile at once: one per runner. controller-runtime serialises reconciles
+// per object, so extra workers on the other three controllers only pay off
+// when many runner scale sets exist.
 func OptionsWithDefault() Options {
 	return Options{
-		RunnerMaxConcurrentReconciles: 2,
+		AutoscalingRunnerSetMaxConcurrentReconciles: 2,
+		AutoscalingListenerMaxConcurrentReconciles:  2,
+		EphemeralRunnerSetMaxConcurrentReconciles:   2,
+		EphemeralRunnerMaxConcurrentReconciles:      4,
 	}
+}
+
+// Resolve returns a copy of the options where every MaxConcurrentReconciles of
+// zero or less is replaced by that controller's shipped default, so a
+// non-positive value can never reach controller-runtime.
+func (o Options) Resolve() Options {
+	defaults := OptionsWithDefault()
+	orDefault := func(n, def int) int {
+		if n > 0 {
+			return n
+		}
+		return def
+	}
+	o.AutoscalingRunnerSetMaxConcurrentReconciles = orDefault(o.AutoscalingRunnerSetMaxConcurrentReconciles, defaults.AutoscalingRunnerSetMaxConcurrentReconciles)
+	o.AutoscalingListenerMaxConcurrentReconciles = orDefault(o.AutoscalingListenerMaxConcurrentReconciles, defaults.AutoscalingListenerMaxConcurrentReconciles)
+	o.EphemeralRunnerSetMaxConcurrentReconciles = orDefault(o.EphemeralRunnerSetMaxConcurrentReconciles, defaults.EphemeralRunnerSetMaxConcurrentReconciles)
+	o.EphemeralRunnerMaxConcurrentReconciles = orDefault(o.EphemeralRunnerMaxConcurrentReconciles, defaults.EphemeralRunnerMaxConcurrentReconciles)
+	return o
 }
 
 type Option func(*controller.Options)
@@ -58,20 +103,28 @@ func WithTypedRateLimiter(rateLimiter workqueue.TypedRateLimiter[reconcile.Reque
 	}
 }
 
-// builderWithOptions applies the given options to the provided builder, if any.
+// builderWithOptions applies the controller defaults and given options to the provided builder.
 // This is a helper function to avoid the need to import the controller-runtime package in every reconciler source file
 // and the command package that creates the controller.
 // This is also useful for reducing code duplication around setting controller options in
 // multiple reconcilers.
 func builderWithOptions(b *builder.Builder, opts []Option) *builder.Builder {
-	if len(opts) == 0 {
-		return b
-	}
+	return b.WithOptions(newControllerOptions(opts))
+}
 
+func newControllerOptions(opts []Option) controller.Options {
 	var controllerOpts controller.Options
 	for _, opt := range opts {
 		opt(&controllerOpts)
 	}
+	if controllerOpts.RateLimiter == nil {
+		if controllerOpts.UsePriorityQueue != nil && !*controllerOpts.UsePriorityQueue {
+			controllerOpts.RateLimiter = workqueue.DefaultTypedControllerRateLimiter[reconcile.Request]()
+		} else {
+			controllerOpts.RateLimiter = workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](5*time.Millisecond, 30*time.Second)
+		}
+	}
+	controllerOpts.RateLimiter = workqueue.NewTypedWithMaxWaitRateLimiter(controllerOpts.RateLimiter, 30*time.Second)
 
-	return b.WithOptions(controllerOpts)
+	return controllerOpts
 }

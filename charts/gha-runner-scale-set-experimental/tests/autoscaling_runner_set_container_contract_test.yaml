@@ -1,0 +1,62 @@
+suite: Runner container customization and restart policy
+templates:
+  - autoscalingrunnserset.yaml
+set:
+  auth.url: https://github.com/example
+  auth.secretName: existing-auth
+  controllerServiceAccount.name: controller
+  controllerServiceAccount.namespace: arc-system
+  runner.container.env:
+    - {name: CUSTOM_MARKER, value: expected}
+  runner.container.resources.requests: {cpu: 250m, memory: 512Mi}
+  runner.container.securityContext: {runAsUser: 1000, runAsGroup: 0, privileged: false}
+  runner.container.volumeMounts:
+    - {name: custom, mountPath: /custom}
+  runner.pod.spec.volumes:
+    - {name: custom, emptyDir: {}}
+tests:
+  - it: preserves manual container customization and defaults to Never
+    set:
+      runner.mode: ""
+    asserts: &container-contract
+      - equal:
+          path: spec.template.spec.restartPolicy
+          value: Never
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: CUSTOM_MARKER, value: expected}
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests
+          value: {cpu: 250m, memory: 512Mi}
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value: {runAsUser: 1000, runAsGroup: 0, privileged: false}
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content: {name: custom, mountPath: /custom}
+  - it: preserves dind container customization and defaults to Never
+    set:
+      runner.mode: dind
+    asserts: *container-contract
+  - it: preserves kubernetes container customization and defaults to Never
+    set:
+      runner.mode: kubernetes
+    asserts: *container-contract
+  - it: preserves a manual restart policy override
+    set:
+      runner.mode: ""
+      runner.pod.spec.restartPolicy: OnFailure
+    asserts: &restart-override
+      - equal:
+          path: spec.template.spec.restartPolicy
+          value: OnFailure
+  - it: preserves a dind restart policy override
+    set:
+      runner.mode: dind
+      runner.pod.spec.restartPolicy: OnFailure
+    asserts: *restart-override
+  - it: preserves a kubernetes restart policy override
+    set:
+      runner.mode: kubernetes
+      runner.pod.spec.restartPolicy: OnFailure
+    asserts: *restart-override

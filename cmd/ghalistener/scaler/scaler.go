@@ -8,6 +8,7 @@ import (
 	"math"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/cmd/ghalistener/metrics"
 	"github.com/actions/scaleset"
 	"github.com/actions/scaleset/listener"
 	jsonpatch "github.com/evanphx/json-patch"
@@ -30,7 +31,13 @@ type Config struct {
 	EphemeralRunnerSetName      string
 	MaxRunners                  int
 	MinRunners                  int
+	ScalerConfig                *v1alpha1.ScalerConfig
 }
+
+const (
+	defaultQPS   = 50
+	defaultBurst = 100
+)
 
 // The Scaler's role is to process the messages it receives from the listener.
 // It then initiates Kubernetes API requests to carry out the necessary actions.
@@ -42,21 +49,43 @@ type Scaler struct {
 	// dirty is set when there are any events handled before the desired count is called.
 	dirty  bool
 	logger *slog.Logger
+
+	messageClient    listener.Client
+	recorder         metrics.Recorder
+	latestStatistics *scaleset.RunnerScaleSetStatistic
 }
 
 var _ listener.Scaler = (*Scaler)(nil)
 
-func New(config Config, options ...Option) (*Scaler, error) {
+func New(config Config, messageClient listener.Client, recorder metrics.Recorder, options ...Option) (*Scaler, error) {
+	if messageClient == nil {
+		return nil, fmt.Errorf("message client is required")
+	}
+	if recorder == nil {
+		recorder = metrics.Discard
+	}
 	w := &Scaler{
 		config:        config,
 		targetRunners: -1,
 		patchSeq:      -1,
+		messageClient: messageClient,
+		recorder:      recorder,
+	}
+	for _, option := range options {
+		option(w)
+	}
+	if err := w.applyDefaults(); err != nil {
+		return nil, err
 	}
 
 	conf, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, err
 	}
+
+	qps, burst := effectiveRateLimiterConfig(config.ScalerConfig, w.logger)
+	conf.QPS = float32(qps)
+	conf.Burst = burst
 
 	clientset, err := kubernetes.NewForConfig(conf)
 	if err != nil {
@@ -65,15 +94,34 @@ func New(config Config, options ...Option) (*Scaler, error) {
 
 	w.clientset = clientset
 
-	for _, option := range options {
-		option(w)
-	}
-
-	if err := w.applyDefaults(); err != nil {
-		return nil, err
-	}
-
 	return w, nil
+}
+
+func effectiveRateLimiterConfig(config *v1alpha1.ScalerConfig, logger *slog.Logger) (int, int) {
+	if config == nil {
+		logger.Debug("Listener scaler configuration is missing; using defaults", "qps", defaultQPS, "burst", defaultBurst)
+		return defaultQPS, defaultBurst
+	}
+
+	qps := defaultQPS
+	if config.QPS == nil {
+		logger.Debug("Listener scaler qps is missing; using default", "default", defaultQPS)
+	} else if *config.QPS < 1 {
+		logger.Warn("Listener scaler qps must be greater than 0; using default", "configured", *config.QPS, "default", defaultQPS)
+	} else {
+		qps = *config.QPS
+	}
+
+	burst := defaultBurst
+	if config.Burst == nil {
+		logger.Debug("Listener scaler burst is missing; using default", "default", defaultBurst)
+	} else if *config.Burst < 1 {
+		logger.Warn("Listener scaler burst must be greater than 0; using default", "configured", *config.Burst, "default", defaultBurst)
+	} else {
+		burst = *config.Burst
+	}
+
+	return qps, burst
 }
 
 func (w *Scaler) applyDefaults() error {
@@ -81,6 +129,54 @@ func (w *Scaler) applyDefaults() error {
 		w.logger = slog.New(slog.DiscardHandler)
 	}
 
+	return nil
+}
+
+func (w *Scaler) Scale(ctx context.Context, message *scaleset.RunnerScaleSetMessage) error {
+	if message != nil {
+		if message.Statistics == nil {
+			return fmt.Errorf("message statistics are required")
+		}
+		w.latestStatistics = message.Statistics
+		w.recorder.RecordStatistics(message.Statistics)
+
+		if len(message.JobAvailableMessages) > 0 {
+			ids := make([]int64, 0, len(message.JobAvailableMessages))
+			for _, job := range message.JobAvailableMessages {
+				ids = append(ids, job.RunnerRequestID)
+			}
+			w.logger.Info("Acquiring jobs", "count", len(ids))
+			acquired, err := w.messageClient.AcquireJobs(ctx, ids)
+			if err != nil {
+				return fmt.Errorf("failed to acquire available jobs: %w", err)
+			}
+			w.logger.Info("Jobs acquired", "count", len(acquired))
+		}
+
+		for _, job := range message.JobStartedMessages {
+			w.recorder.RecordJobStarted(job)
+			if err := w.HandleJobStarted(ctx, job); err != nil {
+				return fmt.Errorf("failed to handle job started: %w", err)
+			}
+		}
+		for _, job := range message.JobCompletedMessages {
+			w.recorder.RecordJobCompleted(job)
+			if err := w.HandleJobCompleted(ctx, job); err != nil {
+				return fmt.Errorf("failed to handle job completed: %w", err)
+			}
+		}
+	}
+
+	if w.latestStatistics == nil {
+		return fmt.Errorf("initial message statistics are required")
+	}
+	desiredCount, err := w.HandleDesiredRunnerCount(ctx, w.latestStatistics.TotalAssignedJobs)
+	if err != nil {
+		return fmt.Errorf("failed to handle desired runner count: %w", err)
+	}
+	if message != nil {
+		w.recorder.RecordDesiredRunners(desiredCount)
+	}
 	return nil
 }
 
@@ -102,23 +198,28 @@ func (w *Scaler) HandleJobStarted(ctx context.Context, jobInfo *scaleset.JobStar
 
 	w.dirty = true
 
+	return w.patchJobStarted(ctx, jobInfo)
+}
+
+func (w *Scaler) patchJobStarted(ctx context.Context, jobInfo *scaleset.JobStarted) error {
 	original, err := json.Marshal(&v1alpha1.EphemeralRunner{})
 	if err != nil {
 		return fmt.Errorf("failed to marshal empty ephemeral runner: %w", err)
 	}
 
-	patch, err := json.Marshal(
-		&v1alpha1.EphemeralRunner{
-			Status: v1alpha1.EphemeralRunnerStatus{
-				JobRequestID:      jobInfo.RunnerRequestID,
-				JobRepositoryName: fmt.Sprintf("%s/%s", jobInfo.OwnerName, jobInfo.RepositoryName),
-				JobID:             jobInfo.JobID,
-				WorkflowRunID:     jobInfo.WorkflowRunID,
-				JobWorkflowRef:    jobInfo.JobWorkflowRef,
-				JobDisplayName:    jobInfo.JobDisplayName,
-			},
+	// Build patch with job fields
+	patchRunner := &v1alpha1.EphemeralRunner{
+		Status: v1alpha1.EphemeralRunnerStatus{
+			JobRequestID:      jobInfo.RunnerRequestID,
+			JobRepositoryName: fmt.Sprintf("%s/%s", jobInfo.OwnerName, jobInfo.RepositoryName),
+			JobID:             jobInfo.JobID,
+			WorkflowRunID:     jobInfo.WorkflowRunID,
+			JobWorkflowRef:    jobInfo.JobWorkflowRef,
+			JobDisplayName:    jobInfo.JobDisplayName,
 		},
-	)
+	}
+
+	patch, err := json.Marshal(patchRunner)
 	if err != nil {
 		return fmt.Errorf("failed to marshal ephemeral runner patch: %w", err)
 	}
@@ -135,7 +236,7 @@ func (w *Scaler) HandleJobStarted(ctx context.Context, jobInfo *scaleset.JobStar
 		Patch(types.MergePatchType).
 		Prefix("apis", v1alpha1.GroupVersion.Group, v1alpha1.GroupVersion.Version).
 		Namespace(w.config.EphemeralRunnerSetNamespace).
-		Resource("EphemeralRunners").
+		Resource("ephemeralrunners").
 		Name(jobInfo.RunnerName).
 		SubResource("status").
 		Body(mergePatch).
@@ -213,10 +314,11 @@ func (w *Scaler) HandleDesiredRunnerCount(ctx context.Context, count int) (int, 
 		Do(ctx).
 		Into(patchedEphemeralRunnerSet)
 	if err != nil {
-		return 0, fmt.Errorf("could not patch ephemeral runner set , patch JSON: %s, error: %w", string(mergePatch), err)
+		return 0, fmt.Errorf("could not patch ephemeral runner set, patch JSON: %s, error: %w", string(mergePatch), err)
 	}
 
-	w.logger.Info("Ephemeral runner set scaled.",
+	w.logger.Info(
+		"Ephemeral runner set scaled.",
 		"namespace", w.config.EphemeralRunnerSetNamespace,
 		"name", w.config.EphemeralRunnerSetName,
 		"replicas", patchedEphemeralRunnerSet.Spec.Replicas,

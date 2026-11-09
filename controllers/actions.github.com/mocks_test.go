@@ -19,10 +19,19 @@ func NewMockSecretResolver(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockSecretResolver {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockSecretResolver{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -76,7 +85,7 @@ type MockSecretResolver_GetActionsService_Call struct {
 // GetActionsService is a helper method to define mock.On call
 //   - ctx context.Context
 //   - obj object.ActionsGitHubObject
-func (_e *MockSecretResolver_Expecter) GetActionsService(ctx interface{}, obj interface{}) *MockSecretResolver_GetActionsService_Call {
+func (_e *MockSecretResolver_Expecter) GetActionsService(ctx any, obj any) *MockSecretResolver_GetActionsService_Call {
 	return &MockSecretResolver_GetActionsService_Call{Call: _e.mock.On("GetActionsService", ctx, obj)}
 }
 
@@ -144,7 +153,7 @@ type MockSecretResolver_GetAppConfig_Call struct {
 // GetAppConfig is a helper method to define mock.On call
 //   - ctx context.Context
 //   - obj object.ActionsGitHubObject
-func (_e *MockSecretResolver_Expecter) GetAppConfig(ctx interface{}, obj interface{}) *MockSecretResolver_GetAppConfig_Call {
+func (_e *MockSecretResolver_Expecter) GetAppConfig(ctx any, obj any) *MockSecretResolver_GetAppConfig_Call {
 	return &MockSecretResolver_GetAppConfig_Call{Call: _e.mock.On("GetAppConfig", ctx, obj)}
 }
 

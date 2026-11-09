@@ -89,6 +89,11 @@ var _ = BeforeSuite(func() {
 		20 * time.Millisecond,
 		20 * time.Millisecond,
 	}
+
+	// Most specs run the set controller without the runner controller, so a
+	// runner records its ID only if the spec patches it in. Cleanup would sit
+	// out the grace period on every other one.
+	unrecordedRunnerIDGracePeriod = 0
 })
 
 var _ = AfterSuite(func() {

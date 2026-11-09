@@ -41,7 +41,7 @@ secretResolution:
   # Name of the secret resolver to use.
   # Available values:
   # - "kubernetes" - use Kubernetes secrets
-  # - "azureKeyVault" - use Azure Key Vault
+  # - "azureKeyVault" - use Azure Key Vault (rendered as the API type "azure_key_vault")
   type: "kubernetes"
   ## Proxy settings when type is NOT "kubernetes"
   # proxy:
@@ -55,44 +55,52 @@ secretResolution:
   #     - example.com
   #     - example.org
 
-  ## Configuration for Azure Key Vault integration
+  ## Configuration for Azure Key Vault integration.
+  ## auth.secretName selects the Azure secret containing the GitHub app/token configuration.
+  ## azureKeyVault.secretKey is not supported; it was never used by the API/resolver
+  ## and is now rejected rather than silently ignored. Set auth.secretName explicitly.
   # azureKeyVault:
   #   url: ""
-  #   client_id: ""
-  #   tenant_id: ""
-  #   certificate_path: ""
+  #   clientId: ""
+  #   tenantId: ""
+  #   certificatePath: ""
 
-  ## Proxy can be used to define proxy settings that will be used by the
-  ## controller, the listener and the runner of this scale set.
-  # proxy:
-  #   http:
-  #     url: http://proxy.com:1234
-  #     credentialSecretRef: proxy-auth # a secret with `username` and `password` keys
-  #   https:
-  #     url: http://proxy.com:1234
-  #     credentialSecretRef: proxy-auth # a secret with `username` and `password` keys
-  #   noProxy:
-  #     - example.com
-  #     - example.org
+## Proxy can be used to define proxy settings that will be used by the
+## controller, the listener and the runner of this scale set.
+# proxy:
+#   http:
+#     url: http://proxy.com:1234
+#     credentialSecretRef: proxy-auth # a secret with `username` and `password` keys
+#   https:
+#     url: http://proxy.com:1234
+#     credentialSecretRef: proxy-auth # a secret with `username` and `password` keys
+#   noProxy:
+#     - example.com
+#     - example.org
 
-  ## listenerTemplate is the PodSpec for each listener Pod
-  ## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
-  # listenerPodTemplate:
-  #   spec:
-  #     containers:
-  #     # Use this section to append additional configuration to the listener container.
-  #     # If you change the name of the container, the configuration will not be applied to the listener,
-  #     # and it will be treated as a side-car container.
-  #     - name: listener
-  #       securityContext:
-  #         runAsUser: 1000
-  #     # Use this section to add the configuration of a side-car container.
-  #     # Comment it out or remove it if you don't need it.
-  #     # Spec for this container will be applied as is without any modifications.
-  #     - name: side-car
-  #       image: example-sidecar
+## A self-signed CA certificate for communication with the GitHub server can be
+## provided using a config map key selector. If `runnerMountPath` is set, for
+## each runner pod ARC will:
+## - create a `github-server-tls-cert` volume containing the certificate
+##   specified in `certificateFrom`
+## - mount that volume on path `runnerMountPath`/{certificate name}
+## - set NODE_EXTRA_CA_CERTS environment variable to that same path
+## - set RUNNER_UPDATE_CA_CERTS environment variable to "1" (as of version
+##   2.303.0 this will instruct the runner to reload certificates on the host)
+##
+## If any of the above had already been set by the user in the runner pod
+## template, ARC will observe those and not overwrite them.
+## Example configuration:
+#
+# githubServerTLS:
+#   certificateFrom:
+#     configMapKeyRef:
+#       name: config-map-name
+#       key: ca.crt
+#   runnerMountPath: /usr/local/share/ca-certificates/
 
-  ## Resource object allows modifying resources created by the chart itself
+## Resource object allows modifying resources created by the chart itself
+## Labels and annotations are independently optional for each resource.
 resource:
   # Specifies metadata that will be applied to all resources managed by ARC
   all:
@@ -222,6 +230,9 @@ runner:
     # - spec.containers: appended after the generated "runner" container (name "runner" is reserved)
     # - spec.initContainers: appended after any generated initContainers (e.g. dind mode)
     # - spec.volumes: appended after generated volumes
+    #   In empty mode, only user-supplied volumes and the optional GitHub server TLS
+    #   volume are included.
+    # - spec.restartPolicy: defaults to Never; an explicit Kubernetes restart policy is preserved
     #
     # Note: serviceAccountName is managed by the chart and cannot be overridden via runner.pod.spec.
     spec:
@@ -230,7 +241,15 @@ runner:
       initContainers: []
       volumes: []
 
-  # container field is applied to the container named "runner". You cannot override the name of the runner container
+  # Applied to the container named "runner" in every mode; its name cannot be overridden.
+  # image and command use the defaults below when omitted. Other container fields
+  # (e.g. resources, securityContext, args) are passed through, including false/zero values.
+  # env entries replace mode defaults by name; volumeMounts replace them by mountPath.
+  # Replacements are whole entries, not merged maps. Unspecified mode defaults remain.
+  # TLS defaults also respect an existing mount named github-server-tls-cert.
+  # Duplicate env names or mountPaths within a list are rejected.
+  # Overrides of Docker/hook env or mounts must remain compatible with the selected mode.
+  # In dind/kubernetes mode, the older runner.env is still read, but container.env takes precedence.
   container:
     image: "ghcr.io/actions/actions-runner:latest"
     command: ["/home/runner/run.sh"]
@@ -286,184 +305,218 @@ runner:
     #     spec:
     #       containers: []
 
-    ## A self-signed CA certificate for communication with the GitHub server can be
-    ## provided using a config map key selector. If `runnerMountPath` is set, for
-    ## each runner pod ARC will:
-    ## - create a `github-server-tls-cert` volume containing the certificate
-    ##   specified in `certificateFrom`
-    ## - mount that volume on path `runnerMountPath`/{certificate name}
-    ## - set NODE_EXTRA_CA_CERTS environment variable to that same path
-    ## - set RUNNER_UPDATE_CA_CERTS environment variable to "1" (as of version
-    ##   2.303.0 this will instruct the runner to reload certificates on the host)
-    ##
-    ## If any of the above had already been set by the user in the runner pod
-    ## template, ARC will observe those and not overwrite them.
-    ## Example configuration:
-    #
-    # githubServerTLS:
-    #   certificateFrom:
-    #     configMapKeyRef:
-    #       name: config-map-name
-    #       key: ca.crt
-    #   runnerMountPath: /usr/local/share/ca-certificates/
-
     ## controllerServiceAccount is the service account of the controller
 controllerServiceAccount:
   namespace: ""
   name: ""
 
-## listenerMetrics are configurable metrics applied to the listener.
-## In order to avoid helm merging these fields, we left the metrics commented out.
-## When configuring metrics, please uncomment the listenerMetrics object below.
-## You can modify the configuration to remove the label or specify custom buckets for histogram.
-##
-## If the buckets field is not specified, the default buckets will be applied. Default buckets are
-## provided here for documentation purposes
-# listenerMetrics:
-#   counters:
-#     gha_started_jobs_total:
-#       labels:
-#         ["repository", "organization", "enterprise", "job_name", "event_name", "job_workflow_ref", "job_workflow_name", "job_workflow_target"]
-#     gha_completed_jobs_total:
-#       labels:
-#         [
-#           "repository",
-#           "organization",
-#           "enterprise",
-#           "job_name",
-#           "event_name",
-#           "job_result",
-#           "job_workflow_ref",
-#           "job_workflow_name",
-#           "job_workflow_target",
-#         ]
-#   gauges:
-#     gha_assigned_jobs:
-#       labels: ["name", "namespace", "repository", "organization", "enterprise"]
-#     gha_running_jobs:
-#       labels: ["name", "namespace", "repository", "organization", "enterprise"]
-#     gha_registered_runners:
-#       labels: ["name", "namespace", "repository", "organization", "enterprise"]
-#     gha_busy_runners:
-#       labels: ["name", "namespace", "repository", "organization", "enterprise"]
-#     gha_min_runners:
-#       labels: ["name", "namespace", "repository", "organization", "enterprise"]
-#     gha_max_runners:
-#       labels: ["name", "namespace", "repository", "organization", "enterprise"]
-#     gha_desired_runners:
-#       labels: ["name", "namespace", "repository", "organization", "enterprise"]
-#     gha_idle_runners:
-#       labels: ["name", "namespace", "repository", "organization", "enterprise"]
-#   histograms:
-#     gha_job_startup_duration_seconds:
-#       labels:
-#         ["repository", "organization", "enterprise", "job_name", "event_name","job_workflow_ref", "job_workflow_name", "job_workflow_target"]
-#       buckets:
-#         [
-#           0.01,
-#           0.05,
-#           0.1,
-#           0.5,
-#           1.0,
-#           2.0,
-#           3.0,
-#           4.0,
-#           5.0,
-#           6.0,
-#           7.0,
-#           8.0,
-#           9.0,
-#           10.0,
-#           12.0,
-#           15.0,
-#           18.0,
-#           20.0,
-#           25.0,
-#           30.0,
-#           40.0,
-#           50.0,
-#           60.0,
-#           70.0,
-#           80.0,
-#           90.0,
-#           100.0,
-#           110.0,
-#           120.0,
-#           150.0,
-#           180.0,
-#           210.0,
-#           240.0,
-#           300.0,
-#           360.0,
-#           420.0,
-#           480.0,
-#           540.0,
-#           600.0,
-#           900.0,
-#           1200.0,
-#           1800.0,
-#           2400.0,
-#           3000.0,
-#           3600.0,
-#         ]
-#     gha_job_execution_duration_seconds:
-#       labels:
-#         [
-#           "repository",
-#           "organization",
-#           "enterprise",
-#           "job_name",
-#           "event_name",
-#           "job_result",
-#           "job_workflow_ref",
-#           "job_workflow_name",
-#           "job_workflow_target"
-#         ]
-#       buckets:
-#         [
-#           0.01,
-#           0.05,
-#           0.1,
-#           0.5,
-#           1.0,
-#           2.0,
-#           3.0,
-#           4.0,
-#           5.0,
-#           6.0,
-#           7.0,
-#           8.0,
-#           9.0,
-#           10.0,
-#           12.0,
-#           15.0,
-#           18.0,
-#           20.0,
-#           25.0,
-#           30.0,
-#           40.0,
-#           50.0,
-#           60.0,
-#           70.0,
-#           80.0,
-#           90.0,
-#           100.0,
-#           110.0,
-#           120.0,
-#           150.0,
-#           180.0,
-#           210.0,
-#           240.0,
-#           300.0,
-#           360.0,
-#           420.0,
-#           480.0,
-#           540.0,
-#           600.0,
-#           900.0,
-#           1200.0,
-#           1800.0,
-#           2400.0,
-#           3000.0,
-#           3600.0,
-#         ]
+# listener specific configuration. This configuration is applied to the listener component of the chart.
+listener:
+  # scaler is config applied to the kubernetes client component of the listener.
+  # Both values must be integers greater than 0.
+  scaler:
+    # qps is the sustained rate of requests the listener may issue to the Kubernetes API server.
+    qps: 50
+    # burst is the number of requests the listener may issue to the Kubernetes API server in a burst.
+    burst: 100
+  ## podTemplate is the PodSpec for each listener Pod
+  ## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
+  # podTemplate:
+  #   spec:
+  #     containers:
+  #     # Use this section to append additional configuration to the listener container.
+  #     # If you change the name of the container, the configuration will not be applied to the listener,
+  #     # and it will be treated as a side-car container.
+  #     - name: listener
+  #       securityContext:
+  #         runAsUser: 1000
+  #     # Use this section to add the configuration of a side-car container.
+  #     # Comment it out or remove it if you don't need it.
+  #     # Spec for this container will be applied as is without any modifications.
+  #     - name: side-car
+  #       image: example-sidecar
+  ## metrics configuration for the listener.
+  ## In order to avoid helm merging these fields, we left the metrics commented out.
+  ## When configuring metrics, please uncomment the metrics object below.
+  ## You can modify the configuration to add or remove labels or specify custom buckets for histograms.
+  ##
+  ## The example below lists every metric and every label the listener can export, together with the
+  ## default buckets. It is not identical to the built-in defaults used when listener.metrics is not set: the
+  ## labels marked "not exposed by default" ("job_workflow_ref", "job_workflow_name" and
+  ## "job_workflow_target") are opt-in, so remove them to keep the default label set. If the buckets
+  ## field is not specified, the default buckets will be applied.
+  ##
+  ## "job_workflow_ref" and "job_workflow_target" contain the git ref the workflow ran from (for example
+  ## refs/heads/<branch> or refs/pull/<number>/merge), so every branch and pull request creates a new
+  ## time series per job. On histograms this is multiplied by the number of buckets. Only keep these
+  ## labels when your metrics backend can handle the resulting cardinality.
+  # metrics:
+  #   counters:
+  #     gha_started_jobs_total:
+  #       labels:
+  #         [
+  #           "repository",
+  #           "organization",
+  #           "enterprise",
+  #           "job_name",
+  #           "event_name",
+  #           # not exposed by default:
+  #           "job_workflow_ref",
+  #           "job_workflow_name",
+  #           "job_workflow_target",
+  #         ]
+  #     gha_completed_jobs_total:
+  #       labels:
+  #         [
+  #           "repository",
+  #           "organization",
+  #           "enterprise",
+  #           "job_name",
+  #           "event_name",
+  #           "job_result",
+  #           # not exposed by default:
+  #           "job_workflow_ref",
+  #           "job_workflow_name",
+  #           "job_workflow_target",
+  #         ]
+  #   gauges:
+  #     gha_assigned_jobs:
+  #       labels: ["name", "namespace", "repository", "organization", "enterprise"]
+  #     gha_running_jobs:
+  #       labels: ["name", "namespace", "repository", "organization", "enterprise"]
+  #     gha_registered_runners:
+  #       labels: ["name", "namespace", "repository", "organization", "enterprise"]
+  #     gha_busy_runners:
+  #       labels: ["name", "namespace", "repository", "organization", "enterprise"]
+  #     gha_min_runners:
+  #       labels: ["name", "namespace", "repository", "organization", "enterprise"]
+  #     gha_max_runners:
+  #       labels: ["name", "namespace", "repository", "organization", "enterprise"]
+  #     gha_desired_runners:
+  #       labels: ["name", "namespace", "repository", "organization", "enterprise"]
+  #     gha_idle_runners:
+  #       labels: ["name", "namespace", "repository", "organization", "enterprise"]
+  #   histograms:
+  #     gha_job_startup_duration_seconds:
+  #       labels:
+  #         [
+  #           "repository",
+  #           "organization",
+  #           "enterprise",
+  #           "job_name",
+  #           "event_name",
+  #           # not exposed by default:
+  #           "job_workflow_ref",
+  #           "job_workflow_name",
+  #           "job_workflow_target",
+  #         ]
+  #       buckets:
+  #         [
+  #           0.01,
+  #           0.05,
+  #           0.1,
+  #           0.5,
+  #           1.0,
+  #           2.0,
+  #           3.0,
+  #           4.0,
+  #           5.0,
+  #           6.0,
+  #           7.0,
+  #           8.0,
+  #           9.0,
+  #           10.0,
+  #           12.0,
+  #           15.0,
+  #           18.0,
+  #           20.0,
+  #           25.0,
+  #           30.0,
+  #           40.0,
+  #           50.0,
+  #           60.0,
+  #           70.0,
+  #           80.0,
+  #           90.0,
+  #           100.0,
+  #           110.0,
+  #           120.0,
+  #           150.0,
+  #           180.0,
+  #           210.0,
+  #           240.0,
+  #           300.0,
+  #           360.0,
+  #           420.0,
+  #           480.0,
+  #           540.0,
+  #           600.0,
+  #           900.0,
+  #           1200.0,
+  #           1800.0,
+  #           2400.0,
+  #           3000.0,
+  #           3600.0,
+  #         ]
+  #     gha_job_execution_duration_seconds:
+  #       labels:
+  #         [
+  #           "repository",
+  #           "organization",
+  #           "enterprise",
+  #           "job_name",
+  #           "event_name",
+  #           "job_result",
+  #           # not exposed by default:
+  #           "job_workflow_ref",
+  #           "job_workflow_name",
+  #           "job_workflow_target",
+  #         ]
+  #       buckets:
+  #         [
+  #           0.01,
+  #           0.05,
+  #           0.1,
+  #           0.5,
+  #           1.0,
+  #           2.0,
+  #           3.0,
+  #           4.0,
+  #           5.0,
+  #           6.0,
+  #           7.0,
+  #           8.0,
+  #           9.0,
+  #           10.0,
+  #           12.0,
+  #           15.0,
+  #           18.0,
+  #           20.0,
+  #           25.0,
+  #           30.0,
+  #           40.0,
+  #           50.0,
+  #           60.0,
+  #           70.0,
+  #           80.0,
+  #           90.0,
+  #           100.0,
+  #           110.0,
+  #           120.0,
+  #           150.0,
+  #           180.0,
+  #           210.0,
+  #           240.0,
+  #           300.0,
+  #           360.0,
+  #           420.0,
+  #           480.0,
+  #           540.0,
+  #           600.0,
+  #           900.0,
+  #           1200.0,
+  #           1800.0,
+  #           2400.0,
+  #           3000.0,
+  #           3600.0,
+  #         ]

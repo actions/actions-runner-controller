@@ -187,9 +187,6 @@ func TestResourceBuilderCachesListenerPodDependencies(t *testing.T) {
 			Name:      "listener",
 			Namespace: "controller-ns",
 			UID:       "listener-uid",
-			Annotations: map[string]string{
-				annotationKeyIntegrityHash: "listener-hash",
-			},
 		},
 		Spec: v1alpha1.AutoscalingListenerSpec{
 			Image:                         "listener:latest",
@@ -204,9 +201,6 @@ func TestResourceBuilderCachesListenerPodDependencies(t *testing.T) {
 			Namespace:       "controller-ns",
 			UID:             "config-secret-uid",
 			ResourceVersion: "11",
-			Annotations: map[string]string{
-				annotationKeyIntegrityHash: "config-hash",
-			},
 		},
 	}
 	serviceAccount := &corev1.ServiceAccount{
@@ -215,9 +209,6 @@ func TestResourceBuilderCachesListenerPodDependencies(t *testing.T) {
 			Namespace:       "controller-ns",
 			UID:             "service-account-uid",
 			ResourceVersion: "12",
-			Annotations: map[string]string{
-				annotationKeyIntegrityHash: "service-account-hash",
-			},
 		},
 	}
 	role := &rbacv1.Role{
@@ -226,9 +217,6 @@ func TestResourceBuilderCachesListenerPodDependencies(t *testing.T) {
 			Namespace:       "scale-set-ns",
 			UID:             "role-uid",
 			ResourceVersion: "13",
-			Annotations: map[string]string{
-				annotationKeyIntegrityHash: "role-hash",
-			},
 		},
 	}
 	roleBinding := &rbacv1.RoleBinding{
@@ -237,9 +225,6 @@ func TestResourceBuilderCachesListenerPodDependencies(t *testing.T) {
 			Namespace:       "scale-set-ns",
 			UID:             "role-binding-uid",
 			ResourceVersion: "14",
-			Annotations: map[string]string{
-				annotationKeyIntegrityHash: "role-binding-hash",
-			},
 		},
 	}
 

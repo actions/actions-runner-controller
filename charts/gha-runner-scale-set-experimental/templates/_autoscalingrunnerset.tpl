@@ -32,11 +32,11 @@ Render a ResourceMeta block for AutoscalingRunnerSet spec fields.
 {{- define "autoscaling-runner-set.spec-resource-metadata" -}}
 {{- with .labels }}
 labels:
-  {{- toYaml . | nindent 2 }}
+  {{- include "string-map" . | nindent 2 }}
 {{- end }}
 {{- with .annotations }}
 annotations:
-  {{- toYaml . | nindent 2 }}
+  {{- include "string-map" . | nindent 2 }}
 {{- end }}
 {{- end }}
 

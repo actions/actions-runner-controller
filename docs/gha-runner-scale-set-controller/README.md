@@ -11,7 +11,7 @@ This new autoscaling mode brings numerous enhancements (described in the followi
 2. The `AutoScalingRunnerSet` controller calls the APIs one more time to either fetch or create a runner scale set in the `Actions Service` before creating the `Runner ScaleSet Listener` resource.
 3. A `Runner ScaleSet Listener` pod is deployed by the `AutoScaling Listener Controller`. In this pod, the listener application connects to the `Actions Service` to authenticate and establish a long poll HTTPS connection. The listener stays idle until it receives a `Job Available` message from the `Actions Service`.
 4. When a workflow run is triggered from a repository, the `Actions Service` dispatches individual job runs to the runners or runner scalesets where the `runs-on` property matches the name of the runner scaleset or labels of self-hosted runners.
-5. When the `Runner ScaleSet Listener` receives the `Job Available` message, it checks whether it can scale up to the desired count. If it can, the `Runner ScaleSet Listener` acknowledges the message.
+5. When the `Runner ScaleSet Listener` receives the `Job Available` message, it acquires the available jobs within its advertised capacity. Messages are acknowledged only after their job updates and desired runner count have been successfully handled, so failed processing can be retried.
 6. The `Runner ScaleSet Listener` uses a `Service Account` and a `Role` bound to that account to make an HTTPS call through the Kubernetes APIs to patch the `EphemeralRunner Set` resource with the number of desired replicas count.
 7. The `EphemeralRunner Set` attempts to create new runners and the `EphemeralRunner Controller` requests a JIT configuration token to register these runners. The controller attempts to create runner pods. If the pod's status is `failed`, the controller retries up to 5 times. After 24 hours the `Actions Service` unassigns the job if no runner accepts it.
 8. Once the runner pod is created, the runner application in the pod uses the JIT configuration token to register itself with the `Actions Service`. It then establishes another HTTPS long poll connection to receive the job details it needs to execute.
@@ -41,7 +41,100 @@ You can follow [this quickstart guide](https://docs.github.com/en/actions/hostin
 
 You can follow [this troubleshooting guide](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners-with-actions-runner-controller/troubleshooting-actions-runner-controller-errors) for troubleshooting steps.
 
+Controller HTTP requests are not retried inside the client. Each service call has a 10-second deadline covering authentication, HTTP requests, and reading the response. Background unregistration uses the same bounds and client pool; Kubernetes reconciliation itself is not given this deadline. On a rate limit, the controller immediately releases its worker and requeues reconciliation after the server's `Retry-After` delay (or the primary rate-limit reset). When no usable delay is provided, it waits 30 seconds. Other failures in a cleanup batch are logged without overriding a rate-limit cooldown. This also applies to JIT configuration requests, so throttled registrations do not hold workers through retry waits while completed runners await cleanup. The listener retains the SDK's default retry policy.
+
+Each concurrent service call leases a separate SDK client, so slow authentication in one call cannot block another on the SDK's authentication mutex. Idle clients retain their authentication tokens for reuse, and clients for the same configuration share an HTTP transport.
+
+Ordinary reconciliation failures, including service-call timeouts, use exponential error backoff capped at 30 seconds. This applies to both workqueue rate-limiter settings and does not shorten server-provided `Retry-After` delays.
+
 ## Changelog
+
+### 0.15.1
+
+Upgrading the controller from 0.15.0 to 0.15.1 does not require updating the installed CRDs. The ARC API fields, served/storage versions, and conversion settings are unchanged. The generated scale-set CRD changes only update the controller-gen version annotation and tighten validation for embedded Pod `evictionResponders` (non-empty names, priorities from 0 to 100000, and at most 10 responders). Existing 0.15.0 CRDs remain compatible with the 0.15.1 controller; no CRD replacement or ARC resource recreation is required.
+
+1. Requeue rate-limited scale-set requests without client retries [#4726](https://github.com/actions/actions-runner-controller/pull/4726)
+1. Remove succeeded ephemeral runners that never ran a job from the service [#4709](https://github.com/actions/actions-runner-controller/pull/4709)
+1. Bump Go to 1.27.3 and update Go dependencies [#4725](https://github.com/actions/actions-runner-controller/pull/4725)
+1. Updates: runner to v2.338.1 [#4724](https://github.com/actions/actions-runner-controller/pull/4724)
+1. Updates: runner to v2.338.0 [#4708](https://github.com/actions/actions-runner-controller/pull/4708)
+1. Fix inconsistent guards for scale set metrics registration and publishing [#4566](https://github.com/actions/actions-runner-controller/pull/4566)
+1. Read the e2e Go version from go.mod and apply the safe go fix modernizers [#4677](https://github.com/actions/actions-runner-controller/pull/4677)
+
+### 0.15.0
+
+1. Scale down runners whose pod never reports the runner container [#4696](https://github.com/actions/actions-runner-controller/pull/4696)
+1. Fix empty collection drift across scale-set resources [#4695](https://github.com/actions/actions-runner-controller/pull/4695)
+1. Fix custom runner mode volume injection [#4693](https://github.com/actions/actions-runner-controller/pull/4693)
+1. Reduce ephemeral runner status contention [#4692](https://github.com/actions/actions-runner-controller/pull/4692)
+1. Bump the gomod group with 4 updates [#4691](https://github.com/actions/actions-runner-controller/pull/4691)
+1. Fix annotation merging for labels-only resource metadata [#4689](https://github.com/actions/actions-runner-controller/pull/4689)
+1. Fix experimental charts and upgrade Helm tooling [#4687](https://github.com/actions/actions-runner-controller/pull/4687)
+1. Fix patch permissions in generated controller RBAC [#4686](https://github.com/actions/actions-runner-controller/pull/4686)
+1. Avoid listener pod recreation for prepended sidecars [#4685](https://github.com/actions/actions-runner-controller/pull/4685)
+1. Keep the pod of a runner that has not recorded its ID during set cleanup [#4683](https://github.com/actions/actions-runner-controller/pull/4683)
+1. Fix listener replacement loop for empty collections [#4682](https://github.com/actions/actions-runner-controller/pull/4682)
+1. Fix listener pod patch recovery [#4680](https://github.com/actions/actions-runner-controller/pull/4680)
+1. Reject unsafe chart metadata integers [#4679](https://github.com/actions/actions-runner-controller/pull/4679)
+1. Create runner pod before recording identity [#4681](https://github.com/actions/actions-runner-controller/pull/4681)
+1. Bump go and go dependencies and modify deprecated Requeue to RequeueAfter [#4678](https://github.com/actions/actions-runner-controller/pull/4678)
+1. Hand a finished runner's pod back as soon as its job is over [#4673](https://github.com/actions/actions-runner-controller/pull/4673)
+1. Remove constants orphaned by #4059 and unused proxy env var names [#4675](https://github.com/actions/actions-runner-controller/pull/4675)
+1. Remove dead GitHubConfig surface left by scaleset migration [#4676](https://github.com/actions/actions-runner-controller/pull/4676)
+1. Remove AutoscalingRunnerSet printer columns referencing removed status fields [#4583](https://github.com/actions/actions-runner-controller/pull/4583)
+1. Document which listenerMetrics example labels are not exposed by default [#4633](https://github.com/actions/actions-runner-controller/pull/4633)
+1. Set per-controller reconcile concurrency defaults and remove --default-max-concurrent-reconciles [#4670](https://github.com/actions/actions-runner-controller/pull/4670)
+1. Stop paying a write to release a registration a runner already released [#4669](https://github.com/actions/actions-runner-controller/pull/4669)
+1. Cover the outdated runner lifecycle end to end [#4662](https://github.com/actions/actions-runner-controller/pull/4662)
+1. Revert "Remove legacy e2e tests and promote v2 tests (#4658)" [#4667](https://github.com/actions/actions-runner-controller/pull/4667)
+1. Deregister runners from the Actions service in the background [#4664](https://github.com/actions/actions-runner-controller/pull/4664)
+1. Keep the outdated phase until the runner spec itself changes [#4660](https://github.com/actions/actions-runner-controller/pull/4660)
+1. Pin the listener's optimistic lock to API server behavior [#4648](https://github.com/actions/actions-runner-controller/pull/4648)
+1. Switch the scale set off instead of rebuilding it when runners are outdated [#4652](https://github.com/actions/actions-runner-controller/pull/4652)
+1. Remove legacy e2e tests and promote v2 tests [#4658](https://github.com/actions/actions-runner-controller/pull/4658)
+1. Filter owned-resource events in the workqueue [#4647](https://github.com/actions/actions-runner-controller/pull/4647)
+1. Let the listener own the EphemeralRunner Running phase transition [#4646](https://github.com/actions/actions-runner-controller/pull/4646)
+1. Use lazy copy to patch resources to ensure multiple modifications are applied to the base resource [#4580](https://github.com/actions/actions-runner-controller/pull/4580)
+1. Make the Outdated phase revision-aware [#4644](https://github.com/actions/actions-runner-controller/pull/4644)
+1. Remove the integrity hash annotation [#4643](https://github.com/actions/actions-runner-controller/pull/4643)
+1. Defer scale up until the listener publishes a state that accounts for finished runners [#4642](https://github.com/actions/actions-runner-controller/pull/4642)
+1. Track runner spec updates with an actionable revision [#4638](https://github.com/actions/actions-runner-controller/pull/4638)
+1. Track AutoscalingRunnerSet updates with metadata.generation [#4636](https://github.com/actions/actions-runner-controller/pull/4636)
+1. Bump the actions group across 1 directory with 8 updates [#4623](https://github.com/actions/actions-runner-controller/pull/4623)
+1. Detect listener pod drift by comparing the pod, not a hash [#4635](https://github.com/actions/actions-runner-controller/pull/4635)
+1. Fix EphemeralRunnerSet metadata drift check comparing against the wrong value [#4634](https://github.com/actions/actions-runner-controller/pull/4634)
+1. Validate and coerce listener metadata at render time [#4640](https://github.com/actions/actions-runner-controller/pull/4640)
+1. Validate label and annotation metadata at chart render time [#4639](https://github.com/actions/actions-runner-controller/pull/4639)
+1. Render label and annotation values as strings [#4637](https://github.com/actions/actions-runner-controller/pull/4637)
+1. Add default and per-controller max-concurrent-reconciles flags [#4626](https://github.com/actions/actions-runner-controller/pull/4626)
+1. Set listener qps and burst [#4558](https://github.com/actions/actions-runner-controller/pull/4558)
+1. Add @actions/actions-runtime to codeowners [#4631](https://github.com/actions/actions-runner-controller/pull/4631)
+1. Add guards on timings so we don't publish incorrect metrics [#4621](https://github.com/actions/actions-runner-controller/pull/4621)
+1. Fix nil ResourceCache panic in stale scale set tests [#4628](https://github.com/actions/actions-runner-controller/pull/4628)
+1. Introduce cache for lookups of desired resource state, to reduce the amount of allocations in the controller [#4568](https://github.com/actions/actions-runner-controller/pull/4568)
+1. Remove orphaned testserver package [#4620](https://github.com/actions/actions-runner-controller/pull/4620)
+1. Bump golang.org/x/crypto from 0.51.0 to 0.52.0 [#4562](https://github.com/actions/actions-runner-controller/pull/4562)
+1. Re-register the runner scale set when it is gone from the Actions service [#4571](https://github.com/actions/actions-runner-controller/pull/4571)
+1. Updates: runner to v2.337.0 [#4613](https://github.com/actions/actions-runner-controller/pull/4613)
+1. Updates: runner to v2.336.0 [#4578](https://github.com/actions/actions-runner-controller/pull/4578)
+1. Bump the actions group across 1 directory with 6 updates [#4559](https://github.com/actions/actions-runner-controller/pull/4559)
+1. Fix deprecated calls [#4570](https://github.com/actions/actions-runner-controller/pull/4570)
+1. Use metrics to display runner statuses instead of status field for EphemeralRunnerSet and AutoscalingRunnerSet [#4557](https://github.com/actions/actions-runner-controller/pull/4557)
+1. Use Patch instead of Update [#4533](https://github.com/actions/actions-runner-controller/pull/4533)
+1. Tag fields with optional allowing patches without issues [#4528](https://github.com/actions/actions-runner-controller/pull/4528)
+1. Mark generated files as linguist-generated [#4536](https://github.com/actions/actions-runner-controller/pull/4536)
+1. Make controller terminationGracePeriodSeconds configurable and align it with graceful shutdown timeout [#4556](https://github.com/actions/actions-runner-controller/pull/4556)
+1. Increase e2e wait timeouts to reduce flakiness [#4545](https://github.com/actions/actions-runner-controller/pull/4545)
+1. Bump the actions group across 1 directory with 2 updates [#4539](https://github.com/actions/actions-runner-controller/pull/4539)
+1. Bump the gomod group across 1 directory with 11 updates [#4529](https://github.com/actions/actions-runner-controller/pull/4529)
+1. Fix typo and rename status to phase [#4506](https://github.com/actions/actions-runner-controller/pull/4506)
+1. Updates: runner to v2.335.1 [#4523](https://github.com/actions/actions-runner-controller/pull/4523)
+1. Upgrade resources in-place, causing 1-1 mapping between autoscaling runner set and ephemeral runner set [#4516](https://github.com/actions/actions-runner-controller/pull/4516)
+1. Bump the actions group across 1 directory with 6 updates [#4518](https://github.com/actions/actions-runner-controller/pull/4518)
+1. Bump the gomod group across 1 directory with 9 updates [#4508](https://github.com/actions/actions-runner-controller/pull/4508)
+1. Add context: . to the docker/build-push-action [#4501](https://github.com/actions/actions-runner-controller/pull/4501)
+1. Fix patch on autoscaling runner set when creating a runner scale set [#4502](https://github.com/actions/actions-runner-controller/pull/4502)
+1. Do not use EqualFold when checking u.Host [#4496](https://github.com/actions/actions-runner-controller/pull/4496)
 
 ### 0.14.2
 

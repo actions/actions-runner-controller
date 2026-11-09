@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "gha-runner-scale-set values",
+  "description": "Only values that require strict validation are described here. Any value not listed is intentionally unconstrained.",
+  "type": "object",
+  "properties": {
+    "listenerConfig": {
+      "description": "Configuration for the ghalistener pod.",
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "scaler": {
+          "description": "Configuration for the Kubernetes client used by the ghalistener scaler.",
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "qps": {
+              "description": "Queries per second the listener may issue to the Kubernetes API server.",
+              "type": "integer",
+              "minimum": 1
+            },
+            "burst": {
+              "description": "Burst of queries the listener may issue to the Kubernetes API server.",
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    }
+  }
+}

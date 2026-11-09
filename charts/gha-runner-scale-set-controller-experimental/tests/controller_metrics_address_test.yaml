@@ -1,0 +1,48 @@
+suite: Controller metrics addresses
+templates:
+  - deployment.yaml
+set:
+  controller.metrics.listenerAddr: ":9090"
+  controller.metrics.listenerEndpoint: /metrics
+tests:
+  - it: extracts the IPv4 bind port without changing the address
+    set:
+      controller.metrics.controllerManagerAddr: "127.0.0.1:8080"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--metrics-addr=127.0.0.1:8080"
+      - equal:
+          path: spec.template.spec.containers[0].ports
+          value: [{name: metrics, containerPort: 8080, protocol: TCP}]
+  - it: extracts the bracketed IPv6 bind port
+    set:
+      controller.metrics.controllerManagerAddr: "[::]:8080"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--metrics-addr=[::]:8080"
+      - equal:
+          path: spec.template.spec.containers[0].ports
+          value: [{name: metrics, containerPort: 8080, protocol: TCP}]
+  - it: disables only controller metrics and retains extra ports
+    set:
+      controller.metrics.controllerManagerAddr: "0"
+      controller.manager.container.extraPorts:
+        - {name: custom, containerPort: 9000, protocol: TCP}
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--metrics-addr=0"
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--listener-metrics-addr=:9090"
+      - equal:
+          path: spec.template.spec.containers[0].ports
+          value: [{name: custom, containerPort: 9000, protocol: TCP}]
+  - it: rejects a non-numeric port explicitly
+    set:
+      controller.metrics.controllerManagerAddr: "localhost:http"
+    asserts:
+      - failedTemplate:
+          errorMessage: 'controller.metrics.controllerManagerAddr must be "0" or a host:port address with a numeric port between 1 and 65535 (IPv6 hosts must be bracketed)'

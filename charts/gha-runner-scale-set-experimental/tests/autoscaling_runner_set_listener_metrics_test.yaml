@@ -1,7 +1,111 @@
-suite: "Test AutoscalingRunnerSet Listener Metrics"
+suite: "Test AutoscalingRunnerSet Listener"
 templates:
   - autoscalingrunnserset.yaml
 tests:
+  - it: should render default scaler values when listener.scaler is not overridden
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.listenerConfig.scaler.qps
+          value: 50
+      - equal:
+          path: spec.listenerConfig.scaler.burst
+          value: 100
+
+  - it: should render custom scaler values when overridden
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      listener:
+        scaler:
+          qps: 100
+          burst: 200
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.listenerConfig.scaler.qps
+          value: 100
+      - equal:
+          path: spec.listenerConfig.scaler.burst
+          value: 200
+
+  - it: should render qps override while keeping default burst
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      listener:
+        scaler:
+          qps: 75
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.listenerConfig.scaler.qps
+          value: 75
+      - equal:
+          path: spec.listenerConfig.scaler.burst
+          value: 100
+
+  - it: should render scaler and metrics together
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      listener:
+        scaler:
+          qps: 75
+        metrics:
+          counters:
+            gha_started_jobs_total:
+              labels:
+                - repository
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.listenerConfig.scaler.qps
+          value: 75
+      - exists:
+          path: spec.listenerMetrics
+      - equal:
+          path: spec.listenerMetrics.counters.gha_started_jobs_total.labels[0]
+          value: repository
+
+  - it: should not render listenerConfig when listener is null
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      listener: null
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - notExists:
+          path: spec.listenerConfig
+
   - it: should not render listenerMetrics when not configured
     set:
       scaleset.name: "test"
@@ -23,18 +127,19 @@ tests:
       auth.githubToken: "gh_token12345"
       controllerServiceAccount.name: "arc"
       controllerServiceAccount.namespace: "arc-system"
-      listenerMetrics:
-        counters:
-          gha_started_jobs_total:
-            labels:
-              - repository
-              - organization
-        histograms:
-          gha_job_startup_duration_seconds:
-            buckets:
-              - 0.1
-              - 1
-              - 2.5
+      listener:
+        metrics:
+          counters:
+            gha_started_jobs_total:
+              labels:
+                - repository
+                - organization
+          histograms:
+            gha_job_startup_duration_seconds:
+              buckets:
+                - 0.1
+                - 1
+                - 2.5
     release:
       name: "test-name"
       namespace: "test-namespace"
