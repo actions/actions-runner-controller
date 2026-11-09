@@ -62,8 +62,9 @@ const runnerScaleSetNotFoundException = "RunnerScaleSetNotFoundException"
 
 // sessionClientError wraps a failure to create the message session. A bare
 // not-found is not enough to call the scale set gone: the client refreshes its
-// admin token on the way, and a 404 from the registration endpoints there
-// points at credentials or a renamed repository instead.
+// admin token on the way, and a 404 from the GitHub endpoints behind that
+// (installation token, registration token, runner registration) points at
+// credentials, an uninstalled app or a renamed repository instead.
 func sessionClientError(err error) error {
 	if errors.Is(err, scaleset.NotFoundError) && strings.Contains(err.Error(), runnerScaleSetNotFoundException) {
 		return fmt.Errorf("%w: failed to create actions message session client: %w", errRunnerScaleSetNotFound, err)
