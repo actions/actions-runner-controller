@@ -2789,6 +2789,75 @@ var _ = Describe("Test AutoscalingRunnerSet with a stale runner scale set", Orde
 		})
 	})
 
+	// The lookup by ID and the lookup by name can disagree, for example while
+	// the service is degraded. Re-registration then resolves the recorded ID,
+	// the annotation patch changes nothing, and no event follows it.
+	Context("When re-registration resolves the runner scale set ID that was reported missing", func() {
+		var ctx context.Context
+		var mgr ctrl.Manager
+		var autoscalingNS *corev1.Namespace
+		var autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet
+		var createCalls atomic.Int64
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
+			configSecret := createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
+			createCalls.Store(0)
+
+			controller := &AutoscalingRunnerSetReconciler{
+				Client:                             mgr.GetClient(),
+				Scheme:                             mgr.GetScheme(),
+				Log:                                logf.Log,
+				ControllerNamespace:                autoscalingNS.Name,
+				DefaultRunnerScaleSetListenerImage: "ghcr.io/actions/arc",
+				ResourceBuilder: ResourceBuilder{
+					ResourceCache: newTestResourceCache(),
+					SecretResolver: secretresolver.New(mgr.GetClient(), scalefake.NewMultiClient(
+						scalefake.WithClient(
+							scalefake.NewClient(
+								scalefake.WithGetRunnerGroupByName(&scaleset.RunnerGroup{ID: 1, Name: "testgroup"}, nil),
+								scalefake.WithGetRunnerScaleSetByIDFunc(func(_ context.Context, _ int) (*scaleset.RunnerScaleSet, error) {
+									return nil, scaleset.NotFoundError
+								}),
+								scalefake.WithGetRunnerScaleSet(&scaleset.RunnerScaleSet{ID: staleRunnerScaleSetID, Name: "test-asrs", RunnerGroupID: 1, RunnerGroupName: "testgroup"}, nil),
+								scalefake.WithCreateRunnerScaleSetFunc(func(_ context.Context, rs *scaleset.RunnerScaleSet) (*scaleset.RunnerScaleSet, error) {
+									createCalls.Add(1)
+									return &scaleset.RunnerScaleSet{ID: freshRunnerScaleSetID, Name: rs.Name, RunnerGroupID: 1, RunnerGroupName: "testgroup"}, nil
+								}),
+								scalefake.WithDeleteRunnerScaleSet(nil),
+							),
+						),
+					)),
+				},
+			}
+			Expect(controller.SetupWithManager(mgr)).To(Succeed(), "failed to setup controller")
+			startManagers(GinkgoT(), mgr)
+
+			autoscalingRunnerSet = newAutoscalingRunnerSet(autoscalingNS.Name, configSecret.Name, registeredAnnotations(staleRunnerScaleSetID))
+			// Set the scale set name so re-registration does not default it and
+			// write the spec, which would hand the reconciler an event of its own.
+			autoscalingRunnerSet.Spec.RunnerScaleSetName = "test-asrs"
+			Expect(k8sClient.Create(ctx, autoscalingRunnerSet)).To(Succeed(), "failed to create AutoScalingRunnerSet")
+		})
+
+		It("creates the listener with the resolved ID instead of waiting for an event", func() {
+			Eventually(
+				func() (int, error) {
+					listener := new(v1alpha1.AutoscalingListener)
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: scaleSetListenerName(autoscalingRunnerSet), Namespace: autoscalingNS.Name}, listener); err != nil {
+						return 0, err
+					}
+					return listener.Spec.RunnerScaleSetID, nil
+				},
+				autoscalingRunnerSetTestTimeout,
+				autoscalingRunnerSetTestInterval,
+			).Should(BeEquivalentTo(staleRunnerScaleSetID), "the listener should be created with the ID the lookup by name resolved")
+
+			Expect(createCalls.Load()).To(BeEquivalentTo(0), "a scale set found by name must be reused, not registered a second time")
+		})
+	})
+
 	Context("When the runner scale set is already deleted from the Actions service", func() {
 		var ctx context.Context
 		var mgr ctrl.Manager

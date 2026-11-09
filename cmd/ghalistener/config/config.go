@@ -22,6 +22,13 @@ import (
 
 const appName = "ghalistener"
 
+// ExitCodeRunnerScaleSetNotFound is the exit code the listener uses when the
+// Actions service no longer knows the runner scale set it was configured with.
+// The ID is baked into the listener config, so restarting the pod cannot fix
+// it. The AutoscalingListener controller watches for this code and hands the
+// listener back to be rebuilt against a revalidated runner scale set.
+const ExitCodeRunnerScaleSetNotFound = 3
+
 type Config struct {
 	ConfigureURL   string          `json:"configure_url"`
 	VaultType      vault.VaultType `json:"vault_type"`

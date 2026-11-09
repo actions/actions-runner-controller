@@ -352,8 +352,18 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 			return ctrl.Result{}, err
 		}
 		if gone {
+			recordedID := autoscalingRunnerSet.Annotations[runnerScaleSetIDAnnotationKey]
 			log.Info("Recorded runner scale set no longer exists on the Actions service. Registering it again before creating the listener")
-			return r.createRunnerScaleSet(ctx, &autoscalingRunnerSet, log)
+			result, err := r.createRunnerScaleSet(ctx, &autoscalingRunnerSet, log)
+			if err != nil || autoscalingRunnerSet.Annotations[runnerScaleSetIDAnnotationKey] != recordedID {
+				return result, err
+			}
+
+			// The lookup by name found the scale set under the ID that was just
+			// reported missing. The annotation patch changed nothing, so no event
+			// would bring the reconciler back, and checking again would get the
+			// same answers. Build the listener with the ID the service resolved.
+			log.Info("Re-registration resolved the recorded runner scale set ID, creating the listener with it")
 		}
 
 		log.Info("AutoscalingListener does not exist, creating autoscaling listener")

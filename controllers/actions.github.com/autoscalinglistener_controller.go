@@ -38,6 +38,7 @@ import (
 
 	v1alpha1 "github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1/appconfig"
+	ghalistenerconfig "github.com/actions/actions-runner-controller/cmd/ghalistener/config"
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/metrics"
 	"github.com/actions/actions-runner-controller/github/actions"
 	corev1 "k8s.io/api/core/v1"
@@ -528,6 +529,20 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 
 		if listenerPodIsDead(&listenerPod) {
 			logDeadListenerPod(&listenerPod, log)
+
+			// The runner scale set ID is part of the listener spec, so a new pod
+			// would fail exactly like this one. Deleting the listener instead
+			// lets the AutoscalingRunnerSet controller confirm the scale set is
+			// gone, register it again, and build a listener with the new ID.
+			if listenerReportedRunnerScaleSetGone(&listenerPod) {
+				log.Info("Listener reported that its runner scale set is gone from the Actions service. Deleting the listener so it is rebuilt against a revalidated runner scale set")
+				if err := r.Delete(ctx, &autoscalingListener); err != nil && !kerrors.IsNotFound(err) {
+					log.Error(err, "Failed to delete the listener whose runner scale set is gone")
+					return ctrl.Result{}, err
+				}
+				return ctrl.Result{}, nil
+			}
+
 			return ctrl.Result{}, r.deleteListenerPod(ctx, &autoscalingListener, &listenerPod, log)
 		}
 
@@ -988,6 +1003,15 @@ func listenerPodIsDead(pod *corev1.Pod) bool {
 
 	cs := listenerContainerStatus(pod)
 	return cs != nil && cs.State.Terminated != nil
+}
+
+// listenerReportedRunnerScaleSetGone reports whether the listener container
+// exited because the Actions service no longer knows its runner scale set.
+func listenerReportedRunnerScaleSetGone(pod *corev1.Pod) bool {
+	cs := listenerContainerStatus(pod)
+	return cs != nil &&
+		cs.State.Terminated != nil &&
+		cs.State.Terminated.ExitCode == ghalistenerconfig.ExitCodeRunnerScaleSetNotFound
 }
 
 func logDeadListenerPod(pod *corev1.Pod, log logr.Logger) {
