@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/config"
@@ -53,12 +54,18 @@ func exitCode(err error) int {
 	return 1
 }
 
-// sessionClientError wraps a failure to create the message session. The
-// session is created under the scale set ID, so a not-found here means the
-// scale set is gone. The controller confirms that with the Actions service
-// before it acts on it.
+// runnerScaleSetNotFoundException is the exception the Actions service returns
+// when it does not know the scale set ID a session is requested for. The
+// scaleset client has no sentinel for it, so it is matched by name, the same
+// way the client classifies the exceptions it does map.
+const runnerScaleSetNotFoundException = "RunnerScaleSetNotFoundException"
+
+// sessionClientError wraps a failure to create the message session. A bare
+// not-found is not enough to call the scale set gone: the client refreshes its
+// admin token on the way, and a 404 from the registration endpoints there
+// points at credentials or a renamed repository instead.
 func sessionClientError(err error) error {
-	if errors.Is(err, scaleset.NotFoundError) {
+	if errors.Is(err, scaleset.NotFoundError) && strings.Contains(err.Error(), runnerScaleSetNotFoundException) {
 		return fmt.Errorf("%w: failed to create actions message session client: %w", errRunnerScaleSetNotFound, err)
 	}
 	return fmt.Errorf("failed to create actions message session client: %w", err)
