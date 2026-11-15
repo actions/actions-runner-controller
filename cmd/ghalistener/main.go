@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -33,10 +35,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := run(ctx, config); err != nil {
+	if err := run(ctx, config); err != nil && !isGracefulShutdown(ctx, err) {
 		log.Printf("Application returned an error: %v", err)
 		os.Exit(1)
 	}
+}
+
+// isGracefulShutdown reports whether err is only the fallout of the termination
+// signal that canceled ctx: the listener returns the context error and the
+// metrics server returns http.ErrServerClosed once it is shut down.
+func isGracefulShutdown(ctx context.Context, err error) bool {
+	if ctx.Err() == nil {
+		return false
+	}
+	return errors.Is(err, context.Canceled) || errors.Is(err, http.ErrServerClosed)
 }
 
 func run(ctx context.Context, config *config.Config) error {
