@@ -272,6 +272,8 @@ type VaultConfig struct {
 	// +optional
 	AzureKeyVault *AzureKeyVaultConfig `json:"azureKeyVault,omitempty"`
 	// +optional
+	GCPSecretManager *GCPSecretManagerConfig `json:"gcpSecretManager,omitempty"`
+	// +optional
 	Proxy *ProxyConfig `json:"proxy,omitempty"`
 }
 
@@ -284,6 +286,18 @@ type AzureKeyVaultConfig struct {
 	ClientID string `json:"clientId,omitempty"`
 	// +required
 	CertificatePath string `json:"certificatePath,omitempty"`
+}
+
+// GCPSecretManagerConfig configures Google Cloud Secret Manager as the vault.
+// The GitHub config secret name is used as the Secret Manager secret ID.
+// Authentication uses Google Application Default Credentials, e.g. Workload Identity Federation for GKE.
+type GCPSecretManagerConfig struct {
+	// ProjectID is the Google Cloud project ID or number that owns the secret.
+	// +required
+	ProjectID string `json:"projectId,omitempty"`
+	// Version is the secret version to access. Defaults to "latest".
+	// +optional
+	Version string `json:"version,omitempty"`
 }
 
 // MetricsConfig holds configuration parameters for each metric type

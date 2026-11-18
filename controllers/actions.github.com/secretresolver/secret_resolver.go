@@ -17,6 +17,7 @@ import (
 	"github.com/actions/actions-runner-controller/controllers/actions.github.com/object"
 	"github.com/actions/actions-runner-controller/vault"
 	"github.com/actions/actions-runner-controller/vault/azurekeyvault"
+	"github.com/actions/actions-runner-controller/vault/gcpsecretmanager"
 	"golang.org/x/net/http/httpproxy"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -39,10 +40,13 @@ func wrapKubernetesError(err error) error {
 	return err
 }
 
-// wrapAzureKeyVaultError tags only a missing Azure Key Vault secret, so a 403 or throttled read still requeues.
-func wrapAzureKeyVaultError(err error) error {
+// wrapVaultError tags only a missing vault secret, so a 403 or throttled read still requeues.
+func wrapVaultError(err error) error {
 	var responseErr *azcore.ResponseError
 	if errors.As(err, &responseErr) && responseErr.StatusCode == http.StatusNotFound && responseErr.ErrorCode == "SecretNotFound" {
+		return fmt.Errorf("%w: %w", ErrNotFound, err)
+	}
+	if gcpsecretmanager.IsNotFound(err) {
 		return fmt.Errorf("%w: %w", ErrNotFound, err)
 	}
 	return err
@@ -226,6 +230,22 @@ func (sr *SecretResolver) resolverForObject(ctx context.Context, obj object.Acti
 			vault: akv,
 		}, nil
 
+	case vault.VaultTypeGCPSecretManager:
+		if vaultConfig.GCPSecretManager == nil {
+			return nil, fmt.Errorf("vault type %q requires gcpSecretManager configuration", vaultConfig.Type)
+		}
+		sm, err := gcpsecretmanager.New(ctx, gcpsecretmanager.Config{
+			ProjectID: vaultConfig.GCPSecretManager.ProjectID,
+			Version:   vaultConfig.GCPSecretManager.Version,
+			Proxy:     proxy,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create GCP Secret Manager client: %v", err)
+		}
+		return &vaultResolver{
+			vault: sm,
+		}, nil
+
 	default:
 		return nil, fmt.Errorf("unknown vault type %q", vaultConfig.Type)
 	}
@@ -282,7 +302,7 @@ type vaultResolver struct {
 func (r *vaultResolver) appConfig(ctx context.Context, key string) (*appconfig.AppConfig, error) {
 	val, err := r.vault.GetSecret(ctx, key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve secret: %w", wrapAzureKeyVaultError(err))
+		return nil, fmt.Errorf("failed to resolve secret: %w", wrapVaultError(err))
 	}
 
 	return appconfig.FromJSONString(val)
@@ -291,7 +311,7 @@ func (r *vaultResolver) appConfig(ctx context.Context, key string) (*appconfig.A
 func (r *vaultResolver) proxyCredentials(ctx context.Context, key string) (*url.Userinfo, error) {
 	val, err := r.vault.GetSecret(ctx, key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve secret: %w", wrapAzureKeyVaultError(err))
+		return nil, fmt.Errorf("failed to resolve secret: %w", wrapVaultError(err))
 	}
 
 	type info struct {

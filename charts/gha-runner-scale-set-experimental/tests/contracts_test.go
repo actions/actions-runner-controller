@@ -118,6 +118,35 @@ secretResolution:
 	assert.Nil(t, runnerSetContract(t, "", nil).Spec.VaultConfig)
 }
 
+func TestExperimentalGCPSecretManagerDispatch(t *testing.T) {
+	ars := runnerSetContract(t, `
+secretResolution:
+  type: gcpSecretManager
+  gcpSecretManager:
+    projectId: my-project
+    version: "7"
+`, nil)
+	require.NotNil(t, ars.Spec.VaultConfig)
+	assert.Equal(t, vault.VaultTypeGCPSecretManager, ars.Spec.VaultConfig.Type)
+	assert.NoError(t, ars.Spec.VaultConfig.Type.Validate())
+	assert.Nil(t, ars.Spec.VaultConfig.AzureKeyVault)
+	require.NotNil(t, ars.Spec.VaultConfig.GCPSecretManager)
+	assert.Equal(t, "my-project", ars.Spec.VaultConfig.GCPSecretManager.ProjectID)
+	assert.Equal(t, "7", ars.Spec.VaultConfig.GCPSecretManager.Version)
+	assert.Equal(t, "existing-auth", ars.GitHubConfigSecret(), "the selector passed to the vault resolver")
+
+	// Pointing ADC at a missing credentials file proves dispatch reached GCP without any network or credentials.
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", filepath.Join(t.TempDir(), "missing.json"))
+	resolver := secretresolver.New(fake.NewClientBuilder().Build(), nil)
+	_, err := resolver.GetAppConfig(t.Context(), ars)
+	require.ErrorContains(t, err, "failed to create GCP Secret Manager client")
+	assert.ErrorContains(t, err, "application default credentials")
+	assert.NotContains(t, err.Error(), "unknown vault type")
+
+	_, err = renderContract(t, "secretResolution:\n  type: gcpSecretManager\n", nil)
+	require.ErrorContains(t, err, "secretResolution.gcpSecretManager.projectId is required")
+}
+
 const customizedRunner = `
 runner:
   container:

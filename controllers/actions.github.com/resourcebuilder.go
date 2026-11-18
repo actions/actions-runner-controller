@@ -20,7 +20,9 @@ import (
 	"github.com/actions/actions-runner-controller/github/actions"
 	"github.com/actions/actions-runner-controller/hash"
 	"github.com/actions/actions-runner-controller/logging"
+	"github.com/actions/actions-runner-controller/vault"
 	"github.com/actions/actions-runner-controller/vault/azurekeyvault"
+	"github.com/actions/actions-runner-controller/vault/gcpsecretmanager"
 	"github.com/actions/scaleset"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -271,17 +273,31 @@ func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha
 		ListenerConfig:              autoscalingListener.Spec.ListenerConfig,
 	}
 
-	vault := autoscalingListener.Spec.VaultConfig
-	if vault == nil {
+	vaultConfig := autoscalingListener.Spec.VaultConfig
+	if vaultConfig == nil {
 		config.AppConfig = appConfig
 	} else {
-		config.VaultType = vault.Type
+		config.VaultType = vaultConfig.Type
 		config.VaultLookupKey = autoscalingListener.Spec.GitHubConfigSecret
-		config.AzureKeyVaultConfig = &azurekeyvault.Config{
-			TenantID:        vault.AzureKeyVault.TenantID,
-			ClientID:        vault.AzureKeyVault.ClientID,
-			URL:             vault.AzureKeyVault.URL,
-			CertificatePath: vault.AzureKeyVault.CertificatePath,
+		switch vaultConfig.Type {
+		case vault.VaultTypeAzureKeyVault:
+			if vaultConfig.AzureKeyVault == nil {
+				return nil, fmt.Errorf("vault type %q requires azureKeyVault configuration", vaultConfig.Type)
+			}
+			config.AzureKeyVaultConfig = &azurekeyvault.Config{
+				TenantID:        vaultConfig.AzureKeyVault.TenantID,
+				ClientID:        vaultConfig.AzureKeyVault.ClientID,
+				URL:             vaultConfig.AzureKeyVault.URL,
+				CertificatePath: vaultConfig.AzureKeyVault.CertificatePath,
+			}
+		case vault.VaultTypeGCPSecretManager:
+			if vaultConfig.GCPSecretManager == nil {
+				return nil, fmt.Errorf("vault type %q requires gcpSecretManager configuration", vaultConfig.Type)
+			}
+			config.GCPSecretManagerConfig = &gcpsecretmanager.Config{
+				ProjectID: vaultConfig.GCPSecretManager.ProjectID,
+				Version:   vaultConfig.GCPSecretManager.Version,
+			}
 		}
 	}
 

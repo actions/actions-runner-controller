@@ -113,6 +113,15 @@ spec:
       clientId: {{ .Values.keyVault.azureKeyVault.clientId }}
       certificatePath: {{ .Values.keyVault.azureKeyVault.certificatePath }}
       secretKey: {{ .Values.keyVault.azureKeyVault.secretKey }}
+    {{- else if eq .Values.keyVault.type "gcp_secret_manager" }}
+    {{- if not (and .Values.keyVault.gcpSecretManager .Values.keyVault.gcpSecretManager.projectId) }}
+    {{- fail "keyVault.gcpSecretManager.projectId is required when keyVault.type is gcp_secret_manager" }}
+    {{- end }}
+    gcpSecretManager:
+      projectId: {{ .Values.keyVault.gcpSecretManager.projectId | quote }}
+      {{- with .Values.keyVault.gcpSecretManager.version }}
+      version: {{ . | quote }}
+      {{- end }}
     {{- else }}
     {{- fail "Unsupported keyVault type: " .Values.keyVault.type }}
     {{- end }}
