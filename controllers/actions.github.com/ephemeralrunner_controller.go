@@ -397,6 +397,15 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			log.Error(err, "Failed to fetch the pod")
 			return ctrl.Result{}, err
 		}
+		if ephemeralRunner.Status.Phase == v1alpha1.EphemeralRunnerPhaseRunning && ephemeralRunner.HasJob() {
+			// A pod that was running a job was removed (preempted, evicted through the API, or garbage collected
+			// after it terminated) before this controller observed it fail. The job is lost and the runner's JIT
+			// configuration was already used, so a re-created pod could never run a job: it would only hold a
+			// replica slot. Handle it like a failed pod with a job assigned.
+			log.Info("Ephemeral runner pod does not exist, but a job was assigned. Deleting the ephemeral runner instead of re-creating the pod")
+			return ctrl.Result{}, r.deleteEphemeralRunnerWithJob(ctx, &ephemeralRunner, log)
+		}
+
 		log.Info("Ephemeral runner pod does not exist. Creating new ephemeral runner")
 
 		result, err := r.createPod(ctx, &ephemeralRunner, secret, log)
@@ -541,21 +550,7 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 func (r *EphemeralRunnerReconciler) deleteEphemeralRunnerOrPod(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, pod *corev1.Pod, log logr.Logger) error {
 	if ephemeralRunner.HasJob() {
-		log.Error(
-			errors.New("ephemeral runner has a job assigned, but the pod has failed"),
-			"Ephemeral runner either has faulty entrypoint or something external killing the runner",
-		)
-		log.Info("Deleting the ephemeral runner that has a job assigned but the pod has failed")
-		if err := r.Delete(ctx, ephemeralRunner); err != nil {
-			log.Error(err, "Failed to delete the ephemeral runner that has a job assigned but the pod has failed")
-			return err
-		}
-
-		// The runner is gone, and its pod failed with a job assigned, so the
-		// registration is still held. The delete above runs the finalizer, which
-		// queues its removal.
-		log.Info("Deleted the ephemeral runner that has a job assigned but the pod has failed")
-		return nil
+		return r.deleteEphemeralRunnerWithJob(ctx, ephemeralRunner, log)
 	}
 
 	if err := r.deletePodAsFailed(ctx, ephemeralRunner, pod, log); err != nil {
@@ -563,6 +558,26 @@ func (r *EphemeralRunnerReconciler) deleteEphemeralRunnerOrPod(ctx context.Conte
 		return err
 	}
 
+	return nil
+}
+
+// deleteEphemeralRunnerWithJob deletes an ephemeral runner whose pod failed or disappeared with a job assigned. Its pod
+// is never re-created: the job is lost and the runner's JIT configuration was already used.
+func (r *EphemeralRunnerReconciler) deleteEphemeralRunnerWithJob(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, log logr.Logger) error {
+	log.Error(
+		errors.New("ephemeral runner has a job assigned, but the pod has failed"),
+		"Ephemeral runner either has faulty entrypoint or something external killing the runner",
+	)
+	log.Info("Deleting the ephemeral runner that has a job assigned but the pod has failed")
+	if err := r.Delete(ctx, ephemeralRunner); err != nil {
+		log.Error(err, "Failed to delete the ephemeral runner that has a job assigned but the pod has failed")
+		return err
+	}
+
+	// The runner is gone, and its pod failed with a job assigned, so the
+	// registration is still held. The delete above runs the finalizer, which
+	// queues its removal.
+	log.Info("Deleted the ephemeral runner that has a job assigned but the pod has failed")
 	return nil
 }
 
