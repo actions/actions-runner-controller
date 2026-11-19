@@ -129,3 +129,11 @@ Create the name of the service account to use
 {{- define "gha-runner-scale-set-controller.leaderElectionRoleBinding" -}}
 {{- include "gha-runner-scale-set-controller.fullname" . }}-leader-election
 {{- end }}
+
+{{- define "gha-runner-scale-set-controller.aggregateViewRoleName" -}}
+{{- include "gha-runner-scale-set-controller.fullname" . }}-aggregate-to-view
+{{- end }}
+
+{{- define "gha-runner-scale-set-controller.aggregateEditRoleName" -}}
+{{- include "gha-runner-scale-set-controller.fullname" . }}-aggregate-to-edit
+{{- end }}

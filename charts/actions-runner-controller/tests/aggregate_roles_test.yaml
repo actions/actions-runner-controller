@@ -1,0 +1,104 @@
+suite: "Aggregate ClusterRoles"
+templates:
+  - aggregate_view_cluster_role.yaml
+  - aggregate_edit_cluster_role.yaml
+  - aggregate_read_sensitive_cluster_role.yaml
+release:
+  name: test-arc
+tests:
+  - it: should render view role without runners, aggregated into view, edit and admin
+    template: aggregate_view_cluster_role.yaml
+    asserts:
+      - isKind:
+          of: ClusterRole
+      - equal:
+          path: metadata.labels["rbac.authorization.k8s.io/aggregate-to-view"]
+          value: "true"
+      - equal:
+          path: metadata.labels["rbac.authorization.k8s.io/aggregate-to-edit"]
+          value: "true"
+      - equal:
+          path: metadata.labels["rbac.authorization.k8s.io/aggregate-to-admin"]
+          value: "true"
+      - equal:
+          path: rules[0].verbs
+          value:
+            - get
+            - list
+            - watch
+      - exists:
+          path: metadata.labels["helm.sh/chart"]
+      - notContains:
+          path: rules[0].resources
+          content: runners
+      - notContains:
+          path: rules[0].resources
+          content: runners/status
+
+  - it: should render edit role (writes only, including runners), aggregated into edit and admin
+    template: aggregate_edit_cluster_role.yaml
+    asserts:
+      - isKind:
+          of: ClusterRole
+      - equal:
+          path: metadata.labels["rbac.authorization.k8s.io/aggregate-to-edit"]
+          value: "true"
+      - equal:
+          path: metadata.labels["rbac.authorization.k8s.io/aggregate-to-admin"]
+          value: "true"
+      - notExists:
+          path: metadata.labels["rbac.authorization.k8s.io/aggregate-to-view"]
+      - exists:
+          path: metadata.labels["helm.sh/chart"]
+      - notContains:
+          path: rules[0].verbs
+          content: get
+      - contains:
+          path: rules[1].resources
+          content: runners
+      - contains:
+          path: rules[1].verbs
+          content: update
+      - notContains:
+          path: rules[1].verbs
+          content: get
+      - notContains:
+          path: rules[1].verbs
+          content: list
+      - notContains:
+          path: rules[1].verbs
+          content: watch
+
+  - it: should render read-sensitive role (runners reads), aggregated into edit and admin but not view
+    template: aggregate_read_sensitive_cluster_role.yaml
+    asserts:
+      - isKind:
+          of: ClusterRole
+      - equal:
+          path: metadata.labels["rbac.authorization.k8s.io/aggregate-to-edit"]
+          value: "true"
+      - equal:
+          path: metadata.labels["rbac.authorization.k8s.io/aggregate-to-admin"]
+          value: "true"
+      - notExists:
+          path: metadata.labels["rbac.authorization.k8s.io/aggregate-to-view"]
+      - exists:
+          path: metadata.labels["helm.sh/chart"]
+      - equal:
+          path: rules[0].resources
+          value:
+            - runners
+            - runners/status
+      - equal:
+          path: rules[0].verbs
+          value:
+            - get
+            - list
+            - watch
+
+  - it: should not render any role when disabled
+    set:
+      rbac.aggregateRoles.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0

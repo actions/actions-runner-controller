@@ -72,3 +72,11 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- define "gha-controller.leader-election-role-binding" -}}
 {{- include "gha-controller.leaderElectionRoleBinding" . -}}
 {{- end }}
+
+{{- define "gha-controller.aggregate-view-role-name" -}}
+{{- include "gha-controller.name" . }}-aggregate-to-view
+{{- end }}
+
+{{- define "gha-controller.aggregate-edit-role-name" -}}
+{{- include "gha-controller.name" . }}-aggregate-to-edit
+{{- end }}
