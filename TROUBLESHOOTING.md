@@ -12,6 +12,7 @@
   * [Outgoing network action hangs indefinitely](#outgoing-network-action-hangs-indefinitely)
   * [Unable to scale to zero with TotalNumberOfQueuedAndInProgressWorkflowRuns](#unable-to-scale-to-zero-with-totalnumberofqueuedandinprogressworkflowruns)
   * [Slow / failure to boot dind sidecar (default runner)](#slow--failure-to-boot-dind-sidecar-default-runner)
+  * [Jobs failing with "lost communication with the server"](#jobs-failing-with-lost-communication-with-the-server)
 
 ## Tools
 
@@ -294,6 +295,26 @@ HRA doesn't scale the RunnerDeployment to zero, even though you did configure HR
 You very likely have some dangling workflow jobs stuck in `queued` or `in_progress` as seen in [#1057](https://github.com/actions/actions-runner-controller/issues/1057#issuecomment-1133439061).
 
 Manually call [the "list workflow runs" API](https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-repository), and [remove the dangling workflow job(s)](https://docs.github.com/en/rest/actions/workflow-runs#delete-a-workflow-run).
+
+### Jobs failing with "lost communication with the server"
+
+**Problem**
+
+A workflow job can fail with `lost communication with the server` when the runner pod or its Kubernetes node stops unexpectedly while the job is running. The runner container may have been killed because the pod or node ran out of memory, or the node may have been evicted, interrupted, or terminated.
+
+**Solution**
+
+Inspect the runner pod and its node to identify why the runner stopped:
+
+```bash
+kubectl describe pod <runner-pod> -n <namespace>
+kubectl get pod <runner-pod> -n <namespace> -o jsonpath='{.status.containerStatuses[*].state.terminated.reason}'
+kubectl describe node <node-name>
+```
+
+If the container was `OOMKilled`, increase the runner pod's memory requests and limits. If the node was under resource pressure, move runners to a more resourceful node or increase the node resources. For evictions and planned node termination, configure graceful runner termination as described in [Configuring automatic termination](docs/automatically-scaling-runners.md#configuring-automatic-termination).
+
+If the pod and node show no resource or termination problem, the error may be caused by a race between the runner agent and the GitHub Actions service. This is an upstream issue and cannot be fully resolved by ARC. As a workaround, set `ephemeral: false` in the runner specification so the runner is not stopped after each job, and retry the workflow when a job is lost.
 
 ### Slow / failure to boot dind sidecar (default runner)
 
