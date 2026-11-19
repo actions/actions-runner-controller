@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
@@ -17,10 +18,11 @@ import (
 
 // AzureKeyVault is a struct that holds the Azure Key Vault client.
 type Config struct {
-	TenantID        string            `json:"tenant_id"`
-	ClientID        string            `json:"client_id"`
-	URL             string            `json:"url"`
-	CertificatePath string            `json:"certificate_path"`
+	TenantID string `json:"tenant_id"`
+	ClientID string `json:"client_id"`
+	URL      string `json:"url"`
+	// When empty, uses the pod's Azure workload identity.
+	CertificatePath string            `json:"certificate_path,omitempty"`
 	Proxy           *httpproxy.Config `json:"proxy,omitempty"`
 }
 
@@ -35,12 +37,10 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("failed to parse url: %v", err)
 	}
 
-	if c.CertificatePath == "" {
-		return errors.New("cert path must be provided")
-	}
-
-	if _, err := os.Stat(c.CertificatePath); err != nil {
-		return fmt.Errorf("cert path %q does not exist: %v", c.CertificatePath, err)
+	if c.CertificatePath != "" {
+		if _, err := os.Stat(c.CertificatePath); err != nil {
+			return fmt.Errorf("cert path %q does not exist: %v", c.CertificatePath, err)
+		}
 	}
 
 	if c.Proxy != nil {
@@ -54,10 +54,34 @@ func (c *Config) Validate() error {
 
 // Client creates a new Azure Key Vault client using the provided configuration.
 func (c *Config) Client() (*azsecrets.Client, error) {
-	return c.certClient()
+	httpClient, err := c.httpClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to instantiate http client: %v", err)
+	}
+
+	var cred azcore.TokenCredential
+	if c.CertificatePath != "" {
+		cred, err = c.certCredential(httpClient)
+	} else {
+		cred, err = c.workloadIdentityCredential(httpClient)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := azsecrets.NewClient(c.URL, cred, &azsecrets.ClientOptions{
+		ClientOptions: policy.ClientOptions{
+			Transport: httpClient,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to instantiate client for azsecrets: %v", err)
+	}
+
+	return client, nil
 }
 
-func (c *Config) certClient() (*azsecrets.Client, error) {
+func (c *Config) certCredential(httpClient *http.Client) (azcore.TokenCredential, error) {
 	data, err := os.ReadFile(c.CertificatePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read cert file from path %q: %v", c.CertificatePath, err)
@@ -66,11 +90,6 @@ func (c *Config) certClient() (*azsecrets.Client, error) {
 	certs, key, err := azidentity.ParseCertificates(data, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse certificates: %w", err)
-	}
-
-	httpClient, err := c.httpClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to instantiate http client: %v", err)
 	}
 
 	cred, err := azidentity.NewClientCertificateCredential(
@@ -87,17 +106,25 @@ func (c *Config) certClient() (*azsecrets.Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client certificate credential: %v", err)
 	}
+	return cred, nil
+}
 
-	client, err := azsecrets.NewClient(c.URL, cred, &azsecrets.ClientOptions{
+func (c *Config) workloadIdentityCredential(httpClient *http.Client) (azcore.TokenCredential, error) {
+	if os.Getenv("AZURE_FEDERATED_TOKEN_FILE") == "" {
+		return nil, errors.New("certificate_path is not set and AZURE_FEDERATED_TOKEN_FILE is empty: label the pod for Azure workload identity or set a certificate")
+	}
+
+	cred, err := azidentity.NewWorkloadIdentityCredential(&azidentity.WorkloadIdentityCredentialOptions{
+		ClientID: c.ClientID,
+		TenantID: c.TenantID,
 		ClientOptions: policy.ClientOptions{
 			Transport: httpClient,
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to instantiate client for azsecrets: %v", err)
+		return nil, fmt.Errorf("failed to create workload identity credential: %v", err)
 	}
-
-	return client, nil
+	return cred, nil
 }
 
 func (c *Config) httpClient() (*http.Client, error) {
