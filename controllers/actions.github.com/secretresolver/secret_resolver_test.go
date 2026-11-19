@@ -9,6 +9,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/vault"
+	"github.com/googleapis/gax-go/v2/apierror"
+	"google.golang.org/api/googleapi"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,6 +37,14 @@ func TestWrapKubernetesError(t *testing.T) {
 }
 
 func TestVaultResolverTagsOnlySecretNotFound(t *testing.T) {
+	gcpError := func(code int) error {
+		err, ok := apierror.FromError(&googleapi.Error{Code: code})
+		if !ok {
+			t.Fatalf("failed to build GCP API error for %d", code)
+		}
+		return err
+	}
+
 	tests := map[string]struct {
 		err      error
 		notFound bool
@@ -44,6 +54,9 @@ func TestVaultResolverTagsOnlySecretNotFound(t *testing.T) {
 		"404 other":     {&azcore.ResponseError{StatusCode: http.StatusNotFound, ErrorCode: "VaultNotFound"}, false},
 		"403":           {&azcore.ResponseError{StatusCode: http.StatusForbidden, ErrorCode: "Forbidden"}, false},
 		"network error": {errors.New("dial tcp: i/o timeout"), false},
+		"gcp 404":       {gcpError(http.StatusNotFound), true},
+		"gcp 403":       {gcpError(http.StatusForbidden), false},
+		"gcp 429":       {gcpError(http.StatusTooManyRequests), false},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {

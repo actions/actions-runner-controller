@@ -91,14 +91,24 @@ githubConfigSecret:
 #   runnerMountPath: /usr/local/share/ca-certificates/
 
 # keyVault:
-  # Available values: "azure_key_vault"
+  # Available values: "azure_key_vault", "gcp_secret_manager"
   # type: ""
   # Configuration related to azure key vault
-  # azure_key_vault:
+  # azureKeyVault:
   #   url: ""
-  #   client_id: ""
-  #   tenant_id: ""
-  #   certificate_path: ""
+  #   clientId: ""
+  #   tenantId: ""
+  #   certificatePath: ""
+  # Configuration related to Google Cloud Secret Manager.
+  # githubConfigSecret is used as the Secret Manager secret ID. The secret payload is a JSON
+  # document with github_app_id, github_app_installation_id and github_app_private_key, or github_token.
+  # Authentication uses Application Default Credentials, e.g. Workload Identity Federation for GKE:
+  # grant the controller and listener Kubernetes service accounts roles/secretmanager.secretAccessor
+  # on the secret.
+  # gcpSecretManager:
+  #   projectId: ""
+  #   # Optional, defaults to "latest"
+  #   version: ""
     # proxy:
     #   http:
     #     url: http://proxy.com:1234

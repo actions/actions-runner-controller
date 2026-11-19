@@ -16,6 +16,7 @@ import (
 	"github.com/actions/actions-runner-controller/logger"
 	"github.com/actions/actions-runner-controller/vault"
 	"github.com/actions/actions-runner-controller/vault/azurekeyvault"
+	"github.com/actions/actions-runner-controller/vault/gcpsecretmanager"
 	"github.com/actions/scaleset"
 	"golang.org/x/net/http/httpproxy"
 )
@@ -28,6 +29,8 @@ type Config struct {
 	VaultLookupKey string          `json:"vault_lookup_key"`
 	// If the VaultType is set to "azure_key_vault", this field must be populated.
 	AzureKeyVaultConfig *azurekeyvault.Config `json:"azure_key_vault,omitempty"`
+	// If the VaultType is set to "gcp_secret_manager", this field must be populated.
+	GCPSecretManagerConfig *gcpsecretmanager.Config `json:"gcp_secret_manager,omitempty"`
 	// AppConfig contains the GitHub App configuration.
 	// It is initially set to nil if VaultType is set.
 	// Otherwise, it is populated with the GitHub App credentials from the GitHub secret.
@@ -68,12 +71,25 @@ func Read(ctx context.Context, configPath string) (*Config, error) {
 
 		return &config, nil
 	case "azure_key_vault":
+		if config.AzureKeyVaultConfig == nil {
+			return nil, fmt.Errorf("azure_key_vault configuration is required when vault type is %q", config.VaultType)
+		}
 		akv, err := azurekeyvault.New(*config.AzureKeyVaultConfig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create Azure Key Vault client: %w", err)
 		}
 
 		vault = akv
+	case "gcp_secret_manager":
+		if config.GCPSecretManagerConfig == nil {
+			return nil, fmt.Errorf("gcp_secret_manager configuration is required when vault type is %q", config.VaultType)
+		}
+		sm, err := gcpsecretmanager.New(ctx, *config.GCPSecretManagerConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create GCP Secret Manager client: %w", err)
+		}
+
+		vault = sm
 	default:
 		return nil, fmt.Errorf("unsupported vault type: %s", config.VaultType)
 	}

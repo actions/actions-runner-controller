@@ -157,11 +157,17 @@ spec:
   {{- end }}
 
   {{- if not $usesKubernetesSecrets }}
+  {{- $secretResolutionType := include "secret-resolution.type" . }}
   vaultConfig:
+    {{- if eq $secretResolutionType "azureKeyVault" }}
     type: azure_key_vault
+    {{- else if eq $secretResolutionType "gcpSecretManager" }}
+    type: gcp_secret_manager
+    {{- end }}
     {{- if .Values.secretResolution.proxy }}
     proxy: {{- toYaml .Values.secretResolution.proxy | nindent 6 }}
     {{- end }}
+    {{- if eq $secretResolutionType "azureKeyVault" }}
     {{- if hasKey (.Values.secretResolution.azureKeyVault | default dict) "secretKey" }}
     {{- fail "secretResolution.azureKeyVault.secretKey is not supported; use auth.secretName to select the vault secret" }}
     {{- end }}
@@ -170,6 +176,18 @@ spec:
       tenantId: {{ .Values.secretResolution.azureKeyVault.tenantId }}
       clientId: {{ .Values.secretResolution.azureKeyVault.clientId }}
       certificatePath: {{ .Values.secretResolution.azureKeyVault.certificatePath }}
+    {{- else if eq $secretResolutionType "gcpSecretManager" }}
+    {{- $gcp := .Values.secretResolution.gcpSecretManager | default dict }}
+    {{- include "assert-map" (dict "value" $gcp "path" ".Values.secretResolution.gcpSecretManager") }}
+    {{- if not $gcp.projectId }}
+    {{- fail "secretResolution.gcpSecretManager.projectId is required when secretResolution.type is gcpSecretManager" }}
+    {{- end }}
+    gcpSecretManager:
+      projectId: {{ $gcp.projectId | quote }}
+      {{- with $gcp.version }}
+      version: {{ . | quote }}
+      {{- end }}
+    {{- end }}
   {{- end }}
 
   {{- if .Values.proxy }}

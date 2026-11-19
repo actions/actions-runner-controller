@@ -8,7 +8,7 @@ kubernetes
   {{- if not (kindIs "string" $type) -}}
     {{- fail (printf "Unsupported keyVault type: %v" $type) -}}
   {{- end -}}
-  {{- if not (has $type (list "kubernetes" "azureKeyVault")) -}}
+  {{- if not (has $type (list "kubernetes" "azureKeyVault" "gcpSecretManager")) -}}
     {{- fail (printf "Unsupported keyVault type: %s" $type) -}}
   {{- end -}}
   {{- $type -}}

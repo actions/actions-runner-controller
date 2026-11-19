@@ -3586,3 +3586,72 @@ func TestTemplateRenderedAutoScalingRunnerSet_MetadataPrefixSegmentLengthBoundar
 		})
 	}
 }
+
+func TestTemplateRenderedAutoscalingRunnerSet_GCPSecretManager(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	releaseName := "test-runners"
+	namespaceName := "test-" + strings.ToLower(random.UniqueID())
+
+	baseValues := map[string]string{
+		"githubConfigUrl":                    "https://github.com/actions",
+		"githubConfigSecret":                 "gha-runners-app",
+		"controllerServiceAccount.name":      "arc",
+		"controllerServiceAccount.namespace": "arc-system",
+		"keyVault.type":                      "gcp_secret_manager",
+	}
+
+	t.Run("renders project and version", func(t *testing.T) {
+		values := maps.Clone(baseValues)
+		values["keyVault.gcpSecretManager.projectId"] = "my-project"
+		values["keyVault.gcpSecretManager.version"] = "3"
+
+		output := helm.RenderTemplateContext(t, t.Context(), &helm.Options{
+			Logger:         logger.Discard,
+			SetValues:      values,
+			KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+		}, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+		var ars v1alpha1.AutoscalingRunnerSet
+		helm.UnmarshalK8SYaml(t, output, &ars)
+
+		require.NotNil(t, ars.Spec.VaultConfig)
+		assert.Equal(t, "gcp_secret_manager", ars.Spec.VaultConfig.Type.String())
+		assert.NoError(t, ars.Spec.VaultConfig.Type.Validate())
+		assert.Nil(t, ars.Spec.VaultConfig.AzureKeyVault)
+		require.NotNil(t, ars.Spec.VaultConfig.GCPSecretManager)
+		assert.Equal(t, "my-project", ars.Spec.VaultConfig.GCPSecretManager.ProjectID)
+		assert.Equal(t, "3", ars.Spec.VaultConfig.GCPSecretManager.Version)
+		assert.Equal(t, "gha-runners-app", ars.Spec.GitHubConfigSecret)
+	})
+
+	t.Run("version is optional", func(t *testing.T) {
+		values := maps.Clone(baseValues)
+		values["keyVault.gcpSecretManager.projectId"] = "my-project"
+
+		output := helm.RenderTemplateContext(t, t.Context(), &helm.Options{
+			Logger:         logger.Discard,
+			SetValues:      values,
+			KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+		}, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+
+		var ars v1alpha1.AutoscalingRunnerSet
+		helm.UnmarshalK8SYaml(t, output, &ars)
+
+		require.NotNil(t, ars.Spec.VaultConfig.GCPSecretManager)
+		assert.Empty(t, ars.Spec.VaultConfig.GCPSecretManager.Version)
+	})
+
+	t.Run("fails without project id", func(t *testing.T) {
+		_, err := helm.RenderTemplateContextE(t, t.Context(), &helm.Options{
+			Logger:         logger.Discard,
+			SetValues:      baseValues,
+			KubectlOptions: k8s.NewKubectlOptions("", "", namespaceName),
+		}, helmChartPath, releaseName, []string{"templates/autoscalingrunnerset.yaml"})
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "keyVault.gcpSecretManager.projectId is required when keyVault.type is gcp_secret_manager")
+	})
+}

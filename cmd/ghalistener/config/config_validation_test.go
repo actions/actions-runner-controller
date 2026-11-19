@@ -138,6 +138,21 @@ func TestConfigValidationWithVaultConfig(t *testing.T) {
 		assert.NoError(t, err, "Expected no error for valid vault type")
 	})
 
+	t.Run("valid gcp secret manager", func(t *testing.T) {
+		config := &Config{
+			ConfigureURL:                "https://github.com/actions",
+			EphemeralRunnerSetNamespace: "namespace",
+			EphemeralRunnerSetName:      "deployment",
+			RunnerScaleSetID:            1,
+			MinRunners:                  1,
+			MaxRunners:                  5,
+			VaultType:                   vault.VaultTypeGCPSecretManager,
+			VaultLookupKey:              "testkey",
+		}
+		err := config.Validate()
+		assert.NoError(t, err, "Expected no error for valid vault type")
+	})
+
 	t.Run("invalid vault type", func(t *testing.T) {
 		config := &Config{
 			ConfigureURL:                "https://github.com/actions",
