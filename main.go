@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -44,6 +45,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -386,13 +388,23 @@ func main() {
 		}
 
 		ephemeralRunnerSetOpts := append(controllerOpts, actionsgithubcom.WithMaxConcurrentReconciles(opts.EphemeralRunnerSetMaxConcurrentReconciles))
-		if err = (&actionsgithubcom.EphemeralRunnerSetReconciler{
+		ephemeralRunnerSetReconciler := &actionsgithubcom.EphemeralRunnerSetReconciler{
 			Client:          mgr.GetClient(),
 			Log:             log.WithName("EphemeralRunnerSet").WithValues("version", build.Version),
 			Scheme:          mgr.GetScheme(),
 			ResourceBuilder: rb,
-		}).SetupWithManager(mgr, ephemeralRunnerSetOpts...); err != nil {
+		}
+		if err = ephemeralRunnerSetReconciler.SetupWithManager(mgr, ephemeralRunnerSetOpts...); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunnerSet")
+			os.Exit(1)
+		}
+		// Plain runnables belong to the manager's leader-election group.
+		if err = mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+			<-ctx.Done()
+			ephemeralRunnerSetReconciler.ClearRunnerCreationCache()
+			return nil
+		})); err != nil {
+			log.Error(err, "unable to register runner cache cleanup")
 			os.Exit(1)
 		}
 

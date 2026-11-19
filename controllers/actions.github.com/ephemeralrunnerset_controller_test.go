@@ -2941,6 +2941,13 @@ var _ = Describe("Test EphemeralRunnerSet actionable revision cleanup", func() {
 		idleRunner := createRunner("drain-idle", v1alpha1.EphemeralRunnerPhaseRunning, "")
 		busyRunner := createRunner("drain-busy", v1alpha1.EphemeralRunnerPhaseRunning, "job-1")
 
+		Eventually(func(g Gomega) {
+			var cached v1alpha1.EphemeralRunner
+			g.Expect(controller.Get(ctx, client.ObjectKeyFromObject(busyRunner), &cached)).To(Succeed())
+			g.Expect(cached.Status.RunnerID).To(Equal(1))
+			g.Expect(cached.Status.JobID).To(Equal("job-1"))
+		}, ephemeralRunnerSetTestTimeout, ephemeralRunnerSetTestInterval).Should(Succeed())
+
 		// The outdated report is about the current spec, so the set switches off.
 		Eventually(func(g Gomega) {
 			_, err := controller.Reconcile(ctx, request)

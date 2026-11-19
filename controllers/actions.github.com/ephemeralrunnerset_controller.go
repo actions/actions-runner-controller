@@ -94,6 +94,7 @@ type EphemeralRunnerSetReconciler struct {
 	// SetupWithManager fills this in from the manager when it is left unset.
 	APIReader client.Reader
 	ResourceBuilder
+	runnerCreationCache runnerCreationCache
 }
 
 // +kubebuilder:rbac:groups=actions.github.com,resources=ephemeralrunnersets,verbs=get;list;watch;create;update;patch;delete
@@ -122,18 +123,31 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	var ephemeralRunnerSet v1alpha1.EphemeralRunnerSet
 	if err := r.Get(ctx, req.NamespacedName, &ephemeralRunnerSet); err != nil {
+		if kerrors.IsNotFound(err) {
+			r.runnerCreationCache.delete(req.NamespacedName)
+		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	runnerSet := newLazyCopy(&ephemeralRunnerSet)
 
+	if !ephemeralRunnerSet.DeletionTimestamp.IsZero() && !controllerutil.ContainsFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName) {
+		r.runnerCreationCache.delete(req.NamespacedName)
+		return ctrl.Result{}, nil
+	}
+
+	var ephemeralRunnerList v1alpha1.EphemeralRunnerList
+	if err := r.List(ctx, &ephemeralRunnerList, client.InNamespace(req.Namespace), client.MatchingFields{resourceOwnerKey: req.Name}); err != nil {
+		return ctrl.Result{}, fmt.Errorf("unable to list child ephemeral runners: %w", err)
+	}
+	unseenCreates, expired := r.runnerCreationCache.observe(&ephemeralRunnerSet, &ephemeralRunnerList, time.Now())
+	if expired > 0 {
+		log.Info("Runner cache references expired; proceeding with cached observations", "count", expired)
+	}
+
 	// Requested deletion does not need reconciled.
 	if !ephemeralRunnerSet.DeletionTimestamp.IsZero() {
-		if !controllerutil.ContainsFinalizer(&ephemeralRunnerSet, EphemeralRunnerSetFinalizerName) {
-			return ctrl.Result{}, nil
-		}
-
 		log.Info("Deleting resources")
-		done, requeueAfter, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log)
+		done, requeueAfter, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, &ephemeralRunnerList, unseenCreates, log)
 		if err != nil {
 			log.Error(err, "Failed to clean up EphemeralRunners")
 			return ctrl.Result{}, err
@@ -163,6 +177,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 		log.Info("Successfully removed finalizer after cleanup")
 		r.ResourceCache.Delete(&ephemeralRunnerSet)
+		r.runnerCreationCache.delete(req.NamespacedName)
 		return ctrl.Result{}, nil
 	}
 
@@ -188,7 +203,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 			"specActionableRevision", ephemeralRunnerSet.Spec.ActionableRevision,
 			"statusAppliedActionableRevision", ephemeralRunnerSet.Status.AppliedActionableRevision,
 		)
-		_, requeueAfter, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log)
+		_, requeueAfter, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, &ephemeralRunnerList, unseenCreates, log)
 		if err != nil {
 			log.Error(err, "Failed to clean up EphemeralRunners")
 			return ctrl.Result{}, err
@@ -201,8 +216,8 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 		// A runner left to record its runner ID is still built from the previous
 		// spec, and nothing revisits it once the applied revision catches up.
-		if requeueAfter > 0 {
-			log.Info("Waiting for ephemeral runners to record their runner ID before marking the new spec applied", "requeueAfter", requeueAfter)
+		if requeueAfter > 0 || unseenCreates > 0 {
+			log.Info("Waiting for runner observations or runner IDs before marking the new spec applied", "unseenCreates", unseenCreates, "requeueAfter", requeueAfter)
 			return ctrl.Result{RequeueAfter: requeueAfter}, nil
 		}
 
@@ -216,7 +231,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	if ephemeralRunnerSet.Status.Phase == v1alpha1.EphemeralRunnerSetPhaseOutdated {
-		_, requeueAfter, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log)
+		_, requeueAfter, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, &ephemeralRunnerList, unseenCreates, log)
 		if err != nil {
 			log.Error(err, "Failed to clean up EphemeralRunners")
 			return ctrl.Result{}, err
@@ -232,17 +247,6 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, err
 	}
 
-	var ephemeralRunnerList v1alpha1.EphemeralRunnerList
-	if err := r.List(
-		ctx,
-		&ephemeralRunnerList,
-		client.InNamespace(req.Namespace),
-		client.MatchingFields{resourceOwnerKey: req.Name},
-	); err != nil {
-		log.Error(err, "Unable to list child ephemeral runners")
-		return ctrl.Result{}, err
-	}
-
 	ephemeralRunnersByState := newEphemeralRunnersByStates(&ephemeralRunnerList, ephemeralRunnerSet.Status.AppliedActionableRevision)
 
 	log.Info(
@@ -254,6 +258,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		"finished", len(ephemeralRunnersByState.finished),
 		"failed", len(ephemeralRunnersByState.failed),
 		"deleting", len(ephemeralRunnersByState.deleting),
+		"unseenCreates", unseenCreates,
 	)
 
 	// Runners that reported Outdated against a runner spec that has since been
@@ -302,7 +307,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 			return ctrl.Result{}, err
 		}
 
-		_, requeueAfter, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log)
+		_, requeueAfter, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, &ephemeralRunnerList, unseenCreates, log)
 		if err != nil {
 			log.Error(err, "Failed to clean up EphemeralRunners")
 			return ctrl.Result{}, err
@@ -338,7 +343,7 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		// Runners that are being deleted still exist and still hold their
 		// registration, so counting only the live ones would let the controller
 		// create replacements for runners that have not gone away yet.
-		scaleUpTotal := total + len(ephemeralRunnersByState.deleting)
+		scaleUpTotal := total + len(ephemeralRunnersByState.deleting) + unseenCreates
 		log.Info("Scaling comparison", "current", total, "deleting", len(ephemeralRunnersByState.deleting), "desired", ephemeralRunnerSet.Spec.Replicas)
 		switch {
 		case scaleUpTotal < ephemeralRunnerSet.Spec.Replicas: // Handle scale up
@@ -763,14 +768,12 @@ func (r *EphemeralRunnerSetReconciler) cleanUpProxySecret(ctx context.Context, e
 // A positive requeueAfter means runners that have not recorded their runner ID
 // were left alone, and is when the first of them has waited long enough to be
 // deleted without one. See unrecordedRunnerIDGracePeriod.
-func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) (done bool, requeueAfter time.Duration, err error) {
-	ephemeralRunnerList := new(v1alpha1.EphemeralRunnerList)
-	if err := r.List(ctx, ephemeralRunnerList, client.InNamespace(ephemeralRunnerSet.Namespace), client.MatchingFields{resourceOwnerKey: ephemeralRunnerSet.Name}); err != nil {
-		return false, 0, fmt.Errorf("failed to list child ephemeral runners: %w", err)
-	}
-
+func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, ephemeralRunnerList *v1alpha1.EphemeralRunnerList, unseenCreates int, log logr.Logger) (done bool, requeueAfter time.Duration, err error) {
 	// only if there are no ephemeral runners left, return true
 	if len(ephemeralRunnerList.Items) == 0 {
+		if unseenCreates > 0 {
+			return false, 0, nil
+		}
 		err := r.cleanUpProxySecret(ctx, ephemeralRunnerSet, log)
 		if err != nil {
 			return false, 0, err
@@ -1043,6 +1046,7 @@ func (r *EphemeralRunnerSetReconciler) createEphemeralRunners(ctx context.Contex
 				addErr(err)
 				return nil
 			}
+			r.runnerCreationCache.record(runnerSet, ephemeralRunner.UID, time.Now())
 
 			log.Info("Created new ephemeral runner", "runner", ephemeralRunner.Name)
 			return nil
