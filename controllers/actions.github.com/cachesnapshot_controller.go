@@ -59,7 +59,8 @@ func (r *CacheSnapshotReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if r.Now != nil {
 		now = r.Now
 	}
-	plan := planCacheGC(snapshots, now())
+	maxAge, idleTimeout := cacheRetentionLimits(scaleSet.Spec.CacheVolume)
+	plan := planCacheGC(snapshots, now(), maxAge, idleTimeout)
 
 	for _, s := range plan.markSuperseded {
 		patch := client.MergeFrom(s.DeepCopy())
@@ -91,14 +92,23 @@ type cacheGCPlan struct {
 }
 
 // planCacheGC decides which snapshots of one scale set to remove. It never
-// removes the newest ready snapshot, nor a snapshot that is still being taken.
+// removes the newest ready snapshot, unless it outlived the retention, nor a
+// snapshot that is still being taken.
 //
 // A replaced snapshot is only deleted a grace period after it was first seen
 // replaced, so a runner that chose it as its restore source just before its
 // replacement became ready can still create its volume from it.
-func planCacheGC(snapshots []snapshotv1.VolumeSnapshot, now time.Time) cacheGCPlan {
+func planCacheGC(snapshots []snapshotv1.VolumeSnapshot, now time.Time, maxAge, idleTimeout time.Duration) cacheGCPlan {
 	var plan cacheGCPlan
 	newest := newestReadySnapshot(snapshots)
+
+	// The newest ready snapshot is only deleted once it has outlived the retention. New
+	// runners already ignore an expired snapshot, so nothing new is restored from it.
+	if newest != nil {
+		if expired, _ := cacheExpired(newest, maxAge, idleTimeout, now); expired {
+			plan.delete = append(plan.delete, newest)
+		}
+	}
 
 	for i := range snapshots {
 		s := &snapshots[i]

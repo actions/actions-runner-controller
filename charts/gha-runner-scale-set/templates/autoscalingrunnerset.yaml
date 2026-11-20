@@ -175,6 +175,36 @@ spec:
     {{- with .snapshotClassName }}
     snapshotClassName: {{ . | quote }}
     {{- end }}
+    {{- with .commitPolicy }}
+    commitPolicy:
+      {{- with .repositories }}
+      repositories:
+        {{- range . }}
+        - {{ . | quote }}
+        {{- end }}
+      {{- end }}
+      {{- with .refs }}
+      refs:
+        {{- range . }}
+        - {{ . | quote }}
+        {{- end }}
+      {{- end }}
+      {{- with .events }}
+      events:
+        {{- range . }}
+        - {{ . | quote }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+    {{- with .retention }}
+    retention:
+      {{- if not (kindIs "invalid" .maxAge) }}
+      maxAge: {{ .maxAge | quote }}
+      {{- end }}
+      {{- if not (kindIs "invalid" .idleTimeout) }}
+      idleTimeout: {{ .idleTimeout | quote }}
+      {{- end }}
+    {{- end }}
   {{- end }}
 
   {{- with .Values.listenerTemplate }}

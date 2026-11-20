@@ -154,6 +154,21 @@ githubConfigSecret:
 #   size: 50Gi
 #   volumeName: cache            # optional, defaults to "cache"
 #   snapshotClassName: csi-snap  # optional, defaults to the cluster default VolumeSnapshotClass
+#
+#   ## commitPolicy restricts which finished runners may save their volume as the new cache.
+#   ## Runners that do not match still start from the cache, but their changes are discarded.
+#   ## Every list that is set has to match, and a job whose property is unknown never matches.
+#   ## Patterns use path.Match syntax, where "*" does not match "/". Without a policy every
+#   ## runner commits, so set one if any workflow that runs on the scale set is not trusted.
+#   commitPolicy:
+#     repositories: ["my-org/*"]
+#     events: ["push", "schedule", "workflow_dispatch"]  # keeps pull_request(_target) jobs out
+#     refs: ["refs/heads/main"]                          # the ref of the workflow
+#
+#   ## retention limits how long a cache lives. A duration of 0 disables a limit.
+#   retention:
+#     maxAge: 336h      # after this long a new cache history starts from an empty volume (default 336h)
+#     idleTimeout: 168h # a snapshot nobody restores from or replaces is deleted after this (default 168h)
 
 ## listenerTemplate is the PodSpec for each listener Pod
 ## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec

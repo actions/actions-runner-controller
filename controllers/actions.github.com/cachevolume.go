@@ -5,8 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"path"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
@@ -38,6 +40,13 @@ const (
 	AnnotationKeyCacheJobRepository  = "actions.github.com/cache-job-repository"
 	AnnotationKeyCacheJobWorkflowRef = "actions.github.com/cache-job-workflow-ref"
 	AnnotationKeyCacheWorkflowRunID  = "actions.github.com/cache-workflow-run-id"
+	AnnotationKeyCacheJobEvent       = "actions.github.com/cache-job-event"
+	// AnnotationKeyCacheChainStartedAt records when the cache history a snapshot belongs to
+	// was started from an empty volume. It is inherited by every snapshot of the chain, and
+	// the retention maxAge is measured from it.
+	AnnotationKeyCacheChainStartedAt = "actions.github.com/cache-chain-started-at"
+	// AnnotationKeyCacheLastUsedAt records when a runner last restored its volume from a snapshot.
+	AnnotationKeyCacheLastUsedAt = "actions.github.com/cache-last-used-at"
 	// AnnotationKeyCacheSupersededAt records when garbage collection first saw
 	// a snapshot that a newer ready snapshot replaced.
 	AnnotationKeyCacheSupersededAt = "actions.github.com/cache-superseded-at"
@@ -63,6 +72,13 @@ const (
 	cacheSupersededGracePeriod = time.Minute
 	// cacheFailedSnapshotTTL is how long a snapshot that reports an error is kept.
 	cacheFailedSnapshotTTL = 10 * time.Minute
+	// DefaultCacheMaxAge and DefaultCacheIdleTimeout apply when the retention of a cache
+	// volume does not set them.
+	DefaultCacheMaxAge      = 14 * 24 * time.Hour
+	DefaultCacheIdleTimeout = 7 * 24 * time.Hour
+	// cacheLastUsedRefresh is how stale the last-used mark of a snapshot has to be before a
+	// runner restoring from it refreshes it, so that busy scale sets do not write on every start.
+	cacheLastUsedRefresh = time.Hour
 	// cacheGCInterval is how often snapshots of a scale set are garbage collected.
 	cacheGCInterval = 30 * time.Second
 )
@@ -162,7 +178,7 @@ func (r *EphemeralRunnerReconciler) cacheReader() client.Reader {
 	return r.Client
 }
 
-func newCacheClaim(runner *v1alpha1.EphemeralRunner, lineage string, restoreFrom *snapshotv1.VolumeSnapshot) *corev1.PersistentVolumeClaim {
+func newCacheClaim(runner *v1alpha1.EphemeralRunner, lineage string, restoreFrom *snapshotv1.VolumeSnapshot, now time.Time) *corev1.PersistentVolumeClaim {
 	cv := runner.Spec.CacheVolume
 	claim := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -181,8 +197,13 @@ func newCacheClaim(runner *v1alpha1.EphemeralRunner, lineage string, restoreFrom
 			},
 		},
 	}
+	chainStart := now
 	if restoreFrom != nil {
-		claim.Annotations = map[string]string{AnnotationKeyCacheBaseSnapshot: restoreFrom.Name}
+		chainStart = cacheChainStart(restoreFrom)
+	}
+	claim.Annotations = map[string]string{AnnotationKeyCacheChainStartedAt: chainStart.UTC().Format(time.RFC3339)}
+	if restoreFrom != nil {
+		claim.Annotations[AnnotationKeyCacheBaseSnapshot] = restoreFrom.Name
 		claim.Spec.DataSource = &corev1.TypedLocalObjectReference{
 			APIGroup: ptr.To(snapshotv1.GroupName),
 			Kind:     "VolumeSnapshot",
@@ -197,11 +218,17 @@ func newCacheSnapshot(runner *v1alpha1.EphemeralRunner, claim *corev1.Persistent
 	if base := claim.Annotations[AnnotationKeyCacheBaseSnapshot]; base != "" {
 		annotations[AnnotationKeyCacheBaseSnapshot] = base
 	}
+	if started := claim.Annotations[AnnotationKeyCacheChainStartedAt]; started != "" {
+		annotations[AnnotationKeyCacheChainStartedAt] = started
+	}
 	if v := runner.Status.JobRepositoryName; v != "" {
 		annotations[AnnotationKeyCacheJobRepository] = v
 	}
 	if v := runner.Status.JobWorkflowRef; v != "" {
 		annotations[AnnotationKeyCacheJobWorkflowRef] = v
+	}
+	if v := runner.Status.JobEventName; v != "" {
+		annotations[AnnotationKeyCacheJobEvent] = v
 	}
 	if v := runner.Status.WorkflowRunID; v != 0 {
 		annotations[AnnotationKeyCacheWorkflowRunID] = strconv.FormatInt(v, 10)
@@ -263,7 +290,18 @@ func (r *EphemeralRunnerReconciler) ensureCacheClaim(ctx context.Context, runner
 	}
 	restoreFrom := newestReadySnapshot(snapshots)
 
-	claim := newCacheClaim(runner, lineage, restoreFrom)
+	now := time.Now()
+	if restoreFrom != nil {
+		maxAge, idleTimeout := cacheRetentionLimits(runner.Spec.CacheVolume)
+		if expired, reason := cacheExpired(restoreFrom, maxAge, idleTimeout, now); expired {
+			log.Info("The newest cache snapshot has expired, starting from an empty volume", "snapshot", restoreFrom.Name, "reason", reason)
+			restoreFrom = nil
+		} else {
+			r.touchCacheSnapshot(ctx, restoreFrom, now, log)
+		}
+	}
+
+	claim := newCacheClaim(runner, lineage, restoreFrom, now)
 	if err := r.setControllerReference(runner, claim); err != nil {
 		return "", fmt.Errorf("failed to set controller reference for the cache claim: %w", err)
 	}
@@ -292,6 +330,10 @@ func (r *EphemeralRunnerReconciler) ensureCacheClaim(ctx context.Context, runner
 // Before requesting the snapshot it waits, for a bounded time, for the volume to be detached.
 func (r *EphemeralRunnerReconciler) commitCacheVolume(ctx context.Context, runner *v1alpha1.EphemeralRunner, log logr.Logger) (ctrl.Result, error) {
 	if runner.Spec.CacheVolume == nil || runner.Status.Phase != v1alpha1.EphemeralRunnerPhaseSucceeded {
+		return ctrl.Result{}, nil
+	}
+	if ok, reason := cacheCommitAllowed(runner.Spec.CacheVolume.CommitPolicy, &runner.Status); !ok {
+		log.Info("Not saving the cache volume of the runner, the commit policy does not allow it", "reason", reason)
 		return ctrl.Result{}, nil
 	}
 	scaleSet := cacheScaleSetName(runner)
@@ -405,4 +447,116 @@ func (r *EphemeralRunnerReconciler) cacheVolumeInUse(ctx context.Context, runner
 		}
 	}
 	return false
+}
+
+// cacheCommitAllowed reports whether the job a runner ran may advance the cache, and
+// why not. A nil policy allows everything. Every list that is set must match, and a
+// list that is set never matches a property of the job that is not known.
+func cacheCommitAllowed(policy *v1alpha1.CacheCommitPolicy, status *v1alpha1.EphemeralRunnerStatus) (bool, string) {
+	if policy == nil {
+		return true, ""
+	}
+
+	if len(policy.Repositories) > 0 && !matchAny(policy.Repositories, status.JobRepositoryName) {
+		return false, fmt.Sprintf("repository %q is not allowed to commit", status.JobRepositoryName)
+	}
+	if len(policy.Refs) > 0 {
+		ref := workflowRefRef(status.JobWorkflowRef)
+		if !matchAny(policy.Refs, ref) {
+			return false, fmt.Sprintf("ref %q is not allowed to commit", ref)
+		}
+	}
+	if len(policy.Events) > 0 && (status.JobEventName == "" || !slices.Contains(policy.Events, status.JobEventName)) {
+		return false, fmt.Sprintf("event %q is not allowed to commit", status.JobEventName)
+	}
+	return true, ""
+}
+
+// workflowRefRef extracts the git ref from a job workflow reference of the form
+// "owner/repo/.github/workflows/file.yaml@refs/heads/main". It is empty if there is none.
+func workflowRefRef(jobWorkflowRef string) string {
+	i := strings.LastIndex(jobWorkflowRef, "@")
+	if i < 0 {
+		return ""
+	}
+	return jobWorkflowRef[i+1:]
+}
+
+// matchAny reports whether value, which must not be empty, matches one of the patterns.
+// Patterns that are not valid never match.
+func matchAny(patterns []string, value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, pattern := range patterns {
+		if ok, err := path.Match(pattern, value); err == nil && ok {
+			return true
+		}
+	}
+	return false
+}
+
+// cacheRetentionLimits returns the effective retention of a cache volume. A zero
+// duration means the limit is disabled.
+func cacheRetentionLimits(cv *v1alpha1.CacheVolume) (maxAge, idleTimeout time.Duration) {
+	maxAge, idleTimeout = DefaultCacheMaxAge, DefaultCacheIdleTimeout
+	if cv == nil || cv.Retention == nil {
+		return maxAge, idleTimeout
+	}
+	if d := cv.Retention.MaxAge; d != nil {
+		maxAge = max(d.Duration, 0)
+	}
+	if d := cv.Retention.IdleTimeout; d != nil {
+		idleTimeout = max(d.Duration, 0)
+	}
+	return maxAge, idleTimeout
+}
+
+func annotationTime(s *snapshotv1.VolumeSnapshot, key string) (time.Time, bool) {
+	t, err := time.Parse(time.RFC3339, s.Annotations[key])
+	return t, err == nil
+}
+
+// cacheChainStart is when the history the snapshot belongs to started from an empty volume.
+func cacheChainStart(s *snapshotv1.VolumeSnapshot) time.Time {
+	if t, ok := annotationTime(s, AnnotationKeyCacheChainStartedAt); ok {
+		return t
+	}
+	return snapshotTime(s)
+}
+
+// cacheLastUsed is when the snapshot was last restored from, or cut if that is later.
+func cacheLastUsed(s *snapshotv1.VolumeSnapshot) time.Time {
+	used := snapshotTime(s)
+	if t, ok := annotationTime(s, AnnotationKeyCacheLastUsedAt); ok && t.After(used) {
+		used = t
+	}
+	return used
+}
+
+// cacheExpired reports whether the snapshot has outlived the retention, and why.
+func cacheExpired(s *snapshotv1.VolumeSnapshot, maxAge, idleTimeout time.Duration, now time.Time) (bool, string) {
+	if maxAge > 0 && now.Sub(cacheChainStart(s)) >= maxAge {
+		return true, fmt.Sprintf("the cache history started more than %v ago", maxAge)
+	}
+	if idleTimeout > 0 && now.Sub(cacheLastUsed(s)) >= idleTimeout {
+		return true, fmt.Sprintf("the cache was not used for more than %v", idleTimeout)
+	}
+	return false, ""
+}
+
+// touchCacheSnapshot records that a runner restores from the snapshot. It is best effort and
+// skipped while the existing mark is recent.
+func (r *EphemeralRunnerReconciler) touchCacheSnapshot(ctx context.Context, s *snapshotv1.VolumeSnapshot, now time.Time, log logr.Logger) {
+	if t, ok := annotationTime(s, AnnotationKeyCacheLastUsedAt); ok && now.Sub(t) < cacheLastUsedRefresh {
+		return
+	}
+	patch := client.MergeFrom(s.DeepCopy())
+	if s.Annotations == nil {
+		s.Annotations = map[string]string{}
+	}
+	s.Annotations[AnnotationKeyCacheLastUsedAt] = now.UTC().Format(time.RFC3339)
+	if err := r.Patch(ctx, s, patch); err != nil && !kerrors.IsNotFound(err) {
+		log.V(1).Info("Could not record the use of the cache snapshot", "snapshot", s.Name, "error", err.Error())
+	}
 }

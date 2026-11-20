@@ -3683,6 +3683,48 @@ func TestTemplateRenderedCacheVolume(t *testing.T) {
 		assert.Nil(t, ars.Spec.CacheVolume.SnapshotClassName)
 	})
 
+	t.Run("commit policy and retention are rendered", func(t *testing.T) {
+		output, err := render(t, map[string]string{
+			"cacheVolume.storageClassName":          "fast-ssd",
+			"cacheVolume.size":                      "10Gi",
+			"cacheVolume.commitPolicy.repositories": "{my-org/*,my-org/other}",
+			"cacheVolume.commitPolicy.events":       "{push,schedule}",
+			"cacheVolume.commitPolicy.refs":         "{refs/heads/main}",
+			"cacheVolume.retention.maxAge":          "72h",
+			"cacheVolume.retention.idleTimeout":     "0",
+		}, "templates/autoscalingrunnerset.yaml")
+		require.NoError(t, err)
+		var ars v1alpha1.AutoscalingRunnerSet
+		helm.UnmarshalK8SYaml(t, output, &ars)
+		require.NotNil(t, ars.Spec.CacheVolume)
+
+		policy := ars.Spec.CacheVolume.CommitPolicy
+		require.NotNil(t, policy)
+		assert.Equal(t, []string{"my-org/*", "my-org/other"}, policy.Repositories)
+		assert.Equal(t, []string{"push", "schedule"}, policy.Events)
+		assert.Equal(t, []string{"refs/heads/main"}, policy.Refs)
+
+		retention := ars.Spec.CacheVolume.Retention
+		require.NotNil(t, retention)
+		require.NotNil(t, retention.MaxAge)
+		assert.Equal(t, "72h0m0s", retention.MaxAge.Duration.String())
+		require.NotNil(t, retention.IdleTimeout, "0 disables the limit and must not be dropped")
+		assert.Zero(t, retention.IdleTimeout.Duration)
+	})
+
+	t.Run("commit policy and retention are unset by default", func(t *testing.T) {
+		output, err := render(t, map[string]string{
+			"cacheVolume.storageClassName": "fast-ssd",
+			"cacheVolume.size":             "10Gi",
+		}, "templates/autoscalingrunnerset.yaml")
+		require.NoError(t, err)
+		var ars v1alpha1.AutoscalingRunnerSet
+		helm.UnmarshalK8SYaml(t, output, &ars)
+		require.NotNil(t, ars.Spec.CacheVolume)
+		assert.Nil(t, ars.Spec.CacheVolume.CommitPolicy, "by default every runner commits")
+		assert.Nil(t, ars.Spec.CacheVolume.Retention)
+	})
+
 	t.Run("storageClassName and size are required", func(t *testing.T) {
 		_, err := render(t, map[string]string{"cacheVolume.size": "10Gi"}, "templates/autoscalingrunnerset.yaml")
 		require.Error(t, err)

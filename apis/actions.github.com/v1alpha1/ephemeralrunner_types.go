@@ -186,6 +186,11 @@ type EphemeralRunnerStatus struct {
 
 	// +optional
 	JobDisplayName string `json:"jobDisplayName,omitempty"`
+
+	// JobEventName is the name of the event that triggered the workflow of the job,
+	// for example push or pull_request.
+	// +optional
+	JobEventName string `json:"jobEventName,omitempty"`
 }
 
 // EphemeralRunnerPhase is the phase of the ephemeral runner.

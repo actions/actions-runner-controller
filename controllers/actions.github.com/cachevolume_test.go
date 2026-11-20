@@ -163,7 +163,7 @@ func TestPlanCacheGC(t *testing.T) {
 	now := cacheTestEpoch.Add(time.Hour)
 
 	t.Run("only snapshot is kept", func(t *testing.T) {
-		plan := planCacheGC([]snapshotv1.VolumeSnapshot{cacheTestSnapshot("a", true, cacheTestEpoch)}, now)
+		plan := planCacheGC([]snapshotv1.VolumeSnapshot{cacheTestSnapshot("a", true, cacheTestEpoch)}, now, 0, 0)
 		assert.Empty(t, plan.delete)
 		assert.Empty(t, plan.markSuperseded)
 	})
@@ -173,24 +173,24 @@ func TestPlanCacheGC(t *testing.T) {
 			cacheTestSnapshot("old", true, cacheTestEpoch),
 			cacheTestSnapshot("new", true, cacheTestEpoch.Add(time.Minute)),
 		}
-		plan := planCacheGC(snapshots, now)
+		plan := planCacheGC(snapshots, now, 0, 0)
 		assert.Equal(t, []string{"old"}, names(plan.markSuperseded))
 		assert.Empty(t, plan.delete)
 
 		snapshots[0].Annotations = map[string]string{AnnotationKeyCacheSupersededAt: now.Add(-cacheSupersededGracePeriod / 2).Format(time.RFC3339)}
-		plan = planCacheGC(snapshots, now)
+		plan = planCacheGC(snapshots, now, 0, 0)
 		assert.Empty(t, plan.markSuperseded)
 		assert.Empty(t, plan.delete, "within the grace period")
 
 		snapshots[0].Annotations[AnnotationKeyCacheSupersededAt] = now.Add(-cacheSupersededGracePeriod).Format(time.RFC3339)
-		plan = planCacheGC(snapshots, now)
+		plan = planCacheGC(snapshots, now, 0, 0)
 		assert.Equal(t, []string{"old"}, names(plan.delete))
 	})
 
 	t.Run("a corrupt marker does not keep a snapshot forever", func(t *testing.T) {
 		old := cacheTestSnapshot("old", true, cacheTestEpoch)
 		old.Annotations = map[string]string{AnnotationKeyCacheSupersededAt: "garbage"}
-		plan := planCacheGC([]snapshotv1.VolumeSnapshot{old, cacheTestSnapshot("new", true, cacheTestEpoch.Add(time.Minute))}, now)
+		plan := planCacheGC([]snapshotv1.VolumeSnapshot{old, cacheTestSnapshot("new", true, cacheTestEpoch.Add(time.Minute))}, now, 0, 0)
 		assert.Equal(t, []string{"old"}, names(plan.delete))
 	})
 
@@ -198,7 +198,7 @@ func TestPlanCacheGC(t *testing.T) {
 		plan := planCacheGC([]snapshotv1.VolumeSnapshot{
 			cacheTestSnapshot("current", true, cacheTestEpoch),
 			cacheTestSnapshot("pending", false, cacheTestEpoch.Add(time.Minute)),
-		}, now)
+		}, now, 0, 0)
 		assert.Empty(t, plan.delete)
 		assert.Empty(t, plan.markSuperseded)
 	})
@@ -206,18 +206,18 @@ func TestPlanCacheGC(t *testing.T) {
 	t.Run("the only ready snapshot is kept even if newer ones fail", func(t *testing.T) {
 		failed := cacheTestSnapshot("failed", false, cacheTestEpoch.Add(time.Minute))
 		failed.Status.Error = &snapshotv1.VolumeSnapshotError{Message: ptr.To("boom")}
-		plan := planCacheGC([]snapshotv1.VolumeSnapshot{cacheTestSnapshot("good", true, cacheTestEpoch), failed}, now)
+		plan := planCacheGC([]snapshotv1.VolumeSnapshot{cacheTestSnapshot("good", true, cacheTestEpoch), failed}, now, 0, 0)
 		assert.Equal(t, []string{"failed"}, names(plan.delete), "old failure is cleaned up")
 		assert.Empty(t, plan.markSuperseded, "the good snapshot is still the newest ready one")
 
-		plan = planCacheGC([]snapshotv1.VolumeSnapshot{cacheTestSnapshot("good", true, cacheTestEpoch), failed}, failed.CreationTimestamp.Add(time.Second))
+		plan = planCacheGC([]snapshotv1.VolumeSnapshot{cacheTestSnapshot("good", true, cacheTestEpoch), failed}, failed.CreationTimestamp.Add(time.Second), 0, 0)
 		assert.Empty(t, plan.delete, "recent failure is kept for a while")
 	})
 
 	t.Run("snapshots being deleted are left alone", func(t *testing.T) {
 		old := cacheTestSnapshot("old", true, cacheTestEpoch)
 		old.DeletionTimestamp = ptr.To(metav1.NewTime(now))
-		plan := planCacheGC([]snapshotv1.VolumeSnapshot{old, cacheTestSnapshot("new", true, cacheTestEpoch.Add(time.Minute))}, now)
+		plan := planCacheGC([]snapshotv1.VolumeSnapshot{old, cacheTestSnapshot("new", true, cacheTestEpoch.Add(time.Minute))}, now, 0, 0)
 		assert.Empty(t, plan.delete)
 		assert.Empty(t, plan.markSuperseded)
 	})

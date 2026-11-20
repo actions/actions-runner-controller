@@ -158,9 +158,12 @@ func (e *env) newRunner(job, prev string) *v1alpha1.EphemeralRunner {
 }
 
 // runJob creates a runner and waits for it to finish, returning the lap timings.
-func (e *env) startJob(job, prev string) stopwatch {
+func (e *env) startJob(job, prev string, mutate ...func(*v1alpha1.EphemeralRunner)) stopwatch {
 	t := e.t
 	er := e.newRunner(job, prev)
+	for _, m := range mutate {
+		m(er)
+	}
 	er.OwnerReferences[0].UID = types.UID(e.ersUID)
 	sw := stopwatch{t: t, start: time.Now()}
 	require.NoError(t, e.c.Create(e.ctx, er))
@@ -344,49 +347,128 @@ func TestCacheVolumeOnRealCluster(t *testing.T) {
 
 	// 5. The surviving snapshot holds the whole history: restore it in a plain pod and read it.
 	final := e.snapshots()[0]
-	require.NoError(t, c.Create(ctx, &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{Name: "verify", Namespace: ns},
-		Spec: corev1.PersistentVolumeClaimSpec{
-			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-			StorageClassName: &sc,
-			Resources:        corev1.VolumeResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("1Gi")}},
-			DataSource:       &corev1.TypedLocalObjectReference{APIGroup: ptr.To("snapshot.storage.k8s.io"), Kind: "VolumeSnapshot", Name: final.Name},
-		},
-	}))
-	require.NoError(t, c.Create(ctx, &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: "verify", Namespace: ns},
-		Spec: corev1.PodSpec{
-			RestartPolicy: corev1.RestartPolicyNever,
-			Containers: []corev1.Container{{Name: "c", Image: busybox, Command: []string{"cat", "/cache/log"},
-				VolumeMounts: []corev1.VolumeMount{{Name: "v", MountPath: "/cache"}}}},
-			Volumes: []corev1.Volume{{Name: "v", VolumeSource: corev1.VolumeSource{PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: "verify"}}}},
-		},
-	}))
-	eventually(t, 3*time.Minute, "verify pod to finish", func() (bool, error) {
-		var p corev1.Pod
-		if err := c.Get(ctx, client.ObjectKey{Namespace: ns, Name: "verify"}, &p); err != nil {
-			return false, err
-		}
-		return p.Status.Phase == corev1.PodSucceeded, nil
-	})
-	rc, err := cs.CoreV1().Pods(ns).GetLogs("verify", &corev1.PodLogOptions{}).Stream(ctx)
-	require.NoError(t, err)
-	defer rc.Close()
-	raw, err := io.ReadAll(rc)
-	require.NoError(t, err)
-	lines := strings.Fields(string(raw))
+	lines := e.readCache(final.Name)
 	t.Logf("final cache log (from snapshot %s): %v", final.Name, lines)
 	require.Equal(t, []string{"run-1", "run-2", "run-3"}, lines[:3], "history must be chained through snapshots")
 	require.Len(t, lines, 4, "exactly one of the concurrent jobs wins (last writer wins)")
 	require.Contains(t, []string{"run-4a", "run-4b"}, lines[3])
+	winner := lines[3]
+
+	policy := func(er *v1alpha1.EphemeralRunner) {
+		er.Spec.CacheVolume.CommitPolicy = &v1alpha1.CacheCommitPolicy{Events: []string{"push"}, Repositories: []string{"org/*"}}
+	}
+
+	// 6. Commit policy: a pull_request_target job restores the cache but must not advance it.
+	t.Logf("=== job deny: pull_request_target is refused by the commit policy")
+	sw := e.startJob("deny", winner, policy)
+	e.setJobInfo("deny", "org/repo", "refs/heads/main", "pull_request_target")
+	e.waitJob("deny", sw)
+	time.Sleep(25 * time.Second) // longer than the detach wait, which is when a commit would have been requested
+	require.Equal(t, []string{final.Name + "(ready)"}, e.snapshotNames(), "a refused job must not add a snapshot")
+	var denied snapshotv1.VolumeSnapshot
+	require.True(t, kerrors.IsNotFound(c.Get(ctx, client.ObjectKey{Namespace: ns, Name: "set-runner-deny-cache"}, &denied)))
+
+	// 7. Commit policy: a push job from an allowed repository does advance it.
+	t.Logf("=== job allow: push from org/repo is allowed by the commit policy")
+	sw = e.startJob("allow", winner, policy)
+	e.setJobInfo("allow", "org/repo", "refs/heads/main", "push")
+	e.waitJob("allow", sw)
+	e.waitSnapshot("allow", sw)
+	eventually(t, 5*time.Minute, "only the allowed job's snapshot to remain", func() (bool, error) {
+		snaps := e.snapshots()
+		return len(snaps) == 1 && snaps[0].Name == "set-runner-allow-cache", nil
+	})
+	lines = e.readCache("set-runner-allow-cache")
+	t.Logf("cache after the allowed job: %v", lines)
+	require.Equal(t, []string{"run-1", "run-2", "run-3", winner, "allow"}, lines, "the refused job's writes are not in the cache")
+	require.NotContains(t, lines, "deny")
+
+	// 8. Retention maxAge: a runner whose configured maximum age is exceeded starts from an empty volume.
+	t.Logf("=== job cold: maxAge exceeded, starts from an empty volume")
+	sw = e.startJob("cold", "", func(er *v1alpha1.EphemeralRunner) {
+		er.Spec.CacheVolume.Retention = &v1alpha1.CacheRetention{MaxAge: &metav1.Duration{Duration: time.Second}}
+	})
+	e.waitJob("cold", sw)
+	e.waitSnapshot("cold", sw)
+	eventually(t, 5*time.Minute, "only the cold start's snapshot to remain", func() (bool, error) {
+		snaps := e.snapshots()
+		return len(snaps) == 1 && snaps[0].Name == "set-runner-cold-cache", nil
+	})
+	lines = e.readCache("set-runner-cold-cache")
+	t.Logf("cache after the cold start: %v", lines)
+	require.Equal(t, []string{"cold"}, lines, "the old history was dropped and a new one started")
+
+	// 9. Retention idleTimeout: the real GC deletes a snapshot nobody uses any more.
+	t.Logf("=== idle timeout: the snapshot is deleted once the scale set's retention says it is idle")
+	var latest v1alpha1.AutoscalingRunnerSet
+	require.NoError(t, c.Get(ctx, client.ObjectKey{Namespace: ns, Name: "set"}, &latest))
+	orig := latest.DeepCopy()
+	latest.Spec.CacheVolume.Retention = &v1alpha1.CacheRetention{IdleTimeout: &metav1.Duration{Duration: time.Second}}
+	require.NoError(t, c.Patch(ctx, &latest, client.MergeFrom(orig)))
+	idleWatch := stopwatch{t: t, start: time.Now()}
+	eventually(t, 3*time.Minute, "the idle snapshot to be deleted", func() (bool, error) { return len(e.snapshots()) == 0, nil })
+	idleWatch.lap("idle snapshot deleted by GC")
+}
+
+// setJobInfo plays the part of the listener, which records what job a runner got.
+func (e *env) setJobInfo(job, repo, ref, event string) {
+	name := "set-runner-" + job
+	eventually(e.t, 30*time.Second, "job info to be recorded for "+name, func() (bool, error) {
+		var er v1alpha1.EphemeralRunner
+		if err := e.c.Get(e.ctx, client.ObjectKey{Namespace: e.ns, Name: name}, &er); err != nil {
+			return false, err
+		}
+		orig := er.DeepCopy()
+		er.Status.JobRepositoryName = repo
+		er.Status.JobWorkflowRef = repo + "/.github/workflows/ci.yaml@" + ref
+		er.Status.JobEventName = event
+		return true, e.c.Status().Patch(e.ctx, &er, client.MergeFrom(orig))
+	})
+}
+
+// readCache restores a snapshot into a plain pod and returns the lines of the cache log.
+func (e *env) readCache(snapshot string) []string {
+	t := e.t
+	name := "verify-" + strings.ToLower(rand.String(5))
+	require.NoError(t, e.c.Create(e.ctx, &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: e.ns},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+			StorageClassName: &e.sc,
+			Resources:        corev1.VolumeResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("1Gi")}},
+			DataSource:       &corev1.TypedLocalObjectReference{APIGroup: ptr.To("snapshot.storage.k8s.io"), Kind: "VolumeSnapshot", Name: snapshot},
+		},
+	}))
+	require.NoError(t, e.c.Create(e.ctx, &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: e.ns},
+		Spec: corev1.PodSpec{
+			RestartPolicy: corev1.RestartPolicyNever,
+			Containers: []corev1.Container{{Name: "c", Image: busybox, Command: []string{"cat", "/cache/log"},
+				VolumeMounts: []corev1.VolumeMount{{Name: "v", MountPath: "/cache"}}}},
+			Volumes: []corev1.Volume{{Name: "v", VolumeSource: corev1.VolumeSource{PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: name}}}},
+		},
+	}))
+	eventually(t, 3*time.Minute, "pod "+name+" to finish", func() (bool, error) {
+		var p corev1.Pod
+		if err := e.c.Get(e.ctx, client.ObjectKey{Namespace: e.ns, Name: name}, &p); err != nil {
+			return false, err
+		}
+		return p.Status.Phase == corev1.PodSucceeded, nil
+	})
+	rc, err := e.cs.CoreV1().Pods(e.ns).GetLogs(name, &corev1.PodLogOptions{}).Stream(e.ctx)
+	require.NoError(t, err)
+	defer rc.Close()
+	raw, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	return strings.Fields(string(raw))
+}
+
+func placeholderTemplate() corev1.PodTemplateSpec {
+	return corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: v1alpha1.EphemeralRunnerContainerName, Image: busybox}}}}
 }
 
 // lineageOf mirrors the lineage label value ARC derives from a scale set.
 func lineageOf(namespace, scaleSet string) string {
 	sum := sha256.Sum256([]byte(namespace + "/" + scaleSet))
 	return hex.EncodeToString(sum[:])[:20]
-}
-
-func placeholderTemplate() corev1.PodTemplateSpec {
-	return corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: v1alpha1.EphemeralRunnerContainerName, Image: busybox}}}}
 }
