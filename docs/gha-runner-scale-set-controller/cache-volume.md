@@ -68,6 +68,43 @@ The size has to be at least the size of the volumes the snapshots were taken fro
 
 Make sure the user running the job can write to the mount, for example with `securityContext.fsGroup`.
 
+## Protecting the cache from untrusted workflows
+
+By default every runner that exits cleanly saves its volume, so whatever a workflow writes to the cache is read by later workflows, including pull requests. If some workflows are not fully trusted, add a `commitPolicy`. Runners that do not match it still start from the cache, but their changes are discarded:
+
+```yaml
+cacheVolume:
+  storageClassName: fast-ssd
+  size: 50Gi
+  commitPolicy:
+    repositories: ["my-org/*"]
+    events: ["push", "schedule", "workflow_dispatch"]
+    refs: ["refs/heads/main"]
+```
+
+- `repositories`: patterns for the `owner/repo` that runs the job.
+- `events`: names of the events that triggered the workflow, compared exactly. Use this to keep `pull_request` and `pull_request_target` jobs out. The ref alone cannot do that, because a `pull_request_target` job runs the workflow from the base branch ref.
+- `refs`: patterns for the ref of the workflow, as GitHub reports it in the job workflow reference. For a workflow that calls a reusable workflow, check what your workflows report before relying on it.
+
+Patterns use `path.Match` syntax, where `*` does not match `/`, so `refs/heads/*` does not match `refs/heads/release/1`. Every list that is set has to match. The policy **fails closed**: if a list is set and the job's property is unknown (the runner never got a job, or the listener did not record it), the runner does not commit. Skipped commits are logged by the controller. The listener has to be on a version that records `status.jobEventName` for `events` to work.
+
+A policy only protects what is written. Anything that is already in the cache is still read by every job, so do not share a scale set between workflows with different trust levels if the cache could expose secrets.
+
+## Limiting how long a cache lives
+
+A cache only grows: every runner starts from the previous cache and adds to it, until the volume is full and jobs fail with "no space left on device". Two limits bound that, and both have defaults:
+
+```yaml
+cacheVolume:
+  retention:
+    maxAge: 336h      # default: after 14 days a new cache history starts from an empty volume
+    idleTimeout: 168h # default: a snapshot nobody restores from or replaces is deleted after 7 days
+```
+
+- `maxAge` is measured from when the current history started from an empty volume. It is inherited by every snapshot of the history, so it applies even to a cache that is used constantly. When it is exceeded, new runners start empty (a cold build) and the old snapshot is deleted. Pick a value that gives a cold build at an acceptable frequency.
+- `idleTimeout` deletes a snapshot that no runner restored from and no runner replaced. It stops a scale set that no longer runs jobs from keeping its storage forever. Deleting it needs no new commit: the snapshot is removed by the controller.
+- A duration of `0` disables a limit. Retention does not size the volume: choose `size` for the largest cache you expect between resets.
+
 ## Behavior to know about
 
 - **One cache per scale set.** GitHub assigns a job to any idle runner of the scale set, so the volume is chosen before the job is known. Use separate scale sets for separate caches.
@@ -75,10 +112,11 @@ Make sure the user running the job can write to the mount, for example with `sec
 - **Pre-created runners are not refreshed.** Runners created ahead of time (`minRunners`) restore when created and do not see later snapshots.
 - **Only clean exits commit.** A runner that crashes, is killed, or fails to start never advances the cache. The runner phase is `Succeeded` whenever the runner exits cleanly, including for jobs whose steps failed.
 - **Snapshots are best effort.** A failure to snapshot is logged and never blocks the runner or the job.
-- **The cache is shared by every job of the scale set.** Anything a workflow writes to it is read by later workflows, including pull requests. Only use a cache volume on scale sets that run trusted workflows.
+- **The cache is shared by every job of the scale set.** Without a `commitPolicy`, anything a workflow writes to it is read by later workflows, including pull requests. Set a policy, or only use a cache volume on scale sets that run trusted workflows.
 
 ## Troubleshooting
 
 - A runner pod stays `Pending` with an unbound claim: check the StorageClass, the snapshot it restores from (`kubectl get volumesnapshot -l actions.github.com/cache-lineage`), and the snapshot controller. A volume cannot be restored if the snapshot was deleted in the meantime.
 - No snapshots appear: check the controller logs for `cache snapshot` messages and that the controller role can create `volumesnapshots` in the scale set namespace.
-- Snapshots carry the annotations `actions.github.com/cache-source-runner`, `cache-job-repository`, `cache-job-workflow-ref` and `cache-workflow-run-id` that identify the job that produced them.
+- Snapshots carry the annotations `actions.github.com/cache-source-runner`, `cache-job-repository`, `cache-job-workflow-ref`, `cache-job-event` and `cache-workflow-run-id` that identify the job that produced them, and `cache-chain-started-at` and `cache-last-used-at`, which retention uses.
+- Jobs start cold when you expect a warm cache: look for `has expired, starting from an empty volume` in the controller log, and check `retention`.

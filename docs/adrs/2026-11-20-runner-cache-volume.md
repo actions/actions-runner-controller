@@ -29,6 +29,13 @@ cacheVolume:
   storageClassName: fast-ssd   # required; must support ReadWriteOnce and CSI snapshots
   size: 50Gi                   # required
   snapshotClassName: my-class  # optional; cluster default VolumeSnapshotClass when unset
+  commitPolicy:                # optional; without it every runner that exits cleanly commits
+    repositories: ["my-org/*"]
+    events: ["push", "schedule", "workflow_dispatch"]
+    refs: ["refs/heads/main"]
+  retention:                   # optional; these are the defaults
+    maxAge: 336h
+    idleTimeout: 168h
 ```
 
 ARC injects only the *volume*. Users mount it where they need it by adding `volumeMounts` to the containers of `template.spec` (for example `/home/runner/_cache` in the runner container, `/var/lib/docker` in the dind sidecar). The Helm chart exposes the same block and adds the namespaced RBAC it needs (PVCs and `volumesnapshots`) only when the feature is enabled. Waiting for the volume to be detached additionally needs cluster-wide `list` on `volumeattachments`, which the controller chart grants (it is optional: without it the controller only waits for the pod to be gone).
@@ -49,6 +56,21 @@ When an `EphemeralRunner` that finishes in phase `Succeeded` (the runner contain
 
 A dedicated reconciler, driven by the `AutoscalingRunnerSet`, lists the lineage's snapshots every 30 seconds with the uncached API reader (it polls instead of watching, so enabling the feature needs only namespaced permissions and no `VolumeSnapshot` informer). Snapshots that are not the newest ready one are marked with a `superseded-at` annotation the first time they are seen replaced, and deleted once a one-minute grace period has passed; this covers runners that chose the old snapshot as their restore source just before its replacement became ready. The newest ready snapshot and snapshots still being taken are never deleted; snapshots that report an error are deleted after ten minutes. Snapshot-as-source protection delays deletion of a snapshot that is still being restored from, without affecting correctness.
 
+### Commit policy
+
+All jobs of a scale set share one cache, so a job that writes something harmful to it affects every later job. `commitPolicy` restricts which finished runners may advance the cache: allow-lists of repositories, workflow refs and trigger events, all of which must match. Runners that do not match still restore from the cache and run normally, but their volume is discarded, so the job is never failed because of it. The policy is evaluated when the runner finishes, from the job information the listener records in the `EphemeralRunner` status. Only restoring has to happen before the job is known, which is why a repository- or job-specific *restore* is not possible but a restricted *commit* is.
+
+It fails closed: when a list is set and the matching job property is unknown, the runner does not commit. The listener now also records `status.jobEventName`, which is needed because the ref alone cannot distinguish a `pull_request_target` job (which runs the base branch workflow) from a push. The `refs` list is matched against the ref of the workflow as GitHub reports it in the job workflow reference.
+
+### Retention
+
+Every runner starts from the previous cache and adds to it, so without a limit a cache only grows, until the fixed-size volume is full and jobs fail. Two limits are enforced, both configurable and enabled by default:
+
+- `maxAge`: the time since the current history of snapshots started from an empty volume. Every snapshot inherits the start of its history (annotation `cache-chain-started-at`), so a constantly used cache still reaches it. Once it is exceeded, runners ignore the snapshot and start from an empty volume, which begins a new history, and garbage collection deletes the old snapshot. The price is a cold build every `maxAge`.
+- `idleTimeout`: a snapshot that no runner restored from (annotation `cache-last-used-at`, refreshed at most hourly) and no commit replaced is deleted, so a scale set that no longer runs jobs does not keep its storage.
+
+Both are decided from annotations on the snapshots, so they survive controller restarts. The defaults (14 and 7 days) are a judgement, not measurements, and can be disabled with `0`. They do not replace sizing the volume for the largest cache expected between resets, and a free-space guard remains a follow-up.
+
 ### Semantics
 
 - Concurrent runners restore from the snapshot that is newest when they are created and commit independently; the last snapshot to become ready wins (matching hosted vendors).
@@ -62,7 +84,7 @@ This ADR covers only **runner scale sets** (`AutoscalingRunnerSet`, `EphemeralRu
 
 ### Out of scope (follow-ups)
 
-Commit filtering by ref/workflow (poisoning protection for less trusted organizations), free-space guard, idle expiry and retain-on-delete, multiple caches per scale set, metrics, recovering a runner whose claim can never be restored (for example because its snapshot was deleted despite the grace period), `containerMode: kubernetes` (job pods are separate from the runner pod), and transparent `actions/cache` acceleration (requires a patched runner).
+Free-space guard, retain-on-delete, multiple caches per scale set, metrics, recovering a runner whose claim can never be restored (for example because its snapshot was deleted despite the grace period), `containerMode: kubernetes` (job pods are separate from the runner pod), and transparent `actions/cache` acceleration (requires a patched runner).
 
 ### Alternatives considered
 
@@ -78,5 +100,6 @@ Commit filtering by ref/workflow (poisoning protection for less trusted organiza
 - Network traffic and object-store request costs for caches drop; the cost moves to PV and snapshot storage, bounded by `size` and one retained snapshot per scale set.
 - Runner start-up gains the latency of provisioning a volume from a snapshot; this is storage-dependent and should be measured per backend (for example lazily restored cloud volumes may be slow on first read).
 - Requires a CSI driver with snapshot support, the snapshot CRDs/controller, and a restore that works on the node the runner is scheduled to; drivers with node-local snapshots are unsupported, and `WaitForFirstConsumer` binding is recommended for zonal storage.
-- Cache contents are shared by every job on the scale set. Operators who run untrusted workflows must use separate scale sets (or wait for commit filtering) to avoid cache poisoning.
+- Cache contents are shared by every job on the scale set. Operators who run untrusted workflows must restrict commits with `commitPolicy` or use separate scale sets; the policy protects what is written, not what is read.
+- Caches are bounded in time by default: a cold build every `maxAge` is the price for bounded growth, and idle caches disappear after `idleTimeout`.
 - ARC gains a new optional dependency on the snapshot API group, three optional RBAC rules, and a new field in three CRDs; because runner drift detection compares the whole `EphemeralRunnerSpec`, changing `cacheVolume` rolls idle runners like any other spec change.
