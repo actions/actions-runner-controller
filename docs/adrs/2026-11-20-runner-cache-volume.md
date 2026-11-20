@@ -31,7 +31,7 @@ cacheVolume:
   snapshotClassName: my-class  # optional; cluster default VolumeSnapshotClass when unset
 ```
 
-ARC injects only the *volume*. Users mount it where they need it by adding `volumeMounts` to the containers of `template.spec` (for example `/home/runner/_cache` in the runner container, `/var/lib/docker` in the dind sidecar). The Helm chart exposes the same block and adds the namespaced RBAC it needs (PVCs, `volumesnapshots`, `volumeattachments` read) only when the feature is enabled.
+ARC injects only the *volume*. Users mount it where they need it by adding `volumeMounts` to the containers of `template.spec` (for example `/home/runner/_cache` in the runner container, `/var/lib/docker` in the dind sidecar). The Helm chart exposes the same block and adds the namespaced RBAC it needs (PVCs and `volumesnapshots`) only when the feature is enabled. Waiting for the volume to be detached additionally needs cluster-wide `list` on `volumeattachments`, which the controller chart grants (it is optional: without it the controller only waits for the pod to be gone).
 
 ### Lineage
 
@@ -39,15 +39,15 @@ The lineage is the `AutoscalingRunnerSet` (namespace and name). Snapshots carry 
 
 ### Restore
 
-Before creating the runner pod, the `EphemeralRunner` controller ensures a PVC `<runner-name>-cache` owned by the `EphemeralRunner`, restored from the latest snapshot via `spec.dataSource`. With no snapshot yet, an empty volume is provisioned (cold start). The pod mounts the claim through `persistentVolumeClaim.claimName`. A recreated pod reuses the claim.
+Before creating the runner pod, the `EphemeralRunner` controller ensures a PVC `<runner-name>-cache` owned by the `EphemeralRunner`, restored from the latest snapshot via `spec.dataSource`. With no snapshot yet, an empty volume is provisioned (cold start). The pod mounts the claim through `persistentVolumeClaim.claimName`. A recreated pod reuses the claim. Snapshots and claims are read with the uncached API reader, so the feature starts no new cluster-wide informers. If the `VolumeSnapshot` API is not served by the cluster, the pod gets an `emptyDir` with the same volume name instead, so runners still start.
 
 ### Commit
 
-When an `EphemeralRunner` finishes in phase `Succeeded` (the runner container exited cleanly, which includes jobs that failed their steps), the controller creates a `VolumeSnapshot` of its claim. The snapshot name is derived from the runner name, so creation is idempotent. Before snapshotting, the controller waits a bounded time (default 60 seconds) for the `VolumeAttachment` of the volume to disappear, so that the snapshot is taken from a detached, cleanly unmounted filesystem; drivers without attachments skip the wait. The controller does **not** wait for `readyToUse`: the snapshot controller's as-source protection keeps the PVC alive until the snapshot is cut, so runner cleanup is not delayed. Runners that fail, are killed, or are deleted with a job assigned never commit.
+When an `EphemeralRunner` that finishes in phase `Succeeded` (the runner container exited cleanly, which includes jobs that failed their steps) is deleted, the controller creates a `VolumeSnapshot` of its claim after cleaning up the pod. The snapshot name is derived from the runner name, so creation is idempotent. Before snapshotting, the controller waits a bounded time (60 seconds) for the pod to be gone and for the `VolumeAttachment` of the volume to disappear, so that the snapshot is taken from a detached, cleanly unmounted filesystem; if the controller may not list volume attachments, or the driver has none, only the pod is waited for. The controller does **not** wait for `readyToUse`: the snapshot controller's as-source protection keeps the PVC alive until the snapshot is cut, so runner cleanup is not delayed. Snapshotting is best effort: a failure is logged and never blocks the runner's deletion, so it cannot hold scale set capacity. Runners that fail, are killed, or are deleted with a job assigned never commit.
 
 ### Garbage collection
 
-When a lineage snapshot becomes `readyToUse`, the `AutoscalingRunnerSet` controller deletes all older snapshots of that lineage, keeping the newest ready one and any newer snapshots still in progress. Snapshots that report an error are deleted after a grace period. Snapshot-as-source protection delays deletion of a snapshot that is still being restored from, without affecting correctness.
+A dedicated reconciler, driven by the `AutoscalingRunnerSet`, lists the lineage's snapshots every 30 seconds with the uncached API reader (it polls instead of watching, so enabling the feature needs only namespaced permissions and no `VolumeSnapshot` informer). Snapshots that are not the newest ready one are marked with a `superseded-at` annotation the first time they are seen replaced, and deleted once a one-minute grace period has passed; this covers runners that chose the old snapshot as their restore source just before its replacement became ready. The newest ready snapshot and snapshots still being taken are never deleted; snapshots that report an error are deleted after ten minutes. Snapshot-as-source protection delays deletion of a snapshot that is still being restored from, without affecting correctness.
 
 ### Semantics
 
@@ -62,7 +62,7 @@ This ADR covers only **runner scale sets** (`AutoscalingRunnerSet`, `EphemeralRu
 
 ### Out of scope (follow-ups)
 
-Commit filtering by ref/workflow (poisoning protection for less trusted organizations), free-space guard, idle expiry and retain-on-delete, multiple caches per scale set, metrics, `containerMode: kubernetes` (job pods are separate from the runner pod), and transparent `actions/cache` acceleration (requires a patched runner).
+Commit filtering by ref/workflow (poisoning protection for less trusted organizations), free-space guard, idle expiry and retain-on-delete, multiple caches per scale set, metrics, recovering a runner whose claim can never be restored (for example because its snapshot was deleted despite the grace period), `containerMode: kubernetes` (job pods are separate from the runner pod), and transparent `actions/cache` acceleration (requires a patched runner).
 
 ### Alternatives considered
 

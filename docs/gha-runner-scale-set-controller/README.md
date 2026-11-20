@@ -27,6 +27,10 @@ In addition to the increased reliability of the automatic scaling, we have worke
 - The GitHub Personal Access Token (PAT) or the GitHub App installation token is no longer passed to the runner pod for runner registration
 - Maximum flexibility for customizing your runner pod template
 
+### Cache volumes
+
+Runners can get a persistent, snapshot-backed cache volume that is restored from the previous runs of the scale set. See [Cache volumes for runner scale sets](cache-volume.md).
+
 ### Demo
 
 [![Watch the walkthrough](thumbnail.png)](https://youtu.be/wQ0k5k6KW5Y)
