@@ -35,6 +35,7 @@ import (
 	"github.com/actions/actions-runner-controller/logger"
 	"github.com/actions/actions-runner-controller/logging"
 	"github.com/kelseyhightower/envconfig"
+	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -61,6 +62,7 @@ var scheme = runtime.NewScheme()
 func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 	_ = githubv1alpha1.AddToScheme(scheme)
+	_ = snapshotv1.AddToScheme(scheme)
 	_ = summerwindv1alpha1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
@@ -353,6 +355,15 @@ func main() {
 			ResourceBuilder: rb,
 		}).SetupWithManager(mgr, autoscalingRunnerSetOpts...); err != nil {
 			log.Error(err, "unable to create controller", "controller", "AutoscalingRunnerSet")
+			os.Exit(1)
+		}
+
+		if err = (&actionsgithubcom.CacheSnapshotReconciler{
+			Client: mgr.GetClient(),
+			Log:    log.WithName("CacheSnapshot").WithValues("version", build.Version),
+			Scheme: mgr.GetScheme(),
+		}).SetupWithManager(mgr, controllerOpts...); err != nil {
+			log.Error(err, "unable to create controller", "controller", "CacheSnapshot")
 			os.Exit(1)
 		}
 

@@ -107,6 +107,9 @@ const maxFailures = 5
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=pods/status,verbs=get
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=create;get;list;watch;delete
+// +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=create;get;list;delete
+// +kubebuilder:rbac:groups=snapshot.storage.k8s.io,resources=volumesnapshots,verbs=get;list;create;patch;delete
+// +kubebuilder:rbac:groups=storage.k8s.io,resources=volumeattachments,verbs=list
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -231,6 +234,15 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				log.Error(err, "Failed to clean up container hooks resources")
 				return ctrl.Result{}, err
 			}
+		}
+
+		// Saving the cache is best effort. A failure is logged and does not hold
+		// the runner, which counts against the scale set's capacity, so a
+		// permanently failing snapshot cannot wedge the scale set.
+		if result, err := r.commitCacheVolume(ctx, &ephemeralRunner, log); err != nil {
+			log.Error(err, "Failed to snapshot the cache volume of the ephemeral runner, the cache will not advance")
+		} else if !result.IsZero() {
+			return result, nil
 		}
 
 		log.Info("Removing finalizer")
@@ -947,6 +959,15 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 	if err != nil {
 		log.Error(err, "Failed to build new pod")
 		return ctrl.Result{}, err
+	}
+
+	if cacheVolume := runner.Spec.CacheVolume; cacheVolume != nil {
+		claimName, err := r.ensureCacheClaim(ctx, runner, log)
+		if err != nil {
+			log.Error(err, "Failed to prepare the cache volume")
+			return ctrl.Result{}, err
+		}
+		injectCacheVolume(&newPod.Spec, cacheVolume.GetVolumeName(), claimName)
 	}
 
 	log.Info("Created new pod spec for ephemeral runner")

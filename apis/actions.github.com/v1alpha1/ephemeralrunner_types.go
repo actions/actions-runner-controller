@@ -128,6 +128,10 @@ type EphemeralRunnerSpec struct {
 	// +optional
 	EphemeralRunnerConfigSecretMetadata *ResourceMeta `json:"ephemeralRunnerConfigSecretMetadata,omitempty"`
 
+	// CacheVolume adds a snapshot-backed cache volume to the runner pod.
+	// +optional
+	CacheVolume *CacheVolume `json:"cacheVolume,omitempty"`
+
 	// +optional
 	corev1.PodTemplateSpec `json:",inline"`
 }

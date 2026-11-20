@@ -72,6 +72,37 @@ spec:
                 ephemeralRunnerSpec:
                   description: EphemeralRunnerSpec is the spec of the ephemeral runner
                   properties:
+                    cacheVolume:
+                      description: CacheVolume adds a snapshot-backed cache volume to the runner pod.
+                      properties:
+                        size:
+                          anyOf:
+                            - type: integer
+                            - type: string
+                          description: |-
+                            Size is the requested size of each cache volume. It must be at least the
+                            size of the volume the snapshots were taken from.
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        snapshotClassName:
+                          description: |-
+                            SnapshotClassName is the VolumeSnapshotClass used to snapshot cache
+                            volumes. The cluster default class is used when it is not set.
+                          type: string
+                        storageClassName:
+                          description: StorageClassName is the StorageClass used to provision cache volumes.
+                          minLength: 1
+                          type: string
+                        volumeName:
+                          description: |-
+                            VolumeName is the name of the volume added to the runner pod.
+                            Defaults to "cache".
+                          maxLength: 63
+                          type: string
+                      required:
+                        - size
+                        - storageClassName
+                      type: object
                     ephemeralRunnerConfigSecretMetadata:
                       description: ResourceMeta carries metadata common to all internal resources
                       properties:

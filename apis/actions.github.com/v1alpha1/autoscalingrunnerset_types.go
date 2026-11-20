@@ -78,6 +78,10 @@ type AutoscalingRunnerSetSpec struct {
 	// +optional
 	Template corev1.PodTemplateSpec `json:"template,omitempty"`
 
+	// CacheVolume adds a snapshot-backed cache volume to every runner of the scale set.
+	// +optional
+	CacheVolume *CacheVolume `json:"cacheVolume,omitempty"`
+
 	// +optional
 	AutoscalingListenerMetadata *ResourceMeta `json:"autoscalingListener,omitempty"`
 

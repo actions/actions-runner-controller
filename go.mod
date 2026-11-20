@@ -19,6 +19,7 @@ require (
 	github.com/gruntwork-io/terratest v1.0.1
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/kelseyhightower/envconfig v1.4.0
+	github.com/kubernetes-csi/external-snapshotter/client/v8 v8.7.0
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/ginkgo/v2 v2.33.1
 	github.com/onsi/gomega v1.44.0
