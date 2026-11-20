@@ -141,6 +141,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 
 		log.Info("Successfully removed finalizer after cleanup")
 		r.ResourceCache.Delete(&autoscalingListener)
+		r.stuckTerminatingWarned.Delete(client.ObjectKeyFromObject(&autoscalingListener))
 		return ctrl.Result{}, nil
 	}
 
@@ -665,6 +666,8 @@ func (r *AutoscalingListenerReconciler) warnIfListenerPodStuckTerminating(autosc
 		"overdue", overdue.String(),
 	)
 	if r.Recorder != nil {
+		// events.k8s.io/v1 rejects an Event without an action, and the pod
+		// goes in as the related object so the event points at it.
 		r.Recorder.Eventf(
 			autoscalingListener,
 			listenerPod,

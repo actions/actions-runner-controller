@@ -10,6 +10,7 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	eventsv1 "k8s.io/api/events/v1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
@@ -160,6 +161,7 @@ var _ = Describe("AutoscalingListener with a listener pod stuck terminating", fu
 
 	var ctx context.Context
 	var mgr ctrl.Manager
+	var controller *AutoscalingListenerReconciler
 	var autoscalingListener *v1alpha1.AutoscalingListener
 
 	BeforeEach(func() {
@@ -168,7 +170,7 @@ var _ = Describe("AutoscalingListener with a listener pod stuck terminating", fu
 		autoscalingNS, mgr = createNamespace(GinkgoT(), k8sClient)
 		configSecret := createDefaultSecret(GinkgoT(), k8sClient, autoscalingNS.Name)
 
-		controller := &AutoscalingListenerReconciler{
+		controller = &AutoscalingListenerReconciler{
 			Client: mgr.GetClient(),
 			Scheme: mgr.GetScheme(),
 			Log:    logf.Log,
@@ -216,27 +218,33 @@ var _ = Describe("AutoscalingListener with a listener pod stuck terminating", fu
 		startManagers(GinkgoT(), mgr)
 	})
 
-	It("emits one Warning event on the listener and leaves the pod alone", func() {
-		key := client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}
+	// holdAndDeleteListenerPod deletes the listener pod and keeps it
+	// terminating. envtest has no kubelet: a finalizer keeps the deleted pod
+	// around, the way an unreachable node does.
+	holdAndDeleteListenerPod := func(key client.ObjectKey) *corev1.Pod {
 		pod := new(corev1.Pod)
 		Eventually(func() error { return k8sClient.Get(ctx, key, pod) },
 			autoscalingListenerTestTimeout, autoscalingListenerTestInterval,
 		).Should(Succeed(), "listener pod should be created")
 
-		// envtest has no kubelet: a finalizer keeps the deleted pod around,
-		// the way an unreachable node does.
 		held := pod.DeepCopy()
 		held.Finalizers = append(held.Finalizers, holdFinalizer)
 		Expect(k8sClient.Patch(ctx, held, client.MergeFrom(pod))).To(Succeed())
 		Expect(k8sClient.Delete(ctx, held)).To(Succeed())
-		DeferCleanup(func() {
-			current := new(corev1.Pod)
-			if err := k8sClient.Get(ctx, key, current); err == nil {
-				released := current.DeepCopy()
-				released.Finalizers = nil
-				_ = k8sClient.Patch(ctx, released, client.MergeFrom(current))
-			}
-		})
+		DeferCleanup(func() { releaseListenerPod(ctx, key, held.UID) })
+		return held
+	}
+
+	warnedFor := func(key client.ObjectKey) func() bool {
+		return func() bool {
+			_, ok := controller.stuckTerminatingWarned.Load(key)
+			return ok
+		}
+	}
+
+	It("emits one Warning event on the listener and leaves the pod alone", func() {
+		key := client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}
+		held := holdAndDeleteListenerPod(key)
 
 		stuckEvents := func() ([]eventsv1.Event, error) {
 			var list eventsv1.EventList
@@ -281,4 +289,42 @@ var _ = Describe("AutoscalingListener with a listener pod stuck terminating", fu
 		Expect(current.UID).To(Equal(held.UID), "the stuck pod is left as it was")
 		Expect(current.DeletionTimestamp).NotTo(BeNil())
 	})
+
+	It("forgets the episode once the stuck pod is gone", func() {
+		key := client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}
+		held := holdAndDeleteListenerPod(key)
+		Eventually(warnedFor(key), autoscalingListenerTestTimeout, autoscalingListenerTestInterval).
+			Should(BeTrue(), "the stuck pod should be warned about")
+
+		releaseListenerPod(ctx, key, held.UID)
+		Eventually(warnedFor(key), autoscalingListenerTestTimeout, autoscalingListenerTestInterval).
+			Should(BeFalse(), "the episode should be forgotten once the pod is gone")
+	})
+
+	It("forgets the episode when the listener is deleted with its pod stuck", func() {
+		key := client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}
+		held := holdAndDeleteListenerPod(key)
+		Eventually(warnedFor(key), autoscalingListenerTestTimeout, autoscalingListenerTestInterval).
+			Should(BeTrue(), "the stuck pod should be warned about")
+
+		Expect(k8sClient.Delete(ctx, autoscalingListener)).To(Succeed())
+		releaseListenerPod(ctx, key, held.UID)
+		Eventually(func() bool {
+			err := k8sClient.Get(ctx, key, new(v1alpha1.AutoscalingListener))
+			return kerrors.IsNotFound(err)
+		}, autoscalingListenerTestTimeout, autoscalingListenerTestInterval).Should(BeTrue(), "the listener should be deleted")
+		Expect(warnedFor(key)()).To(BeFalse(), "a deleted listener should leave nothing behind")
+	})
 })
+
+// releaseListenerPod removes the test finalizer from the listener pod with
+// the given UID, so the API server can finish deleting it.
+func releaseListenerPod(ctx context.Context, key client.ObjectKey, uid types.UID) {
+	current := new(corev1.Pod)
+	if err := k8sClient.Get(ctx, key, current); err != nil || current.UID != uid {
+		return
+	}
+	released := current.DeepCopy()
+	released.Finalizers = nil
+	_ = k8sClient.Patch(ctx, released, client.MergeFrom(current))
+}
