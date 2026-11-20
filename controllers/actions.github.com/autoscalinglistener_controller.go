@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -28,6 +29,7 @@ import (
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -52,6 +54,17 @@ const (
 	// a listener secret that a foreign finalizer keeps from going away.
 	// Secrets are not watched, so that is the one wait no event ends.
 	listenerSecretFinalizerPollInterval = 500 * time.Millisecond
+
+	// defaultListenerPodStuckTerminatingWarningAfter is how long a listener pod
+	// may stay past its deletion deadline before the reconciler warns about it.
+	// A pod on an unreachable node keeps its deletionTimestamp until the node
+	// comes back or the pod object is removed, and no new listener starts until
+	// then.
+	defaultListenerPodStuckTerminatingWarningAfter = 5 * time.Minute
+
+	// listenerPodStuckTerminatingReason is the reason of the Warning event
+	// emitted on the AutoscalingListener when its pod is stuck terminating.
+	listenerPodStuckTerminatingReason = "ListenerPodStuckTerminating"
 )
 
 // AutoscalingListenerReconciler reconciles a AutoscalingListener object
@@ -65,7 +78,20 @@ type AutoscalingListenerReconciler struct {
 	ListenerMetricsEndpoint string
 	PublishMetrics          bool
 
+	// Recorder emits events about the listener. SetupWithManager sets it when
+	// it is nil.
+	Recorder events.EventRecorder
+
 	ResourceBuilder
+
+	// listenerPodStuckTerminatingWarningAfter overrides
+	// defaultListenerPodStuckTerminatingWarningAfter when it is positive.
+	listenerPodStuckTerminatingWarningAfter time.Duration
+
+	// stuckTerminatingWarned maps a listener to the UID of the pod it already
+	// warned about, so a pod that stays stuck gets one event, not one per
+	// reconcile.
+	stuckTerminatingWarned sync.Map
 }
 
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
@@ -77,6 +103,7 @@ type AutoscalingListenerReconciler struct {
 // +kubebuilder:rbac:groups=actions.github.com,resources=autoscalinglisteners,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=actions.github.com,resources=autoscalinglisteners/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=actions.github.com,resources=autoscalinglisteners/finalizers,verbs=update
+// +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
 
 // Reconcile a AutoscalingListener resource to meet its desired spec.
 func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -532,8 +559,9 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 
 		if !listenerPod.DeletionTimestamp.IsZero() {
-			return ctrl.Result{}, nil
+			return ctrl.Result{RequeueAfter: r.warnIfListenerPodStuckTerminating(&autoscalingListener, &listenerPod, time.Now(), log)}, nil
 		}
+		r.stuckTerminatingWarned.Delete(client.ObjectKeyFromObject(&autoscalingListener))
 
 		desiredLabels := r.filterAndMergeLabels(listenerPod.Labels, desiredPod.Labels)
 		labelsModified := !maps.Equal(listenerPod.Labels, desiredLabels)
@@ -563,6 +591,7 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 
 		r.ResourceCache.listenerPod.Delete(&autoscalingListener)
+		r.stuckTerminatingWarned.Delete(client.ObjectKeyFromObject(&autoscalingListener))
 		desiredPod, err := r.newScaleSetListenerPod(
 			&autoscalingListener,
 			&listenerConfigSecret,
@@ -603,6 +632,53 @@ func (r *AutoscalingListenerReconciler) Reconcile(ctx context.Context, req ctrl.
 
 	}
 	return ctrl.Result{}, nil
+}
+
+// warnIfListenerPodStuckTerminating emits one Warning event, and logs once, when
+// the listener pod stays past its deletion deadline for longer than the warning
+// threshold. It only reports: the pod is still left to the kubelet, or to
+// whoever removes it. It returns how long to wait before checking again, or
+// zero when there is nothing left to wait for.
+func (r *AutoscalingListenerReconciler) warnIfListenerPodStuckTerminating(autoscalingListener *v1alpha1.AutoscalingListener, listenerPod *corev1.Pod, now time.Time, log logr.Logger) time.Duration {
+	warnAfter := r.listenerPodStuckTerminatingWarningAfter
+	if warnAfter <= 0 {
+		warnAfter = defaultListenerPodStuckTerminatingWarningAfter
+	}
+
+	// deletionTimestamp is already the request time plus the grace period.
+	overdue := now.Sub(listenerPod.DeletionTimestamp.Time)
+	if overdue < warnAfter {
+		return warnAfter - overdue
+	}
+
+	key := client.ObjectKeyFromObject(autoscalingListener)
+	if warned, ok := r.stuckTerminatingWarned.Swap(key, listenerPod.UID); ok && warned == listenerPod.UID {
+		return 0
+	}
+
+	overdue = overdue.Round(time.Second)
+	log.Info(
+		"Listener pod is stuck terminating; no new listener starts until the pod object is gone",
+		"namespace", listenerPod.Namespace,
+		"name", listenerPod.Name,
+		"node", listenerPod.Spec.NodeName,
+		"overdue", overdue.String(),
+	)
+	if r.Recorder != nil {
+		r.Recorder.Eventf(
+			autoscalingListener,
+			listenerPod,
+			corev1.EventTypeWarning,
+			listenerPodStuckTerminatingReason,
+			"WaitForListenerPodDeletion",
+			"Listener pod %s/%s is %s past its deletion deadline, so no new listener can start. Its node %q may be unreachable: the pod goes away when the node comes back or when the pod is removed.",
+			listenerPod.Namespace,
+			listenerPod.Name,
+			overdue,
+			listenerPod.Spec.NodeName,
+		)
+	}
+	return 0
 }
 
 func (r *AutoscalingListenerReconciler) deleteListenerPod(ctx context.Context, autoscalingListener *v1alpha1.AutoscalingListener, listenerPod *corev1.Pod, log logr.Logger) error {
@@ -934,6 +1010,9 @@ func (r *AutoscalingListenerReconciler) publishRunningListener(autoscalingListen
 // SetupWithManager sets up the controller with the Manager.
 func (r *AutoscalingListenerReconciler) SetupWithManager(mgr ctrl.Manager, opts ...Option) error {
 	r.setSchemeIfUnset(r.Scheme)
+	if r.Recorder == nil {
+		r.Recorder = mgr.GetEventRecorder("autoscalinglistener-controller")
+	}
 
 	labelBasedWatchFunc := func(_ context.Context, obj client.Object) []reconcile.Request {
 		var requests []reconcile.Request

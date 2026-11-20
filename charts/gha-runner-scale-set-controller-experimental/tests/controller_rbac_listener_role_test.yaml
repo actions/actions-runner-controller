@@ -44,6 +44,21 @@ tests:
           path: rules[3].resources[0]
           value: "serviceaccounts"
         template: manager_listener_role.yaml
+      - equal:
+          path: rules[4].apiGroups
+          value:
+            - events.k8s.io
+        template: manager_listener_role.yaml
+      - equal:
+          path: rules[4].resources[0]
+          value: "events"
+        template: manager_listener_role.yaml
+      - equal:
+          path: rules[4].verbs
+          value:
+            - create
+            - patch
+        template: manager_listener_role.yaml
 
   - it: should bind listener role to controller serviceaccount
     release:
