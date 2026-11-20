@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -200,6 +201,123 @@ func TestWebhookWorkflowJob(t *testing.T) {
 			initObjs,
 		)
 	})
+}
+
+// TestWebhookWorkflowJobCompletedDedup reproduces
+// https://github.com/actions/actions-runner-controller/issues/4315: GitHub resends
+// "completed" events for jobs that finished in an earlier run of the same workflow run
+// when only some jobs are re-run via "Re-run failed jobs". A second delivery for a job
+// ID we already scaled down for must be ignored, not scaled down again.
+func TestWebhookWorkflowJobCompletedDedup(t *testing.T) {
+	f, err := os.Open("testdata/org_webhook_workflow_job_payload.json")
+	if err != nil {
+		t.Fatalf("could not open the fixture: %s", err)
+	}
+	defer f.Close()
+
+	var e github.WorkflowJobEvent
+	if err := json.NewDecoder(f).Decode(&e); err != nil {
+		t.Fatalf("invalid json: %s", err)
+	}
+
+	e.Action = github.String("completed")
+	e.WorkflowJob.Status = github.String("completed")
+	e.WorkflowJob.Conclusion = github.String("failure")
+	runnerID := int64(1)
+	e.WorkflowJob.RunnerID = &runnerID
+
+	hra := &actionsv1alpha1.HorizontalRunnerAutoscaler{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-name",
+		},
+		Spec: actionsv1alpha1.HorizontalRunnerAutoscalerSpec{
+			ScaleTargetRef: actionsv1alpha1.ScaleTargetRef{
+				Name: "test-name",
+			},
+			ScaleUpTriggers: []actionsv1alpha1.ScaleUpTrigger{
+				{
+					GitHubEvent: &actionsv1alpha1.GitHubEventScaleUpTriggerSpec{
+						WorkflowJob: &actionsv1alpha1.WorkflowJobSpec{},
+					},
+				},
+			},
+		},
+	}
+
+	rd := &actionsv1alpha1.RunnerDeployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-name",
+		},
+		Spec: actionsv1alpha1.RunnerDeploymentSpec{
+			Template: actionsv1alpha1.RunnerTemplate{
+				Spec: actionsv1alpha1.RunnerSpec{
+					RunnerConfig: actionsv1alpha1.RunnerConfig{
+						Organization: "MYORG",
+						Labels:       []string{"label1"},
+					},
+				},
+			},
+		},
+	}
+
+	hraWebhook := &HorizontalRunnerAutoscalerGitHubWebhook{}
+
+	client := fake.NewClientBuilder().
+		WithScheme(sc).
+		WithRuntimeObjects(hra, rd).
+		WithIndex(&actionsv1alpha1.HorizontalRunnerAutoscaler{}, scaleTargetKey, hraWebhook.indexer).
+		Build()
+
+	logs := installTestLogger(hraWebhook)
+	hraWebhook.Client = client
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", hraWebhook.Handle)
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	defer func() {
+		if t.Failed() {
+			t.Logf("diagnostics: %s", logs.String())
+		}
+	}()
+
+	// First delivery: a genuine completion. Must scale down by 1.
+	resp1, err := sendWebhook(server, "workflow_job", &e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp1.Body.Close()
+
+	body1, err := io.ReadAll(resp1.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if resp1.StatusCode != 200 || string(body1) != "scaled test-name by -1" {
+		t.Fatalf("first delivery: want 200 %q, got %d %q", "scaled test-name by -1", resp1.StatusCode, string(body1))
+	}
+
+	// Second delivery: GitHub resending the same job's completion. Must be ignored.
+	resp2, err := sendWebhook(server, "workflow_job", &e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp2.Body.Close()
+
+	body2, err := io.ReadAll(resp2.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if resp2.StatusCode != 200 || string(body2) != "" {
+		t.Fatalf("second (duplicate) delivery: want 200 with an empty (ignored) body, got %d %q", resp2.StatusCode, string(body2))
+	}
+
+	if !strings.Contains(logs.String(), "Ignoring duplicate workflow_job completed event") {
+		t.Fatalf("expected a duplicate-detection log line, got: %s", logs.String())
+	}
 }
 
 func TestWebhookWorkflowJobWithSelfHostedLabel(t *testing.T) {
