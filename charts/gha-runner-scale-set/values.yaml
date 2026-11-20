@@ -129,6 +129,32 @@ githubConfigSecret:
 #   kubernetesModeAdditionalRoleRules: []
 #
 
+## cacheVolume gives every runner of the scale set a persistent cache volume.
+##
+## Each runner gets its own PersistentVolumeClaim, restored from the newest snapshot of the
+## scale set's cache. When a runner finishes cleanly, its volume is snapshotted and becomes the
+## newest snapshot. Only the newest snapshot is kept.
+##
+## ARC only adds the volume to the runner pod. Mount it by adding volumeMounts to the containers
+## in the template, for example:
+##   template:
+##     spec:
+##       containers:
+##         - name: runner
+##           volumeMounts:
+##             - name: cache
+##               mountPath: /home/runner/_cache
+##
+## Requires a StorageClass that supports ReadWriteOnce volumes and a CSI driver with VolumeSnapshot
+## support (snapshot CRDs and snapshot controller installed). Prefer a StorageClass with
+## volumeBindingMode: WaitForFirstConsumer. All jobs of the scale set share the same cache, so
+## only use it for scale sets that run trusted workflows.
+# cacheVolume:
+#   storageClassName: fast-ssd
+#   size: 50Gi
+#   volumeName: cache            # optional, defaults to "cache"
+#   snapshotClassName: csi-snap  # optional, defaults to the cluster default VolumeSnapshotClass
+
 ## listenerTemplate is the PodSpec for each listener Pod
 ## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
 # listenerTemplate:

@@ -3586,3 +3586,110 @@ func TestTemplateRenderedAutoScalingRunnerSet_MetadataPrefixSegmentLengthBoundar
 		})
 	}
 }
+
+func TestTemplateRenderedCacheVolume(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	baseValues := map[string]string{
+		"githubConfigUrl":                    "https://github.com/actions",
+		"githubConfigSecret.github_token":    "gh_token12345",
+		"controllerServiceAccount.name":      "arc",
+		"controllerServiceAccount.namespace": "arc-system",
+	}
+
+	render := func(t *testing.T, setValues map[string]string, template string) (string, error) {
+		t.Helper()
+		values := make(map[string]string, len(baseValues)+len(setValues))
+		maps.Copy(values, baseValues)
+		maps.Copy(values, setValues)
+		options := &helm.Options{
+			Logger:         logger.Discard,
+			SetValues:      values,
+			KubectlOptions: k8s.NewKubectlOptions("", "", "test"),
+		}
+		return helm.RenderTemplateE(t, options, helmChartPath, "test-runners", []string{template})
+	}
+
+	managerRoleHasCacheRules := func(role rbacv1.Role) (claims, snapshots bool) {
+		for _, rule := range role.Rules {
+			for _, resource := range rule.Resources {
+				switch resource {
+				case "persistentvolumeclaims":
+					claims = true
+				case "volumesnapshots":
+					snapshots = true
+				}
+			}
+		}
+		return claims, snapshots
+	}
+
+	t.Run("disabled by default", func(t *testing.T) {
+		output, err := render(t, nil, "templates/autoscalingrunnerset.yaml")
+		require.NoError(t, err)
+		var ars v1alpha1.AutoscalingRunnerSet
+		helm.UnmarshalK8SYaml(t, output, &ars)
+		assert.Nil(t, ars.Spec.CacheVolume)
+
+		output, err = render(t, nil, "templates/manager_role.yaml")
+		require.NoError(t, err)
+		var role rbacv1.Role
+		helm.UnmarshalK8SYaml(t, output, &role)
+		claims, snapshots := managerRoleHasCacheRules(role)
+		assert.False(t, claims)
+		assert.False(t, snapshots)
+	})
+
+	t.Run("rendered into the autoscaling runner set and the manager role", func(t *testing.T) {
+		setValues := map[string]string{
+			"cacheVolume.storageClassName":  "fast-ssd",
+			"cacheVolume.size":              "50Gi",
+			"cacheVolume.volumeName":        "build-cache",
+			"cacheVolume.snapshotClassName": "csi-snap",
+		}
+		output, err := render(t, setValues, "templates/autoscalingrunnerset.yaml")
+		require.NoError(t, err)
+		var ars v1alpha1.AutoscalingRunnerSet
+		helm.UnmarshalK8SYaml(t, output, &ars)
+		require.NotNil(t, ars.Spec.CacheVolume)
+		assert.Equal(t, "fast-ssd", ars.Spec.CacheVolume.StorageClassName)
+		assert.Equal(t, "50Gi", ars.Spec.CacheVolume.Size.String())
+		assert.Equal(t, "build-cache", ars.Spec.CacheVolume.VolumeName)
+		assert.Equal(t, ptr.To("csi-snap"), ars.Spec.CacheVolume.SnapshotClassName)
+
+		output, err = render(t, setValues, "templates/manager_role.yaml")
+		require.NoError(t, err)
+		var role rbacv1.Role
+		helm.UnmarshalK8SYaml(t, output, &role)
+		claims, snapshots := managerRoleHasCacheRules(role)
+		assert.True(t, claims)
+		assert.True(t, snapshots)
+	})
+
+	t.Run("optional fields stay unset", func(t *testing.T) {
+		output, err := render(t, map[string]string{
+			"cacheVolume.storageClassName": "fast-ssd",
+			"cacheVolume.size":             "10Gi",
+		}, "templates/autoscalingrunnerset.yaml")
+		require.NoError(t, err)
+		var ars v1alpha1.AutoscalingRunnerSet
+		helm.UnmarshalK8SYaml(t, output, &ars)
+		require.NotNil(t, ars.Spec.CacheVolume)
+		assert.Empty(t, ars.Spec.CacheVolume.VolumeName)
+		assert.Equal(t, "cache", ars.Spec.CacheVolume.GetVolumeName())
+		assert.Nil(t, ars.Spec.CacheVolume.SnapshotClassName)
+	})
+
+	t.Run("storageClassName and size are required", func(t *testing.T) {
+		_, err := render(t, map[string]string{"cacheVolume.size": "10Gi"}, "templates/autoscalingrunnerset.yaml")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cacheVolume.storageClassName is required")
+
+		_, err = render(t, map[string]string{"cacheVolume.storageClassName": "fast-ssd"}, "templates/autoscalingrunnerset.yaml")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cacheVolume.size is required")
+	})
+}

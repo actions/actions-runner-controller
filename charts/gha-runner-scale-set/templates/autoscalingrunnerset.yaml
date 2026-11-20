@@ -159,6 +159,24 @@ spec:
   minRunners: {{ .Values.minRunners | int }}
   {{- end }}
 
+  {{- with .Values.cacheVolume }}
+  {{- if not .storageClassName }}
+    {{- fail "cacheVolume.storageClassName is required" }}
+  {{- end }}
+  {{- if not .size }}
+    {{- fail "cacheVolume.size is required" }}
+  {{- end }}
+  cacheVolume:
+    {{- with .volumeName }}
+    volumeName: {{ . | quote }}
+    {{- end }}
+    storageClassName: {{ .storageClassName | quote }}
+    size: {{ .size | quote }}
+    {{- with .snapshotClassName }}
+    snapshotClassName: {{ . | quote }}
+    {{- end }}
+  {{- end }}
+
   {{- with .Values.listenerTemplate }}
   listenerTemplate:
     {{- with .metadata }}

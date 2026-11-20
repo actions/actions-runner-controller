@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -178,7 +179,16 @@ func TestTemplate_CreateManagerClusterRole(t *testing.T) {
 
 	assert.Empty(t, managerClusterRole.Namespace, "ClusterRole should not have a namespace")
 	assert.Equal(t, "test-arc-gha-rs-controller", managerClusterRole.Name)
-	assert.Equal(t, 16, len(managerClusterRole.Rules))
+	assert.Equal(t, 17, len(managerClusterRole.Rules))
+
+	// The controller reads volume attachments to snapshot cache volumes after they are detached.
+	var volumeAttachmentVerbs []string
+	for _, rule := range managerClusterRole.Rules {
+		if slices.Contains(rule.Resources, "volumeattachments") {
+			volumeAttachmentVerbs = rule.Verbs
+		}
+	}
+	assert.Equal(t, []string{"list"}, volumeAttachmentVerbs)
 
 	_, err = helm.RenderTemplateContextE(t, t.Context(), options, helmChartPath, releaseName, []string{"templates/manager_single_namespace_controller_role.yaml"})
 	assert.ErrorContains(t, err, "could not find template templates/manager_single_namespace_controller_role.yaml in chart", "We should get an error because the template should be skipped")
