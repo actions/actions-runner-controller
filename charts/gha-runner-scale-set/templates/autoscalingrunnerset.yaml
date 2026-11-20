@@ -175,6 +175,9 @@ spec:
     {{- with .snapshotClassName }}
     snapshotClassName: {{ . | quote }}
     {{- end }}
+    {{- if not (kindIs "invalid" .restoreTimeout) }}
+    restoreTimeout: {{ .restoreTimeout | quote }}
+    {{- end }}
     {{- with .commitPolicy }}
     commitPolicy:
       {{- with .repositories }}

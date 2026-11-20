@@ -165,6 +165,11 @@ githubConfigSecret:
 #     events: ["push", "schedule", "workflow_dispatch"]  # keeps pull_request(_target) jobs out
 #     refs: ["refs/heads/main"]                          # the ref of the workflow
 #
+#   ## restoreTimeout is how long a runner waits for its volume to be restored from the cache snapshot
+#   ## before it starts with an empty volume instead. It starts once the cluster began provisioning the
+#   ## volume. Defaults to 5m, and 0 waits forever.
+#   restoreTimeout: 5m
+#
 #   ## retention limits how long a cache lives. A duration of 0 disables a limit.
 #   retention:
 #     maxAge: 336h      # after this long a new cache history starts from an empty volume (default 336h)

@@ -50,6 +50,13 @@ type CacheVolume struct {
 	// +optional
 	CommitPolicy *CacheCommitPolicy `json:"commitPolicy,omitempty"`
 
+	// RestoreTimeout is how long a runner waits for the volume restored from the cache
+	// snapshot to be provisioned before it gives up and starts with an empty volume instead.
+	// The wait only starts once the cluster began provisioning the volume. A runner never
+	// stays blocked because of the cache. Defaults to 5m. A duration of 0 waits forever.
+	// +optional
+	RestoreTimeout *metav1.Duration `json:"restoreTimeout,omitempty"`
+
 	// Retention limits how long a cache lives. Without it a cache would only ever grow,
 	// because every runner starts from the previous cache and adds to it.
 	// +optional

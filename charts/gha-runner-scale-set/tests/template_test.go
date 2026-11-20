@@ -3613,7 +3613,7 @@ func TestTemplateRenderedCacheVolume(t *testing.T) {
 		return helm.RenderTemplateE(t, options, helmChartPath, "test-runners", []string{template})
 	}
 
-	managerRoleHasCacheRules := func(role rbacv1.Role) (claims, snapshots bool) {
+	managerRoleHasCacheRules := func(role rbacv1.Role) (claims, snapshots, events bool) {
 		for _, rule := range role.Rules {
 			for _, resource := range rule.Resources {
 				switch resource {
@@ -3621,10 +3621,12 @@ func TestTemplateRenderedCacheVolume(t *testing.T) {
 					claims = true
 				case "volumesnapshots":
 					snapshots = true
+				case "events":
+					events = rule.APIGroups[0] == "events.k8s.io"
 				}
 			}
 		}
-		return claims, snapshots
+		return claims, snapshots, events
 	}
 
 	t.Run("disabled by default", func(t *testing.T) {
@@ -3638,9 +3640,10 @@ func TestTemplateRenderedCacheVolume(t *testing.T) {
 		require.NoError(t, err)
 		var role rbacv1.Role
 		helm.UnmarshalK8SYaml(t, output, &role)
-		claims, snapshots := managerRoleHasCacheRules(role)
+		claims, snapshots, events := managerRoleHasCacheRules(role)
 		assert.False(t, claims)
 		assert.False(t, snapshots)
+		assert.False(t, events)
 	})
 
 	t.Run("rendered into the autoscaling runner set and the manager role", func(t *testing.T) {
@@ -3664,9 +3667,10 @@ func TestTemplateRenderedCacheVolume(t *testing.T) {
 		require.NoError(t, err)
 		var role rbacv1.Role
 		helm.UnmarshalK8SYaml(t, output, &role)
-		claims, snapshots := managerRoleHasCacheRules(role)
+		claims, snapshots, events := managerRoleHasCacheRules(role)
 		assert.True(t, claims)
 		assert.True(t, snapshots)
+		assert.True(t, events, "the controller records events about the cache volume")
 	})
 
 	t.Run("optional fields stay unset", func(t *testing.T) {
@@ -3692,6 +3696,7 @@ func TestTemplateRenderedCacheVolume(t *testing.T) {
 			"cacheVolume.commitPolicy.refs":         "{refs/heads/main}",
 			"cacheVolume.retention.maxAge":          "72h",
 			"cacheVolume.retention.idleTimeout":     "0",
+			"cacheVolume.restoreTimeout":            "90s",
 		}, "templates/autoscalingrunnerset.yaml")
 		require.NoError(t, err)
 		var ars v1alpha1.AutoscalingRunnerSet
@@ -3703,6 +3708,9 @@ func TestTemplateRenderedCacheVolume(t *testing.T) {
 		assert.Equal(t, []string{"my-org/*", "my-org/other"}, policy.Repositories)
 		assert.Equal(t, []string{"push", "schedule"}, policy.Events)
 		assert.Equal(t, []string{"refs/heads/main"}, policy.Refs)
+
+		require.NotNil(t, ars.Spec.CacheVolume.RestoreTimeout)
+		assert.Equal(t, "1m30s", ars.Spec.CacheVolume.RestoreTimeout.Duration.String())
 
 		retention := ars.Spec.CacheVolume.Retention
 		require.NotNil(t, retention)
@@ -3723,6 +3731,7 @@ func TestTemplateRenderedCacheVolume(t *testing.T) {
 		require.NotNil(t, ars.Spec.CacheVolume)
 		assert.Nil(t, ars.Spec.CacheVolume.CommitPolicy, "by default every runner commits")
 		assert.Nil(t, ars.Spec.CacheVolume.Retention)
+		assert.Nil(t, ars.Spec.CacheVolume.RestoreTimeout, "the controller default applies")
 	})
 
 	t.Run("storageClassName and size are required", func(t *testing.T) {

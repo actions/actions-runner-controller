@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/metrics"
 	"github.com/go-logr/logr"
 	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -26,6 +27,9 @@ type CacheSnapshotReconciler struct {
 	Log       logr.Logger
 	Scheme    *runtime.Scheme
 
+	// PublishMetrics enables the cache snapshot metrics.
+	PublishMetrics bool
+
 	// Now returns the current time. It defaults to time.Now.
 	Now func() time.Time
 }
@@ -37,9 +41,15 @@ func (r *CacheSnapshotReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	var scaleSet v1alpha1.AutoscalingRunnerSet
 	if err := r.Get(ctx, req.NamespacedName, &scaleSet); err != nil {
+		if kerrors.IsNotFound(err) && r.PublishMetrics {
+			metrics.CacheSnapshotForget(req.Namespace, req.Name)
+		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	if scaleSet.Spec.CacheVolume == nil || !scaleSet.DeletionTimestamp.IsZero() {
+		if r.PublishMetrics {
+			metrics.CacheSnapshotForget(scaleSet.Namespace, scaleSet.Name)
+		}
 		return ctrl.Result{}, nil
 	}
 	if !snapshotAPIAvailable(r.Client) {
@@ -61,6 +71,22 @@ func (r *CacheSnapshotReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 	maxAge, idleTimeout := cacheRetentionLimits(scaleSet.Spec.CacheVolume)
 	plan := planCacheGC(snapshots, now(), maxAge, idleTimeout)
+	if r.PublishMetrics {
+		ready, pending := 0, 0
+		for i := range snapshots {
+			switch {
+			case snapshotReady(&snapshots[i]):
+				ready++
+			case snapshots[i].DeletionTimestamp.IsZero():
+				pending++
+			}
+		}
+		age := -1.0
+		if newest := newestReadySnapshot(snapshots); newest != nil {
+			age = max(now().Sub(snapshotTime(newest)).Seconds(), 0)
+		}
+		metrics.CacheSnapshotState(scaleSet.Namespace, scaleSet.Name, ready, pending, age)
+	}
 
 	for _, s := range plan.markSuperseded {
 		patch := client.MergeFrom(s.DeepCopy())
@@ -77,7 +103,10 @@ func (r *CacheSnapshotReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		if err := r.Delete(ctx, s, client.Preconditions{UID: &uid}); client.IgnoreNotFound(err) != nil && !kerrors.IsConflict(err) {
 			return ctrl.Result{}, fmt.Errorf("failed to delete cache snapshot %q: %w", s.Name, err)
 		}
-		log.Info("Deleted cache snapshot", "snapshot", s.Name)
+		log.Info("Deleted cache snapshot", "snapshot", s.Name, "reason", plan.reasons[s.Name])
+		if r.PublishMetrics {
+			metrics.CacheSnapshotDeleted(scaleSet.Namespace, scaleSet.Name, plan.reasons[s.Name])
+		}
 	}
 
 	return ctrl.Result{RequeueAfter: cacheGCInterval}, nil
@@ -89,6 +118,16 @@ type cacheGCPlan struct {
 	markSuperseded []*snapshotv1.VolumeSnapshot
 	// delete are snapshots to remove now.
 	delete []*snapshotv1.VolumeSnapshot
+	// reasons holds why each snapshot in delete is removed, by name.
+	reasons map[string]string
+}
+
+func (p *cacheGCPlan) remove(s *snapshotv1.VolumeSnapshot, reason string) {
+	if p.reasons == nil {
+		p.reasons = map[string]string{}
+	}
+	p.delete = append(p.delete, s)
+	p.reasons[s.Name] = reason
 }
 
 // planCacheGC decides which snapshots of one scale set to remove. It never
@@ -106,7 +145,7 @@ func planCacheGC(snapshots []snapshotv1.VolumeSnapshot, now time.Time, maxAge, i
 	// runners already ignore an expired snapshot, so nothing new is restored from it.
 	if newest != nil {
 		if expired, _ := cacheExpired(newest, maxAge, idleTimeout, now); expired {
-			plan.delete = append(plan.delete, newest)
+			plan.remove(newest, metrics.CacheSnapshotExpired)
 		}
 	}
 
@@ -118,7 +157,7 @@ func planCacheGC(snapshots []snapshotv1.VolumeSnapshot, now time.Time, maxAge, i
 
 		if !snapshotReady(s) {
 			if s.Status != nil && s.Status.Error != nil && now.Sub(s.CreationTimestamp.Time) >= cacheFailedSnapshotTTL {
-				plan.delete = append(plan.delete, s)
+				plan.remove(s, metrics.CacheSnapshotFailed)
 			}
 			continue
 		}
@@ -131,7 +170,7 @@ func planCacheGC(snapshots []snapshotv1.VolumeSnapshot, now time.Time, maxAge, i
 		}
 		supersededAt, err := time.Parse(time.RFC3339, raw)
 		if err != nil || now.Sub(supersededAt) >= cacheSupersededGracePeriod {
-			plan.delete = append(plan.delete, s)
+			plan.remove(s, metrics.CacheSnapshotSuperseded)
 		}
 	}
 	return plan

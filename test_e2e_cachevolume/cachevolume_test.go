@@ -398,6 +398,34 @@ func TestCacheVolumeOnRealCluster(t *testing.T) {
 	t.Logf("cache after the cold start: %v", lines)
 	require.Equal(t, []string{"cold"}, lines, "the old history was dropped and a new one started")
 
+	// 9a. Restore timeout: a snapshot that cannot be restored must not keep a runner from starting.
+	// Asking for a volume smaller than the snapshot makes the provisioner refuse the restore for
+	// good, while an empty volume of that size is fine.
+	t.Logf("=== job stuck: the restore can never finish, the runner has to start with an empty volume")
+	sw = e.startJob("stuck", "", func(er *v1alpha1.EphemeralRunner) {
+		er.Spec.CacheVolume.Size = resource.MustParse("512Mi")
+		er.Spec.CacheVolume.RestoreTimeout = &metav1.Duration{Duration: 20 * time.Second}
+	})
+	e.waitJob("stuck", sw)
+	e.waitSnapshot("stuck", sw)
+	eventually(t, 5*time.Minute, "only the snapshot of the runner that fell back to remain", func() (bool, error) {
+		snaps := e.snapshots()
+		return len(snaps) == 1 && snaps[0].Name == "set-runner-stuck-cache", nil
+	})
+	lines = e.readCache("set-runner-stuck-cache")
+	t.Logf("cache after the runner that gave up restoring: %v", lines)
+	require.Equal(t, []string{"stuck"}, lines, "it started empty and saved a new cache")
+	var evs corev1.EventList
+	require.NoError(t, c.List(ctx, &evs, client.InNamespace(ns)))
+	var timedOut bool
+	for _, ev := range evs.Items {
+		if ev.Reason == "CacheRestoreTimedOut" {
+			timedOut = true
+			t.Logf("event: %s %s", ev.Reason, ev.Message)
+		}
+	}
+	require.True(t, timedOut, "the fallback is reported as an event")
+
 	// 9. Retention idleTimeout: the real GC deletes a snapshot nobody uses any more.
 	t.Logf("=== idle timeout: the snapshot is deleted once the scale set's retention says it is idle")
 	var latest v1alpha1.AutoscalingRunnerSet

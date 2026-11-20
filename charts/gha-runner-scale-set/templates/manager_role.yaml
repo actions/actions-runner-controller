@@ -109,6 +109,13 @@ rules:
   - get
   - list
   - patch
+- apiGroups:
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
 {{- end }}
 {{- if .Values.githubServerTLS }}
 - apiGroups:

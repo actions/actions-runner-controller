@@ -359,9 +359,10 @@ func main() {
 		}
 
 		if err = (&actionsgithubcom.CacheSnapshotReconciler{
-			Client: mgr.GetClient(),
-			Log:    log.WithName("CacheSnapshot").WithValues("version", build.Version),
-			Scheme: mgr.GetScheme(),
+			Client:         mgr.GetClient(),
+			Log:            log.WithName("CacheSnapshot").WithValues("version", build.Version),
+			Scheme:         mgr.GetScheme(),
+			PublishMetrics: metricsEnabled,
 		}).SetupWithManager(mgr, controllerOpts...); err != nil {
 			log.Error(err, "unable to create controller", "controller", "CacheSnapshot")
 			os.Exit(1)

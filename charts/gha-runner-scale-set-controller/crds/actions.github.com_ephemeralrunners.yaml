@@ -104,6 +104,13 @@ spec:
                             type: string
                           type: array
                       type: object
+                    restoreTimeout:
+                      description: |-
+                        RestoreTimeout is how long a runner waits for the volume restored from the cache
+                        snapshot to be provisioned before it gives up and starts with an empty volume instead.
+                        The wait only starts once the cluster began provisioning the volume. A runner never
+                        stays blocked because of the cache. Defaults to 5m. A duration of 0 waits forever.
+                      type: string
                     retention:
                       description: |-
                         Retention limits how long a cache lives. Without it a cache would only ever grow,

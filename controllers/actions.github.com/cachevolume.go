@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"path"
 	"slices"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/metrics"
 	"github.com/go-logr/logr"
 	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -45,6 +47,12 @@ const (
 	// was started from an empty volume. It is inherited by every snapshot of the chain, and
 	// the retention maxAge is measured from it.
 	AnnotationKeyCacheChainStartedAt = "actions.github.com/cache-chain-started-at"
+	// AnnotationKeyCacheRestoreSkipped marks a runner that gave up waiting for its volume to be
+	// restored from the cache snapshot. Its replacement volume starts empty. The value is the reason.
+	AnnotationKeyCacheRestoreSkipped = "actions.github.com/cache-restore-skipped"
+	// AnnotationKeyCacheRestoreWaitStartedAt records when the cluster was first seen provisioning
+	// the restored volume of a runner, which is when the restore timeout starts counting.
+	AnnotationKeyCacheRestoreWaitStartedAt = "actions.github.com/cache-restore-wait-started-at"
 	// AnnotationKeyCacheLastUsedAt records when a runner last restored its volume from a snapshot.
 	AnnotationKeyCacheLastUsedAt = "actions.github.com/cache-last-used-at"
 	// AnnotationKeyCacheSupersededAt records when garbage collection first saw
@@ -72,6 +80,10 @@ const (
 	cacheSupersededGracePeriod = time.Minute
 	// cacheFailedSnapshotTTL is how long a snapshot that reports an error is kept.
 	cacheFailedSnapshotTTL = 10 * time.Minute
+	// DefaultCacheRestoreTimeout applies when a cache volume does not set restoreTimeout.
+	DefaultCacheRestoreTimeout = 5 * time.Minute
+	// cacheRestorePollInterval is how often a runner whose restored volume is not provisioned yet is checked.
+	cacheRestorePollInterval = 5 * time.Second
 	// DefaultCacheMaxAge and DefaultCacheIdleTimeout apply when the retention of a cache
 	// volume does not set them.
 	DefaultCacheMaxAge      = 14 * 24 * time.Hour
@@ -82,6 +94,10 @@ const (
 	// cacheGCInterval is how often snapshots of a scale set are garbage collected.
 	cacheGCInterval = 30 * time.Second
 )
+
+// errCacheClaimTerminating is returned while the claim of a runner is still being deleted,
+// as after a restore timeout, and the runner has to wait for the name to be free again.
+var errCacheClaimTerminating = errors.New("the cache claim of the runner is being deleted")
 
 // cacheLineage returns the label value identifying the cache of a scale set.
 // It is a digest because namespace and name together can exceed the label length limit.
@@ -270,13 +286,18 @@ func (r *EphemeralRunnerReconciler) ensureCacheClaim(ctx context.Context, runner
 	}
 	if !snapshotAPIAvailable(r.Client) {
 		log.Info("The VolumeSnapshot API is not available in the cluster, running without a persistent cache volume")
+		r.cacheEvent(runner, corev1.EventTypeWarning, "CacheUnavailable", "The VolumeSnapshot API is not available in the cluster, the runner starts with an empty non-persistent cache volume")
+		r.recordCacheRestore(runner, scaleSet, metrics.CacheRestoreUnavailable)
 		return "", nil
 	}
 
 	name := cacheClaimName(runner)
 	reader := r.cacheReader()
-	err := reader.Get(ctx, types.NamespacedName{Namespace: runner.Namespace, Name: name}, new(corev1.PersistentVolumeClaim))
+	var existing corev1.PersistentVolumeClaim
+	err := reader.Get(ctx, types.NamespacedName{Namespace: runner.Namespace, Name: name}, &existing)
 	switch {
+	case err == nil && !existing.DeletionTimestamp.IsZero():
+		return "", errCacheClaimTerminating
 	case err == nil:
 		return name, nil
 	case !kerrors.IsNotFound(err):
@@ -291,11 +312,18 @@ func (r *EphemeralRunnerReconciler) ensureCacheClaim(ctx context.Context, runner
 	restoreFrom := newestReadySnapshot(snapshots)
 
 	now := time.Now()
-	if restoreFrom != nil {
+	result := metrics.CacheRestoreHit
+	switch {
+	case restoreFrom == nil:
+		result = metrics.CacheRestoreCold
+	case runner.Annotations[AnnotationKeyCacheRestoreSkipped] != "":
+		log.Info("Not restoring the cache snapshot, restoring it failed before", "snapshot", restoreFrom.Name, "reason", runner.Annotations[AnnotationKeyCacheRestoreSkipped])
+		restoreFrom, result = nil, metrics.CacheRestoreTimeout
+	default:
 		maxAge, idleTimeout := cacheRetentionLimits(runner.Spec.CacheVolume)
 		if expired, reason := cacheExpired(restoreFrom, maxAge, idleTimeout, now); expired {
 			log.Info("The newest cache snapshot has expired, starting from an empty volume", "snapshot", restoreFrom.Name, "reason", reason)
-			restoreFrom = nil
+			restoreFrom, result = nil, metrics.CacheRestoreExpired
 		} else {
 			r.touchCacheSnapshot(ctx, restoreFrom, now, log)
 		}
@@ -308,13 +336,118 @@ func (r *EphemeralRunnerReconciler) ensureCacheClaim(ctx context.Context, runner
 	if err := r.Create(ctx, claim); err != nil && !kerrors.IsAlreadyExists(err) {
 		return "", fmt.Errorf("failed to create the cache claim: %w", err)
 	}
+	r.recordCacheRestore(runner, scaleSet, result)
 
 	if restoreFrom != nil {
 		log.Info("Created cache claim restored from snapshot", "claim", name, "snapshot", restoreFrom.Name)
 	} else {
-		log.Info("Created empty cache claim, no snapshot to restore from yet", "claim", name)
+		log.Info("Created empty cache claim", "claim", name, "reason", result)
 	}
 	return name, nil
+}
+
+func (r *EphemeralRunnerReconciler) recordCacheRestore(runner *v1alpha1.EphemeralRunner, scaleSet, result string) {
+	if r.PublishMetrics {
+		metrics.CacheRestore(runner.Namespace, scaleSet, result)
+	}
+}
+
+func (r *EphemeralRunnerReconciler) recordCacheCommit(runner *v1alpha1.EphemeralRunner, result string) {
+	if r.PublishMetrics {
+		metrics.CacheCommit(runner.Namespace, cacheScaleSetName(runner), result)
+	}
+}
+
+// cacheEvent records a Kubernetes event on the runner. Without a recorder it does nothing.
+func (r *EphemeralRunnerReconciler) cacheEvent(runner *v1alpha1.EphemeralRunner, eventType, reason, message string) {
+	if r.Recorder != nil {
+		r.Recorder.Eventf(runner, nil, eventType, reason, "Cache", "%s", message)
+	}
+}
+
+// cacheRestoreTimeout returns how long a runner waits for its restored volume. Zero waits forever.
+func cacheRestoreTimeout(cv *v1alpha1.CacheVolume) time.Duration {
+	if cv == nil || cv.RestoreTimeout == nil {
+		return DefaultCacheRestoreTimeout
+	}
+	return max(cv.RestoreTimeout.Duration, 0)
+}
+
+// cacheProvisioningStarted reports whether the cluster began provisioning the volume of a
+// claim. A claim that waits for its first consumer stays unbound while the pod waits for
+// capacity, which has nothing to do with the restore, so the restore timeout must not run then.
+func cacheProvisioningStarted(claim *corev1.PersistentVolumeClaim) bool {
+	return claim.Annotations["volume.kubernetes.io/storage-provisioner"] != "" ||
+		claim.Annotations["volume.beta.kubernetes.io/storage-provisioner"] != ""
+}
+
+// enforceCacheRestoreTimeout makes sure a cache snapshot that cannot be restored does not keep a
+// runner from starting. While the pod of a runner has not started and the claim restored from a
+// snapshot is not bound, it waits for restoreTimeout once the cluster began provisioning the
+// volume. After that it deletes the pod and the claim and marks the runner so that the
+// claim is created again without the snapshot: the runner then starts with an empty volume.
+//
+// It returns how soon the runner has to be looked at again, and whether it fell back.
+func (r *EphemeralRunnerReconciler) enforceCacheRestoreTimeout(ctx context.Context, runner *v1alpha1.EphemeralRunner, pod *corev1.Pod, log logr.Logger) (time.Duration, bool, error) {
+	cv := runner.Spec.CacheVolume
+	timeout := cacheRestoreTimeout(cv)
+	if cv == nil || timeout == 0 || pod.Status.Phase != corev1.PodPending || runner.Annotations[AnnotationKeyCacheRestoreSkipped] != "" {
+		return 0, false, nil
+	}
+
+	var claim corev1.PersistentVolumeClaim
+	if err := r.cacheReader().Get(ctx, types.NamespacedName{Namespace: runner.Namespace, Name: cacheClaimName(runner)}, &claim); err != nil {
+		return 0, false, client.IgnoreNotFound(err)
+	}
+	if claim.Spec.DataSource == nil || claim.Status.Phase == corev1.ClaimBound || !claim.DeletionTimestamp.IsZero() {
+		return 0, false, nil
+	}
+	if !cacheProvisioningStarted(&claim) {
+		return cacheRestorePollInterval, false, nil
+	}
+
+	now := time.Now()
+	started, ok := time.Time{}, false
+	if raw := runner.Annotations[AnnotationKeyCacheRestoreWaitStartedAt]; raw != "" {
+		started, ok = annotationTimeOf(raw)
+	}
+	if !ok {
+		patch := client.MergeFrom(runner.DeepCopy())
+		if runner.Annotations == nil {
+			runner.Annotations = map[string]string{}
+		}
+		runner.Annotations[AnnotationKeyCacheRestoreWaitStartedAt] = now.UTC().Format(time.RFC3339)
+		if err := r.Patch(ctx, runner, patch); err != nil {
+			return 0, false, fmt.Errorf("failed to record when the cache restore started: %w", err)
+		}
+		return min(timeout, cacheRestorePollInterval), false, nil
+	}
+	if remaining := timeout - now.Sub(started); remaining > 0 {
+		return min(remaining, cacheRestorePollInterval), false, nil
+	}
+
+	log.Info("Restoring the cache snapshot took too long, starting the runner with an empty cache volume",
+		"claim", claim.Name, "snapshot", claim.Spec.DataSource.Name, "timeout", timeout)
+	patch := client.MergeFrom(runner.DeepCopy())
+	runner.Annotations[AnnotationKeyCacheRestoreSkipped] = "restore timed out after " + timeout.String()
+	if err := r.Patch(ctx, runner, patch); err != nil {
+		return 0, false, fmt.Errorf("failed to mark the runner as having skipped its cache restore: %w", err)
+	}
+	if err := r.Delete(ctx, pod, r.deletePodOptions(pod)...); client.IgnoreNotFound(err) != nil {
+		return 0, false, fmt.Errorf("failed to delete the pod waiting for its cache volume: %w", err)
+	}
+	if err := r.Delete(ctx, &claim); client.IgnoreNotFound(err) != nil {
+		return 0, false, fmt.Errorf("failed to delete the cache claim that cannot be restored: %w", err)
+	}
+	r.cacheEvent(runner, corev1.EventTypeWarning, "CacheRestoreTimedOut",
+		fmt.Sprintf("Restoring the cache snapshot %q did not finish within %v, the runner starts with an empty cache volume", claim.Spec.DataSource.Name, timeout))
+	r.recordCacheRestore(runner, cacheScaleSetName(runner), metrics.CacheRestoreTimeout)
+	return 0, true, nil
+}
+
+func annotationTimeOf(raw string) (time.Time, bool) {
+	t, err := time.Parse(time.RFC3339, raw)
+	return t, err == nil
 }
 
 // commitCacheVolume snapshots the cache volume of a runner that finished
@@ -334,6 +467,8 @@ func (r *EphemeralRunnerReconciler) commitCacheVolume(ctx context.Context, runne
 	}
 	if ok, reason := cacheCommitAllowed(runner.Spec.CacheVolume.CommitPolicy, &runner.Status); !ok {
 		log.Info("Not saving the cache volume of the runner, the commit policy does not allow it", "reason", reason)
+		r.cacheEvent(runner, corev1.EventTypeNormal, "CacheNotSaved", "The commit policy does not allow saving the cache volume: "+reason)
+		r.recordCacheCommit(runner, metrics.CacheCommitDenied)
 		return ctrl.Result{}, nil
 	}
 	scaleSet := cacheScaleSetName(runner)
@@ -389,6 +524,7 @@ func (r *EphemeralRunnerReconciler) commitCacheVolume(ctx context.Context, runne
 		return ctrl.Result{}, fmt.Errorf("failed to create the cache snapshot: %w", err)
 	}
 	log.Info("Requested cache snapshot", "snapshot", snapshot.Name)
+	r.recordCacheCommit(runner, metrics.CacheCommitRequested)
 	return ctrl.Result{RequeueAfter: cacheBindPollInterval}, nil
 }
 

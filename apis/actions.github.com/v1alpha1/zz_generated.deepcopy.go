@@ -434,6 +434,11 @@ func (in *CacheVolume) DeepCopyInto(out *CacheVolume) {
 		*out = new(CacheCommitPolicy)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.RestoreTimeout != nil {
+		in, out := &in.RestoreTimeout, &out.RestoreTimeout
+		*out = new(metav1.Duration)
+		**out = **in
+	}
 	if in.Retention != nil {
 		in, out := &in.Retention, &out.Retention
 		*out = new(CacheRetention)
