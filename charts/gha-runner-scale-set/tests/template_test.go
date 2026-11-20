@@ -3586,3 +3586,161 @@ func TestTemplateRenderedAutoScalingRunnerSet_MetadataPrefixSegmentLengthBoundar
 		})
 	}
 }
+
+func TestTemplateRenderedCacheVolume(t *testing.T) {
+	t.Parallel()
+
+	helmChartPath, err := filepath.Abs("../../gha-runner-scale-set")
+	require.NoError(t, err)
+
+	baseValues := map[string]string{
+		"githubConfigUrl":                    "https://github.com/actions",
+		"githubConfigSecret.github_token":    "gh_token12345",
+		"controllerServiceAccount.name":      "arc",
+		"controllerServiceAccount.namespace": "arc-system",
+	}
+
+	render := func(t *testing.T, setValues map[string]string, template string) (string, error) {
+		t.Helper()
+		values := make(map[string]string, len(baseValues)+len(setValues))
+		maps.Copy(values, baseValues)
+		maps.Copy(values, setValues)
+		options := &helm.Options{
+			Logger:         logger.Discard,
+			SetValues:      values,
+			KubectlOptions: k8s.NewKubectlOptions("", "", "test"),
+		}
+		return helm.RenderTemplateE(t, options, helmChartPath, "test-runners", []string{template})
+	}
+
+	managerRoleHasCacheRules := func(role rbacv1.Role) (claims, snapshots, events bool) {
+		for _, rule := range role.Rules {
+			for _, resource := range rule.Resources {
+				switch resource {
+				case "persistentvolumeclaims":
+					claims = true
+				case "volumesnapshots":
+					snapshots = true
+				case "events":
+					events = rule.APIGroups[0] == "events.k8s.io"
+				}
+			}
+		}
+		return claims, snapshots, events
+	}
+
+	t.Run("disabled by default", func(t *testing.T) {
+		output, err := render(t, nil, "templates/autoscalingrunnerset.yaml")
+		require.NoError(t, err)
+		var ars v1alpha1.AutoscalingRunnerSet
+		helm.UnmarshalK8SYaml(t, output, &ars)
+		assert.Nil(t, ars.Spec.CacheVolume)
+
+		output, err = render(t, nil, "templates/manager_role.yaml")
+		require.NoError(t, err)
+		var role rbacv1.Role
+		helm.UnmarshalK8SYaml(t, output, &role)
+		claims, snapshots, events := managerRoleHasCacheRules(role)
+		assert.False(t, claims)
+		assert.False(t, snapshots)
+		assert.False(t, events)
+	})
+
+	t.Run("rendered into the autoscaling runner set and the manager role", func(t *testing.T) {
+		setValues := map[string]string{
+			"cacheVolume.storageClassName":  "fast-ssd",
+			"cacheVolume.size":              "50Gi",
+			"cacheVolume.volumeName":        "build-cache",
+			"cacheVolume.snapshotClassName": "csi-snap",
+		}
+		output, err := render(t, setValues, "templates/autoscalingrunnerset.yaml")
+		require.NoError(t, err)
+		var ars v1alpha1.AutoscalingRunnerSet
+		helm.UnmarshalK8SYaml(t, output, &ars)
+		require.NotNil(t, ars.Spec.CacheVolume)
+		assert.Equal(t, "fast-ssd", ars.Spec.CacheVolume.StorageClassName)
+		assert.Equal(t, "50Gi", ars.Spec.CacheVolume.Size.String())
+		assert.Equal(t, "build-cache", ars.Spec.CacheVolume.VolumeName)
+		assert.Equal(t, ptr.To("csi-snap"), ars.Spec.CacheVolume.SnapshotClassName)
+
+		output, err = render(t, setValues, "templates/manager_role.yaml")
+		require.NoError(t, err)
+		var role rbacv1.Role
+		helm.UnmarshalK8SYaml(t, output, &role)
+		claims, snapshots, events := managerRoleHasCacheRules(role)
+		assert.True(t, claims)
+		assert.True(t, snapshots)
+		assert.True(t, events, "the controller records events about the cache volume")
+	})
+
+	t.Run("optional fields stay unset", func(t *testing.T) {
+		output, err := render(t, map[string]string{
+			"cacheVolume.storageClassName": "fast-ssd",
+			"cacheVolume.size":             "10Gi",
+		}, "templates/autoscalingrunnerset.yaml")
+		require.NoError(t, err)
+		var ars v1alpha1.AutoscalingRunnerSet
+		helm.UnmarshalK8SYaml(t, output, &ars)
+		require.NotNil(t, ars.Spec.CacheVolume)
+		assert.Empty(t, ars.Spec.CacheVolume.VolumeName)
+		assert.Equal(t, "cache", ars.Spec.CacheVolume.GetVolumeName())
+		assert.Nil(t, ars.Spec.CacheVolume.SnapshotClassName)
+	})
+
+	t.Run("commit policy and retention are rendered", func(t *testing.T) {
+		output, err := render(t, map[string]string{
+			"cacheVolume.storageClassName":          "fast-ssd",
+			"cacheVolume.size":                      "10Gi",
+			"cacheVolume.commitPolicy.repositories": "{my-org/*,my-org/other}",
+			"cacheVolume.commitPolicy.events":       "{push,schedule}",
+			"cacheVolume.commitPolicy.refs":         "{refs/heads/main}",
+			"cacheVolume.retention.maxAge":          "72h",
+			"cacheVolume.retention.idleTimeout":     "0",
+			"cacheVolume.restoreTimeout":            "90s",
+		}, "templates/autoscalingrunnerset.yaml")
+		require.NoError(t, err)
+		var ars v1alpha1.AutoscalingRunnerSet
+		helm.UnmarshalK8SYaml(t, output, &ars)
+		require.NotNil(t, ars.Spec.CacheVolume)
+
+		policy := ars.Spec.CacheVolume.CommitPolicy
+		require.NotNil(t, policy)
+		assert.Equal(t, []string{"my-org/*", "my-org/other"}, policy.Repositories)
+		assert.Equal(t, []string{"push", "schedule"}, policy.Events)
+		assert.Equal(t, []string{"refs/heads/main"}, policy.Refs)
+
+		require.NotNil(t, ars.Spec.CacheVolume.RestoreTimeout)
+		assert.Equal(t, "1m30s", ars.Spec.CacheVolume.RestoreTimeout.Duration.String())
+
+		retention := ars.Spec.CacheVolume.Retention
+		require.NotNil(t, retention)
+		require.NotNil(t, retention.MaxAge)
+		assert.Equal(t, "72h0m0s", retention.MaxAge.Duration.String())
+		require.NotNil(t, retention.IdleTimeout, "0 disables the limit and must not be dropped")
+		assert.Zero(t, retention.IdleTimeout.Duration)
+	})
+
+	t.Run("commit policy and retention are unset by default", func(t *testing.T) {
+		output, err := render(t, map[string]string{
+			"cacheVolume.storageClassName": "fast-ssd",
+			"cacheVolume.size":             "10Gi",
+		}, "templates/autoscalingrunnerset.yaml")
+		require.NoError(t, err)
+		var ars v1alpha1.AutoscalingRunnerSet
+		helm.UnmarshalK8SYaml(t, output, &ars)
+		require.NotNil(t, ars.Spec.CacheVolume)
+		assert.Nil(t, ars.Spec.CacheVolume.CommitPolicy, "by default every runner commits")
+		assert.Nil(t, ars.Spec.CacheVolume.Retention)
+		assert.Nil(t, ars.Spec.CacheVolume.RestoreTimeout, "the controller default applies")
+	})
+
+	t.Run("storageClassName and size are required", func(t *testing.T) {
+		_, err := render(t, map[string]string{"cacheVolume.size": "10Gi"}, "templates/autoscalingrunnerset.yaml")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cacheVolume.storageClassName is required")
+
+		_, err = render(t, map[string]string{"cacheVolume.storageClassName": "fast-ssd"}, "templates/autoscalingrunnerset.yaml")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cacheVolume.size is required")
+	})
+}

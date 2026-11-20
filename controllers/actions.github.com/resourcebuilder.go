@@ -760,6 +760,7 @@ func (b *ResourceBuilder) newEphemeralRunnerSet(autoscalingRunnerSet *v1alpha1.A
 			Proxy:                               autoscalingRunnerSet.Spec.Proxy,
 			GitHubServerTLS:                     autoscalingRunnerSet.Spec.GitHubServerTLS,
 			PodTemplateSpec:                     autoscalingRunnerSet.Spec.Template,
+			CacheVolume:                         autoscalingRunnerSet.Spec.CacheVolume,
 			VaultConfig:                         autoscalingRunnerSet.VaultConfig(),
 			EphemeralRunnerConfigSecretMetadata: autoscalingRunnerSet.Spec.EphemeralRunnerConfigSecretMetadata,
 		},

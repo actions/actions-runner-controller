@@ -141,6 +141,7 @@ func TestHandleJobStarted(t *testing.T) {
 			WorkflowRunID:   456,
 			JobWorkflowRef:  "actions/actions-runner-controller/.github/workflows/ci.yaml@refs/heads/main",
 			JobDisplayName:  "build",
+			EventName:       "push",
 			RunnerRequestID: 123,
 		},
 	}
@@ -284,6 +285,7 @@ func newTestScaler(t *testing.T, runner *v1alpha1.EphemeralRunner, onPatch ...fu
 			runner.Status.WorkflowRunID = patch.Status.WorkflowRunID
 			runner.Status.JobWorkflowRef = patch.Status.JobWorkflowRef
 			runner.Status.JobDisplayName = patch.Status.JobDisplayName
+			runner.Status.JobEventName = patch.Status.JobEventName
 
 			require.NoError(t, json.NewEncoder(w).Encode(runner))
 		default:
@@ -314,6 +316,7 @@ func assertJobStartedStatus(t *testing.T, runner *v1alpha1.EphemeralRunner, jobI
 	assert.Equal(t, jobInfo.WorkflowRunID, runner.Status.WorkflowRunID)
 	assert.Equal(t, jobInfo.JobWorkflowRef, runner.Status.JobWorkflowRef)
 	assert.Equal(t, jobInfo.JobDisplayName, runner.Status.JobDisplayName)
+	assert.Equal(t, jobInfo.EventName, runner.Status.JobEventName)
 }
 
 func TestSetDesiredWorkerState_MinMaxDefaults(t *testing.T) {

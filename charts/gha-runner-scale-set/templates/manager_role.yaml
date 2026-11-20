@@ -91,6 +91,32 @@ rules:
   - get
   - patch
   - update
+{{- if .Values.cacheVolume }}
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumeclaims
+  verbs:
+  - create
+  - get
+- apiGroups:
+  - snapshot.storage.k8s.io
+  resources:
+  - volumesnapshots
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+- apiGroups:
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+{{- end }}
 {{- if .Values.githubServerTLS }}
 - apiGroups:
   - ""

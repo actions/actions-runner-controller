@@ -94,6 +94,7 @@ func RegisterMetrics() {
 		outdatedEphemeralRunners,
 		runningListeners,
 	)
+	registerCacheMetrics()
 }
 
 func AddEphemeralRunner(commonLabels CommonLabels, phase v1alpha1.EphemeralRunnerPhase) {
