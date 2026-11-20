@@ -27,6 +27,7 @@ const EphemeralRunnerContainerName = "runner"
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.replicas
 // +kubebuilder:printcolumn:JSONPath=".spec.githubConfigUrl",name="GitHub Config URL",type=string
 // +kubebuilder:printcolumn:JSONPath=".status.runnerId",name=RunnerId,type=number
 // +kubebuilder:printcolumn:JSONPath=".status.phase",name=Phase,type=string
@@ -104,6 +105,15 @@ func (er *EphemeralRunner) VaultProxy() *ProxyConfig {
 
 // EphemeralRunnerSpec defines the desired state of EphemeralRunner
 type EphemeralRunnerSpec struct {
+	// Replicas is always 1: an EphemeralRunner represents exactly one runner pod.
+	// It exists so that the scale subresource is served, which lets the Kubernetes
+	// disruption controller resolve a PodDisruptionBudget for runner pods owned by
+	// this resource. Scaling is done through the EphemeralRunnerSet, not here.
+	// +kubebuilder:default=1
+	// +kubebuilder:validation:Enum=1
+	// +optional
+	Replicas int32 `json:"replicas,omitempty"`
+
 	// +optional
 	GitHubConfigURL string `json:"githubConfigUrl,omitempty"`
 
@@ -134,6 +144,10 @@ type EphemeralRunnerSpec struct {
 
 // EphemeralRunnerStatus defines the observed state of EphemeralRunner
 type EphemeralRunnerStatus struct {
+	// Replicas is always 1. It is reported through the scale subresource.
+	// +kubebuilder:default=1
+	// +optional
+	Replicas int32 `json:"replicas,omitempty"`
 	// Turns true only if the runner is online.
 	// +optional
 	Ready bool `json:"ready"`
