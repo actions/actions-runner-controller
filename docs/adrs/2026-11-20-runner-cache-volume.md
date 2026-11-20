@@ -36,6 +36,7 @@ cacheVolume:
   retention:                   # optional; these are the defaults
     maxAge: 336h
     idleTimeout: 168h
+  restoreTimeout: 5m           # optional; how long a runner waits for its restored volume
 ```
 
 ARC injects only the *volume*. Users mount it where they need it by adding `volumeMounts` to the containers of `template.spec` (for example `/home/runner/_cache` in the runner container, `/var/lib/docker` in the dind sidecar). The Helm chart exposes the same block and adds the namespaced RBAC it needs (PVCs and `volumesnapshots`) only when the feature is enabled. Waiting for the volume to be detached additionally needs cluster-wide `list` on `volumeattachments`, which the controller chart grants (it is optional: without it the controller only waits for the pod to be gone).
@@ -55,6 +56,14 @@ When an `EphemeralRunner` that finishes in phase `Succeeded` (the runner contain
 ### Garbage collection
 
 A dedicated reconciler, driven by the `AutoscalingRunnerSet`, lists the lineage's snapshots every 30 seconds with the uncached API reader (it polls instead of watching, so enabling the feature needs only namespaced permissions and no `VolumeSnapshot` informer). Snapshots that are not the newest ready one are marked with a `superseded-at` annotation the first time they are seen replaced, and deleted once a one-minute grace period has passed; this covers runners that chose the old snapshot as their restore source just before its replacement became ready. The newest ready snapshot and snapshots still being taken are never deleted; snapshots that report an error are deleted after ten minutes. Snapshot-as-source protection delays deletion of a snapshot that is still being restored from, without affecting correctness.
+
+### Restore timeout
+
+A cache must never keep a runner from starting. If the claim restored from a snapshot is not bound for `restoreTimeout` (default 5 minutes, `0` waits forever) while the runner's pod has not started, the controller deletes the pod and the claim, marks the runner with an annotation, and creates the claim again without the snapshot, so the runner starts with an empty volume. The annotation makes the choice stick for that runner, and the new volume is saved normally, which replaces the snapshot that could not be restored. The clock starts when the cluster begins provisioning the volume (the claim carries the `storage-provisioner` annotation), and is recorded on the runner, because with `WaitForFirstConsumer` a claim is unbound for as long as its pod waits for capacity and counting that would discard good caches. A slow restore is indistinguishable from a stuck one, so the timeout has to exceed the slowest restore expected.
+
+### Observability
+
+The controller exports counters for how cache volumes were initialised (hit, cold, expired, timeout, unavailable), for commits (requested, denied, failed) and for snapshots deleted by garbage collection and why, and gauges for the number of snapshots and the age of the newest ready one. Decisions that would otherwise only be in logs (restore timeout, commit refused by the policy, failed commit, missing snapshot API) are also recorded as Kubernetes events on the runner, which needs `create` and `patch` on `events.k8s.io` events in the scale set namespace.
 
 ### Commit policy
 
@@ -84,7 +93,7 @@ This ADR covers only **runner scale sets** (`AutoscalingRunnerSet`, `EphemeralRu
 
 ### Out of scope (follow-ups)
 
-Free-space guard, retain-on-delete, multiple caches per scale set, metrics, recovering a runner whose claim can never be restored (for example because its snapshot was deleted despite the grace period), `containerMode: kubernetes` (job pods are separate from the runner pod), and transparent `actions/cache` acceleration (requires a patched runner).
+Free-space guard, retain-on-delete, multiple caches per scale set, `containerMode: kubernetes` (job pods are separate from the runner pod), and transparent `actions/cache` acceleration (requires a patched runner).
 
 ### Alternatives considered
 

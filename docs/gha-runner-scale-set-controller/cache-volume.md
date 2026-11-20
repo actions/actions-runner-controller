@@ -68,6 +68,17 @@ The size has to be at least the size of the volumes the snapshots were taken fro
 
 Make sure the user running the job can write to the mount, for example with `securityContext.fsGroup`.
 
+## A restore that cannot finish
+
+A runner never stays blocked because of the cache. If the volume restored from the snapshot is not provisioned, for example because the snapshot is unusable or the storage backend keeps failing, the runner waits for `restoreTimeout` and then starts with an empty volume instead:
+
+```yaml
+cacheVolume:
+  restoreTimeout: 5m   # default; 0 waits forever
+```
+
+The wait starts when the cluster begins provisioning the volume, not when the pod is created. With `volumeBindingMode: WaitForFirstConsumer` a volume stays unbound while the pod waits for capacity, and that is not counted. When the timeout is exceeded the controller deletes the pod and its claim, creates the claim again without the snapshot, and records a `CacheRestoreTimedOut` event on the runner. That runner never tries to restore again, so it starts cold. Its volume is saved as usual, which replaces the snapshot that could not be restored. Set the timeout above the longest restore you expect: a restore that is only slow, not stuck, is abandoned too.
+
 ## Protecting the cache from untrusted workflows
 
 By default every runner that exits cleanly saves its volume, so whatever a workflow writes to the cache is read by later workflows, including pull requests. If some workflows are not fully trusted, add a `commitPolicy`. Runners that do not match it still start from the cache, but their changes are discarded:
@@ -105,6 +116,22 @@ cacheVolume:
 - `idleTimeout` deletes a snapshot that no runner restored from and no runner replaced. It stops a scale set that no longer runs jobs from keeping its storage forever. Deleting it needs no new commit: the snapshot is removed by the controller.
 - A duration of `0` disables a limit. Retention does not size the volume: choose `size` for the largest cache you expect between resets.
 
+## Metrics and events
+
+With metrics enabled the controller exports, per scale set (`namespace`, `scale_set`):
+
+| Metric | Meaning |
+|---|---|
+| `gha_controller_cache_restores_total{result}` | Cache volumes created: `hit` (restored), `cold` (no snapshot), `expired` (retention), `timeout` (gave up restoring), `unavailable` (no snapshot API) |
+| `gha_controller_cache_commits_total{result}` | Finished runners considered for saving: `requested`, `denied` (commit policy), `failed` |
+| `gha_controller_cache_snapshots_deleted_total{reason}` | Snapshots deleted by garbage collection: `superseded`, `expired`, `failed` |
+| `gha_controller_cache_snapshots{state}` | Snapshots of the scale set: `ready` or `pending` |
+| `gha_controller_cache_snapshot_age_seconds` | Age of the newest ready snapshot, absent while there is none |
+
+A low `hit` share, a growing `timeout` count, or a snapshot age that keeps growing while jobs run (nothing commits) are the signals to look at first.
+
+Events on the `EphemeralRunner` report the decisions that otherwise only appear in logs: `CacheRestoreTimedOut`, `CacheNotSaved` (commit policy), `CacheCommitFailed` and `CacheUnavailable` (no snapshot API). The controller needs permission to create events (`events.k8s.io`) in the scale set namespace; the chart grants it when `cacheVolume` is set.
+
 ## Behavior to know about
 
 - **One cache per scale set.** GitHub assigns a job to any idle runner of the scale set, so the volume is chosen before the job is known. Use separate scale sets for separate caches.
@@ -116,7 +143,7 @@ cacheVolume:
 
 ## Troubleshooting
 
-- A runner pod stays `Pending` with an unbound claim: check the StorageClass, the snapshot it restores from (`kubectl get volumesnapshot -l actions.github.com/cache-lineage`), and the snapshot controller. A volume cannot be restored if the snapshot was deleted in the meantime.
+- A runner pod stays `Pending` with an unbound claim: check the StorageClass, the snapshot it restores from (`kubectl get volumesnapshot -l actions.github.com/cache-lineage`), and the snapshot controller. After `restoreTimeout` the runner starts with an empty volume on its own and a `CacheRestoreTimedOut` event is recorded.
 - No snapshots appear: check the controller logs for `cache snapshot` messages and that the controller role can create `volumesnapshots` in the scale set namespace.
 - Snapshots carry the annotations `actions.github.com/cache-source-runner`, `cache-job-repository`, `cache-job-workflow-ref`, `cache-job-event` and `cache-workflow-run-id` that identify the job that produced them, and `cache-chain-started-at` and `cache-last-used-at`, which retention uses.
 - Jobs start cold when you expect a warm cache: look for `has expired, starting from an empty volume` in the controller log, and check `retention`.
