@@ -51,6 +51,12 @@ const (
 	cacheDetachWaitTimeout = 60 * time.Second
 	// cacheDetachPollInterval is how often the detach wait is rechecked.
 	cacheDetachPollInterval = 2 * time.Second
+	// cacheBindPollInterval is how often a requested snapshot is checked for having been
+	// picked up by the snapshot controller.
+	cacheBindPollInterval = 500 * time.Millisecond
+	// cacheSnapshotBindTimeout bounds how long a finished runner waits for the snapshot
+	// controller to pick up the snapshot request before it is released anyway.
+	cacheSnapshotBindTimeout = 60 * time.Second
 	// cacheSupersededGracePeriod is how long a replaced snapshot is kept after
 	// garbage collection first saw it replaced. It covers runners that picked
 	// the old snapshot as their restore source just before the new one became ready.
@@ -276,9 +282,14 @@ func (r *EphemeralRunnerReconciler) ensureCacheClaim(ctx context.Context, runner
 // commitCacheVolume snapshots the cache volume of a runner that finished
 // cleanly, which makes the snapshot the newest of the scale set.
 //
-// It does not wait for the snapshot to become ready. The snapshot controller
-// keeps the claim until the snapshot is cut, so the runner can be released
-// right away. It only waits, for a bounded time, for the volume to be detached.
+// It does not wait for the snapshot to be cut, which can take minutes, but it
+// does wait until the snapshot controller has picked the request up. Picking it
+// up pins the claim with a finalizer that holds it until the snapshot is cut.
+// Without that wait the runner would be released first, the claim, which the
+// runner owns, would be garbage collected, and the snapshot controller would
+// find it gone or being deleted and fail the snapshot for good.
+//
+// Before requesting the snapshot it waits, for a bounded time, for the volume to be detached.
 func (r *EphemeralRunnerReconciler) commitCacheVolume(ctx context.Context, runner *v1alpha1.EphemeralRunner, log logr.Logger) (ctrl.Result, error) {
 	if runner.Spec.CacheVolume == nil || runner.Status.Phase != v1alpha1.EphemeralRunnerPhaseSucceeded {
 		return ctrl.Result{}, nil
@@ -304,10 +315,11 @@ func (r *EphemeralRunnerReconciler) commitCacheVolume(ctx context.Context, runne
 		return ctrl.Result{}, nil
 	}
 
-	err := reader.Get(ctx, key, new(snapshotv1.VolumeSnapshot))
+	var existing snapshotv1.VolumeSnapshot
+	err := reader.Get(ctx, key, &existing)
 	switch {
 	case err == nil:
-		return ctrl.Result{}, nil
+		return awaitSnapshotBound(&existing, log), nil
 	case !kerrors.IsNotFound(err):
 		return ctrl.Result{}, fmt.Errorf("failed to get the cache snapshot: %w", err)
 	}
@@ -335,7 +347,26 @@ func (r *EphemeralRunnerReconciler) commitCacheVolume(ctx context.Context, runne
 		return ctrl.Result{}, fmt.Errorf("failed to create the cache snapshot: %w", err)
 	}
 	log.Info("Requested cache snapshot", "snapshot", snapshot.Name)
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: cacheBindPollInterval}, nil
+}
+
+// snapshotBound reports whether the snapshot controller picked the snapshot up, which
+// means it holds the source claim until the snapshot is cut.
+func snapshotBound(s *snapshotv1.VolumeSnapshot) bool {
+	return s.Status != nil && s.Status.BoundVolumeSnapshotContentName != nil && *s.Status.BoundVolumeSnapshotContentName != ""
+}
+
+// awaitSnapshotBound returns a zero result once the claim is pinned by the snapshot
+// controller, or when waiting any longer is pointless.
+func awaitSnapshotBound(s *snapshotv1.VolumeSnapshot, log logr.Logger) ctrl.Result {
+	if snapshotBound(s) {
+		return ctrl.Result{}
+	}
+	if !s.CreationTimestamp.IsZero() && time.Since(s.CreationTimestamp.Time) >= cacheSnapshotBindTimeout {
+		log.Info("The snapshot controller did not pick up the cache snapshot in time, releasing the runner", "snapshot", s.Name)
+		return ctrl.Result{}
+	}
+	return ctrl.Result{RequeueAfter: cacheBindPollInterval}
 }
 
 // cacheVolumeInUse reports whether the runner pod still exists or the volume is

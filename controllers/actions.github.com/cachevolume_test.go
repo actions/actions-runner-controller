@@ -382,7 +382,7 @@ func TestCommitCacheVolume(t *testing.T) {
 		c := cacheTestClient(t, true, boundClaim(), cacheTestScaleSet())
 		res, err := newCacheTestReconciler(c).commitCacheVolume(ctx, cacheTestRunner(v1alpha1.EphemeralRunnerPhaseSucceeded), logr.Discard())
 		require.NoError(t, err)
-		assert.True(t, res.IsZero())
+		assert.Equal(t, ctrl.Result{RequeueAfter: cacheBindPollInterval}, res, "the runner is held until the snapshot controller picks the request up")
 
 		var snapshot snapshotv1.VolumeSnapshot
 		require.NoError(t, c.Get(ctx, key, &snapshot))
@@ -398,17 +398,38 @@ func TestCommitCacheVolume(t *testing.T) {
 		assert.Equal(t, "ars-uid", string(snapshot.OwnerReferences[0].UID), "uninstalling the scale set removes its cache")
 	})
 
-	t.Run("is idempotent", func(t *testing.T) {
+	t.Run("is idempotent and holds the runner until the snapshot is bound", func(t *testing.T) {
 		c := cacheTestClient(t, true, boundClaim(), cacheTestScaleSet())
 		r := newCacheTestReconciler(c)
-		for range 2 {
-			res, err := r.commitCacheVolume(ctx, cacheTestRunner(v1alpha1.EphemeralRunnerPhaseSucceeded), logr.Discard())
+		runner := cacheTestRunner(v1alpha1.EphemeralRunnerPhaseSucceeded)
+
+		for range 3 {
+			res, err := r.commitCacheVolume(ctx, runner, logr.Discard())
 			require.NoError(t, err)
-			assert.True(t, res.IsZero())
+			assert.Equal(t, ctrl.Result{RequeueAfter: cacheBindPollInterval}, res)
 		}
 		var list snapshotv1.VolumeSnapshotList
 		require.NoError(t, c.List(ctx, &list))
-		assert.Len(t, list.Items, 1)
+		require.Len(t, list.Items, 1, "one snapshot however often the runner is reconciled")
+
+		// The snapshot controller picks the request up: the claim is pinned and the runner can go.
+		snapshot := list.Items[0]
+		snapshot.Status = &snapshotv1.VolumeSnapshotStatus{BoundVolumeSnapshotContentName: ptr.To("snapcontent-1")}
+		require.NoError(t, c.Update(ctx, &snapshot))
+		res, err := r.commitCacheVolume(ctx, runner, logr.Discard())
+		require.NoError(t, err)
+		assert.True(t, res.IsZero())
+	})
+
+	t.Run("releases the runner when the snapshot controller never picks the request up", func(t *testing.T) {
+		stale := &snapshotv1.VolumeSnapshot{ObjectMeta: metav1.ObjectMeta{
+			Name: key.Name, Namespace: key.Namespace,
+			CreationTimestamp: metav1.NewTime(time.Now().Add(-2 * cacheSnapshotBindTimeout)),
+		}}
+		c := cacheTestClient(t, true, boundClaim(), cacheTestScaleSet(), stale)
+		res, err := newCacheTestReconciler(c).commitCacheVolume(ctx, cacheTestRunner(v1alpha1.EphemeralRunnerPhaseSucceeded), logr.Discard())
+		require.NoError(t, err)
+		assert.True(t, res.IsZero(), "a snapshot that cannot be taken must not hold scale set capacity")
 	})
 
 	t.Run("does not commit runners that did not succeed or have no cache", func(t *testing.T) {
@@ -468,7 +489,7 @@ func TestCommitCacheVolume(t *testing.T) {
 		c := cacheTestClient(t, true, boundClaim(), cacheTestScaleSet(), runnerPod, attachment)
 		res, err := newCacheTestReconciler(c).commitCacheVolume(ctx, runner, logr.Discard())
 		require.NoError(t, err)
-		assert.True(t, res.IsZero())
+		assert.Equal(t, ctrl.Result{RequeueAfter: cacheBindPollInterval}, res)
 		assert.True(t, snapshotExists(t, c))
 	})
 }

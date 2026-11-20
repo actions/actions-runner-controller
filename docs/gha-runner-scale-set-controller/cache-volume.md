@@ -8,7 +8,7 @@ A runner scale set can give every runner a persistent, snapshot-backed cache vol
 
 1. Every new runner gets its own `PersistentVolumeClaim`, restored from the newest snapshot of the scale set's cache. When there is no snapshot yet, the volume starts empty.
 2. The runner pod gets a volume (named `cache` by default) backed by that claim.
-3. When the runner finishes cleanly, ARC waits (up to 60 seconds) for the volume to be detached from the node and takes a `VolumeSnapshot` of it.
+3. When the runner finishes cleanly, ARC waits (up to 60 seconds) for the volume to be detached from the node, takes a `VolumeSnapshot` of it, and holds the runner for a moment until the snapshot controller has picked the request up and pinned the volume. It does not wait for the snapshot to be cut.
 4. Once the new snapshot is ready, older snapshots of the scale set are deleted after a short grace period. Only the newest snapshot is kept.
 
 Runners never share a live volume. A job's writes become visible to later runners only through the snapshot taken when its runner finishes.
