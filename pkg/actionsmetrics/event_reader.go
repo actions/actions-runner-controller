@@ -221,7 +221,7 @@ type ParseResult struct {
 }
 
 var logLine = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{7}Z)\s(.+)$`)
-var exitCodeLine = regexp.MustCompile(`##\[error\]Process completed with exit code (\d)\.`)
+var exitCodeLine = regexp.MustCompile(`##\[error\]Process completed with exit code (\d+)\.`)
 
 func (reader *EventReader) fetchAndParseWorkflowJobLogs(ctx context.Context, e *gogithub.WorkflowJobEvent) (*ParseResult, error) {
 
