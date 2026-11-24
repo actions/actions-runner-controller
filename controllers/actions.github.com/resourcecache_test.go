@@ -230,7 +230,7 @@ func TestResourceBuilderCachesListenerPodDependencies(t *testing.T) {
 
 	cache := NewResourceCache()
 	b := ResourceBuilder{ResourceCache: &cache}
-	listenerPod, err := b.newScaleSetListenerPod(listener, podConfig, serviceAccount, role, roleBinding, nil)
+	listenerPod, err := b.newScaleSetListenerPod(listener, podConfig, nil, serviceAccount, role, roleBinding, nil)
 	require.NoError(t, err)
 
 	cachedPod, ok := b.ResourceCache.listenerPod.Get(listener, listenerPod, podConfig, serviceAccount, role, roleBinding)
@@ -240,6 +240,59 @@ func TestResourceBuilderCachesListenerPodDependencies(t *testing.T) {
 	role.ResourceVersion = "changed"
 	_, ok = b.ResourceCache.listenerPod.Get(listener, listenerPod, podConfig, serviceAccount, role, roleBinding)
 	assert.False(t, ok)
+}
+
+// The proxy secret is a dependency only when the listener has a proxy. A nil
+// dependency disables the cache, so a listener without a proxy must not pass one.
+func TestResourceBuilderCachesListenerPodProxySecretDependency(t *testing.T) {
+	listener := &v1alpha1.AutoscalingListener{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "listener",
+			Namespace: "controller-ns",
+			UID:       "listener-uid",
+		},
+		Spec: v1alpha1.AutoscalingListenerSpec{
+			Image:                         "listener:latest",
+			AutoscalingRunnerSetName:      "scale-set",
+			AutoscalingRunnerSetNamespace: "scale-set-ns",
+			EphemeralRunnerSetName:        "scale-set",
+			Proxy: &v1alpha1.ProxyConfig{
+				HTTP: &v1alpha1.ProxyServerConfig{Url: "http://proxy.example.com"},
+			},
+		},
+	}
+	podConfig := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "listener-config", Namespace: "controller-ns", UID: "config-secret-uid", ResourceVersion: "11"}}
+	proxySecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "listener-proxy", Namespace: "controller-ns", UID: "proxy-secret-uid", ResourceVersion: "15"}}
+	serviceAccount := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "listener", Namespace: "controller-ns", UID: "service-account-uid", ResourceVersion: "12"}}
+	role := &rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "listener", Namespace: "scale-set-ns", UID: "role-uid", ResourceVersion: "13"}}
+	roleBinding := &rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "listener", Namespace: "scale-set-ns", UID: "role-binding-uid", ResourceVersion: "14"}}
+
+	cache := NewResourceCache()
+	b := ResourceBuilder{ResourceCache: &cache}
+	listenerPod, err := b.newScaleSetListenerPod(listener, podConfig, proxySecret, serviceAccount, role, roleBinding, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "15", listenerPod.Annotations[AnnotationKeyListenerProxySecretResourceVersion])
+
+	_, ok := b.ResourceCache.listenerPod.Get(listener, listenerPod, podConfig, proxySecret, serviceAccount, role, roleBinding)
+	require.True(t, ok, "the pod must be cached against the proxy secret")
+
+	rotated := proxySecret.DeepCopy()
+	rotated.ResourceVersion = "16"
+	_, ok = b.ResourceCache.listenerPod.Get(listener, listenerPod, podConfig, rotated, serviceAccount, role, roleBinding)
+	assert.False(t, ok, "a rotated proxy secret must miss the cache")
+
+	rebuilt, err := b.newScaleSetListenerPod(listener, podConfig, rotated, serviceAccount, role, roleBinding, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "16", rebuilt.Annotations[AnnotationKeyListenerProxySecretResourceVersion],
+		"the rebuilt pod must carry the rotated proxy secret's resource version")
+
+	withoutProxy := listener.DeepCopy()
+	withoutProxy.Spec.Proxy = nil
+	plainPod, err := b.newScaleSetListenerPod(withoutProxy, podConfig, nil, serviceAccount, role, roleBinding, nil)
+	require.NoError(t, err)
+	assert.NotContains(t, plainPod.Annotations, AnnotationKeyListenerProxySecretResourceVersion)
+	_, ok = b.ResourceCache.listenerPod.Get(withoutProxy, plainPod, podConfig, serviceAccount, role, roleBinding)
+	assert.True(t, ok, "a listener without a proxy must still be cached")
 }
 
 func TestResourceBuilderCachesEphemeralRunnerSet(t *testing.T) {

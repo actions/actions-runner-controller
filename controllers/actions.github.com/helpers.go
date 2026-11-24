@@ -96,15 +96,17 @@ func ephemeralRunnerSetOutdatedForAppliedRevision(ephemeralRunnerSet *v1alpha1.E
 // listenerPodSpecRequiresRecreation reports whether the live listener pod must be
 // deleted and rebuilt to match the desired spec.
 //
-// The config secret is checked first. The pod mounts it as a volume and the
-// listener parses it once at startup, so a change to the scale set URL, the TLS
-// certificate, the metrics configuration or the scaler tuning only reaches the
-// listener after a restart. None of that is visible in the pod spec, which
-// references the secret by name and is byte-identical before and after, so the
-// desired pod carries the secret's resource version as an annotation and drift
-// is detected by comparing it.
+// The secrets are checked first. The pod mounts the config secret as a volume
+// and the listener parses it once at startup, so a change to the scale set URL,
+// the TLS certificate, the metrics configuration or the scaler tuning only
+// reaches the listener after a restart. The proxy secret is injected through
+// SecretKeyRef environment variables, which the kubelet resolves once at
+// container start, so a rotated proxy credential needs the same restart. None of
+// that is visible in the pod spec, which references both secrets by name and is
+// byte-identical before and after, so the desired pod carries each secret's
+// resource version as an annotation and drift is detected by comparing them.
 //
-// A pod that predates this annotation counts as drift and is recreated once, on
+// A pod that predates these annotations counts as drift and is recreated once, on
 // the first reconcile after the controller is upgraded. Ignoring it instead is
 // tempting, to avoid that rollout, but it loses updates: the reconcile that
 // declines to recreate the pod goes on to patch the desired annotations onto it,
@@ -115,7 +117,7 @@ func ephemeralRunnerSetOutdatedForAppliedRevision(ephemeralRunnerSet *v1alpha1.E
 // an upgrade normally changes the listener image and so recreates the pod
 // anyway.
 //
-// The resource version also moves when only the secret's labels or annotations
+// A resource version also moves when only a secret's labels or annotations
 // change, which does not affect the listener. That is accepted rather than
 // worked around by hashing the secret data: those fields come from the
 // AutoscalingListener spec, and a change to that spec already makes the
@@ -152,7 +154,8 @@ func listenerPodSpecRequiresRecreation(current, desired *corev1.Pod) bool {
 		return current != desired
 	}
 
-	if listenerConfigChanged(current, desired) {
+	if listenerSecretChanged(current, desired, AnnotationKeyListenerConfigResourceVersion) ||
+		listenerSecretChanged(current, desired, AnnotationKeyListenerProxySecretResourceVersion) {
 		return true
 	}
 
@@ -165,16 +168,17 @@ func listenerPodSpecRequiresRecreation(current, desired *corev1.Pod) bool {
 	return !apiequality.Semantic.DeepDerivative(desiredSpec, currentSpec)
 }
 
-func listenerConfigChanged(current, desired *corev1.Pod) bool {
-	desiredVersion := desired.Annotations[AnnotationKeyListenerConfigResourceVersion]
+func listenerSecretChanged(current, desired *corev1.Pod, annotationKey string) bool {
+	desiredVersion := desired.Annotations[annotationKey]
 	if desiredVersion == "" {
 		// Nothing to compare against, so there is nothing this check can say.
-		// The desired pod is always built from a secret read back from the API
-		// server, so this only happens in tests.
+		// The desired pod is always built from secrets read back from the API
+		// server, so for the config secret this only happens in tests; for the
+		// proxy secret it means the listener has no proxy.
 		return false
 	}
 
-	return current.Annotations[AnnotationKeyListenerConfigResourceVersion] != desiredVersion
+	return current.Annotations[annotationKey] != desiredVersion
 }
 
 func listenerContainersChanged(current, desired *corev1.Pod) bool {

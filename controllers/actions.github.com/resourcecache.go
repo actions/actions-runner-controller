@@ -19,7 +19,7 @@ const (
 	resourceCacheInitialEntries        = 4096
 	resourceCacheInitialMainUIDEntries = 4096
 	resourceCacheInitialOwnerEntries   = 8
-	resourceCacheMaxDependencyRefs     = 4
+	resourceCacheMaxDependencyRefs     = 5
 )
 
 type ResourceCacheObjectRef struct {

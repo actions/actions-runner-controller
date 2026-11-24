@@ -327,9 +327,14 @@ func (b *ResourceBuilder) newScaleSetListenerConfig(autoscalingListener *v1alpha
 	return desiredSecret, nil
 }
 
+// newScaleSetListenerPod builds the listener pod. proxySecret is the mirror
+// proxy secret the pod reads its credentials from, or nil when the listener has
+// no proxy; a nil dependency would disable the cache, so it is only added when
+// present.
 func (b *ResourceBuilder) newScaleSetListenerPod(
 	autoscalingListener *v1alpha1.AutoscalingListener,
 	podConfig *corev1.Secret,
+	proxySecret *corev1.Secret,
 	serviceAccount *corev1.ServiceAccount,
 	role *rbacv1.Role,
 	roleBinding *rbacv1.RoleBinding,
@@ -341,7 +346,11 @@ func (b *ResourceBuilder) newScaleSetListenerPod(
 			Namespace: autoscalingListener.Namespace,
 		},
 	}
-	if cached, ok := b.ResourceCache.listenerPod.Get(autoscalingListener, cacheKeyObject, podConfig, serviceAccount, role, roleBinding); ok {
+	dependencies := []client.Object{podConfig, serviceAccount, role, roleBinding}
+	if proxySecret != nil {
+		dependencies = append(dependencies, proxySecret)
+	}
+	if cached, ok := b.ResourceCache.listenerPod.Get(autoscalingListener, cacheKeyObject, dependencies...); ok {
 		return cached, nil
 	}
 
@@ -450,18 +459,23 @@ func (b *ResourceBuilder) newScaleSetListenerPod(
 	labels := make(map[string]string, len(autoscalingListener.Labels))
 	maps.Copy(labels, autoscalingListener.Labels)
 
+	annotations := map[string]string{
+		AnnotationKeyListenerConfigResourceVersion: podConfig.ResourceVersion,
+	}
+	if proxySecret != nil {
+		annotations[AnnotationKeyListenerProxySecretResourceVersion] = proxySecret.ResourceVersion
+	}
+
 	newRunnerScaleSetListenerPod := &corev1.Pod{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: corev1.SchemeGroupVersion.String(),
 			Kind:       "Pod",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      autoscalingListener.Name,
-			Namespace: autoscalingListener.Namespace,
-			Labels:    labels,
-			Annotations: map[string]string{
-				AnnotationKeyListenerConfigResourceVersion: podConfig.ResourceVersion,
-			},
+			Name:        autoscalingListener.Name,
+			Namespace:   autoscalingListener.Namespace,
+			Labels:      labels,
+			Annotations: annotations,
 		},
 		Spec: podSpec,
 	}
@@ -473,7 +487,7 @@ func (b *ResourceBuilder) newScaleSetListenerPod(
 	if autoscalingListener.Spec.Template != nil {
 		mergeListenerPodWithTemplate(newRunnerScaleSetListenerPod, autoscalingListener.Spec.Template)
 	}
-	b.ResourceCache.listenerPod.Upsert(autoscalingListener, newRunnerScaleSetListenerPod, podConfig, serviceAccount, role, roleBinding)
+	b.ResourceCache.listenerPod.Upsert(autoscalingListener, newRunnerScaleSetListenerPod, dependencies...)
 
 	return newRunnerScaleSetListenerPod, nil
 }

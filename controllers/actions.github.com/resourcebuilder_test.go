@@ -166,6 +166,7 @@ func TestMetadataPropagation(t *testing.T) {
 	listenerPod, err := b.newScaleSetListenerPod(
 		listener,
 		&corev1.Secret{},
+		nil,
 		listenerServiceAccount,
 		listenerRole,
 		listenerRoleBinding,
@@ -347,6 +348,7 @@ func TestOwnershipRelationships(t *testing.T) {
 	listenerPod, err := b.newScaleSetListenerPod(
 		listener,
 		&corev1.Secret{},
+		nil,
 		listenerServiceAccount,
 		listenerRole,
 		listenerRoleBinding,
@@ -444,6 +446,7 @@ func TestListenerPodNodeSelector(t *testing.T) {
 		pod, err := b.newScaleSetListenerPod(
 			listener,
 			&corev1.Secret{},
+			nil,
 			listenerServiceAccount,
 			listenerRole,
 			listenerRoleBinding,
@@ -462,6 +465,7 @@ func TestListenerPodNodeSelector(t *testing.T) {
 		pod, err := b.newScaleSetListenerPod(
 			listenerNoTemplate,
 			&corev1.Secret{},
+			nil,
 			listenerServiceAccount,
 			listenerRole,
 			listenerRoleBinding,
@@ -487,6 +491,7 @@ func TestListenerPodNodeSelector(t *testing.T) {
 		pod, err := b.newScaleSetListenerPod(
 			listenerWithTemplate,
 			&corev1.Secret{},
+			nil,
 			listenerServiceAccount,
 			listenerRole,
 			listenerRoleBinding,
@@ -513,6 +518,7 @@ func TestListenerPodNodeSelector(t *testing.T) {
 		pod, err := b.newScaleSetListenerPod(
 			listenerWithTemplate,
 			&corev1.Secret{},
+			nil,
 			listenerServiceAccount,
 			listenerRole,
 			listenerRoleBinding,
@@ -536,6 +542,7 @@ func TestListenerPodNodeSelector(t *testing.T) {
 		pod, err := b.newScaleSetListenerPod(
 			listenerWithTemplate,
 			&corev1.Secret{},
+			nil,
 			listenerServiceAccount,
 			listenerRole,
 			listenerRoleBinding,

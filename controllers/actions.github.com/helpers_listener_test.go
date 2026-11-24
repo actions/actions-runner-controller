@@ -377,7 +377,7 @@ func TestListenerPodSpecRequiresRecreation_MetricsToggleUsesRealBuilder(t *testi
 		// The cache keys on the listener object, not on metricsConfig, so it must
 		// be bypassed to build both variants.
 		b.ResourceCache.listenerPod.Delete(listener)
-		pod, err := b.newScaleSetListenerPod(listener, &corev1.Secret{}, sa, role, roleBinding, metrics)
+		pod, err := b.newScaleSetListenerPod(listener, &corev1.Secret{}, nil, sa, role, roleBinding, metrics)
 		require.NoError(t, err)
 		return pod
 	}
@@ -448,12 +448,62 @@ func TestListenerPodSpecRequiresRecreation_ConfigSecretChanged(t *testing.T) {
 }
 
 func setListenerConfigVersion(pod *corev1.Pod, version string) {
-	if version == "" {
-		delete(pod.Annotations, AnnotationKeyListenerConfigResourceVersion)
+	setListenerAnnotation(pod, AnnotationKeyListenerConfigResourceVersion, version)
+}
+
+func TestListenerPodSpecRequiresRecreation_ProxySecretChanged(t *testing.T) {
+	tests := map[string]struct {
+		liveVersion    string
+		desiredVersion string
+		want           bool
+		why            string
+	}{
+		"unchanged": {
+			liveVersion:    "200",
+			desiredVersion: "200",
+			want:           false,
+			why:            "the proxy credentials the listener started with are still the desired ones",
+		},
+		"changed": {
+			liveVersion:    "200",
+			desiredVersion: "201",
+			want:           true,
+			why:            "SecretKeyRef env vars are fixed at container start, so the pod must be restarted",
+		},
+		"missing on live pod": {
+			liveVersion:    "",
+			desiredVersion: "201",
+			want:           true,
+			why:            "a pod predating the annotation is recreated once, for the same reason as the config secret",
+		},
+		"missing on desired pod": {
+			liveVersion:    "200",
+			desiredVersion: "",
+			want:           false,
+			why:            "a listener without a proxy has nothing to compare against",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			desired := desiredListenerPod()
+			live := livePodFromDesired(desired)
+
+			setListenerAnnotation(live, AnnotationKeyListenerProxySecretResourceVersion, tt.liveVersion)
+			setListenerAnnotation(desired, AnnotationKeyListenerProxySecretResourceVersion, tt.desiredVersion)
+
+			assert.Equal(t, tt.want, listenerPodSpecRequiresRecreation(live, desired), tt.why)
+		})
+	}
+}
+
+func setListenerAnnotation(pod *corev1.Pod, key, value string) {
+	if value == "" {
+		delete(pod.Annotations, key)
 		return
 	}
 	if pod.Annotations == nil {
 		pod.Annotations = map[string]string{}
 	}
-	pod.Annotations[AnnotationKeyListenerConfigResourceVersion] = version
+	pod.Annotations[key] = value
 }
