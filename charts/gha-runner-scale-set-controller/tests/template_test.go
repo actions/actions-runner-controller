@@ -246,12 +246,15 @@ func TestTemplate_CreateManagerListenerRole(t *testing.T) {
 
 	assert.Equal(t, namespaceName, managerListenerRole.Namespace, "Role should have a namespace")
 	assert.Equal(t, "test-arc-gha-rs-controller-listener", managerListenerRole.Name)
-	assert.Equal(t, 4, len(managerListenerRole.Rules))
+	assert.Equal(t, 5, len(managerListenerRole.Rules))
 	assert.Equal(t, "pods", managerListenerRole.Rules[0].Resources[0])
 	assert.ElementsMatch(t, []string{"create", "delete", "get", "patch"}, managerListenerRole.Rules[0].Verbs)
 	assert.Equal(t, "pods/status", managerListenerRole.Rules[1].Resources[0])
 	assert.Equal(t, "secrets", managerListenerRole.Rules[2].Resources[0])
 	assert.Equal(t, "serviceaccounts", managerListenerRole.Rules[3].Resources[0])
+	assert.Equal(t, []string{"events.k8s.io"}, managerListenerRole.Rules[4].APIGroups)
+	assert.Equal(t, "events", managerListenerRole.Rules[4].Resources[0])
+	assert.ElementsMatch(t, []string{"create", "patch"}, managerListenerRole.Rules[4].Verbs)
 }
 
 func TestTemplate_ManagerListenerRoleBinding(t *testing.T) {
