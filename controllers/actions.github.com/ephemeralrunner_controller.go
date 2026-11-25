@@ -36,6 +36,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -59,6 +60,10 @@ type EphemeralRunnerReconciler struct {
 	Log            logr.Logger
 	Scheme         *runtime.Scheme
 	PublishMetrics bool
+
+	// Recorder records Kubernetes events about the cache volume of a runner. When it is
+	// left unset, SetupWithManager creates one.
+	Recorder events.EventRecorder
 
 	// UnregistrationQueue takes the removal of runner registrations from the
 	// Actions service off the reconcile path. When it is left unset,
@@ -107,6 +112,10 @@ const maxFailures = 5
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=pods/status,verbs=get
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=create;get;list;watch;delete
+// +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=create;get;list;delete
+// +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups=snapshot.storage.k8s.io,resources=volumesnapshots,verbs=get;list;create;patch;delete
+// +kubebuilder:rbac:groups=storage.k8s.io,resources=volumeattachments,verbs=list
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -117,6 +126,17 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	log := r.Log.WithValues("ephemeralrunner", req.NamespacedName)
 	defer func() {
 		result, err = requeueOnRateLimit(ctx, result, err, log)
+	}()
+
+	// cacheRecheck is set while the runner waits for its cache volume to be restored. The pod
+	// of such a runner does not change, so nothing else would wake the runner up. It only
+	// applies to a reconcile that did not ask for a requeue of its own. Registered after the
+	// deferred function above, so that it runs first.
+	var cacheRecheck time.Duration
+	defer func() {
+		if err == nil && cacheRecheck > 0 && result.IsZero() {
+			result = ctrl.Result{RequeueAfter: cacheRecheck}
+		}
 	}()
 
 	var ephemeralRunner v1alpha1.EphemeralRunner
@@ -231,6 +251,17 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				log.Error(err, "Failed to clean up container hooks resources")
 				return ctrl.Result{}, err
 			}
+		}
+
+		// Saving the cache is best effort. A failure is logged and does not hold
+		// the runner, which counts against the scale set's capacity, so a
+		// permanently failing snapshot cannot wedge the scale set.
+		if result, err := r.commitCacheVolume(ctx, &ephemeralRunner, log); err != nil {
+			log.Error(err, "Failed to snapshot the cache volume of the ephemeral runner, the cache will not advance")
+			r.recordCacheCommit(&ephemeralRunner, metrics.CacheCommitFailed)
+			r.cacheEvent(&ephemeralRunner, corev1.EventTypeWarning, "CacheCommitFailed", "Could not snapshot the cache volume, the cache does not advance: "+err.Error())
+		} else if !result.IsZero() {
+			return result, nil
 		}
 
 		log.Info("Removing finalizer")
@@ -445,6 +476,18 @@ func (r *EphemeralRunnerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			log.Error(err, "Failed to create the pod")
 			return ctrl.Result{}, err
 		}
+	}
+
+	if ephemeralRunner.Spec.CacheVolume != nil {
+		recheck, fellBack, err := r.enforceCacheRestoreTimeout(ctx, &ephemeralRunner, pod, log)
+		if err != nil {
+			log.Error(err, "Failed to check whether the cache volume of the runner is restored")
+			return ctrl.Result{}, err
+		}
+		if fellBack {
+			return ctrl.Result{RequeueAfter: time.Second}, nil
+		}
+		cacheRecheck = recheck
 	}
 
 	cs := runnerContainerStatus(pod)
@@ -949,6 +992,19 @@ func (r *EphemeralRunnerReconciler) createPod(ctx context.Context, runner *v1alp
 		return ctrl.Result{}, err
 	}
 
+	if cacheVolume := runner.Spec.CacheVolume; cacheVolume != nil {
+		claimName, err := r.ensureCacheClaim(ctx, runner, log)
+		if errors.Is(err, errCacheClaimTerminating) {
+			log.Info("Waiting for the previous cache claim of the runner to be deleted")
+			return ctrl.Result{RequeueAfter: time.Second}, nil
+		}
+		if err != nil {
+			log.Error(err, "Failed to prepare the cache volume")
+			return ctrl.Result{}, err
+		}
+		injectCacheVolume(&newPod.Spec, cacheVolume.GetVolumeName(), claimName)
+	}
+
 	log.Info("Created new pod spec for ephemeral runner")
 	if err := r.Create(ctx, newPod); err != nil {
 		log.Error(err, "Failed to create pod resource for ephemeral runner.")
@@ -1228,6 +1284,9 @@ func (r *EphemeralRunnerReconciler) SetupWithManager(mgr ctrl.Manager, opts ...O
 	r.ResourceBuilder.setSchemeIfUnset(r.Scheme)
 	if r.APIReader == nil {
 		r.APIReader = mgr.GetAPIReader()
+	}
+	if r.Recorder == nil {
+		r.Recorder = mgr.GetEventRecorder("ephemeral-runner-controller")
 	}
 
 	if r.UnregistrationQueue == nil {

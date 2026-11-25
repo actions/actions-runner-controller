@@ -159,6 +159,57 @@ spec:
   minRunners: {{ .Values.minRunners | int }}
   {{- end }}
 
+  {{- with .Values.cacheVolume }}
+  {{- if not .storageClassName }}
+    {{- fail "cacheVolume.storageClassName is required" }}
+  {{- end }}
+  {{- if not .size }}
+    {{- fail "cacheVolume.size is required" }}
+  {{- end }}
+  cacheVolume:
+    {{- with .volumeName }}
+    volumeName: {{ . | quote }}
+    {{- end }}
+    storageClassName: {{ .storageClassName | quote }}
+    size: {{ .size | quote }}
+    {{- with .snapshotClassName }}
+    snapshotClassName: {{ . | quote }}
+    {{- end }}
+    {{- if not (kindIs "invalid" .restoreTimeout) }}
+    restoreTimeout: {{ .restoreTimeout | quote }}
+    {{- end }}
+    {{- with .commitPolicy }}
+    commitPolicy:
+      {{- with .repositories }}
+      repositories:
+        {{- range . }}
+        - {{ . | quote }}
+        {{- end }}
+      {{- end }}
+      {{- with .refs }}
+      refs:
+        {{- range . }}
+        - {{ . | quote }}
+        {{- end }}
+      {{- end }}
+      {{- with .events }}
+      events:
+        {{- range . }}
+        - {{ . | quote }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+    {{- with .retention }}
+    retention:
+      {{- if not (kindIs "invalid" .maxAge) }}
+      maxAge: {{ .maxAge | quote }}
+      {{- end }}
+      {{- if not (kindIs "invalid" .idleTimeout) }}
+      idleTimeout: {{ .idleTimeout | quote }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+
   {{- with .Values.listenerTemplate }}
   listenerTemplate:
     {{- with .metadata }}

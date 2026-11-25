@@ -216,6 +216,7 @@ func (w *Scaler) patchJobStarted(ctx context.Context, jobInfo *scaleset.JobStart
 			WorkflowRunID:     jobInfo.WorkflowRunID,
 			JobWorkflowRef:    jobInfo.JobWorkflowRef,
 			JobDisplayName:    jobInfo.JobDisplayName,
+			JobEventName:      jobInfo.EventName,
 		},
 	}
 

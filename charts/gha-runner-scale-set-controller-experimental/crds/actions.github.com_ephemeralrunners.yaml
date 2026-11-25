@@ -70,6 +70,93 @@ spec:
             spec:
               description: EphemeralRunnerSpec defines the desired state of EphemeralRunner
               properties:
+                cacheVolume:
+                  description: CacheVolume adds a snapshot-backed cache volume to the runner pod.
+                  properties:
+                    commitPolicy:
+                      description: |-
+                        CommitPolicy restricts which finished runners may save their volume as the new
+                        cache. Runners that do not match still start from the cache, but their changes
+                        are discarded. It protects the cache from being modified by untrusted workflows.
+                        All runners may commit when it is not set.
+                      properties:
+                        events:
+                          description: |-
+                            Events are the names of the events that triggered the workflow and that may commit, for
+                            example "push", "schedule" and "workflow_dispatch". Names are compared exactly.
+                          items:
+                            type: string
+                          type: array
+                        refs:
+                          description: |-
+                            Refs are patterns for the git ref of the workflow, for example "refs/heads/main" or
+                            "refs/heads/release/*". It is the ref of the workflow file, as GitHub reports it in the
+                            job workflow reference. Prefer Events to keep pull request jobs out: a job triggered by
+                            pull_request_target runs the workflow from the base branch ref.
+                          items:
+                            type: string
+                          type: array
+                        repositories:
+                          description: |-
+                            Repositories are patterns for the "owner/repo" of the repository that runs the job,
+                            for example "my-org/*".
+                          items:
+                            type: string
+                          type: array
+                      type: object
+                    restoreTimeout:
+                      description: |-
+                        RestoreTimeout is how long a runner waits for the volume restored from the cache
+                        snapshot to be provisioned before it gives up and starts with an empty volume instead.
+                        The wait only starts once the cluster began provisioning the volume. A runner never
+                        stays blocked because of the cache. Defaults to 5m. A duration of 0 waits forever.
+                      type: string
+                    retention:
+                      description: |-
+                        Retention limits how long a cache lives. Without it a cache would only ever grow,
+                        because every runner starts from the previous cache and adds to it.
+                      properties:
+                        idleTimeout:
+                          description: |-
+                            IdleTimeout is how long a snapshot is kept when no runner restores from it and no
+                            runner saves a newer one. The snapshot is deleted afterwards, so a scale set that
+                            stopped running jobs does not keep its storage forever. Defaults to 168h (7 days).
+                          type: string
+                        maxAge:
+                          description: |-
+                            MaxAge is the longest a cache history is continued. Once the history started from an
+                            empty volume this long ago, new runners start from an empty volume again and the old
+                            snapshot is deleted, which bounds the growth of the cache. Defaults to 336h (14 days).
+                          type: string
+                      type: object
+                    size:
+                      anyOf:
+                        - type: integer
+                        - type: string
+                      description: |-
+                        Size is the requested size of each cache volume. It must be at least the
+                        size of the volume the snapshots were taken from.
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    snapshotClassName:
+                      description: |-
+                        SnapshotClassName is the VolumeSnapshotClass used to snapshot cache
+                        volumes. The cluster default class is used when it is not set.
+                      type: string
+                    storageClassName:
+                      description: StorageClassName is the StorageClass used to provision cache volumes.
+                      minLength: 1
+                      type: string
+                    volumeName:
+                      description: |-
+                        VolumeName is the name of the volume added to the runner pod.
+                        Defaults to "cache".
+                      maxLength: 63
+                      type: string
+                  required:
+                    - size
+                    - storageClassName
+                  type: object
                 ephemeralRunnerConfigSecretMetadata:
                   description: ResourceMeta carries metadata common to all internal resources
                   properties:
@@ -8637,6 +8724,11 @@ spec:
                     type: string
                   type: object
                 jobDisplayName:
+                  type: string
+                jobEventName:
+                  description: |-
+                    JobEventName is the name of the event that triggered the workflow of the job,
+                    for example push or pull_request.
                   type: string
                 jobId:
                   type: string
