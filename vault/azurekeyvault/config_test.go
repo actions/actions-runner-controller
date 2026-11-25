@@ -44,11 +44,11 @@ func TestConfigValidate_invalid(t *testing.T) {
 			URL:             "",
 			CertificatePath: certPath,
 		},
-		"no jwt and no cert path": {
+		"cert path that does not exist": {
 			TenantID:        tenantID,
 			ClientID:        clientID,
 			URL:             url,
-			CertificatePath: "",
+			CertificatePath: certPath + ".missing",
 		},
 		"invalid proxy": {
 			TenantID:        tenantID,
@@ -96,4 +96,30 @@ func TestValidate_valid(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
+}
+
+func TestValidate_validWithoutCert(t *testing.T) {
+	cfg := &Config{TenantID: "tenantID", ClientID: "clientID", URL: "https://example.com"}
+	require.NoError(t, cfg.Validate())
+}
+
+func TestClient_workloadIdentity(t *testing.T) {
+	cfg := &Config{TenantID: "tenantID", ClientID: "clientID", URL: "https://example.com"}
+
+	t.Run("token file set", func(t *testing.T) {
+		tokenFile := filepath.Join(t.TempDir(), "token")
+		require.NoError(t, os.WriteFile(tokenFile, []byte("jwt"), 0o600))
+		t.Setenv("AZURE_FEDERATED_TOKEN_FILE", tokenFile)
+
+		client, err := cfg.Client()
+		require.NoError(t, err)
+		require.NotNil(t, client)
+	})
+
+	t.Run("token file not set", func(t *testing.T) {
+		t.Setenv("AZURE_FEDERATED_TOKEN_FILE", "")
+
+		_, err := cfg.Client()
+		require.Error(t, err)
+	})
 }

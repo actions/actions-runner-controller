@@ -268,7 +268,8 @@ type AzureKeyVaultConfig struct {
 	TenantID string `json:"tenantId,omitempty"`
 	// +required
 	ClientID string `json:"clientId,omitempty"`
-	// +required
+	// When empty, uses the pod's Azure workload identity.
+	// +optional
 	CertificatePath string `json:"certificatePath,omitempty"`
 }
 

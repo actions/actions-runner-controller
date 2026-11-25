@@ -8587,6 +8587,7 @@ spec:
                         azureKeyVault:
                           properties:
                             certificatePath:
+                              description: When empty, uses the pod's Azure workload identity.
                               type: string
                             clientId:
                               type: string
@@ -8595,7 +8596,6 @@ spec:
                             url:
                               type: string
                           required:
-                            - certificatePath
                             - clientId
                             - tenantId
                             - url
