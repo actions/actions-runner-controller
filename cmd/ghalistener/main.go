@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -129,6 +130,9 @@ func run(ctx context.Context, config *config.Config) error {
 		logger.Info("Starting listener")
 		listnerErr := listener.Run(ctx, scaler)
 		cancelMetrics(fmt.Errorf("listener exited: %w", listnerErr))
+		if ctx.Err() != nil && errors.Is(listnerErr, context.Canceled) {
+			return nil
+		}
 		return listnerErr
 	})
 

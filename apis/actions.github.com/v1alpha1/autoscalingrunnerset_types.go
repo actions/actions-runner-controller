@@ -19,7 +19,6 @@ package v1alpha1
 import (
 	"crypto/x509"
 	"fmt"
-	"net/http"
 	"net/url"
 	"strings"
 
@@ -243,19 +242,6 @@ func (c *ProxyConfig) ToSecretData(secretFetcher func(string) (*corev1.Secret, e
 	data["no_proxy"] = []byte(config.NoProxy)
 
 	return data, nil
-}
-
-func (c *ProxyConfig) ProxyFunc(secretFetcher func(string) (*corev1.Secret, error)) (func(*http.Request) (*url.URL, error), error) {
-	config, err := c.ToHTTPProxyConfig(secretFetcher)
-	if err != nil {
-		return nil, err
-	}
-
-	proxyFunc := func(req *http.Request) (*url.URL, error) {
-		return config.ProxyFunc()(req.URL)
-	}
-
-	return proxyFunc, nil
 }
 
 type ProxyServerConfig struct {
