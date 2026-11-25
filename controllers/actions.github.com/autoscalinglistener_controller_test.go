@@ -991,6 +991,54 @@ var _ = Describe("Test AutoScalingListener customization", func() {
 			).ShouldNot(BeEquivalentTo(oldPodUID), "Pod should be created")
 		})
 
+		It("Should delete the listener when the listener reports its runner scale set is gone", func() {
+			pod := new(corev1.Pod)
+			Eventually(
+				func() (string, error) {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: autoscalingListener.Name, Namespace: autoscalingListener.Namespace}, pod)
+					if err != nil {
+						return "", err
+					}
+
+					return pod.Name, nil
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(BeEquivalentTo(autoscalingListener.Name), "Pod should be created")
+
+			updated := pod.DeepCopy()
+			updated.Status.ContainerStatuses = []corev1.ContainerStatus{
+				{
+					Name: autoscalingListenerContainerName,
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							ExitCode: ghalistenerconfig.ExitCodeRunnerScaleSetNotFound,
+						},
+					},
+				},
+				{
+					Name: sidecarContainerName,
+					State: corev1.ContainerState{
+						Running: &corev1.ContainerStateRunning{},
+					},
+				},
+			}
+			err := k8sClient.Status().Update(ctx, updated)
+			Expect(err).NotTo(HaveOccurred(), "failed to update pod status")
+
+			// A new pod would carry the same dead scale set ID, so the listener
+			// itself has to go for the AutoscalingRunnerSet controller to
+			// rebuild it.
+			Eventually(
+				func() bool {
+					err := k8sClient.Get(ctx, client.ObjectKeyFromObject(autoscalingListener), new(v1alpha1.AutoscalingListener))
+					return kerrors.IsNotFound(err)
+				},
+				autoscalingListenerTestTimeout,
+				autoscalingListenerTestInterval,
+			).Should(BeTrue(), "AutoscalingListener should be deleted")
+		})
+
 		It("Should re-create pod when the listener pod is evicted", func() {
 			pod := new(corev1.Pod)
 			Eventually(
