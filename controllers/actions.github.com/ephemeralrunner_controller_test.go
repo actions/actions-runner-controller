@@ -213,6 +213,86 @@ var _ = Describe("EphemeralRunner", func() {
 			).Should(BeEquivalentTo(true))
 		})
 
+		It("It should label the pod as busy only while a job is assigned", func() {
+			er := new(v1alpha1.EphemeralRunner)
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, er)
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(Succeed(), "failed to get ephemeral runner")
+			Expect(er.Spec.Replicas).To(BeEquivalentTo(1), "spec.replicas should default to 1 for the scale subresource")
+
+			pod := new(corev1.Pod)
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(Succeed(), "failed to get pod")
+
+			// the runner container is running, but no job is assigned yet
+			pod.Status.Phase = corev1.PodRunning
+			pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
+				Name:  v1alpha1.EphemeralRunnerContainerName,
+				State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+			}}
+			Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed(), "failed to update pod status")
+
+			Eventually(
+				func() (int32, error) {
+					current := new(v1alpha1.EphemeralRunner)
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, current); err != nil {
+						return 0, err
+					}
+					return current.Status.Replicas, nil
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(BeEquivalentTo(1), "status.replicas should be reported through the scale subresource")
+
+			Consistently(
+				func() (bool, error) {
+					current := new(corev1.Pod)
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, current); err != nil {
+						return false, err
+					}
+					_, busy := current.Labels[LabelKeyRunnerBusy]
+					return busy, nil
+				},
+				"2s",
+				ephemeralRunnerInterval,
+			).Should(BeFalse(), "idle runner pod must not be labeled busy")
+
+			// simulate the listener assigning a job
+			Eventually(
+				func() error {
+					current := new(v1alpha1.EphemeralRunner)
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, current); err != nil {
+						return err
+					}
+					current.Status.JobID = "1"
+					return k8sClient.Status().Update(ctx, current)
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(Succeed(), "failed to assign job")
+
+			Eventually(
+				func() (string, error) {
+					current := new(corev1.Pod)
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, current); err != nil {
+						return "", err
+					}
+					return current.Labels[LabelKeyRunnerBusy], nil
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(Equal("true"), "pod should be labeled busy once a job is assigned")
+		})
+
 		It("It should delete ephemeral runner on failure and job assigned", func() {
 			er := new(v1alpha1.EphemeralRunner)
 			// Check if finalizer is added
