@@ -213,6 +213,76 @@ var _ = Describe("EphemeralRunner", func() {
 			).Should(BeEquivalentTo(true))
 		})
 
+		It("It should delete ephemeral runner instead of re-creating the pod when a pod running a job is removed", func() {
+			pod := new(corev1.Pod)
+			Eventually(func() error {
+				return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(Succeed())
+
+			pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
+				Name: v1alpha1.EphemeralRunnerContainerName,
+				State: corev1.ContainerState{
+					Running: &corev1.ContainerStateRunning{
+						StartedAt: metav1.Now(),
+					},
+				},
+			})
+			pod.Status.Phase = corev1.PodRunning
+			Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
+
+			updated := new(v1alpha1.EphemeralRunner)
+			Eventually(
+				func() (v1alpha1.EphemeralRunnerPhase, error) {
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated); err != nil {
+						return "Unknown", err
+					}
+					return updated.Status.Phase, nil
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(BeEquivalentTo(v1alpha1.EphemeralRunnerPhasePending))
+
+			// The listener records the job assignment; the controller promotes the runner to Running.
+			assignment := updated.DeepCopy()
+			assignment.Status.JobID = "job-1"
+			assignment.Status.WorkflowRunID = 1
+			Expect(k8sClient.Status().Patch(ctx, assignment, client.MergeFrom(updated))).To(Succeed())
+			Eventually(
+				func() (v1alpha1.EphemeralRunnerPhase, error) {
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated); err != nil {
+						return "Unknown", err
+					}
+					return updated.Status.Phase, nil
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(BeEquivalentTo(v1alpha1.EphemeralRunnerPhaseRunning))
+
+			// Something external removes the pod mid-job before the controller observes it fail: a preemption, an
+			// eviction through the API, or the pod garbage collector removing the terminated pod. The job is lost and
+			// the runner's JIT configuration was already used, so a re-created pod can never run a job.
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, pod)).To(Succeed())
+
+			Eventually(
+				func() bool {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, new(v1alpha1.EphemeralRunner))
+					return kerrors.IsNotFound(err)
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(BeTrue(), "Ephemeral runner should eventually be deleted")
+
+			Consistently(
+				func() bool {
+					err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, new(corev1.Pod))
+					return kerrors.IsNotFound(err)
+				},
+				2*time.Second,
+				ephemeralRunnerInterval,
+			).Should(BeTrue(), "the runner pod should not be re-created")
+		})
+
 		It("It should delete ephemeral runner on failure and job assigned", func() {
 			er := new(v1alpha1.EphemeralRunner)
 			// Check if finalizer is added
