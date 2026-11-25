@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"context"
 	"log/slog"
 	"testing"
 	"time"
@@ -238,6 +239,29 @@ func TestNewExporter(t *testing.T) {
 		require.NotNil(t, exporter.srv)
 		assert.Equal(t, config.ServerAddr, exporter.srv.Addr)
 	})
+}
+
+func TestListenAndServeReturnsNilOnShutdown(t *testing.T) {
+	e := NewExporter(ExporterConfig{
+		ScaleSetName:      "test-scale-set",
+		ScaleSetNamespace: "test-namespace",
+		Organization:      "org",
+		ServerAddr:        "127.0.0.1:0",
+		ServerEndpoint:    "/metrics",
+		Logger:            discardLogger,
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() { errCh <- e.ListenAndServe(ctx) }()
+	cancel()
+
+	select {
+	case err := <-errCh:
+		assert.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("ListenAndServe did not return after the context was canceled")
+	}
 }
 
 func TestExporterConfigDefaults(t *testing.T) {
