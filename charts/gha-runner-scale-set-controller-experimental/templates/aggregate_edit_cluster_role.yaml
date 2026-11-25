@@ -1,0 +1,28 @@
+{{- if .Values.controller.rbac.aggregateRoles.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "gha-controller.aggregate-edit-role-name" . }}
+  labels:
+    {{- include "gha-controller.labels" . | nindent 4 }}
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+- apiGroups:
+  - actions.github.com
+  resources:
+  - autoscalingrunnersets
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - patch
+  - update
+- apiGroups:
+  - actions.github.com
+  resources:
+  - ephemeralrunners
+  verbs:
+  - delete
+  - deletecollection
+{{- end }}

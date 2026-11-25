@@ -1,0 +1,130 @@
+suite: "Controller RBAC aggregation"
+templates:
+  - aggregate_view_cluster_role.yaml
+  - aggregate_edit_cluster_role.yaml
+tests:
+  - it: should render view ClusterRole aggregating into view, edit and admin
+    template: aggregate_view_cluster_role.yaml
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - equal:
+          path: kind
+          value: "ClusterRole"
+      - equal:
+          path: metadata.name
+          value: "test-arc-gha-rs-controller-aggregate-to-view"
+      - equal:
+          path: metadata.labels["rbac.authorization.k8s.io/aggregate-to-view"]
+          value: "true"
+      - equal:
+          path: metadata.labels["rbac.authorization.k8s.io/aggregate-to-edit"]
+          value: "true"
+      - equal:
+          path: metadata.labels["rbac.authorization.k8s.io/aggregate-to-admin"]
+          value: "true"
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - actions.github.com
+            resources:
+              - autoscalingrunnersets
+              - autoscalingrunnersets/status
+              - autoscalinglisteners
+              - autoscalinglisteners/status
+              - ephemeralrunnersets
+              - ephemeralrunnersets/status
+              - ephemeralrunners
+              - ephemeralrunners/status
+            verbs:
+              - get
+              - list
+              - watch
+
+  - it: should render edit ClusterRole with write verbs only
+    template: aggregate_edit_cluster_role.yaml
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - equal:
+          path: kind
+          value: "ClusterRole"
+      - equal:
+          path: metadata.name
+          value: "test-arc-gha-rs-controller-aggregate-to-edit"
+      - equal:
+          path: metadata.labels["rbac.authorization.k8s.io/aggregate-to-edit"]
+          value: "true"
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - actions.github.com
+            resources:
+              - ephemeralrunners
+            verbs:
+              - delete
+              - deletecollection
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - actions.github.com
+            resources:
+              - autoscalingrunnersets
+            verbs:
+              - create
+              - delete
+              - deletecollection
+              - patch
+              - update
+      - notContains:
+          path: rules[0].verbs
+          content: get
+      - notContains:
+          path: rules[0].verbs
+          content: list
+      - notContains:
+          path: rules[0].verbs
+          content: watch
+      - notContains:
+          path: rules[1].verbs
+          content: get
+
+  - it: should label the edit role for edit and admin and carry chart labels
+    template: aggregate_edit_cluster_role.yaml
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - equal:
+          path: metadata.labels["rbac.authorization.k8s.io/aggregate-to-admin"]
+          value: "true"
+      - exists:
+          path: metadata.labels["helm.sh/chart"]
+
+  - it: should carry chart labels on the view role
+    template: aggregate_view_cluster_role.yaml
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - exists:
+          path: metadata.labels["helm.sh/chart"]
+
+  - it: should not render any role when disabled
+    set:
+      controller.rbac.aggregateRoles.enabled: false
+    release:
+      name: "test-arc"
+      namespace: "test-ns"
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: aggregate_view_cluster_role.yaml
+      - hasDocuments:
+          count: 0
+        template: aggregate_edit_cluster_role.yaml

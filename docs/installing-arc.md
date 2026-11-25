@@ -27,3 +27,7 @@ helm repo add actions-runner-controller https://actions-runner-controller.github
 helm upgrade --install --namespace actions-runner-system --create-namespace \
              --wait actions-runner-controller actions-runner-controller/actions-runner-controller
 ```
+
+### Granting users access to ARC resources
+
+All three Helm charts (`gha-runner-scale-set-controller`, `gha-runner-scale-set-controller-experimental` and the legacy `actions-runner-controller`) ship two ClusterRoles: `aggregate-to-view` (read verbs, aggregated into `view`, `edit` and `admin`) and `aggregate-to-edit` (write verbs, aggregated into `edit` and `admin`). The legacy chart and the kustomize manifests additionally ship `aggregate-to-read-sensitive` (read verbs for `runners`, aggregated into `edit` and `admin` only, not `view`). Set `rbac.aggregateRoles.enabled=false` (`controller.rbac.aggregateRoles.enabled` in the experimental chart) to skip them. They are aggregated into the builtin `view`, `edit` and `admin` roles, so users bound to those roles can read (and, for `edit`/`admin`, manage) ARC resources without extra bindings. The legacy `Runner` resource is intentionally not readable through `view` because `status.registration.token` holds a runner registration token; the separate `aggregate-to-read-sensitive` role grants edit and admin read access to it, and `aggregate-to-edit` grants the write access.
