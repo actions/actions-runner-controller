@@ -81,6 +81,7 @@ func TestActionsClientReportsResponses(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, []ratelimit.Response{{
 		Backend:     ratelimit.BackendREST,
+		Operation:   ratelimit.OperationRegistrationToken,
 		StatusCode:  http.StatusTooManyRequests,
 		RateLimited: ratelimit.Secondary,
 	}}, got)

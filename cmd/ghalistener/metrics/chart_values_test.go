@@ -59,8 +59,8 @@ func TestChartValuesMetricsExample(t *testing.T) {
 	for name := range defaultMetrics.Gauges {
 		allLabels[name] = keys(e.scaleSetLabels)
 	}
-	allLabels[MetricGitHubRequestsTotal] = append(keys(e.scaleSetLabels), labelKeyBackend, labelKeyStatusCode)
-	allLabels[MetricGitHubRateLimitedTotal] = append(keys(e.scaleSetLabels), labelKeyBackend, labelKeyResource, labelKeyRateLimitKind)
+	allLabels[MetricGitHubRequestsTotal] = append(keys(e.scaleSetLabels), labelKeyBackend, labelKeyOperation, labelKeyStatusCode)
+	allLabels[MetricGitHubRateLimitedTotal] = append(keys(e.scaleSetLabels), labelKeyBackend, labelKeyOperation, labelKeyResource, labelKeyRateLimitKind, labelKeyReason)
 
 	counterOptIn := map[string][]string{
 		MetricStartedJobsTotal:   optInLabels,

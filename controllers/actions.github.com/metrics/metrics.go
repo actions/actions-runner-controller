@@ -99,17 +99,17 @@ var (
 		prometheus.CounterOpts{
 			Subsystem: githubScaleSetControllerSubsystem,
 			Name:      "github_requests_total",
-			Help:      "Total number of attempts to call GitHub, by backend (rest, actions, broker) and status code, or error when no response arrived.",
+			Help:      "Total number of attempts to call GitHub, by backend (rest, actions, broker), operation and status code, or error when no response arrived.",
 		},
-		append(githubClientLabels, "backend", "status_code"),
+		append(githubClientLabels, "backend", "operation", "status_code"),
 	)
 	githubRateLimited = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Subsystem: githubScaleSetControllerSubsystem,
 			Name:      "github_rate_limited_total",
-			Help:      "Total number of responses from GitHub that were rate limited, by backend, rate limit resource and kind (primary, secondary).",
+			Help:      "Total number of responses from GitHub that were rate limited, by backend, operation, rate limit resource, kind (primary, secondary) and the Actions service exception as reason.",
 		},
-		append(githubClientLabels, "backend", "resource", "kind"),
+		append(githubClientLabels, "backend", "operation", "resource", "kind", "reason"),
 	)
 )
 
@@ -122,6 +122,7 @@ func RecordGitHubResponse(config *actions.GitHubConfig, namespace string, resp r
 		"organization": config.Organization,
 		"enterprise":   config.Enterprise,
 		"backend":      string(resp.Backend),
+		"operation":    string(resp.Operation),
 		"status_code":  resp.Status(),
 	}).Inc()
 	if resp.RateLimited != "" {
@@ -131,8 +132,10 @@ func RecordGitHubResponse(config *actions.GitHubConfig, namespace string, resp r
 			"organization": config.Organization,
 			"enterprise":   config.Enterprise,
 			"backend":      string(resp.Backend),
+			"operation":    string(resp.Operation),
 			"resource":     resp.Resource,
 			"kind":         string(resp.RateLimited),
+			"reason":       resp.Reason,
 		}).Inc()
 	}
 }

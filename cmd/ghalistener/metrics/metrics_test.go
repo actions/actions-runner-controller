@@ -599,16 +599,19 @@ func TestRecordGitHubResponse(t *testing.T) {
 
 	e.RecordGitHubResponse(ratelimit.Response{
 		Backend:    ratelimit.BackendREST,
+		Operation:  ratelimit.OperationRegistrationToken,
 		StatusCode: 201,
 	})
 	e.RecordGitHubResponse(ratelimit.Response{
-		Backend:     ratelimit.BackendBroker,
+		Backend:     ratelimit.BackendActions,
+		Operation:   ratelimit.OperationJITConfig,
 		StatusCode:  429,
 		RateLimited: ratelimit.Secondary,
-		Resource:    "core",
+		Reason:      "ConfigureTooManyRunnersException",
 	})
 	e.RecordGitHubResponse(ratelimit.Response{
 		Backend:    ratelimit.BackendREST,
+		Operation:  ratelimit.OperationRegistrationToken,
 		StatusCode: 201,
 	})
 
@@ -619,7 +622,7 @@ func TestRecordGitHubResponse(t *testing.T) {
 			var key []string
 			for _, l := range m.GetLabel() {
 				switch l.GetName() {
-				case labelKeyBackend, labelKeyStatusCode, labelKeyResource, labelKeyRateLimitKind:
+				case labelKeyBackend, labelKeyOperation, labelKeyStatusCode, labelKeyResource, labelKeyRateLimitKind, labelKeyReason:
 					key = append(key, l.GetName()+"="+l.GetValue())
 				case labelKeyRunnerScaleSetName:
 					assert.Equal(t, "test-scale-set", l.GetValue())
@@ -631,10 +634,10 @@ func TestRecordGitHubResponse(t *testing.T) {
 	}
 
 	assert.Equal(t, map[string]float64{
-		"backend=rest,status_code=201":   2,
-		"backend=broker,status_code=429": 1,
+		"backend=rest,operation=registration_token,status_code=201": 2,
+		"backend=actions,operation=jit_config,status_code=429":      1,
 	}, series(MetricGitHubRequestsTotal))
 	assert.Equal(t, map[string]float64{
-		"backend=broker,kind=secondary,resource=core": 1,
+		"backend=actions,kind=secondary,operation=jit_config,reason=ConfigureTooManyRunnersException,resource=": 1,
 	}, series(MetricGitHubRateLimitedTotal))
 }

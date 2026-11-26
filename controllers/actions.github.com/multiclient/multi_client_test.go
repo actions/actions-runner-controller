@@ -76,11 +76,13 @@ func TestGetClientForReportsResponses(t *testing.T) {
 	assert.Equal(t, []observed{
 		{"org", "arc-runners", ratelimit.Response{
 			Backend:    ratelimit.BackendREST,
+			Operation:  ratelimit.OperationRegistrationToken,
 			StatusCode: http.StatusCreated,
 		}},
-		{"org", "arc-runners", ratelimit.Response{Backend: ratelimit.BackendREST, StatusCode: http.StatusOK}},
+		{"org", "arc-runners", ratelimit.Response{Backend: ratelimit.BackendREST, Operation: ratelimit.OperationRunnerRegistration, StatusCode: http.StatusOK}},
 		{"org", "arc-runners", ratelimit.Response{
 			Backend:     ratelimit.BackendActions,
+			Operation:   ratelimit.OperationScaleSet,
 			StatusCode:  http.StatusTooManyRequests,
 			RateLimited: ratelimit.Secondary,
 		}},

@@ -198,10 +198,10 @@ listenerConfig:
 #         ]
 #     gha_github_requests_total:
 #       labels:
-#         ["name", "namespace", "repository", "organization", "enterprise", "backend", "status_code"]
+#         ["name", "namespace", "repository", "organization", "enterprise", "backend", "operation", "status_code"]
 #     gha_github_rate_limited_total:
 #       labels:
-#         ["name", "namespace", "repository", "organization", "enterprise", "backend", "resource", "kind"]
+#         ["name", "namespace", "repository", "organization", "enterprise", "backend", "operation", "resource", "kind", "reason"]
 #   gauges:
 #     gha_assigned_jobs:
 #       labels: ["name", "namespace", "repository", "organization", "enterprise"]

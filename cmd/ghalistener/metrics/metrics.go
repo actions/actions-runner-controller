@@ -29,9 +29,11 @@ const (
 	labelKeyEventName               = "event_name"
 	labelKeyJobResult               = "job_result"
 	labelKeyBackend                 = "backend"
+	labelKeyOperation               = "operation"
 	labelKeyStatusCode              = "status_code"
 	labelKeyRateLimitKind           = "kind"
 	labelKeyResource                = "resource"
+	labelKeyReason                  = "reason"
 )
 
 const (
@@ -67,8 +69,8 @@ var metricsHelp = metricsHelpRegistry{
 	counters: map[string]string{
 		MetricStartedJobsTotal:       "Total number of jobs started.",
 		MetricCompletedJobsTotal:     "Total number of jobs completed.",
-		MetricGitHubRequestsTotal:    "Total number of attempts to call GitHub, by backend (rest, actions, broker) and status code, or error when no response arrived.",
-		MetricGitHubRateLimitedTotal: "Total number of responses from GitHub that were rate limited, by backend, rate limit resource and kind (primary, secondary).",
+		MetricGitHubRequestsTotal:    "Total number of attempts to call GitHub, by backend (rest, actions, broker), operation and status code, or error when no response arrived.",
+		MetricGitHubRateLimitedTotal: "Total number of responses from GitHub that were rate limited, by backend, operation, rate limit resource, kind (primary, secondary) and the Actions service exception as reason.",
 	},
 	gauges: map[string]string{
 		MetricAssignedJobs:      "Number of jobs assigned to this scale set.",
@@ -200,6 +202,7 @@ var defaultMetrics = v1alpha1.MetricsConfig{
 				labelKeyRunnerScaleSetName,
 				labelKeyRunnerScaleSetNamespace,
 				labelKeyBackend,
+				labelKeyOperation,
 				labelKeyStatusCode,
 			},
 		},
@@ -211,8 +214,10 @@ var defaultMetrics = v1alpha1.MetricsConfig{
 				labelKeyRunnerScaleSetName,
 				labelKeyRunnerScaleSetNamespace,
 				labelKeyBackend,
+				labelKeyOperation,
 				labelKeyResource,
 				labelKeyRateLimitKind,
+				labelKeyReason,
 			},
 		},
 	},
@@ -559,15 +564,17 @@ func (e *exporter) RecordDesiredRunners(count int) {
 }
 
 func (e *exporter) RecordGitHubResponse(resp ratelimit.Response) {
-	l := make(prometheus.Labels, len(e.scaleSetLabels)+2)
+	l := make(prometheus.Labels, len(e.scaleSetLabels)+6)
 	maps.Copy(l, e.scaleSetLabels)
 	l[labelKeyBackend] = string(resp.Backend)
+	l[labelKeyOperation] = string(resp.Operation)
 	l[labelKeyStatusCode] = resp.Status()
 	e.incCounter(MetricGitHubRequestsTotal, l)
 
 	if resp.RateLimited != "" {
 		l[labelKeyResource] = resp.Resource
 		l[labelKeyRateLimitKind] = string(resp.RateLimited)
+		l[labelKeyReason] = resp.Reason
 		e.incCounter(MetricGitHubRateLimitedTotal, l)
 	}
 }

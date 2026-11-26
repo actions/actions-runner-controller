@@ -65,73 +65,85 @@ func TestTransport(t *testing.T) {
 			name: "github api",
 			url:  "https://api.github.com/orgs/o/actions/runners/registration-token",
 			stub: stubTransport{status: 201, header: rateLimitHeader("4990", "core")},
-			want: Response{Backend: BackendREST, StatusCode: 201, Resource: "core"},
+			want: Response{Backend: BackendREST, Operation: OperationRegistrationToken, StatusCode: 201, Resource: "core"},
 		},
 		{
 			name: "github enterprise server api",
 			url:  "https://ghes.example.com/api/v3/repos/o/r/actions/runners/registration-token",
 			stub: stubTransport{status: 201},
-			want: Response{Backend: BackendREST, StatusCode: 201},
+			want: Response{Backend: BackendREST, Operation: OperationRegistrationToken, StatusCode: 201},
 		},
 		{
 			name: "actions service",
 			url:  "https://pipelines.actions.githubusercontent.com/abc/_apis/runtime/runnerscalesets/1",
 			stub: stubTransport{status: 200},
-			want: Response{Backend: BackendActions, StatusCode: 200},
+			want: Response{Backend: BackendActions, Operation: OperationScaleSet, StatusCode: 200},
+		},
+		{
+			name: "actions service on the broker host",
+			url:  "https://broker.actions.githubusercontent.com/rest/_apis/distributedtask/pools/0/agents/7",
+			stub: stubTransport{status: 200},
+			want: Response{Backend: BackendActions, Operation: OperationRunner, StatusCode: 200},
 		},
 		{
 			name: "broker secondary limit",
-			url:  "https://broker.actions.githubusercontent.com/message?sessionId=1",
+			url:  "https://broker.actions.githubusercontent.com/scalesets/message?sessionId=1",
 			stub: stubTransport{status: 429},
-			want: Response{Backend: BackendBroker, StatusCode: 429, RateLimited: Secondary},
+			want: Response{Backend: BackendBroker, Operation: OperationMessage, StatusCode: 429, RateLimited: Secondary},
+		},
+		{
+			name: "too many runners configured",
+			url:  "https://broker.actions.githubusercontent.com/rest/_apis/runtime/runnerscalesets/42/generatejitconfig?api-version=6.0-preview",
+			stub: stubTransport{status: 429, body: `{"typeName":"Microsoft.TeamFoundation.DistributedTask.WebApi.ConfigureTooManyRunnersException, Microsoft.TeamFoundation.DistributedTask.WebApi","message":"You have configured more than 1500 runners within the last 5 minutes."}`},
+			want: Response{Backend: BackendActions, Operation: OperationJITConfig, StatusCode: 429, RateLimited: Secondary, Reason: "ConfigureTooManyRunnersException"},
 		},
 		{
 			name: "spent primary quota",
 			url:  "https://api.github.com/orgs/o/actions/runners/registration-token",
 			stub: stubTransport{status: 403, header: rateLimitHeader("0", "actions_runner_registration")},
-			want: Response{Backend: BackendREST, StatusCode: 403, RateLimited: Primary, Resource: "actions_runner_registration"},
+			want: Response{Backend: BackendREST, Operation: OperationRegistrationToken, StatusCode: 403, RateLimited: Primary, Resource: "actions_runner_registration"},
 		},
 		{
 			name: "403 with Retry-After is a secondary limit",
 			url:  "https://api.github.com/orgs/o/actions/runners/registration-token",
 			stub: stubTransport{status: 403, header: http.Header{"Retry-After": []string{"60"}}},
-			want: Response{Backend: BackendREST, StatusCode: 403, RateLimited: Secondary},
+			want: Response{Backend: BackendREST, Operation: OperationRegistrationToken, StatusCode: 403, RateLimited: Secondary},
 		},
 		{
 			name: "secondary limit named only in the body",
 			url:  "https://api.github.com/orgs/o/actions/runners/registration-token",
 			stub: stubTransport{status: 403, body: `{"message":"You have exceeded a secondary rate limit."}`},
-			want: Response{Backend: BackendREST, StatusCode: 403, RateLimited: Secondary},
+			want: Response{Backend: BackendREST, Operation: OperationRegistrationToken, StatusCode: 403, RateLimited: Secondary},
 		},
 		{
 			name: "secondary message wins over spent quota",
 			url:  "https://api.github.com/orgs/o/actions/runners/registration-token",
 			stub: stubTransport{status: 403, header: rateLimitHeader("0", "core"), body: `{"message":"You have exceeded a secondary rate limit."}`},
-			want: Response{Backend: BackendREST, StatusCode: 403, RateLimited: Secondary, Resource: "core"},
+			want: Response{Backend: BackendREST, Operation: OperationRegistrationToken, StatusCode: 403, RateLimited: Secondary, Resource: "core"},
 		},
 		{
 			name: "escaped secondary message in JSON",
 			url:  "https://api.github.com/orgs/o/actions/runners/registration-token",
 			stub: stubTransport{status: 403, body: `{"message":"You have exceeded a secondary\u0020rate limit."}`},
-			want: Response{Backend: BackendREST, StatusCode: 403, RateLimited: Secondary},
+			want: Response{Backend: BackendREST, Operation: OperationRegistrationToken, StatusCode: 403, RateLimited: Secondary},
 		},
 		{
 			name: "secondary rate outside the JSON message is not a rate limit",
 			url:  "https://api.github.com/orgs/o/actions/runners/registration-token",
 			stub: stubTransport{status: 403, body: `{"message":"Forbidden","detail":"secondary rate"}`},
-			want: Response{Backend: BackendREST, StatusCode: 403},
+			want: Response{Backend: BackendREST, Operation: OperationRegistrationToken, StatusCode: 403},
 		},
 		{
 			name: "plain text secondary message",
 			url:  "https://api.github.com/orgs/o/actions/runners/registration-token",
 			stub: stubTransport{status: 403, header: http.Header{"Content-Type": []string{"text/plain"}}, body: "You have exceeded a secondary rate limit."},
-			want: Response{Backend: BackendREST, StatusCode: 403, RateLimited: Secondary},
+			want: Response{Backend: BackendREST, Operation: OperationRegistrationToken, StatusCode: 403, RateLimited: Secondary},
 		},
 		{
 			name: "plain 403 is not a rate limit",
 			url:  "https://api.github.com/orgs/o/actions/runners/registration-token",
 			stub: stubTransport{status: 403},
-			want: Response{Backend: BackendREST, StatusCode: 403},
+			want: Response{Backend: BackendREST, Operation: OperationRegistrationToken, StatusCode: 403},
 		},
 	}
 	for _, tt := range tests {
@@ -143,10 +155,33 @@ func TestTransport(t *testing.T) {
 	}
 }
 
+func TestOperations(t *testing.T) {
+	tests := map[string]Operation{
+		"https://api.github.com/app/installations/1/access_tokens":                        OperationAccessToken,
+		"https://api.github.com/repos/o/r/actions/runners/registration-token":             OperationRegistrationToken,
+		"https://api.github.com/actions/runner-registration":                              OperationRunnerRegistration,
+		"https://pipelines.example/abc/_apis/runtime/runnerscalesets?name=s":              OperationScaleSet,
+		"https://pipelines.example/abc/_apis/runtime/runnerscalesets/1":                   OperationScaleSet,
+		"https://pipelines.example/abc/_apis/runtime/runnergroups/?groupName=g":           OperationRunnerGroup,
+		"https://pipelines.example/abc/_apis/runtime/runnerscalesets/1/sessions":          OperationSession,
+		"https://pipelines.example/abc/_apis/runtime/runnerscalesets/1/sessions/9b2b":     OperationSession,
+		"https://pipelines.example/abc/_apis/runtime/runnerscalesets/1/acquirejobs":       OperationAcquireJobs,
+		"https://pipelines.example/abc/_apis/runtime/runnerscalesets/1/generatejitconfig": OperationJITConfig,
+		"https://pipelines.example/abc/_apis/distributedtask/pools/0/agents?agentName=r":  OperationRunner,
+		"https://broker.actions.githubusercontent.com/scalesets/message/12":               OperationMessage,
+		"https://api.github.com/meta":                                                     OperationOther,
+	}
+	for url, want := range tests {
+		got := send(t, stubTransport{status: 200}, url)
+		require.Len(t, got, 1)
+		assert.Equal(t, want, got[0].Operation, url)
+	}
+}
+
 func TestTransportReportsFailedAttempts(t *testing.T) {
-	got := send(t, stubTransport{err: errors.New("connection reset")}, "https://broker.actions.githubusercontent.com/message")
+	got := send(t, stubTransport{err: errors.New("connection reset")}, "https://broker.actions.githubusercontent.com/scalesets/message")
 	require.Len(t, got, 1)
-	assert.Equal(t, Response{Backend: BackendBroker}, got[0])
+	assert.Equal(t, Response{Backend: BackendBroker, Operation: OperationMessage}, got[0])
 	assert.Equal(t, "error", got[0].Status())
 }
 
