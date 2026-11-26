@@ -1,0 +1,145 @@
+package ratelimit
+
+import (
+	"context"
+	"errors"
+	"io"
+	"net/http"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+type stubTransport struct {
+	status int
+	header http.Header
+	body   string
+	err    error
+}
+
+func (s stubTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	header := s.header
+	if header == nil {
+		header = http.Header{}
+	}
+	return &http.Response{StatusCode: s.status, Header: header, Body: io.NopCloser(strings.NewReader(s.body)), Request: req}, nil
+}
+
+func send(t *testing.T, stub stubTransport, url string) []Response {
+	t.Helper()
+	var got []Response
+	client := &http.Client{Transport: Transport{Transport: stub, Observe: func(r Response) { got = append(got, r) }}}
+	resp, err := client.Get(url)
+	if stub.err != nil {
+		require.Error(t, err)
+		return got
+	}
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	assert.Equal(t, stub.body, string(body), "the caller still reads the whole body")
+	return got
+}
+
+func rateLimitHeader(remaining, resource string) http.Header {
+	h := http.Header{}
+	h.Set("X-RateLimit-Remaining", remaining)
+	h.Set("X-RateLimit-Resource", resource)
+	return h
+}
+
+func TestTransport(t *testing.T) {
+	tests := []struct {
+		name string
+		url  string
+		stub stubTransport
+		want Response
+	}{
+		{
+			name: "github api",
+			url:  "https://api.github.com/orgs/o/actions/runners/registration-token",
+			stub: stubTransport{status: 201, header: rateLimitHeader("4990", "core")},
+			want: Response{Backend: BackendREST, StatusCode: 201, Resource: "core"},
+		},
+		{
+			name: "github enterprise server api",
+			url:  "https://ghes.example.com/api/v3/repos/o/r/actions/runners/registration-token",
+			stub: stubTransport{status: 201},
+			want: Response{Backend: BackendREST, StatusCode: 201},
+		},
+		{
+			name: "actions service",
+			url:  "https://pipelines.actions.githubusercontent.com/abc/_apis/runtime/runnerscalesets/1",
+			stub: stubTransport{status: 200},
+			want: Response{Backend: BackendActions, StatusCode: 200},
+		},
+		{
+			name: "broker secondary limit",
+			url:  "https://broker.actions.githubusercontent.com/message?sessionId=1",
+			stub: stubTransport{status: 429},
+			want: Response{Backend: BackendBroker, StatusCode: 429, RateLimited: Secondary},
+		},
+		{
+			name: "spent primary quota",
+			url:  "https://api.github.com/orgs/o/actions/runners/registration-token",
+			stub: stubTransport{status: 403, header: rateLimitHeader("0", "actions_runner_registration")},
+			want: Response{Backend: BackendREST, StatusCode: 403, RateLimited: Primary, Resource: "actions_runner_registration"},
+		},
+		{
+			name: "403 with Retry-After is a secondary limit",
+			url:  "https://api.github.com/orgs/o/actions/runners/registration-token",
+			stub: stubTransport{status: 403, header: http.Header{"Retry-After": []string{"60"}}},
+			want: Response{Backend: BackendREST, StatusCode: 403, RateLimited: Secondary},
+		},
+		{
+			name: "secondary limit named only in the body",
+			url:  "https://api.github.com/orgs/o/actions/runners/registration-token",
+			stub: stubTransport{status: 403, body: `{"message":"You have exceeded a secondary rate limit."}`},
+			want: Response{Backend: BackendREST, StatusCode: 403, RateLimited: Secondary},
+		},
+		{
+			name: "secondary message wins over spent quota",
+			url:  "https://api.github.com/orgs/o/actions/runners/registration-token",
+			stub: stubTransport{status: 403, header: rateLimitHeader("0", "core"), body: `{"message":"You have exceeded a secondary rate limit."}`},
+			want: Response{Backend: BackendREST, StatusCode: 403, RateLimited: Secondary, Resource: "core"},
+		},
+		{
+			name: "plain 403 is not a rate limit",
+			url:  "https://api.github.com/orgs/o/actions/runners/registration-token",
+			stub: stubTransport{status: 403},
+			want: Response{Backend: BackendREST, StatusCode: 403},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := send(t, tt.stub, tt.url)
+			require.Len(t, got, 1)
+			assert.Equal(t, tt.want, got[0])
+		})
+	}
+}
+
+func TestTransportReportsFailedAttempts(t *testing.T) {
+	got := send(t, stubTransport{err: errors.New("connection reset")}, "https://broker.actions.githubusercontent.com/message")
+	require.Len(t, got, 1)
+	assert.Equal(t, Response{Backend: BackendBroker}, got[0])
+	assert.Equal(t, "error", got[0].Status())
+}
+
+func TestTransportSkipsCanceledRequests(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	var got []Response
+	transport := Transport{Transport: stubTransport{err: context.Canceled}, Observe: func(r Response) { got = append(got, r) }}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://broker.actions.githubusercontent.com/message", nil)
+	require.NoError(t, err)
+	_, err = transport.RoundTrip(req)
+	require.Error(t, err)
+	assert.Empty(t, got)
+}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1/appconfig"
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/config"
+	"github.com/actions/actions-runner-controller/ratelimit"
 	"github.com/actions/scaleset"
 	"github.com/stretchr/testify/require"
 )
@@ -44,7 +45,7 @@ func TestProxySettings(t *testing.T) {
 				ConfigureURL: tc.scheme + "://github.com/org/repo",
 				AppConfig:    &appconfig.AppConfig{Token: "token"},
 			}
-			client, err := config.ActionsClient(discardLogger, scaleset.WithRetry(scaleset.RetryConfig{Max: 0}))
+			client, err := config.ActionsClient(discardLogger, nil, scaleset.WithRetry(scaleset.RetryConfig{Max: 0}))
 			require.NoError(t, err)
 
 			_, err = client.GenerateJitRunnerConfig(t.Context(), &scaleset.RunnerScaleSetJitRunnerSetting{Name: "runner"}, 1)
@@ -52,4 +53,35 @@ func TestProxySettings(t *testing.T) {
 			require.EqualValues(t, 1, requests.Load(), "the request must use the configured proxy")
 		})
 	}
+}
+
+func TestActionsClientReportsResponses(t *testing.T) {
+	for _, env := range []string{"http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY", "no_proxy", "NO_PROXY"} {
+		t.Setenv(env, "")
+	}
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer proxy.Close()
+	t.Setenv("http_proxy", proxy.URL)
+
+	var got []ratelimit.Response
+	config := config.Config{
+		ConfigureURL: "http://github.com/org/repo",
+		AppConfig:    &appconfig.AppConfig{Token: "token"},
+	}
+	client, err := config.ActionsClient(
+		discardLogger,
+		func(resp ratelimit.Response) { got = append(got, resp) },
+		scaleset.WithRetry(scaleset.RetryConfig{Max: 0}),
+	)
+	require.NoError(t, err)
+
+	_, err = client.GenerateJitRunnerConfig(t.Context(), &scaleset.RunnerScaleSetJitRunnerSetting{Name: "runner"}, 1)
+	require.Error(t, err)
+	require.Equal(t, []ratelimit.Response{{
+		Backend:     ratelimit.BackendREST,
+		StatusCode:  http.StatusTooManyRequests,
+		RateLimited: ratelimit.Secondary,
+	}}, got)
 }

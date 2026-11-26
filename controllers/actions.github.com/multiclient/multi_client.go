@@ -13,6 +13,7 @@ import (
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1/appconfig"
 	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/actions-runner-controller/github/actions"
+	"github.com/actions/actions-runner-controller/ratelimit"
 	"github.com/actions/scaleset"
 	"github.com/google/uuid"
 )
@@ -22,8 +23,22 @@ type MultiClient interface {
 }
 
 type Scaleset struct {
-	mu      sync.Mutex
-	clients map[string]*multiClientEntry
+	mu              sync.Mutex
+	clients         map[string]*multiClientEntry
+	observeResponse ResponseObserver
+}
+
+// ResponseObserver is called with every response a client receives from
+// GitHub, along with the configuration and namespace the client serves.
+type ResponseObserver func(config *actions.GitHubConfig, namespace string, resp ratelimit.Response)
+
+type Option func(*Scaleset)
+
+// WithResponseObserver makes every client report its responses to observe.
+func WithResponseObserver(observe ResponseObserver) Option {
+	return func(m *Scaleset) {
+		m.observeResponse = observe
+	}
 }
 
 type multiClientEntry struct {
@@ -31,10 +46,14 @@ type multiClientEntry struct {
 	rootCAs *x509.CertPool
 }
 
-func NewScaleset() *Scaleset {
-	return &Scaleset{
+func NewScaleset(opts ...Option) *Scaleset {
+	m := &Scaleset{
 		clients: make(map[string]*multiClientEntry),
 	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
 }
 
 type Client interface {
@@ -78,6 +97,19 @@ func (m *Scaleset) GetClientFor(ctx context.Context, opts *ClientForOptions) (Cl
 		RootCAs: config.RootCAs,
 		Proxy:   config.ProxyFunc,
 	})
+	if m.observeResponse != nil {
+		ghConfig, err := actions.ParseGitHubConfigFromURL(config.GithubConfigURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse GitHub config URL: %w", err)
+		}
+		observe, namespace := m.observeResponse, config.Namespace
+		httpClient.Transport = ratelimit.Transport{
+			Transport: httpClient.Transport,
+			Observe: func(resp ratelimit.Response) {
+				observe(ghConfig, namespace, resp)
+			},
+		}
+	}
 	newClient := func() (*scaleset.Client, error) {
 		return config.newClient(httpClient)
 	}

@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"maps"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/ratelimit"
 	"github.com/actions/scaleset"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -26,6 +28,10 @@ const (
 	labelKeyJobWorkflowTarget       = "job_workflow_target"
 	labelKeyEventName               = "event_name"
 	labelKeyJobResult               = "job_result"
+	labelKeyBackend                 = "backend"
+	labelKeyStatusCode              = "status_code"
+	labelKeyRateLimitKind           = "kind"
+	labelKeyResource                = "resource"
 )
 
 const (
@@ -47,6 +53,8 @@ const (
 	MetricCompletedJobsTotal          = "gha_completed_jobs_total"
 	MetricJobStartupDurationSeconds   = "gha_job_startup_duration_seconds"
 	MetricJobExecutionDurationSeconds = "gha_job_execution_duration_seconds"
+	MetricGitHubRequestsTotal         = "gha_github_requests_total"
+	MetricGitHubRateLimitedTotal      = "gha_github_rate_limited_total"
 )
 
 type metricsHelpRegistry struct {
@@ -57,8 +65,10 @@ type metricsHelpRegistry struct {
 
 var metricsHelp = metricsHelpRegistry{
 	counters: map[string]string{
-		MetricStartedJobsTotal:   "Total number of jobs started.",
-		MetricCompletedJobsTotal: "Total number of jobs completed.",
+		MetricStartedJobsTotal:       "Total number of jobs started.",
+		MetricCompletedJobsTotal:     "Total number of jobs completed.",
+		MetricGitHubRequestsTotal:    "Total number of attempts to call GitHub, by backend (rest, actions, broker) and status code, or error when no response arrived.",
+		MetricGitHubRateLimitedTotal: "Total number of responses from GitHub that were rate limited, by backend, rate limit resource and kind (primary, secondary).",
 	},
 	gauges: map[string]string{
 		MetricAssignedJobs:      "Number of jobs assigned to this scale set.",
@@ -110,6 +120,7 @@ type Recorder interface {
 
 type ServerExporter interface {
 	Recorder
+	RecordGitHubResponse(resp ratelimit.Response)
 	ListenAndServe(ctx context.Context) error
 }
 
@@ -179,6 +190,29 @@ var defaultMetrics = v1alpha1.MetricsConfig{
 				labelKeyJobName,
 				labelKeyEventName,
 				labelKeyJobResult,
+			},
+		},
+		MetricGitHubRequestsTotal: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyRunnerScaleSetName,
+				labelKeyRunnerScaleSetNamespace,
+				labelKeyBackend,
+				labelKeyStatusCode,
+			},
+		},
+		MetricGitHubRateLimitedTotal: {
+			Labels: []string{
+				labelKeyEnterprise,
+				labelKeyOrganization,
+				labelKeyRepository,
+				labelKeyRunnerScaleSetName,
+				labelKeyRunnerScaleSetNamespace,
+				labelKeyBackend,
+				labelKeyResource,
+				labelKeyRateLimitKind,
 			},
 		},
 	},
@@ -522,6 +556,20 @@ func (e *exporter) RecordJobCompleted(msg *scaleset.JobCompleted) {
 
 func (e *exporter) RecordDesiredRunners(count int) {
 	e.setGauge(MetricDesiredRunners, e.scaleSetLabels, float64(count))
+}
+
+func (e *exporter) RecordGitHubResponse(resp ratelimit.Response) {
+	l := make(prometheus.Labels, len(e.scaleSetLabels)+2)
+	maps.Copy(l, e.scaleSetLabels)
+	l[labelKeyBackend] = string(resp.Backend)
+	l[labelKeyStatusCode] = resp.Status()
+	e.incCounter(MetricGitHubRequestsTotal, l)
+
+	if resp.RateLimited != "" {
+		l[labelKeyResource] = resp.Resource
+		l[labelKeyRateLimitKind] = string(resp.RateLimited)
+		e.incCounter(MetricGitHubRateLimitedTotal, l)
+	}
 }
 
 type discard struct{}

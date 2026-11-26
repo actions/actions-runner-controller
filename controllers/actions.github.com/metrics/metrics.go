@@ -2,6 +2,8 @@ package metrics
 
 import (
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/github/actions"
+	"github.com/actions/actions-runner-controller/ratelimit"
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
@@ -85,8 +87,60 @@ var (
 	)
 )
 
+var githubClientLabels = []string{
+	"namespace",
+	"repository",
+	"organization",
+	"enterprise",
+}
+
+var (
+	githubRequests = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Subsystem: githubScaleSetControllerSubsystem,
+			Name:      "github_requests_total",
+			Help:      "Total number of attempts to call GitHub, by backend (rest, actions, broker) and status code, or error when no response arrived.",
+		},
+		append(githubClientLabels, "backend", "status_code"),
+	)
+	githubRateLimited = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Subsystem: githubScaleSetControllerSubsystem,
+			Name:      "github_rate_limited_total",
+			Help:      "Total number of responses from GitHub that were rate limited, by backend, rate limit resource and kind (primary, secondary).",
+		},
+		append(githubClientLabels, "backend", "resource", "kind"),
+	)
+)
+
+// RecordGitHubResponse counts a response received by the client for a GitHub
+// configuration in a namespace.
+func RecordGitHubResponse(config *actions.GitHubConfig, namespace string, resp ratelimit.Response) {
+	githubRequests.With(prometheus.Labels{
+		"namespace":    namespace,
+		"repository":   config.Repository,
+		"organization": config.Organization,
+		"enterprise":   config.Enterprise,
+		"backend":      string(resp.Backend),
+		"status_code":  resp.Status(),
+	}).Inc()
+	if resp.RateLimited != "" {
+		githubRateLimited.With(prometheus.Labels{
+			"namespace":    namespace,
+			"repository":   config.Repository,
+			"organization": config.Organization,
+			"enterprise":   config.Enterprise,
+			"backend":      string(resp.Backend),
+			"resource":     resp.Resource,
+			"kind":         string(resp.RateLimited),
+		}).Inc()
+	}
+}
+
 func RegisterMetrics() {
 	metrics.Registry.MustRegister(
+		githubRequests,
+		githubRateLimited,
 		pendingEphemeralRunners,
 		runningEphemeralRunners,
 		succeededEphemeralRunners,

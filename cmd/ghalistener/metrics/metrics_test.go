@@ -3,10 +3,12 @@ package metrics
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/ratelimit"
 	"github.com/actions/scaleset"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
@@ -590,4 +592,49 @@ func TestRecordJobCompleted(t *testing.T) {
 			assert.Equal(t, tt.wantSampleSum, histogramSampleSum(t, metrics, MetricJobExecutionDurationSeconds))
 		})
 	}
+}
+
+func TestRecordGitHubResponse(t *testing.T) {
+	e, reg := newTestExporter(t, defaultMetrics)
+
+	e.RecordGitHubResponse(ratelimit.Response{
+		Backend:    ratelimit.BackendREST,
+		StatusCode: 201,
+	})
+	e.RecordGitHubResponse(ratelimit.Response{
+		Backend:     ratelimit.BackendBroker,
+		StatusCode:  429,
+		RateLimited: ratelimit.Secondary,
+		Resource:    "core",
+	})
+	e.RecordGitHubResponse(ratelimit.Response{
+		Backend:    ratelimit.BackendREST,
+		StatusCode: 201,
+	})
+
+	metrics := gatherMetrics(t, reg)
+	series := func(name string) map[string]float64 {
+		got := map[string]float64{}
+		for _, m := range metrics[name].GetMetric() {
+			var key []string
+			for _, l := range m.GetLabel() {
+				switch l.GetName() {
+				case labelKeyBackend, labelKeyStatusCode, labelKeyResource, labelKeyRateLimitKind:
+					key = append(key, l.GetName()+"="+l.GetValue())
+				case labelKeyRunnerScaleSetName:
+					assert.Equal(t, "test-scale-set", l.GetValue())
+				}
+			}
+			got[strings.Join(key, ",")] = m.GetCounter().GetValue()
+		}
+		return got
+	}
+
+	assert.Equal(t, map[string]float64{
+		"backend=rest,status_code=201":   2,
+		"backend=broker,status_code=429": 1,
+	}, series(MetricGitHubRequestsTotal))
+	assert.Equal(t, map[string]float64{
+		"backend=broker,kind=secondary,resource=core": 1,
+	}, series(MetricGitHubRateLimitedTotal))
 }

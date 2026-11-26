@@ -13,6 +13,7 @@ import (
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/metrics"
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/scaler"
 	"github.com/actions/actions-runner-controller/github/actions"
+	"github.com/actions/actions-runner-controller/ratelimit"
 	"github.com/actions/scaleset/listener"
 	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
@@ -72,7 +73,12 @@ func run(ctx context.Context, config *config.Config) error {
 		logger.Info("Failed to get hostname, fallback to uuid", "uuid", hostname, "error", err)
 	}
 
-	scalesetClient, err := config.ActionsClient(logger)
+	var observeGitHubResponse func(ratelimit.Response)
+	if metricsExporter != nil {
+		observeGitHubResponse = metricsExporter.RecordGitHubResponse
+	}
+
+	scalesetClient, err := config.ActionsClient(logger, observeGitHubResponse)
 	if err != nil {
 		return fmt.Errorf("failed to create actions client: %w", err)
 	}
