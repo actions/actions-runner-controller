@@ -110,6 +110,24 @@ func TestTransport(t *testing.T) {
 			want: Response{Backend: BackendREST, StatusCode: 403, RateLimited: Secondary, Resource: "core"},
 		},
 		{
+			name: "escaped secondary message in JSON",
+			url:  "https://api.github.com/orgs/o/actions/runners/registration-token",
+			stub: stubTransport{status: 403, body: `{"message":"You have exceeded a secondary\u0020rate limit."}`},
+			want: Response{Backend: BackendREST, StatusCode: 403, RateLimited: Secondary},
+		},
+		{
+			name: "secondary rate outside the JSON message is not a rate limit",
+			url:  "https://api.github.com/orgs/o/actions/runners/registration-token",
+			stub: stubTransport{status: 403, body: `{"message":"Forbidden","detail":"secondary rate"}`},
+			want: Response{Backend: BackendREST, StatusCode: 403},
+		},
+		{
+			name: "plain text secondary message",
+			url:  "https://api.github.com/orgs/o/actions/runners/registration-token",
+			stub: stubTransport{status: 403, header: http.Header{"Content-Type": []string{"text/plain"}}, body: "You have exceeded a secondary rate limit."},
+			want: Response{Backend: BackendREST, StatusCode: 403, RateLimited: Secondary},
+		},
+		{
 			name: "plain 403 is not a rate limit",
 			url:  "https://api.github.com/orgs/o/actions/runners/registration-token",
 			stub: stubTransport{status: 403},
@@ -142,4 +160,44 @@ func TestTransportSkipsCanceledRequests(t *testing.T) {
 	_, err = transport.RoundTrip(req)
 	require.Error(t, err)
 	assert.Empty(t, got)
+}
+
+type truncatedBody struct {
+	data     io.Reader
+	reported bool
+}
+
+func (b *truncatedBody) Read(p []byte) (int, error) {
+	n, err := b.data.Read(p)
+	if err == io.EOF && !b.reported {
+		b.reported = true
+		return n, io.ErrUnexpectedEOF
+	}
+	return n, err
+}
+
+func (*truncatedBody) Close() error { return nil }
+
+type truncatedTransport struct{}
+
+func (truncatedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return &http.Response{
+		StatusCode: http.StatusTooManyRequests,
+		Header:     http.Header{},
+		Body:       &truncatedBody{data: strings.NewReader(`{"message":"secondary rate`)},
+		Request:    req,
+	}, nil
+}
+
+func TestTransportKeepsBodyReadErrors(t *testing.T) {
+	transport := Transport{Transport: truncatedTransport{}, Observe: func(Response) {}}
+	req, err := http.NewRequest(http.MethodGet, "https://api.github.com/", nil)
+	require.NoError(t, err)
+	resp, err := transport.RoundTrip(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	assert.Equal(t, `{"message":"secondary rate`, string(body))
+	assert.ErrorIs(t, err, io.ErrUnexpectedEOF)
 }

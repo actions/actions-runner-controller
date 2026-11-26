@@ -5,6 +5,7 @@ package ratelimit
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -66,7 +67,7 @@ const maxMessageBytes = 64 << 10
 var secondaryRateLimitPattern = regexp.MustCompile(`(?i)\bsecondary rate\b`)
 
 // readResponse classifies a response with the rules of scaleset.RateLimitError.
-func readResponse(resp *http.Response, message []byte) Response {
+func readResponse(resp *http.Response, message string) Response {
 	r := Response{
 		Backend:    backendOf(resp.Request),
 		StatusCode: resp.StatusCode,
@@ -74,7 +75,7 @@ func readResponse(resp *http.Response, message []byte) Response {
 	}
 
 	primary := resp.Header.Get(headerRateLimitRemaining) == "0"
-	secondary := secondaryRateLimitPattern.Match(message)
+	secondary := secondaryRateLimitPattern.MatchString(message)
 	switch {
 	case resp.StatusCode == http.StatusTooManyRequests,
 		resp.StatusCode == http.StatusForbidden && (primary || secondary || resp.Header.Get(headerRetryAfter) != ""):
@@ -122,18 +123,46 @@ func (t Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return resp, err
 }
 
-// peekMessage returns the start of a 403 or 429 body and leaves the body
-// readable from the beginning for the caller.
-func peekMessage(resp *http.Response) []byte {
+// peekMessage returns the error message of a 403 or 429 response and leaves
+// the body readable from the beginning for the caller, including any error
+// the read hit.
+func peekMessage(resp *http.Response) string {
 	if resp.StatusCode != http.StatusForbidden && resp.StatusCode != http.StatusTooManyRequests || resp.Body == nil {
-		return nil
+		return ""
 	}
-	message, _ := io.ReadAll(io.LimitReader(resp.Body, maxMessageBytes))
-	resp.Body = readCloser{Reader: io.MultiReader(bytes.NewReader(message), resp.Body), Closer: resp.Body}
-	return message
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxMessageBytes))
+	var rest io.Reader = resp.Body
+	if err != nil {
+		rest = errReader{err: err}
+	}
+	resp.Body = readCloser{Reader: io.MultiReader(bytes.NewReader(body), rest), Closer: resp.Body}
+	return messageOf(resp.Header.Get("Content-Type"), body)
+}
+
+// messageOf reads the message the way scaleset does: the whole body when it
+// is plain text, otherwise the message field of a JSON body.
+func messageOf(contentType string, body []byte) string {
+	if strings.Contains(contentType, "text/plain") {
+		return string(body)
+	}
+	var exception struct {
+		Message string `json:"message"`
+	}
+	if json.Unmarshal(body, &exception) != nil {
+		return ""
+	}
+	return exception.Message
 }
 
 type readCloser struct {
 	io.Reader
 	io.Closer
+}
+
+type errReader struct {
+	err error
+}
+
+func (r errReader) Read([]byte) (int, error) {
+	return 0, r.err
 }
