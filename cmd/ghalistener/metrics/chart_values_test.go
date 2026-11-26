@@ -59,6 +59,13 @@ func TestChartValuesMetricsExample(t *testing.T) {
 	for name := range defaultMetrics.Gauges {
 		allLabels[name] = keys(e.scaleSetLabels)
 	}
+	allLabels[MetricGitHubRequestsTotal] = append(keys(e.scaleSetLabels), labelKeyBackend, labelKeyOperation, labelKeyStatusCode)
+	allLabels[MetricGitHubRateLimitedTotal] = append(keys(e.scaleSetLabels), labelKeyBackend, labelKeyOperation, labelKeyResource, labelKeyRateLimitKind, labelKeyReason)
+
+	counterOptIn := map[string][]string{
+		MetricStartedJobsTotal:   optInLabels,
+		MetricCompletedJobsTotal: optInLabels,
+	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -66,7 +73,7 @@ func TestChartValuesMetricsExample(t *testing.T) {
 
 			require.ElementsMatch(t, keys(defaultMetrics.Counters), keys(got.Counters))
 			for name, want := range defaultMetrics.Counters {
-				assertExampleLabels(t, "counter "+name, got.Counters[name].Labels, allLabels[name], want.Labels, optInLabels)
+				assertExampleLabels(t, "counter "+name, got.Counters[name].Labels, allLabels[name], want.Labels, counterOptIn[name])
 			}
 
 			require.ElementsMatch(t, keys(defaultMetrics.Gauges), keys(got.Gauges))

@@ -7,6 +7,7 @@ package metrics
 import (
 	"context"
 
+	"github.com/actions/actions-runner-controller/ratelimit"
 	"github.com/actions/scaleset"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -376,6 +377,46 @@ func (_c *MockServerExporter_RecordDesiredRunners_Call) Return() *MockServerExpo
 }
 
 func (_c *MockServerExporter_RecordDesiredRunners_Call) RunAndReturn(run func(count int)) *MockServerExporter_RecordDesiredRunners_Call {
+	_c.Run(run)
+	return _c
+}
+
+// RecordGitHubResponse provides a mock function for the type MockServerExporter
+func (_mock *MockServerExporter) RecordGitHubResponse(resp ratelimit.Response) {
+	_mock.Called(resp)
+	return
+}
+
+// MockServerExporter_RecordGitHubResponse_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RecordGitHubResponse'
+type MockServerExporter_RecordGitHubResponse_Call struct {
+	*mock.Call
+}
+
+// RecordGitHubResponse is a helper method to define mock.On call
+//   - resp ratelimit.Response
+func (_e *MockServerExporter_Expecter) RecordGitHubResponse(resp any) *MockServerExporter_RecordGitHubResponse_Call {
+	return &MockServerExporter_RecordGitHubResponse_Call{Call: _e.mock.On("RecordGitHubResponse", resp)}
+}
+
+func (_c *MockServerExporter_RecordGitHubResponse_Call) Run(run func(resp ratelimit.Response)) *MockServerExporter_RecordGitHubResponse_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 ratelimit.Response
+		if args[0] != nil {
+			arg0 = args[0].(ratelimit.Response)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockServerExporter_RecordGitHubResponse_Call) Return() *MockServerExporter_RecordGitHubResponse_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *MockServerExporter_RecordGitHubResponse_Call) RunAndReturn(run func(resp ratelimit.Response)) *MockServerExporter_RecordGitHubResponse_Call {
 	_c.Run(run)
 	return _c
 }

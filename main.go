@@ -310,7 +310,11 @@ func main() {
 			os.Exit(1)
 		}
 
-		scalesetMultiClient := multiclient.NewScaleset()
+		var multiClientOpts []multiclient.Option
+		if metricsEnabled {
+			multiClientOpts = append(multiClientOpts, multiclient.WithResponseObserver(actionsgithubcommetrics.RecordGitHubResponse))
+		}
+		scalesetMultiClient := multiclient.NewScaleset(multiClientOpts...)
 
 		secretResolver := secretresolver.New(
 			mgr.GetClient(),

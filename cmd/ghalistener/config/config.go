@@ -14,6 +14,7 @@ import (
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1/appconfig"
 	"github.com/actions/actions-runner-controller/build"
 	"github.com/actions/actions-runner-controller/logger"
+	"github.com/actions/actions-runner-controller/ratelimit"
 	"github.com/actions/actions-runner-controller/vault"
 	"github.com/actions/actions-runner-controller/vault/azurekeyvault"
 	"github.com/actions/scaleset"
@@ -141,7 +142,9 @@ func (c *Config) Logger() (*slog.Logger, error) {
 	return logger.New(c.LogLevel, c.LogFormat)
 }
 
-func (c *Config) ActionsClient(logger *slog.Logger, clientOptions ...scaleset.HTTPOption) (*scaleset.Client, error) {
+// ActionsClient builds the scale set client. A non-nil observe is called with
+// every response the client receives.
+func (c *Config) ActionsClient(logger *slog.Logger, observe func(ratelimit.Response), clientOptions ...scaleset.HTTPOption) (*scaleset.Client, error) {
 	systemInfo := scaleset.SystemInfo{
 		System:     "actions-runner-controller",
 		Version:    build.Version,
@@ -173,7 +176,11 @@ func (c *Config) ActionsClient(logger *slog.Logger, clientOptions ...scaleset.HT
 	httpConfig.Proxy = func(req *http.Request) (*url.URL, error) {
 		return proxyFunc(req.URL)
 	}
-	options = append(options, scaleset.WithHTTPClient(scaleset.NewHTTPClient(httpConfig)))
+	httpClient := scaleset.NewHTTPClient(httpConfig)
+	if observe != nil {
+		httpClient.Transport = ratelimit.Transport{Transport: httpClient.Transport, Observe: observe}
+	}
+	options = append(options, scaleset.WithHTTPClient(httpClient))
 
 	var client *scaleset.Client
 	switch c.Token {

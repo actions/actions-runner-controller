@@ -3,10 +3,12 @@ package metrics
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
+	"github.com/actions/actions-runner-controller/ratelimit"
 	"github.com/actions/scaleset"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
@@ -590,4 +592,52 @@ func TestRecordJobCompleted(t *testing.T) {
 			assert.Equal(t, tt.wantSampleSum, histogramSampleSum(t, metrics, MetricJobExecutionDurationSeconds))
 		})
 	}
+}
+
+func TestRecordGitHubResponse(t *testing.T) {
+	e, reg := newTestExporter(t, defaultMetrics)
+
+	e.RecordGitHubResponse(ratelimit.Response{
+		Backend:    ratelimit.BackendREST,
+		Operation:  ratelimit.OperationRegistrationToken,
+		StatusCode: 201,
+	})
+	e.RecordGitHubResponse(ratelimit.Response{
+		Backend:     ratelimit.BackendActions,
+		Operation:   ratelimit.OperationJITConfig,
+		StatusCode:  429,
+		RateLimited: ratelimit.Secondary,
+		Reason:      "ConfigureTooManyRunnersException",
+	})
+	e.RecordGitHubResponse(ratelimit.Response{
+		Backend:    ratelimit.BackendREST,
+		Operation:  ratelimit.OperationRegistrationToken,
+		StatusCode: 201,
+	})
+
+	metrics := gatherMetrics(t, reg)
+	series := func(name string) map[string]float64 {
+		got := map[string]float64{}
+		for _, m := range metrics[name].GetMetric() {
+			var key []string
+			for _, l := range m.GetLabel() {
+				switch l.GetName() {
+				case labelKeyBackend, labelKeyOperation, labelKeyStatusCode, labelKeyResource, labelKeyRateLimitKind, labelKeyReason:
+					key = append(key, l.GetName()+"="+l.GetValue())
+				case labelKeyRunnerScaleSetName:
+					assert.Equal(t, "test-scale-set", l.GetValue())
+				}
+			}
+			got[strings.Join(key, ",")] = m.GetCounter().GetValue()
+		}
+		return got
+	}
+
+	assert.Equal(t, map[string]float64{
+		"backend=rest,operation=registration_token,status_code=201": 2,
+		"backend=actions,operation=jit_config,status_code=429":      1,
+	}, series(MetricGitHubRequestsTotal))
+	assert.Equal(t, map[string]float64{
+		"backend=actions,kind=secondary,operation=jit_config,reason=ConfigureTooManyRunnersException,resource=": 1,
+	}, series(MetricGitHubRateLimitedTotal))
 }
