@@ -82,9 +82,9 @@ RUN cd "$RUNNER_ASSETS_DIR" \
     && rm -f runner-container-hooks.zip
 
 # Make the rootless runner directory executable
-RUN mkdir /run/user/1000 \
-    && chown runner:runner /run/user/1000 \
-    && chmod a+x /run/user/1000
+RUN mkdir /run/user/$RUNNER_USER_UID \
+    && chown runner:runner /run/user/$RUNNER_USER_UID \
+    && chmod a+x /run/user/$RUNNER_USER_UID
 
 # We place the scripts in `/usr/bin` so that users who extend this image can
 # override them with scripts of the same name placed in `/usr/local/bin`.
@@ -101,8 +101,8 @@ COPY hooks /etc/arc/hooks/
 # Add the Python "User Script Directory" to the PATH
 ENV PATH="${PATH}:${HOME}/.local/bin:/home/runner/bin"
 ENV ImageOS=ubuntu22
-ENV DOCKER_HOST=unix:///run/user/1000/docker.sock
-ENV XDG_RUNTIME_DIR=/run/user/1000
+ENV DOCKER_HOST=unix:///run/user/$RUNNER_USER_UID/docker.sock
+ENV XDG_RUNTIME_DIR=/run/user/$RUNNER_USER_UID
 
 RUN echo "PATH=${PATH}" > /etc/environment \
     && echo "ImageOS=${ImageOS}" >> /etc/environment \
