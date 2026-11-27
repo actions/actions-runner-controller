@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/config"
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/metrics"
@@ -122,6 +123,15 @@ func run(ctx context.Context, config *config.Config) error {
 	if err != nil {
 		return fmt.Errorf("failed to create new kubernetes worker: %w", err)
 	}
+
+	// Drain acknowledged job events before the listener exits.
+	defer func() {
+		drainCtx, cancelDrain := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancelDrain()
+		if err := scaler.Close(drainCtx); err != nil {
+			logger.Error("Failed to drain queued job started events", "error", err)
+		}
+	}()
 
 	g, ctx := errgroup.WithContext(ctx)
 	metricsCtx, cancelMetrics := context.WithCancelCause(ctx)

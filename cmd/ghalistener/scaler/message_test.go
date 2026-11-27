@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/metrics"
@@ -61,17 +63,19 @@ func TestScaleHandlesListenerMessages(t *testing.T) {
 	}{
 		{name: "initial statistics", wantEvents: []string{"statistics", "desired"}},
 		{name: "idle poll uses cached statistics", nilMessage: true},
-		{name: "jobs and metrics", jobs: true, wantEvents: []string{"statistics", "started", "completed", "desired"}},
-		{name: "acquisition failure", jobs: true, acquireErr: true, wantErr: "failed to acquire available jobs", wantEvents: []string{"statistics"}},
-		{name: "runner patch failure", jobs: true, patchErr: "ephemeralrunners/", wantErr: "failed to handle job started", wantEvents: []string{"statistics", "started"}},
+		{name: "jobs and metrics", jobs: true, wantEvents: []string{"statistics", "desired", "started", "completed"}},
+		{name: "acquisition failure", jobs: true, acquireErr: true, wantErr: "failed to acquire available jobs", wantEvents: []string{"statistics", "desired"}},
 		{name: "scale failure", patchErr: "ephemeralrunnersets/", wantErr: "failed to handle desired runner count", wantEvents: []string{"statistics"}},
 		{name: "missing statistics", noStats: true, wantErr: "message statistics are required"},
 		{name: "idle poll without initial statistics", nilMessage: true, noStats: true, wantErr: "initial message statistics are required"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var patches []string
+			var patchesMu sync.Mutex
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				patchesMu.Lock()
 				patches = append(patches, r.URL.Path)
+				patchesMu.Unlock()
 				if tc.patchErr != "" && strings.Contains(r.URL.Path, tc.patchErr) {
 					http.Error(w, "patch failed", http.StatusInternalServerError)
 					return
@@ -95,7 +99,8 @@ func TestScaleHandlesListenerMessages(t *testing.T) {
 			recorder := &messageRecorder{Recorder: metrics.Discard}
 			acquisitions := 0
 			w := &Scaler{
-				clientset: clientset, logger: discardLogger, recorder: recorder,
+				scaleClientset: clientset, jobClientset: clientset,
+				jobs: make(chan *scaleset.JobStarted, jobQueueSize), logger: discardLogger, recorder: recorder,
 				config: Config{
 					EphemeralRunnerSetNamespace: "default", EphemeralRunnerSetName: "set",
 					MinRunners: 2, MaxRunners: 10,
@@ -111,6 +116,14 @@ func TestScaleHandlesListenerMessages(t *testing.T) {
 					return ids[:1], nil
 				}},
 			}
+			w.startJobWorkers()
+			defer func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := w.Close(ctx); err != nil {
+					t.Errorf("failed to close scaler: %v", err)
+				}
+			}()
 			message := &scaleset.RunnerScaleSetMessage{
 				MessageID: listener.InitialMessageID, Statistics: &scaleset.RunnerScaleSetStatistic{TotalAssignedJobs: 3},
 			}
@@ -133,10 +146,15 @@ func TestScaleHandlesListenerMessages(t *testing.T) {
 			}
 
 			err = w.Scale(t.Context(), message)
+			closeCtx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			require.NoError(t, w.Close(closeCtx))
 			require.Equal(t, tc.wantEvents, recorder.events)
+			patchesMu.Lock()
+			defer patchesMu.Unlock()
 			if tc.wantErr != "" {
 				require.ErrorContains(t, err, tc.wantErr)
-				if tc.acquireErr || tc.noStats {
+				if tc.noStats {
 					require.Empty(t, patches)
 				}
 			} else {
@@ -144,8 +162,8 @@ func TestScaleHandlesListenerMessages(t *testing.T) {
 				require.Equal(t, tc.jobs, acquisitions == 1)
 				if tc.jobs {
 					require.Equal(t, []string{
-						"/apis/actions.github.com/v1alpha1/namespaces/default/ephemeralrunners/runner/status",
 						"/apis/actions.github.com/v1alpha1/namespaces/default/ephemeralrunnersets/set",
+						"/apis/actions.github.com/v1alpha1/namespaces/default/ephemeralrunners/runner/status",
 					}, patches)
 					require.False(t, w.dirty)
 				} else {

@@ -11,13 +11,15 @@ This new autoscaling mode brings numerous enhancements (described in the followi
 2. The `AutoScalingRunnerSet` controller calls the APIs one more time to either fetch or create a runner scale set in the `Actions Service` before creating the `Runner ScaleSet Listener` resource.
 3. A `Runner ScaleSet Listener` pod is deployed by the `AutoScaling Listener Controller`. In this pod, the listener application connects to the `Actions Service` to authenticate and establish a long poll HTTPS connection. The listener stays idle until it receives a `Job Available` message from the `Actions Service`.
 4. When a workflow run is triggered from a repository, the `Actions Service` dispatches individual job runs to the runners or runner scalesets where the `runs-on` property matches the name of the runner scaleset or labels of self-hosted runners.
-5. When the `Runner ScaleSet Listener` receives the `Job Available` message, it acquires the available jobs within its advertised capacity. Messages are acknowledged only after their job updates and desired runner count have been successfully handled, so failed processing can be retried.
+5. When the `Runner ScaleSet Listener` receives a message, it publishes the desired runner count and acquires available jobs within its advertised capacity. It acknowledges the message after these operations succeed and job-start updates enter a bounded queue. Updates are retried in the background; a full queue delays further messages.
 6. The `Runner ScaleSet Listener` uses a `Service Account` and a `Role` bound to that account to make an HTTPS call through the Kubernetes APIs to patch the `EphemeralRunner Set` resource with the number of desired replicas count.
 7. The `EphemeralRunner Set` attempts to create new runners and the `EphemeralRunner Controller` requests a JIT configuration token to register these runners. The controller attempts to create runner pods. If the pod's status is `failed`, the controller retries up to 5 times. After 24 hours the `Actions Service` unassigns the job if no runner accepts it.
 8. Once the runner pod is created, the runner application in the pod uses the JIT configuration token to register itself with the `Actions Service`. It then establishes another HTTPS long poll connection to receive the job details it needs to execute.
 9. The `Actions Service` acknowledges the runner registration and dispatches the job run details.
 10. Throughout the job run execution, the runner continuously communicates the logs and job run status back to the `Actions Service`.
 11. When the runner completes its job successfully, the `EphemeralRunner Controller` checks with the `Actions Service` to see if runner can be deleted. If it can, the `Ephemeral RunnerSet` deletes the runner.
+
+Queued job-start updates are held in memory. Shutdown drains them for up to 30 seconds, but a crash or drain timeout can lose pending job metadata. The Actions service still refuses to remove a runner while it is executing a job.
 
 In addition to the increased reliability of the automatic scaling, we have worked on these improvements:
 

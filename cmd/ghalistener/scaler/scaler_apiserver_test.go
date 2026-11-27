@@ -114,7 +114,7 @@ func TestHandleJobStartedAgainstAPIServer(t *testing.T) {
 		require.NoError(t, err)
 
 		return &Scaler{
-			clientset:     clientset,
+			jobClientset:  clientset,
 			config:        Config{EphemeralRunnerSetNamespace: namespace.Name},
 			targetRunners: -1,
 			patchSeq:      -1,

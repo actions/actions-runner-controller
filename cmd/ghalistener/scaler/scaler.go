@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"sync"
+	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/cmd/ghalistener/metrics"
@@ -14,6 +16,7 @@ import (
 	jsonpatch "github.com/evanphx/json-patch"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -35,19 +38,31 @@ type Config struct {
 }
 
 const (
-	defaultQPS   = 50
-	defaultBurst = 100
+	defaultQPS        = 50
+	defaultBurst      = 100
+	defaultScaleQPS   = 10
+	defaultScaleBurst = 20
+	jobWorkerCount    = 10
+	jobQueueSize      = 100
 )
 
 // The Scaler's role is to process the messages it receives from the listener.
 // It then initiates Kubernetes API requests to carry out the necessary actions.
 type Scaler struct {
-	clientset     *kubernetes.Clientset
-	config        Config
-	targetRunners int
-	patchSeq      int
+	scaleClientset *kubernetes.Clientset
+	jobClientset   *kubernetes.Clientset
+	config         Config
+	targetRunners  int
+	patchSeq       int
 	// dirty is set when there are any events handled before the desired count is called.
-	dirty  bool
+	dirty bool
+
+	jobs       chan *scaleset.JobStarted
+	jobWorkers sync.WaitGroup
+	jobCtx     context.Context
+	jobCancel  context.CancelFunc
+	closeOnce  sync.Once
+
 	logger *slog.Logger
 
 	messageClient    listener.Client
@@ -68,6 +83,7 @@ func New(config Config, messageClient listener.Client, recorder metrics.Recorder
 		config:        config,
 		targetRunners: -1,
 		patchSeq:      -1,
+		jobs:          make(chan *scaleset.JobStarted, jobQueueSize),
 		messageClient: messageClient,
 		recorder:      recorder,
 	}
@@ -83,18 +99,97 @@ func New(config Config, messageClient listener.Client, recorder metrics.Recorder
 		return nil, err
 	}
 
-	qps, burst := effectiveRateLimiterConfig(config.ScalerConfig, w.logger)
-	conf.QPS = float32(qps)
-	conf.Burst = burst
-
-	clientset, err := kubernetes.NewForConfig(conf)
+	jobQPS, jobBurst := effectiveRateLimiterConfig(config.ScalerConfig, w.logger)
+	jobConf := rest.CopyConfig(conf)
+	jobConf.QPS = float32(jobQPS)
+	jobConf.Burst = jobBurst
+	jobClientset, err := kubernetes.NewForConfig(jobConf)
 	if err != nil {
 		return nil, err
 	}
 
-	w.clientset = clientset
+	// Keep job patch traffic from consuming the scale patch's rate limit.
+	scaleConf := rest.CopyConfig(conf)
+	scaleConf.QPS = defaultScaleQPS
+	scaleConf.Burst = defaultScaleBurst
+	scaleClientset, err := kubernetes.NewForConfig(scaleConf)
+	if err != nil {
+		return nil, err
+	}
+
+	w.jobClientset = jobClientset
+	w.scaleClientset = scaleClientset
+
+	w.startJobWorkers()
 
 	return w, nil
+}
+
+func (w *Scaler) startJobWorkers() {
+	w.jobCtx, w.jobCancel = context.WithCancel(context.Background())
+
+	for range jobWorkerCount {
+		w.jobWorkers.Add(1)
+		go func() {
+			defer w.jobWorkers.Done()
+
+			for jobInfo := range w.jobs {
+				backoff := wait.Backoff{Duration: time.Second, Factor: 2, Steps: 6, Cap: 30 * time.Second}
+				for {
+					if w.jobCtx.Err() != nil {
+						return
+					}
+					err := w.patchJobStarted(w.jobCtx, jobInfo)
+					if err == nil {
+						break
+					}
+					if w.jobCtx.Err() != nil {
+						return
+					}
+					delay := backoff.Step()
+					w.logger.Error("Failed to patch job started event",
+						"runnerName", jobInfo.RunnerName,
+						"requestId", jobInfo.RunnerRequestID,
+						"error", err,
+						"retryAfter", delay,
+					)
+					timer := time.NewTimer(delay)
+					select {
+					case <-w.jobCtx.Done():
+						timer.Stop()
+						return
+					case <-timer.C:
+					}
+				}
+			}
+		}()
+	}
+}
+
+// Close drains accepted job events until ctx expires.
+func (w *Scaler) Close(ctx context.Context) error {
+	w.closeOnce.Do(func() {
+		close(w.jobs)
+	})
+
+	drained := make(chan struct{})
+	go func() {
+		w.jobWorkers.Wait()
+		close(drained)
+	}()
+
+	select {
+	case <-drained:
+		w.jobCancel()
+		return nil
+	case <-ctx.Done():
+		if depth := len(w.jobs); depth > 0 {
+			w.logger.Error("Abandoning queued job started events", "count", depth)
+		}
+		w.jobCancel()
+		<-drained
+		return ctx.Err()
+	}
 }
 
 func effectiveRateLimiterConfig(config *v1alpha1.ScalerConfig, logger *slog.Logger) (int, int) {
@@ -140,27 +235,10 @@ func (w *Scaler) Scale(ctx context.Context, message *scaleset.RunnerScaleSetMess
 		w.latestStatistics = message.Statistics
 		w.recorder.RecordStatistics(message.Statistics)
 
-		if len(message.JobAvailableMessages) > 0 {
-			ids := make([]int64, 0, len(message.JobAvailableMessages))
-			for _, job := range message.JobAvailableMessages {
-				ids = append(ids, job.RunnerRequestID)
-			}
-			w.logger.Info("Acquiring jobs", "count", len(ids))
-			acquired, err := w.messageClient.AcquireJobs(ctx, ids)
-			if err != nil {
-				return fmt.Errorf("failed to acquire available jobs: %w", err)
-			}
-			w.logger.Info("Jobs acquired", "count", len(acquired))
-		}
-
-		for _, job := range message.JobStartedMessages {
-			w.recorder.RecordJobStarted(job)
-			if err := w.HandleJobStarted(ctx, job); err != nil {
-				return fmt.Errorf("failed to handle job started: %w", err)
-			}
+		if len(message.JobStartedMessages) > 0 {
+			w.dirty = true
 		}
 		for _, job := range message.JobCompletedMessages {
-			w.recorder.RecordJobCompleted(job)
 			if err := w.HandleJobCompleted(ctx, job); err != nil {
 				return fmt.Errorf("failed to handle job completed: %w", err)
 			}
@@ -174,8 +252,35 @@ func (w *Scaler) Scale(ctx context.Context, message *scaleset.RunnerScaleSetMess
 	if err != nil {
 		return fmt.Errorf("failed to handle desired runner count: %w", err)
 	}
-	if message != nil {
-		w.recorder.RecordDesiredRunners(desiredCount)
+	if message == nil {
+		return nil
+	}
+	w.recorder.RecordDesiredRunners(desiredCount)
+
+	if len(message.JobAvailableMessages) > 0 {
+		ids := make([]int64, 0, len(message.JobAvailableMessages))
+		for _, job := range message.JobAvailableMessages {
+			ids = append(ids, job.RunnerRequestID)
+		}
+		w.logger.Info("Acquiring jobs", "count", len(ids))
+		acquired, err := w.messageClient.AcquireJobs(ctx, ids)
+		if err != nil {
+			return fmt.Errorf("failed to acquire available jobs: %w", err)
+		}
+		w.logger.Info("Jobs acquired", "count", len(acquired))
+	}
+
+	// A full queue applies backpressure rather than growing without bound.
+	for _, job := range message.JobStartedMessages {
+		select {
+		case w.jobs <- job:
+			w.recorder.RecordJobStarted(job)
+		case <-ctx.Done():
+			return fmt.Errorf("failed to queue job started event: %w", ctx.Err())
+		}
+	}
+	for _, job := range message.JobCompletedMessages {
+		w.recorder.RecordJobCompleted(job)
 	}
 	return nil
 }
@@ -186,6 +291,11 @@ func (w *Scaler) Scale(ctx context.Context, message *scaleset.RunnerScaleSetMess
 // about the ephemeral runner that should not be deleted when scaling down.
 // It returns an error if there is any issue with updating the job information.
 func (w *Scaler) HandleJobStarted(ctx context.Context, jobInfo *scaleset.JobStarted) error {
+	w.dirty = true
+	return w.patchJobStarted(ctx, jobInfo)
+}
+
+func (w *Scaler) patchJobStarted(ctx context.Context, jobInfo *scaleset.JobStarted) error {
 	w.logger.Info("Updating job info for the runner",
 		"runnerName", jobInfo.RunnerName,
 		"ownerName", jobInfo.OwnerName,
@@ -196,12 +306,6 @@ func (w *Scaler) HandleJobStarted(ctx context.Context, jobInfo *scaleset.JobStar
 		"jobDisplayName", jobInfo.JobDisplayName,
 		"requestId", jobInfo.RunnerRequestID)
 
-	w.dirty = true
-
-	return w.patchJobStarted(ctx, jobInfo)
-}
-
-func (w *Scaler) patchJobStarted(ctx context.Context, jobInfo *scaleset.JobStarted) error {
 	original, err := json.Marshal(&v1alpha1.EphemeralRunner{})
 	if err != nil {
 		return fmt.Errorf("failed to marshal empty ephemeral runner: %w", err)
@@ -232,7 +336,7 @@ func (w *Scaler) patchJobStarted(ctx context.Context, jobInfo *scaleset.JobStart
 	w.logger.Info("Updating ephemeral runner with merge patch", "json", string(mergePatch))
 
 	patchedStatus := &v1alpha1.EphemeralRunner{}
-	err = w.clientset.RESTClient().
+	err = w.jobClientset.RESTClient().
 		Patch(types.MergePatchType).
 		Prefix("apis", v1alpha1.GroupVersion.Group, v1alpha1.GroupVersion.Version).
 		Namespace(w.config.EphemeralRunnerSetNamespace).
@@ -260,13 +364,7 @@ func (w *Scaler) HandleJobCompleted(ctx context.Context, msg *scaleset.JobComple
 	return nil
 }
 
-// HandleDesiredRunnerCount handles the desired runner count by scaling the ephemeral runner set.
-// The function calculates the target runner count based on the minimum and maximum runner count configuration.
-// If the target runner count is the same as the last patched count, it skips patching and returns nil.
-// Otherwise, it creates a merge patch JSON for updating the ephemeral runner set with the desired count.
-// The function then scales the ephemeral runner set by applying the merge patch.
-// Finally, it logs the scaled ephemeral runner set details and returns nil if successful.
-// If any error occurs during the process, it returns an error with a descriptive message.
+// HandleDesiredRunnerCount publishes the desired runner count to the ephemeral runner set.
 func (w *Scaler) HandleDesiredRunnerCount(ctx context.Context, count int) (int, error) {
 	patchID := w.setDesiredWorkerState(count)
 
@@ -304,7 +402,7 @@ func (w *Scaler) HandleDesiredRunnerCount(ctx context.Context, count int) (int, 
 	w.logger.Info("Preparing EphemeralRunnerSet update", "json", string(mergePatch))
 
 	patchedEphemeralRunnerSet := &v1alpha1.EphemeralRunnerSet{}
-	err = w.clientset.RESTClient().
+	err = w.scaleClientset.RESTClient().
 		Patch(types.MergePatchType).
 		Prefix("apis", v1alpha1.GroupVersion.Group, v1alpha1.GroupVersion.Version).
 		Namespace(w.config.EphemeralRunnerSetNamespace).

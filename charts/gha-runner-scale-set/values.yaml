@@ -149,6 +149,8 @@ githubConfigSecret:
 ## listenerConfig holds configuration for the ghalistener pod.
 listenerConfig:
   scaler:
+    ## Job status patches use these limits; desired runner counts use a
+    ## separate limit of 10 QPS and a burst of 20.
     qps: 50
     burst: 100
 

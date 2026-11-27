@@ -315,9 +315,10 @@ listener:
   # scaler is config applied to the kubernetes client component of the listener.
   # Both values must be integers greater than 0.
   scaler:
-    # qps is the sustained rate of requests the listener may issue to the Kubernetes API server.
+    # qps is the sustained rate of job status requests to the Kubernetes API server.
+    # Desired runner counts use a separate limit of 10 QPS and a burst of 20.
     qps: 50
-    # burst is the number of requests the listener may issue to the Kubernetes API server in a burst.
+    # burst is the number of job status requests the listener may issue in a burst.
     burst: 100
   ## podTemplate is the PodSpec for each listener Pod
   ## For reference: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#PodSpec
