@@ -91,15 +91,16 @@ func TestScalePrioritizesScalingAndAcquisition(t *testing.T) {
 		JobAvailableMessages: []*scaleset.JobAvailable{{JobMessageBase: scaleset.JobMessageBase{RunnerRequestID: 1}}},
 		JobStartedMessages:   []*scaleset.JobStarted{{RunnerName: "runner"}},
 	}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
 	done := make(chan error, 1)
-	go func() { done <- w.Scale(t.Context(), first) }()
+	go func() { done <- w.Scale(ctx, first) }()
 	select {
 	case err := <-done:
 		require.NoError(t, err)
 	case <-time.After(2 * time.Second):
 		releaseOnce()
-		<-done
-		t.Fatal("Scale waited for a job status patch")
+		t.Fatalf("Scale waited for a job status patch: %v", <-done)
 	}
 	require.EqualValues(t, 1, acquireAt)
 	select {
@@ -109,7 +110,7 @@ func TestScalePrioritizesScalingAndAcquisition(t *testing.T) {
 	}
 
 	go func() {
-		done <- w.Scale(t.Context(), &scaleset.RunnerScaleSetMessage{
+		done <- w.Scale(ctx, &scaleset.RunnerScaleSetMessage{
 			Statistics: &scaleset.RunnerScaleSetStatistic{TotalAssignedJobs: 2},
 		})
 	}()
@@ -118,8 +119,7 @@ func TestScalePrioritizesScalingAndAcquisition(t *testing.T) {
 		require.NoError(t, err)
 	case <-time.After(2 * time.Second):
 		releaseOnce()
-		<-done
-		t.Fatal("a blocked job patch delayed the next scale decision")
+		t.Fatalf("a blocked job patch delayed the next scale decision: %v", <-done)
 	}
 	require.EqualValues(t, 2, scales.Load())
 	releaseOnce()
