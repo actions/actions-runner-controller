@@ -18,7 +18,8 @@ on:
   workflow_dispatch:
 env:
   KUBE_SCORE_VERSION: 1.16.1
-  HELM_VERSION: v3.19.4
+  HELM_VERSION: v4.2.2
+  HELM_UNITTEST_VERSION: 1.1.2
 
 permissions:
   contents: read
@@ -41,7 +42,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Helm
-        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310
+        uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e
         with:
           version: ${{ env.HELM_VERSION }}
 
@@ -51,7 +52,7 @@ jobs:
           python-version: "3.11"
 
       - name: Set up chart-testing
-        uses: helm/chart-testing-action@6ec842c01de15ebb84c8627d2744a0c2f2755c9f
+        uses: helm/chart-testing-action@720270857a28afd41e2426521a7801db09e9b510
 
       - name: Run chart-testing (list-changed)
         id: list-changed
@@ -79,7 +80,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Helm
-        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310
+        uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e
         with:
           version: ${{ env.HELM_VERSION }}
 
@@ -89,7 +90,7 @@ jobs:
           python-version: "3.11"
 
       - name: Set up chart-testing
-        uses: helm/chart-testing-action@6ec842c01de15ebb84c8627d2744a0c2f2755c9f
+        uses: helm/chart-testing-action@720270857a28afd41e2426521a7801db09e9b510
 
       - name: Run chart-testing (list-changed)
         id: list-changed
@@ -105,7 +106,17 @@ jobs:
 
       - name: Install helm-unittest
         run: |
-          helm plugin install https://github.com/helm-unittest/helm-unittest.git
+          # Pin the upstream signing key independently of the release download.
+          curl --fail --silent --show-error --location \
+            https://raw.githubusercontent.com/helm-unittest/helm-unittest/33c48cac798e465deda9a66c8e6c07c0973cf53d/public-key.asc \
+            --output "${RUNNER_TEMP}/helm-unittest-key.asc"
+          gpg --batch --yes --dearmor \
+            --output "${RUNNER_TEMP}/helm-unittest-keyring.gpg" \
+            "${RUNNER_TEMP}/helm-unittest-key.asc"
+          helm plugin install \
+            "https://github.com/helm-unittest/helm-unittest/releases/download/v${HELM_UNITTEST_VERSION}/unittest-${HELM_UNITTEST_VERSION}.tgz" \
+            --verify \
+            --keyring "${RUNNER_TEMP}/helm-unittest-keyring.gpg"
 
       - name: Run helm-unittest (gha-runner-scale-set-controller-experimental)
         run: |
@@ -125,3 +136,6 @@ jobs:
 
       - name: Test gha-runner-scale-set-controller
         run: go test ./charts/gha-runner-scale-set-controller/...
+
+      - name: Test gha-runner-scale-set-experimental
+        run: go test ./charts/gha-runner-scale-set-experimental/...

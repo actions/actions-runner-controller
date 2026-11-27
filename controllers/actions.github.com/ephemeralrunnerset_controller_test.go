@@ -929,6 +929,18 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 				ephemeralRunnerSetTestInterval,
 			).Should(BeNil(), "1 EphemeralRunner should be in Pending and 1 in Running phase")
 
+			// Let's say ephemeral runner controller patched these ephemeral runners with the registration.
+
+			updatedRunner = runnerList.Items[0].DeepCopy()
+			updatedRunner.Status.RunnerID = 1
+			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[0]))
+			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
+
+			updatedRunner = runnerList.Items[1].DeepCopy()
+			updatedRunner.Status.RunnerID = 2
+			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[1]))
+			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
+
 			// Scale down to 0 with patch ID 0. This forces the scale down to self correct on empty batch
 
 			ers = new(v1alpha1.EphemeralRunnerSet)
@@ -941,31 +953,6 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 
 			err = k8sClient.Patch(ctx, updated, client.MergeFrom(ers))
 			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunnerSet")
-
-			runnerList = new(v1alpha1.EphemeralRunnerList)
-			Consistently(
-				func() (int, error) {
-					if err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace); err != nil {
-						return -1, err
-					}
-
-					return len(runnerList.Items), nil
-				},
-				ephemeralRunnerSetTestTimeout,
-				ephemeralRunnerSetTestInterval,
-			).Should(BeEquivalentTo(2), "2 EphemeralRunner should be up since they don't have an ID yet")
-
-			// Now, let's say ephemeral runner controller patched these ephemeral runners with the registration.
-
-			updatedRunner = runnerList.Items[0].DeepCopy()
-			updatedRunner.Status.RunnerID = 1
-			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[0]))
-			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
-
-			updatedRunner = runnerList.Items[1].DeepCopy()
-			updatedRunner.Status.RunnerID = 2
-			err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runnerList.Items[1]))
-			Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
 
 			// Now, eventually, they should be deleted
 			runnerList = new(v1alpha1.EphemeralRunnerList)
@@ -1467,7 +1454,7 @@ var _ = Describe("Test EphemeralRunnerSet controller", func() {
 			).Should(BeEquivalentTo(3), "3 EphemeralRunner should be created")
 
 			idleRunnerNames := map[string]struct{}{}
-			for i := 0; i < 2; i++ {
+			for i := range 2 {
 				idleRunner := runnerList.Items[i].DeepCopy()
 				idleRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
 				idleRunner.Status.RunnerID = i + 101
@@ -1845,6 +1832,7 @@ var _ = Describe("EphemeralRunner phase metrics", func() {
 		Expect(err).NotTo(HaveOccurred(), "failed to get ephemeral runner before listener-owned running patch")
 		runnerRunningOriginal := runnerRunning.DeepCopy()
 		runnerRunning.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
+		runnerRunning.Status.JobID = "job-id"
 		err = k8sClient.Status().Patch(ctx, runnerRunning, client.MergeFrom(runnerRunningOriginal))
 		Expect(err).NotTo(HaveOccurred(), "failed to simulate listener running phase patch")
 
@@ -1872,6 +1860,30 @@ var _ = Describe("EphemeralRunner phase metrics", func() {
 		expectEphemeralRunnerPhase(ctx, ephemeralRunner, v1alpha1.EphemeralRunnerPhaseSucceeded)
 		expectEphemeralRunnerPhaseMetric(ephemeralRunner, v1alpha1.EphemeralRunnerPhaseRunning, 0)
 		expectEphemeralRunnerPhaseMetric(ephemeralRunner, v1alpha1.EphemeralRunnerPhaseSucceeded, 1)
+
+		// The pod is handed back by the reconcile that finalizes the deleted
+		// runner, not by the one that observes the exit. The runner itself is
+		// still there to be read: it is deleted, but its finalizers hold it until
+		// that reconcile, which is also what lets the EphemeralRunnerSet see that
+		// the job finished.
+		//
+		// Deleting the pod on the success path instead would emit a pod deletion
+		// on the pod informer just after the status patch goes to the runner
+		// informer, and nothing orders those two streams, so the reconcile that
+		// deletion wakes could read a runner that is not yet Succeeded and build
+		// a replacement pod from a JIT config that has already been used.
+		runnerFinishing := new(v1alpha1.EphemeralRunner)
+		err = k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, runnerFinishing)
+		Expect(err).NotTo(HaveOccurred(), "the finalizers must keep the finished runner readable")
+		Expect(runnerFinishing.DeletionTimestamp.IsZero()).To(BeFalse(), "the reconcile that observes the exit must delete the runner")
+
+		_, err = controller.Reconcile(ctx, request)
+		Expect(err).NotTo(HaveOccurred(), "failed to reconcile the deleted runner")
+
+		Eventually(func() bool {
+			err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+			return kerrors.IsNotFound(err)
+		}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeTrue(), "expected the pod of the finished runner to be gone")
 	})
 })
 
@@ -2000,40 +2012,21 @@ var _ = Describe("Test EphemeralRunnerSet controller with proxy settings", func(
 		err = k8sClient.Patch(ctx, ephemeralRunnerSet, patch)
 		Expect(err).NotTo(HaveOccurred(), "failed to patch EphemeralRunnerSet")
 
-		// Set pods to PodSucceeded to simulate an actual EphemeralRunner stopping
+		// The runner has not recorded a runner ID, and the suite does not wait for
+		// it, so scale down retires it.
 		Eventually(
-			func(g Gomega) (int, error) {
+			func() (int, error) {
 				runnerList := new(v1alpha1.EphemeralRunnerList)
 				err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
 				if err != nil {
 					return -1, err
 				}
 
-				// Set status to simulate a configured EphemeralRunner
-				refetch := false
-				for i, runner := range runnerList.Items {
-					if runner.Status.RunnerID == 0 {
-						updatedRunner := runner.DeepCopy()
-						updatedRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseSucceeded
-						updatedRunner.Status.RunnerID = i + 100
-						err = k8sClient.Status().Patch(ctx, updatedRunner, client.MergeFrom(&runner))
-						Expect(err).NotTo(HaveOccurred(), "failed to update EphemeralRunner")
-						refetch = true
-					}
-				}
-
-				if refetch {
-					err := listEphemeralRunnersAndRemoveFinalizers(ctx, k8sClient, runnerList, ephemeralRunnerSet.Namespace)
-					if err != nil {
-						return -1, err
-					}
-				}
-
 				return len(runnerList.Items), nil
 			},
 			ephemeralRunnerSetTestTimeout,
 			ephemeralRunnerSetTestInterval,
-		).Should(BeEquivalentTo(1), "1 EphemeralRunner should exist")
+		).Should(BeEquivalentTo(0), "EphemeralRunner should be retired by the scale down")
 
 		// Delete the EphemeralRunnerSet
 		err = k8sClient.Delete(ctx, ephemeralRunnerSet)
@@ -2353,6 +2346,8 @@ var _ = Describe("Test EphemeralRunnerSet actionable revision cleanup", func() {
 		ephemeralRunnerSet := &v1alpha1.EphemeralRunnerSet{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-actionable-revision-initial", Namespace: autoscalingNS.Name},
 			Spec: v1alpha1.EphemeralRunnerSetSpec{
+				// Wants the runner, so that only cleanup can remove it.
+				Replicas: 1,
 				EphemeralRunnerSpec: v1alpha1.EphemeralRunnerSpec{
 					GitHubConfigURL:    "https://github.com/owner/repo",
 					GitHubConfigSecret: configSecret.Name,
@@ -2390,7 +2385,7 @@ var _ = Describe("Test EphemeralRunnerSet actionable revision cleanup", func() {
 		}, time.Second, ephemeralRunnerSetTestInterval).Should(Equal(int64(0)))
 	})
 
-	It("deletes runner-a-idle, keeps runner-b-busy, and advances applied actionable revision 3 to 4", func() {
+	It("deletes runner-a-idle, keeps a job-bearing pending runner, and advances applied actionable revision 3 to 4", func() {
 		controller := &EphemeralRunnerSetReconciler{
 			Client:    mgr.GetClient(),
 			APIReader: mgr.GetAPIReader(),
@@ -2455,7 +2450,7 @@ var _ = Describe("Test EphemeralRunnerSet actionable revision cleanup", func() {
 		err = k8sClient.Get(ctx, client.ObjectKeyFromObject(busyRunner), busyCurrent)
 		Expect(err).NotTo(HaveOccurred())
 		busyUpdated := busyCurrent.DeepCopy()
-		busyUpdated.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
+		busyUpdated.Status.Phase = v1alpha1.EphemeralRunnerPhasePending
 		busyUpdated.Status.RunnerID = 102
 		busyUpdated.Status.JobID = "job-1"
 		busyUpdated.Status.WorkflowRunID = 9001

@@ -796,7 +796,35 @@ var _ = Describe("EphemeralRunner", func() {
 			).Should(BeFalse(), "EphemeralRunner-owned resources should be removed from cache after deletion")
 		})
 
-		It("It should eventually have runner id set", func() {
+		It("It should record the runner identity with the first nonterminal pod status", func() {
+			pod := new(corev1.Pod)
+			Eventually(
+				func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, pod)
+				},
+				ephemeralRunnerTimeout,
+				ephemeralRunnerInterval,
+			).Should(Succeed())
+
+			Consistently(
+				func() (int, error) {
+					updatedEphemeralRunner := new(v1alpha1.EphemeralRunner)
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updatedEphemeralRunner); err != nil {
+						return 0, err
+					}
+					return updatedEphemeralRunner.Status.RunnerID, nil
+				},
+				ephemeralRunnerInterval*3,
+				ephemeralRunnerInterval,
+			).Should(BeZero(), "Pod creation alone must not publish runner identity")
+
+			pod.Status.Phase = corev1.PodPending
+			pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
+				Name:  v1alpha1.EphemeralRunnerContainerName,
+				State: corev1.ContainerState{},
+			}}
+			Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
+
 			Eventually(
 				func() (int, error) {
 					updatedEphemeralRunner := new(v1alpha1.EphemeralRunner)
@@ -1225,7 +1253,7 @@ var _ = Describe("EphemeralRunner", func() {
 			).Should(BeEquivalentTo(v1alpha1.EphemeralRunnerPhaseRunning))
 		})
 
-		It("Controller should not set Running phase from pod status - listener owns Running transition", func() {
+		It("Controller sets Running phase after the listener records a job assignment", func() {
 			pod := new(corev1.Pod)
 			Eventually(
 				func() (bool, error) {
@@ -1255,13 +1283,6 @@ var _ = Describe("EphemeralRunner", func() {
 			err := k8sClient.Status().Update(ctx, pod)
 			Expect(err).To(BeNil())
 
-			// Two-stage on purpose. Eventually establishes that the controller does
-			// publish Pending even though the pod was first observed already Running
-			// -- the common case once the image is cached, and the only chance the
-			// controller gets to publish an initial phase. Consistently then holds
-			// that it never advances to Running, which is the listener's transition
-			// to make. Asserting Pending is strictly stronger than asserting empty,
-			// because empty is also what a controller that never ran would leave.
 			updated := new(v1alpha1.EphemeralRunner)
 			Eventually(
 				func() (v1alpha1.EphemeralRunnerPhase, error) {
@@ -1274,7 +1295,13 @@ var _ = Describe("EphemeralRunner", func() {
 				ephemeralRunnerInterval,
 			).Should(BeEquivalentTo(v1alpha1.EphemeralRunnerPhasePending), "controller must publish the initial Pending phase")
 
-			Consistently(
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated)).To(Succeed())
+			assignment := updated.DeepCopy()
+			assignment.Status.JobID = "job-1"
+			assignment.Status.WorkflowRunID = 1
+			Expect(k8sClient.Status().Patch(ctx, assignment, client.MergeFrom(updated))).To(Succeed())
+
+			Eventually(
 				func() (v1alpha1.EphemeralRunnerPhase, error) {
 					updated := new(v1alpha1.EphemeralRunner)
 					if err := k8sClient.Get(ctx, client.ObjectKey{Name: ephemeralRunner.Name, Namespace: ephemeralRunner.Namespace}, updated); err != nil {
@@ -1283,7 +1310,8 @@ var _ = Describe("EphemeralRunner", func() {
 					return updated.Status.Phase, nil
 				},
 				ephemeralRunnerTimeout,
-			).Should(BeEquivalentTo(v1alpha1.EphemeralRunnerPhasePending), "controller must not set Running from pod status")
+				ephemeralRunnerInterval,
+			).Should(BeEquivalentTo(v1alpha1.EphemeralRunnerPhaseRunning))
 
 			Eventually(
 				func() (bool, error) {
@@ -1512,7 +1540,7 @@ var _ = Describe("EphemeralRunner", func() {
 			).Should(Succeed(), "failed to get ephemeral runner pod")
 
 			Expect(pod.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
-				Name: EnvVarHTTPProxy,
+				Name: "http_proxy",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
@@ -1524,7 +1552,7 @@ var _ = Describe("EphemeralRunner", func() {
 			}))
 
 			Expect(pod.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
-				Name: EnvVarHTTPSProxy,
+				Name: "https_proxy",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
@@ -1536,7 +1564,7 @@ var _ = Describe("EphemeralRunner", func() {
 			}))
 
 			Expect(pod.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
-				Name: EnvVarNoProxy,
+				Name: "no_proxy",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
@@ -1675,6 +1703,7 @@ var _ = Describe("EphemeralRunner", func() {
 
 			controller = &EphemeralRunnerReconciler{
 				Client:              k8sClient,
+				APIReader:           k8sClient,
 				Scheme:              mgr.GetScheme(),
 				Log:                 logf.Log,
 				UnregistrationQueue: queue,
@@ -1687,9 +1716,10 @@ var _ = Describe("EphemeralRunner", func() {
 			}
 		})
 
-		// finalizeRunner drives a runner that has reached phase through deletion,
-		// and returns what the reconciler left on the unregistration queue.
-		finalizeRunner := func(name string, runnerID int, phase v1alpha1.EphemeralRunnerPhase) []runnerUnregistration {
+		// finalizeRunner drives a runner that has reached phase, having run the
+		// job jobID if it is set, through deletion, and returns what the
+		// reconciler left on the unregistration queue.
+		finalizeRunner := func(name string, runnerID int, phase v1alpha1.EphemeralRunnerPhase, jobID string) []runnerUnregistration {
 			ephemeralRunner := newExampleRunner(name, autoscalingNS.Name, configSecret.Name)
 			ephemeralRunner.Finalizers = []string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName}
 			Expect(k8sClient.Create(ctx, ephemeralRunner)).To(Succeed())
@@ -1697,6 +1727,7 @@ var _ = Describe("EphemeralRunner", func() {
 			original := ephemeralRunner.DeepCopy()
 			ephemeralRunner.Status.RunnerID = runnerID
 			ephemeralRunner.Status.Phase = phase
+			ephemeralRunner.Status.JobID = jobID
 			Expect(k8sClient.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original))).To(Succeed())
 
 			Expect(k8sClient.Delete(ctx, ephemeralRunner)).To(Succeed())
@@ -1712,28 +1743,38 @@ var _ = Describe("EphemeralRunner", func() {
 
 			return queue.queued()
 		}
-		It("skips the service for a runner that exited successfully", func() {
-			// A runner that exits with code 0 removed its own registration on the
-			// way out, so the deletion costs no API call at all. This is the path
-			// every completed job takes.
-			Expect(finalizeRunner("succeeded-runner", 1, v1alpha1.EphemeralRunnerPhaseSucceeded)).To(BeEmpty())
+		It("skips the service for a runner that exited successfully after running a job", func() {
+			// The service removes an ephemeral runner once its job is done, so the
+			// deletion costs no API call at all. This is the path every completed
+			// job takes.
+			Expect(finalizeRunner("succeeded-runner", 1, v1alpha1.EphemeralRunnerPhaseSucceeded, "job-id")).To(BeEmpty())
+		})
+
+		It("queues a runner that exited successfully without running a job", func() {
+			// A runner told by the service that it no longer exists exits 0 and
+			// only removes its local configuration, so the registration it was
+			// told about can still be there.
+			queued := finalizeRunner("succeeded-jobless-runner", 1, v1alpha1.EphemeralRunnerPhaseSucceeded, "")
+
+			Expect(queued).To(HaveLen(1))
+			Expect(queued[0].runnerID).To(Equal(1))
 		})
 
 		It("skips the service for a runner that exited successfully before recording its ID", func() {
-			// The skip is decided on the exit alone. A succeeded runner is not
-			// chased through the jitconfig secret looking for a registration to
-			// remove, because it already removed its own.
+			// The skip is decided on the exit and the job alone. A runner that
+			// finished its job is not chased through the jitconfig secret looking
+			// for a registration to remove, because the service already removed it.
 			name := "succeeded-unrecorded-runner"
 			Expect(k8sClient.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: autoscalingNS.Name},
 				Data:       map[string][]byte{"runnerId": []byte("7"), "runnerName": []byte(name)},
 			})).To(Succeed())
 
-			Expect(finalizeRunner(name, 0, v1alpha1.EphemeralRunnerPhaseSucceeded)).To(BeEmpty())
+			Expect(finalizeRunner(name, 0, v1alpha1.EphemeralRunnerPhaseSucceeded, "job-id")).To(BeEmpty())
 		})
 
 		It("skips the service for a runner that was never registered", func() {
-			Expect(finalizeRunner("unregistered-runner", 0, v1alpha1.EphemeralRunnerPhaseRunning)).To(BeEmpty())
+			Expect(finalizeRunner("unregistered-runner", 0, v1alpha1.EphemeralRunnerPhaseRunning, "")).To(BeEmpty())
 		})
 
 		It("queues the ID from the jitconfig secret when the status never recorded one", func() {
@@ -1746,7 +1787,7 @@ var _ = Describe("EphemeralRunner", func() {
 				Data:       map[string][]byte{"runnerId": []byte("7"), "runnerName": []byte(name)},
 			})).To(Succeed())
 
-			queued := finalizeRunner(name, 0, v1alpha1.EphemeralRunnerPhaseRunning)
+			queued := finalizeRunner(name, 0, v1alpha1.EphemeralRunnerPhaseRunning, "")
 
 			Expect(queued).To(HaveLen(1))
 			Expect(queued[0].runnerID).To(Equal(7))
@@ -1788,12 +1829,17 @@ var _ = Describe("EphemeralRunner", func() {
 			ephemeralRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseRunning
 			Expect(k8sClient.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original))).To(Succeed())
 
-			Expect(k8sClient.Create(ctx, &corev1.Pod{
+			runnerPod := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: autoscalingNS.Name},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{Name: v1alpha1.EphemeralRunnerContainerName, Image: "ghcr.io/actions/actions-runner"}},
 				},
-			})).To(Succeed())
+			}
+			Expect(k8sClient.Create(ctx, runnerPod)).To(Succeed())
+			// Nothing is left running in the pod, so the removal is handed to the
+			// workers rather than asked for before the pod goes.
+			runnerPod.Status.Phase = corev1.PodFailed
+			Expect(k8sClient.Status().Update(ctx, runnerPod)).To(Succeed())
 			Expect(k8sClient.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: autoscalingNS.Name},
 				Data:       map[string][]byte{jitTokenKey: []byte("jit")},
@@ -1834,7 +1880,7 @@ var _ = Describe("EphemeralRunner", func() {
 			v1alpha1.EphemeralRunnerPhaseOutdated,
 		} {
 			It(fmt.Sprintf("queues the removal of a runner in phase %s", phase), func() {
-				queued := finalizeRunner(fmt.Sprintf("%s-runner", strings.ToLower(string(phase))), 42, phase)
+				queued := finalizeRunner(fmt.Sprintf("%s-runner", strings.ToLower(string(phase))), 42, phase, "")
 
 				Expect(queued).To(HaveLen(1))
 				Expect(queued[0].runnerID).To(Equal(42))
@@ -1910,9 +1956,48 @@ var _ = Describe("EphemeralRunner", func() {
 		})
 
 		It("leaves a succeeded runner alone on the terminated path", func() {
-			// Same path, but the runner exited cleanly, so there is nothing to
-			// hand over and only the finalizer goes.
+			// Same path, but the runner exited cleanly after running a job, so
+			// there is nothing to hand over and nothing to release. The finalizer
+			// stays until the deletion that removes it anyway, in a patch that
+			// deletion already makes, rather than costing a write and a wake-up
+			// here.
 			name := "terminated-succeeded-runner"
+			ephemeralRunner := newExampleRunner(name, autoscalingNS.Name, configSecret.Name)
+			ephemeralRunner.Finalizers = []string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName}
+			Expect(k8sClient.Create(ctx, ephemeralRunner)).To(Succeed())
+
+			original := ephemeralRunner.DeepCopy()
+			ephemeralRunner.Status.RunnerID = 42
+			ephemeralRunner.Status.Phase = v1alpha1.EphemeralRunnerPhaseSucceeded
+			ephemeralRunner.Status.JobID = "job-id"
+			Expect(k8sClient.Status().Patch(ctx, ephemeralRunner, client.MergeFrom(original))).To(Succeed())
+
+			request := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(ephemeralRunner)}
+			_, err := controller.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(queue.queued()).To(BeEmpty())
+
+			updated := new(v1alpha1.EphemeralRunner)
+			Expect(k8sClient.Get(ctx, request.NamespacedName, updated)).To(Succeed())
+			Expect(updated.Finalizers).To(ContainElement(ephemeralRunnerActionsFinalizerName))
+
+			// Deleting it clears both finalizers, so nothing is left behind and
+			// the service is still never asked to remove the registration.
+			Expect(k8sClient.Delete(ctx, updated)).To(Succeed())
+			_, err = controller.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(queue.queued()).To(BeEmpty())
+			Eventually(func() bool {
+				return kerrors.IsNotFound(k8sClient.Get(ctx, request.NamespacedName, new(v1alpha1.EphemeralRunner)))
+			}, ephemeralRunnerTimeout, ephemeralRunnerInterval).Should(BeTrue())
+		})
+
+		It("releases the registration of a succeeded runner that never ran a job on the terminated path", func() {
+			// The runner exited cleanly because the service told it that it no
+			// longer exists, which does not mean the registration is gone.
+			name := "terminated-succeeded-jobless-runner"
 			ephemeralRunner := newExampleRunner(name, autoscalingNS.Name, configSecret.Name)
 			ephemeralRunner.Finalizers = []string{ephemeralRunnerFinalizerName, ephemeralRunnerActionsFinalizerName}
 			Expect(k8sClient.Create(ctx, ephemeralRunner)).To(Succeed())
@@ -1926,7 +2011,9 @@ var _ = Describe("EphemeralRunner", func() {
 			_, err := controller.Reconcile(ctx, request)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(queue.queued()).To(BeEmpty())
+			queued := queue.queued()
+			Expect(queued).To(HaveLen(1))
+			Expect(queued[0].runnerID).To(Equal(42))
 
 			updated := new(v1alpha1.EphemeralRunner)
 			Expect(k8sClient.Get(ctx, request.NamespacedName, updated)).To(Succeed())

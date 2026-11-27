@@ -1,10 +1,10 @@
 package actionsgithubcom
 
 import (
+	"maps"
 	"testing"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
-	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -43,7 +43,7 @@ func newLegacyAnnotationTestAutoscalingRunnerSet() *v1alpha1.AutoscalingRunnerSe
 // upgrade consequence of no longer stamping the integrity hash.
 //
 // AutoscalingRunnerSetReconciler compares the live listener's annotations
-// against the desired ones with cmp.Equal and deletes the listener when they
+// against the desired ones with maps.Equal and deletes the listener when they
 // differ. A listener created by an older controller carries the legacy
 // annotation, the desired listener no longer does, so the first reconcile after
 // an upgrade recreates it.
@@ -72,7 +72,7 @@ func TestLegacyIntegrityHashAnnotationCausesOneTimeListenerRecreation(t *testing
 
 	assert.False(
 		t,
-		cmp.Equal(live.Annotations, desired.Annotations),
+		maps.Equal(live.Annotations, desired.Annotations),
 		"a listener carrying the legacy annotation must not compare equal to the desired listener, otherwise it would never be replaced",
 	)
 
@@ -83,7 +83,7 @@ func TestLegacyIntegrityHashAnnotationCausesOneTimeListenerRecreation(t *testing
 	assert.NotContains(t, replacement.Annotations, legacyIntegrityHashAnnotation)
 	assert.True(
 		t,
-		cmp.Equal(replacement.Annotations, desired.Annotations),
+		maps.Equal(replacement.Annotations, desired.Annotations),
 		"the recreated listener must match the desired one, otherwise the controller would rebuild it forever",
 	)
 }

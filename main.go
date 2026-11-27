@@ -115,6 +115,8 @@ func main() {
 		k8sClientRateLimiterQPS   int
 		k8sClientRateLimiterBurst int
 
+		terminatedRunnerPodGracePeriodSeconds int64
+
 		workqueueRateLimiter string
 	)
 	var c github.Config
@@ -151,11 +153,10 @@ func main() {
 	flag.DurationVar(&defaultScaleDownDelay, "default-scale-down-delay", actionssummerwindnet.DefaultScaleDownDelay, "The approximate delay for a scale down followed by a scale up, used to prevent flapping (down->up->down->... loop)")
 	flag.IntVar(&port, "port", 9443, "The port to which the admission webhook endpoint should bind")
 	flag.DurationVar(&syncPeriod, "sync-period", 1*time.Minute, "Determines the minimum frequency at which K8s resources managed by this controller are reconciled.")
-	flag.IntVar(&opts.DefaultMaxConcurrentReconciles, "default-max-concurrent-reconciles", opts.DefaultMaxConcurrentReconciles, "The maximum number of concurrent reconciles applied to every controller that does not set its own --<controller>-max-concurrent-reconciles flag. Increase this value to improve the throughput of the controller, but it may also increase the load on the API server and the external service (e.g. GitHub API).")
-	flag.IntVar(&opts.AutoscalingRunnerSetMaxConcurrentReconciles, "autoscaling-runner-set-max-concurrent-reconciles", 0, "The maximum number of concurrent reconciles which can be run by the AutoscalingRunnerSet controller. Defaults to --default-max-concurrent-reconciles.")
-	flag.IntVar(&opts.AutoscalingListenerMaxConcurrentReconciles, "autoscaling-listener-max-concurrent-reconciles", 0, "The maximum number of concurrent reconciles which can be run by the AutoscalingListener controller. Defaults to --default-max-concurrent-reconciles.")
-	flag.IntVar(&opts.EphemeralRunnerSetMaxConcurrentReconciles, "ephemeral-runner-set-max-concurrent-reconciles", 0, "The maximum number of concurrent reconciles which can be run by the EphemeralRunnerSet controller. Defaults to --default-max-concurrent-reconciles.")
-	flag.IntVar(&opts.EphemeralRunnerMaxConcurrentReconciles, "ephemeral-runner-max-concurrent-reconciles", 0, "The maximum number of concurrent reconciles which can be run by the EphemeralRunner controller. Defaults to --default-max-concurrent-reconciles.")
+	flag.IntVar(&opts.AutoscalingRunnerSetMaxConcurrentReconciles, "autoscaling-runner-set-max-concurrent-reconciles", opts.AutoscalingRunnerSetMaxConcurrentReconciles, "The maximum number of concurrent reconciles which can be run by the AutoscalingRunnerSet controller. Increase this value to improve throughput when running many runner scale sets, at the cost of more load on the API server and the external service (e.g. GitHub API).")
+	flag.IntVar(&opts.AutoscalingListenerMaxConcurrentReconciles, "autoscaling-listener-max-concurrent-reconciles", opts.AutoscalingListenerMaxConcurrentReconciles, "The maximum number of concurrent reconciles which can be run by the AutoscalingListener controller. Increase this value to improve throughput when running many runner scale sets, at the cost of more load on the API server and the external service (e.g. GitHub API).")
+	flag.IntVar(&opts.EphemeralRunnerSetMaxConcurrentReconciles, "ephemeral-runner-set-max-concurrent-reconciles", opts.EphemeralRunnerSetMaxConcurrentReconciles, "The maximum number of concurrent reconciles which can be run by the EphemeralRunnerSet controller. Increase this value to improve throughput when running many runner scale sets, at the cost of more load on the API server and the external service (e.g. GitHub API).")
+	flag.IntVar(&opts.EphemeralRunnerMaxConcurrentReconciles, "ephemeral-runner-max-concurrent-reconciles", opts.EphemeralRunnerMaxConcurrentReconciles, "The maximum number of concurrent reconciles which can be run by the EphemeralRunner controller. Increase this value to improve runner provisioning and cleanup throughput, at the cost of more load on the API server and the external service (e.g. GitHub API).")
 	flag.Var(&commonRunnerLabels, "common-runner-labels", "Runner labels in the K1=V1,K2=V2,... format that are inherited all the runners created by the controller. See https://github.com/actions/actions-runner-controller/issues/321 for more information")
 	flag.StringVar(&namespace, "watch-namespace", "", "The namespace to watch for custom resources. Set to empty for letting it watch for all namespaces.")
 	flag.StringVar(&watchSingleNamespace, "watch-single-namespace", "", "Restrict to watch for custom resources in a single namespace.")
@@ -167,6 +168,7 @@ func main() {
 	flag.IntVar(&k8sClientRateLimiterQPS, "k8s-client-rate-limiter-qps", 20, "The QPS value of the K8s client rate limiter.")
 	flag.IntVar(&k8sClientRateLimiterBurst, "k8s-client-rate-limiter-burst", 30, "The burst value of the K8s client rate limiter.")
 	flag.StringVar(&workqueueRateLimiter, "workqueue-rate-limiter", "", `The workqueue rate limiter to use. Valid values are "bucket_rate_limiter" (default) and "typed_rate_limiter" (per-item only, no global token bucket).`)
+	flag.Int64Var(&terminatedRunnerPodGracePeriodSeconds, "terminated-runner-pod-grace-period-seconds", 0, "The grace period used when deleting a runner pod whose containers have all exited. Zero, the default, removes the pod from the API as soon as its job is over instead of leaving it Terminating while the kubelet cleans up locally, so the runner replacing it can start right away. A negative value leaves the pod's own terminationGracePeriodSeconds in charge. Pods that are still running are always deleted gracefully.")
 	flag.Parse()
 
 	opts = opts.Resolve()
@@ -180,11 +182,11 @@ func main() {
 	c.Log = &log
 
 	log.Info("Using options",
-		"default-max-concurrent-reconciles", opts.DefaultMaxConcurrentReconciles,
 		"autoscaling-runner-set-max-concurrent-reconciles", opts.AutoscalingRunnerSetMaxConcurrentReconciles,
 		"autoscaling-listener-max-concurrent-reconciles", opts.AutoscalingListenerMaxConcurrentReconciles,
 		"ephemeral-runner-set-max-concurrent-reconciles", opts.EphemeralRunnerSetMaxConcurrentReconciles,
 		"ephemeral-runner-max-concurrent-reconciles", opts.EphemeralRunnerMaxConcurrentReconciles,
+		"terminated-runner-pod-grace-period-seconds", terminatedRunnerPodGracePeriodSeconds,
 	)
 
 	if !autoScalingRunnerSetOnly {
@@ -292,7 +294,12 @@ func main() {
 			os.Exit(1)
 		}
 
-		if metricsAddr != "" {
+		// controller-runtime only skips its metrics server when BindAddress is
+		// "0"; an empty address falls back to ":8080". Register and publish
+		// under the same rule so a live endpoint never misses the scale set
+		// metrics and a disabled one never accumulates unregistered series.
+		metricsEnabled := metricsAddr != "0"
+		if metricsEnabled {
 			log.Info("Registering scale set metrics")
 			actionsgithubcommetrics.RegisterMetrics()
 		}
@@ -366,12 +373,13 @@ func main() {
 		}
 
 		if err = (&actionsgithubcom.EphemeralRunnerReconciler{
-			Client:              mgr.GetClient(),
-			Log:                 log.WithName("EphemeralRunner").WithValues("version", build.Version),
-			Scheme:              mgr.GetScheme(),
-			PublishMetrics:      metricsAddr != "0",
-			UnregistrationQueue: runnerUnregistrationQueue,
-			ResourceBuilder:     rb,
+			Client:                          mgr.GetClient(),
+			Log:                             log.WithName("EphemeralRunner").WithValues("version", build.Version),
+			Scheme:                          mgr.GetScheme(),
+			PublishMetrics:                  metricsEnabled,
+			UnregistrationQueue:             runnerUnregistrationQueue,
+			TerminatedPodGracePeriodSeconds: terminatedRunnerPodGracePeriodSeconds,
+			ResourceBuilder:                 rb,
 		}).SetupWithManager(mgr, ephemeralRunnerOpts...); err != nil {
 			log.Error(err, "unable to create controller", "controller", "EphemeralRunner")
 			os.Exit(1)
@@ -395,6 +403,7 @@ func main() {
 			Scheme:                  mgr.GetScheme(),
 			ListenerMetricsAddr:     listenerMetricsAddr,
 			ListenerMetricsEndpoint: listenerMetricsEndpoint,
+			PublishMetrics:          metricsEnabled,
 			ResourceBuilder:         rb,
 		}).SetupWithManager(mgr, autoscalingListenerOpts...); err != nil {
 			log.Error(err, "unable to create controller", "controller", "AutoscalingListener")

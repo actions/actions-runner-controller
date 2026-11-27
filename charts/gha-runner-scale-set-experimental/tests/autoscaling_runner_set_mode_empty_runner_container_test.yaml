@@ -74,6 +74,47 @@ tests:
       - notExists:
           path: spec.template.spec.volumes
 
+  - it: should preserve custom work volumes without adding dind volumes in mode-empty
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.githubToken: "gh_token12345"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      runner:
+        mode: ""
+        container:
+          volumeMounts:
+            - name: work
+              mountPath: /home/runner/_work
+        pod:
+          spec:
+            volumes:
+              - name: work
+                persistentVolumeClaim:
+                  claimName: runner-work
+              - name: cache
+                emptyDir: {}
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes
+          value:
+            - name: work
+              persistentVolumeClaim:
+                claimName: runner-work
+            - name: cache
+              emptyDir: {}
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts
+          value:
+            - name: work
+              mountPath: /home/runner/_work
+      - notExists:
+          path: spec.template.spec.initContainers
+
   - it: should not allow overriding runner container name
     set:
       scaleset.name: "test"

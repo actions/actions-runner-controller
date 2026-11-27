@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -432,7 +433,10 @@ func (e *exporter) ListenAndServe(ctx context.Context) error {
 		defer cancel()
 		e.srv.Shutdown(ctx)
 	}()
-	return e.srv.ListenAndServe()
+	if err := e.srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
 }
 
 func (e *exporter) setGauge(name string, allLabels prometheus.Labels, val float64) {

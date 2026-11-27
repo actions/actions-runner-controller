@@ -56,9 +56,9 @@ app.kubernetes.io/instance: {{ include "gha-runner-scale-set.scale-set-name" . }
 
 {{/*
 Render a single label or annotation value as a string.
-Values from a values file arrive as float64, so "%v" would turn large integers into
-scientific notation (12345678901234 -> 1.2345678901234e+13) and silently write a value the
-user never asked for. Integral floats are therefore formatted without an exponent.
+Values from a values file arrive as float64. Integral values in the IEEE 754 safe integer
+range are formatted without an exponent. Unsafe integral values are rejected by assertScalar
+before reaching this helper, because their original value may already have been rounded.
 */}}
 {{- define "gha-runner-scale-set.metadataValue" -}}
 {{- if eq . nil -}}
@@ -115,6 +115,11 @@ Expects a dict with "key", "kind" (label|annotation) and "path" (the values path
 {{- if gt (len $prefix) 253 -}}
 {{- fail (printf "%s: invalid %s key %q: the prefix %q must be a DNS subdomain of no more than 253 characters" $path $kind $key $prefix) -}}
 {{- end -}}
+{{- range $segment := splitList "." $prefix -}}
+{{- if gt (len $segment) 63 -}}
+{{- fail (printf "%s: invalid %s key %q: the prefix segment %q must be no more than 63 characters" $path $kind $key $segment) -}}
+{{- end -}}
+{{- end -}}
 {{- if not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$" $prefix) -}}
 {{- fail (printf "%s: invalid %s key %q: the prefix %q must be a DNS subdomain, so it must consist of dot-separated segments of lowercase alphanumeric characters or '-', each starting and ending with an alphanumeric character" $path $kind $key $prefix) -}}
 {{- end -}}
@@ -134,6 +139,8 @@ Expects a dict with "value", "key", "kind" and "path".
 {{- $value := .value -}}
 {{- if or (kindIs "map" $value) (kindIs "slice" $value) (kindIs "invalid" $value) -}}
 {{- fail (printf "%s: invalid value for %s %q: must be a scalar, got %s. Quote the value if it is meant to be a string" .path .kind .key (kindOf $value)) -}}
+{{- else if and (or (kindIs "int" $value) (kindIs "int64" $value) (and (kindIs "float64" $value) (eq $value (floor $value)))) (or (ge (float64 $value) 9007199254740992.0) (le (float64 $value) -9007199254740992.0)) -}}
+{{- fail (printf "%s: invalid value for %s %q: unquoted integers outside the IEEE 754 safe range must be quoted to preserve their exact value" .path .kind .key) -}}
 {{- end -}}
 {{- end }}
 

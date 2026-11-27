@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"time"
 
@@ -78,10 +79,5 @@ func NewLogger(logLevel string, logFormat string) (logr.Logger, error) {
 
 func validLogFormat(logFormat string) bool {
 	validFormat := []string{"text", "json"}
-	for _, v := range validFormat {
-		if v == logFormat {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(validFormat, logFormat)
 }

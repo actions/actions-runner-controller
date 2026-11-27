@@ -47,9 +47,6 @@ args:
 {{- with .Values.controller.manager.config.watchSingleNamespace }}
   - "--watch-single-namespace={{ . }}"
 {{- end }}
-{{- with .Values.controller.manager.config.defaultMaxConcurrentReconciles }}
-  - "--default-max-concurrent-reconciles={{ . }}"
-{{- end }}
 {{- with .Values.controller.manager.config.autoscalingRunnerSetMaxConcurrentReconciles }}
   - "--autoscaling-runner-set-max-concurrent-reconciles={{ . }}"
 {{- end }}
@@ -61,6 +58,9 @@ args:
 {{- end }}
 {{- with .Values.controller.manager.config.ephemeralRunnerMaxConcurrentReconciles }}
   - "--ephemeral-runner-max-concurrent-reconciles={{ . }}"
+{{- end }}
+{{- with .Values.controller.manager.config.terminatedRunnerPodGracePeriodSeconds }}
+  - "--terminated-runner-pod-grace-period-seconds={{ . }}"
 {{- end }}
 {{- if .Values.controller.metrics }}
 {{- with .Values.controller.metrics }}
@@ -97,8 +97,11 @@ args:
 {{- end }}
 {{- $ports := list -}}
 {{- if .Values.controller.metrics }}
-{{- $metricsPort := dict "containerPort" ((regexReplaceAll ":([0-9]+)" .Values.controller.metrics.controllerManagerAddr "${1}") | int) "protocol" "TCP" "name" "metrics" -}}
+{{- $port := include "gha-controller.metrics-port" .Values.controller.metrics.controllerManagerAddr -}}
+{{- if $port }}
+{{- $metricsPort := dict "containerPort" (int $port) "protocol" "TCP" "name" "metrics" -}}
 {{- $ports = append $ports $metricsPort -}}
+{{- end }}
 {{- end }}
 {{- with .Values.controller.manager.container.extraPorts }}
 {{- if kindIs "slice" . }}

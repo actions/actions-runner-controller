@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
-	"github.com/actions/actions-runner-controller/cmd/ghalistener/metrics"
 	"github.com/actions/scaleset"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,13 +28,9 @@ func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }
 
-// TestHandleJobStartedAgainstAPIServer exercises HandleJobStarted against a real
-// API server. The unit tests above emulate the optimistic concurrency check that
-// kube-apiserver performs when a merge patch carries metadata.resourceVersion;
-// this test pins that emulation to the real behaviour.
-//
-// The race is made deterministic by writing the terminal phase from inside the
-// client transport, right before the scaler's patch reaches the API server.
+// TestHandleJobStartedAgainstAPIServer exercises the listener's metadata-only
+// patch against a real API server. The terminal phase race is made deterministic
+// by writing it from inside the client transport before the patch arrives.
 func TestHandleJobStartedAgainstAPIServer(t *testing.T) {
 	if os.Getenv("KUBEBUILDER_ASSETS") == "" {
 		t.Skip("KUBEBUILDER_ASSETS is not set; run via `make test`")
@@ -119,18 +114,15 @@ func TestHandleJobStartedAgainstAPIServer(t *testing.T) {
 		require.NoError(t, err)
 
 		return &Scaler{
-			scaleClientset: clientset,
-			jobClientset:   clientset,
-			config:         Config{EphemeralRunnerSetNamespace: namespace.Name},
-			targetRunners:  -1,
-			patchSeq:       -1,
-			logger:         discardLogger,
-			metrics:        metrics.Discard,
-			workers:        defaultWorkers,
+			jobClientset:  clientset,
+			config:        Config{EphemeralRunnerSetNamespace: namespace.Name},
+			targetRunners: -1,
+			patchSeq:      -1,
+			logger:        discardLogger,
 		}
 	}
 
-	t.Run("transitions an idle runner to Running", func(t *testing.T) {
+	t.Run("records job metadata without changing phase", func(t *testing.T) {
 		runner := newRunner(t, "runner-running")
 		jobInfo := *jobInfo
 		jobInfo.RunnerName = runner.Name
@@ -138,7 +130,7 @@ func TestHandleJobStartedAgainstAPIServer(t *testing.T) {
 		require.NoError(t, newScaler(t, nil).HandleJobStarted(ctx, &jobInfo))
 
 		require.NoError(t, k8sClient.Get(ctx, client.ObjectKeyFromObject(runner), runner))
-		assert.Equal(t, v1alpha1.EphemeralRunnerPhaseRunning, runner.Status.Phase)
+		assert.Empty(t, runner.Status.Phase)
 		assert.Equal(t, jobInfo.JobID, runner.Status.JobID)
 	})
 

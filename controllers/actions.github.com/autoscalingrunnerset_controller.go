@@ -27,11 +27,12 @@ import (
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
 	"github.com/actions/actions-runner-controller/build"
+	"github.com/actions/actions-runner-controller/controllers/actions.github.com/secretresolver"
 	"github.com/actions/scaleset"
 	"github.com/go-logr/logr"
-	"github.com/google/go-cmp/cmp"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -69,8 +70,11 @@ type AutoscalingRunnerSetReconciler struct {
 // +kubebuilder:rbac:groups=actions.github.com,resources=autoscalinglisteners/status,verbs=get;update;patch
 
 // Reconcile a AutoscalingRunnerSet resource to meet its desired spec.
-func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	log := r.Log.WithValues("autoscalingrunnerset", req.NamespacedName)
+	defer func() {
+		result, err = requeueOnRateLimit(ctx, result, err, log)
+	}()
 
 	var autoscalingRunnerSet v1alpha1.AutoscalingRunnerSet
 	if err := r.Get(ctx, req.NamespacedName, &autoscalingRunnerSet); err != nil {
@@ -222,7 +226,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	var ephemeralRunnerSet v1alpha1.EphemeralRunnerSet
-	err := r.Get(
+	err = r.Get(
 		ctx,
 		types.NamespacedName{
 			Namespace: autoscalingRunnerSet.Namespace,
@@ -299,7 +303,7 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		desiredLabels := r.filterAndMergeLabels(ephemeralRunnerSet.Labels, desired.Labels)
 		desiredAnnotations := r.mergeAnnotations(ephemeralRunnerSet.Annotations, desired.Annotations)
 
-		ephemeralRunnerMetadataModified := !cmp.Equal(ephemeralRunnerSet.Spec.EphemeralRunnerMetadata, desired.Spec.EphemeralRunnerMetadata)
+		ephemeralRunnerMetadataModified := !apiequality.Semantic.DeepEqual(ephemeralRunnerSet.Spec.EphemeralRunnerMetadata, desired.Spec.EphemeralRunnerMetadata)
 		ephemeralRunnerLabelsModified := !maps.Equal(ephemeralRunnerSet.Labels, desiredLabels)
 		ephemeralRunnerAnnotationsModified := !maps.Equal(ephemeralRunnerSet.Annotations, desiredAnnotations)
 
@@ -379,8 +383,8 @@ func (r *AutoscalingRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl
 		// instead re-creates the listener with the phase unset, which means
 		// running, so it comes back correct in one step.
 		if listenerSpecChanged(&listener, desired) ||
-			!cmp.Equal(listener.Labels, desired.Labels) ||
-			!cmp.Equal(listener.Annotations, desired.Annotations) {
+			!maps.Equal(listener.Labels, desired.Labels) ||
+			!maps.Equal(listener.Annotations, desired.Annotations) {
 			// The listener is about to be torn down and rebuilt, which is what
 			// the pending phase means. Report it here rather than relying on the
 			// generation check above: the desired listener is derived from the
@@ -500,6 +504,10 @@ func (r *AutoscalingRunnerSetReconciler) runnerSpecChanged(autoscalingRunnerSet 
 // comparing it would make a stopped listener look like drift and delete the very
 // object the stop is meant to preserve. Starting and stopping is handled by
 // patching the phase instead.
+//
+// Semantic equality treats nil and empty collections alike: omitempty drops
+// explicit empty input when the derived listener is persisted. Comparing those
+// representations strictly would replace an unchanged listener on every reconcile.
 func listenerSpecChanged(current, desired *v1alpha1.AutoscalingListener) bool {
 	if current == nil || desired == nil {
 		return current != desired
@@ -510,7 +518,7 @@ func listenerSpecChanged(current, desired *v1alpha1.AutoscalingListener) bool {
 	currentSpec.Phase = ""
 	desiredSpec.Phase = ""
 
-	return !cmp.Equal(currentSpec, desiredSpec)
+	return !apiequality.Semantic.DeepEqual(currentSpec, desiredSpec)
 }
 
 // stopListener switches the listener off without deleting it.
@@ -1216,7 +1224,17 @@ func (r *AutoscalingRunnerSetReconciler) deleteRunnerScaleSet(ctx context.Contex
 	}
 
 	actionsClient, err := r.GetActionsService(ctx, autoscalingRunnerSet)
-	if err != nil {
+	switch {
+	case errors.Is(err, secretresolver.ErrNotFound):
+		// A secret or config map the client is built from is gone, from Kubernetes or the vault. Retrying cannot bring it back,
+		// so release the autoscaling runner set instead of leaving it stuck in Terminating.
+		logger.Error(
+			err,
+			"A secret or config map required to reach the Actions service no longer exists in Kubernetes or the configured vault. The runner scale set cannot be deregistered and must be deleted manually from the Actions service",
+			"runnerScaleSetId", runnerScaleSetID,
+		)
+		return r.removeRunnerScaleSetIDAnnotation(ctx, autoscalingRunnerSet, runnerScaleSetID, logger)
+	case err != nil:
 		logger.Error(err, "Failed to initialize Actions service client for updating a existing runner scale set")
 		return err
 	}
@@ -1231,15 +1249,23 @@ func (r *AutoscalingRunnerSetReconciler) deleteRunnerScaleSet(ctx context.Contex
 		return err
 	}
 
-	original := autoscalingRunnerSet.DeepCopy()
-	delete(autoscalingRunnerSet.Annotations, runnerScaleSetIDAnnotationKey)
-
-	if err := r.Patch(ctx, autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
-		logger.Error(err, "Failed to remove runner scale set ID annotation after deleting the runner scale set", "runnerScaleSetId", runnerScaleSetID)
+	if err := r.removeRunnerScaleSetIDAnnotation(ctx, autoscalingRunnerSet, runnerScaleSetID, logger); err != nil {
 		return err
 	}
 
 	logger.Info("Deleted the runner scale set from Actions service")
+	return nil
+}
+
+func (r *AutoscalingRunnerSetReconciler) removeRunnerScaleSetIDAnnotation(ctx context.Context, autoscalingRunnerSet *v1alpha1.AutoscalingRunnerSet, runnerScaleSetID int, logger logr.Logger) error {
+	original := autoscalingRunnerSet.DeepCopy()
+	delete(autoscalingRunnerSet.Annotations, runnerScaleSetIDAnnotationKey)
+
+	if err := r.Patch(ctx, autoscalingRunnerSet, client.MergeFrom(original)); err != nil {
+		logger.Error(err, "Failed to remove runner scale set ID annotation", "runnerScaleSetId", runnerScaleSetID)
+		return err
+	}
+
 	return nil
 }
 

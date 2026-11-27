@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -108,7 +109,6 @@ func run(ctx context.Context, config *config.Config) error {
 	}
 
 	scaler, err := scaler.New(
-		sessionClient,
 		scaler.Config{
 			EphemeralRunnerSetNamespace: config.EphemeralRunnerSetNamespace,
 			EphemeralRunnerSetName:      config.EphemeralRunnerSetName,
@@ -116,17 +116,15 @@ func run(ctx context.Context, config *config.Config) error {
 			MinRunners:                  config.MinRunners,
 			ScalerConfig:                config.ListenerConfig.GetScaler(),
 		},
+		sessionClient,
+		metricsExporter,
 		scaler.WithLogger(logger.With("component", "worker")),
-		scaler.WithMetrics(metricsExporter),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create new kubernetes worker: %w", err)
 	}
 
-	// The scaler patches job started events in the background, after the listener
-	// has already acked the message they arrived on. Draining them on the way out
-	// keeps a clean shutdown from stranding job information the service believes
-	// was recorded.
+	// Drain acknowledged job events before the listener exits.
 	defer func() {
 		drainCtx, cancelDrain := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancelDrain()
@@ -142,6 +140,9 @@ func run(ctx context.Context, config *config.Config) error {
 		logger.Info("Starting listener")
 		listnerErr := listener.Run(ctx, scaler)
 		cancelMetrics(fmt.Errorf("listener exited: %w", listnerErr))
+		if ctx.Err() != nil && errors.Is(listnerErr, context.Canceled) {
+			return nil
+		}
 		return listnerErr
 	})
 

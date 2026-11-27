@@ -17,13 +17,6 @@ const (
 	EnvVarRunnerDeprecatedExitCode = "ACTIONS_RUNNER_RETURN_VERSION_DEPRECATED_EXIT_CODE"
 )
 
-// Environment variable names used to set proxy variables for containers
-const (
-	EnvVarHTTPProxy  = "http_proxy"
-	EnvVarHTTPSProxy = "https_proxy"
-	EnvVarNoProxy    = "no_proxy"
-)
-
 // Labels applied to resources
 const (
 	// Kubernetes labels
@@ -105,7 +98,4 @@ const resourceOwnerKey = ".metadata.controller"
 const autoscalingRunnerSetOwnerKey = ".spec.autoscalingRunnerSet"
 
 // EphemeralRunner pod creation failure reasons
-const (
-	ReasonTooManyPodFailures = "TooManyPodFailures"
-	ReasonInvalidPodFailure  = "InvalidPod"
-)
+const ReasonInvalidPodFailure = "InvalidPod"

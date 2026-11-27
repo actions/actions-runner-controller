@@ -25,6 +25,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/actions/actions-runner-controller/apis/actions.github.com/v1alpha1"
@@ -32,6 +33,7 @@ import (
 	"github.com/actions/scaleset"
 	"github.com/go-logr/logr"
 	"go.uber.org/multierr"
+	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -47,7 +49,38 @@ import (
 const (
 	// EphemeralRunnerSetFinalizerName is the finalizer name used in EphemeralRunnerSet resource to protect the cleanup process of the child ephemeral runners and proxy secret.
 	EphemeralRunnerSetFinalizerName = "ephemeralrunnerset.actions.github.com/finalizer"
+
+	// runnerBatchConcurrency is how many runners of a single EphemeralRunnerSet
+	// are created or deleted at the same time.
+	//
+	// A set reconciles as one object, and controller-runtime serialises
+	// reconciles per object, so every runner a burst of jobs asks for is created
+	// by one reconcile and every finished runner it leaves behind is deleted by
+	// one reconcile. Done one at a time, the round trip to the API server is
+	// paid once per runner in sequence, and the last runner of a scale up waits
+	// for all the ones before it. The requests are independent, so they are
+	// issued in a batch instead.
+	//
+	// The bound exists because these are writes, and an unbounded fan-out would
+	// hand the whole burst to the client rate limiter at once, where it would
+	// queue in front of the reconciles of every other controller rather than in
+	// front of itself.
+	runnerBatchConcurrency = 8
 )
+
+// unrecordedRunnerIDGracePeriod is how long cleanup and scale down wait for a
+// runner to record its runner ID before deleting it without one.
+//
+// The runner controller records the ID only once the pod reports the runner
+// container, so for a moment a runner can be executing a job while its status
+// still says 0, and 0 is not a registration the service can be asked about.
+// Cleanup and scale down leave such a runner until the ID is recorded, which
+// updates the runner and so reconciles the set again, and then treat it like
+// any other. A runner that goes on without one usually cannot register or its
+// pod cannot start, for instance because it cannot be scheduled, and waiting
+// on it forever would strand its pod and registration. It is deleted instead,
+// and finalizing it asks the service before a live pod goes.
+var unrecordedRunnerIDGracePeriod = time.Minute
 
 // EphemeralRunnerSetReconciler reconciles a EphemeralRunnerSet object
 type EphemeralRunnerSetReconciler struct {
@@ -81,8 +114,11 @@ type EphemeralRunnerSetReconciler struct {
 // risk the same issue of patching the status. Responsibility of this controller should only
 // be to bring the count of EphemeralRunners to the desired one, not to patch this resource
 // until it is safe to do so
-func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	log := r.Log.WithValues("ephemeralrunnerset", req.NamespacedName)
+	defer func() {
+		result, err = requeueOnRateLimit(ctx, result, err, log)
+	}()
 
 	var ephemeralRunnerSet v1alpha1.EphemeralRunnerSet
 	if err := r.Get(ctx, req.NamespacedName, &ephemeralRunnerSet); err != nil {
@@ -97,14 +133,14 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 
 		log.Info("Deleting resources")
-		done, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log)
+		done, requeueAfter, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log)
 		if err != nil {
 			log.Error(err, "Failed to clean up EphemeralRunners")
 			return ctrl.Result{}, err
 		}
 		if !done {
 			log.Info("Waiting for resources to be deleted")
-			return ctrl.Result{}, nil
+			return ctrl.Result{RequeueAfter: requeueAfter}, nil
 		}
 
 		done, err = r.cleanUpEphemeralRunnerSetProxySecret(ctx, &ephemeralRunnerSet, log)
@@ -152,7 +188,8 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 			"specActionableRevision", ephemeralRunnerSet.Spec.ActionableRevision,
 			"statusAppliedActionableRevision", ephemeralRunnerSet.Status.AppliedActionableRevision,
 		)
-		if _, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log); err != nil {
+		_, requeueAfter, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log)
+		if err != nil {
 			log.Error(err, "Failed to clean up EphemeralRunners")
 			return ctrl.Result{}, err
 		}
@@ -160,6 +197,13 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		if _, _, err := r.reconcileEphemeralRunnerSetProxySecret(ctx, &ephemeralRunnerSet, log); err != nil {
 			log.Error(err, "Failed to update EphemeralRunnerSet proxy secret")
 			return ctrl.Result{}, err
+		}
+
+		// A runner left to record its runner ID is still built from the previous
+		// spec, and nothing revisits it once the applied revision catches up.
+		if requeueAfter > 0 {
+			log.Info("Waiting for ephemeral runners to record their runner ID before marking the new spec applied", "requeueAfter", requeueAfter)
+			return ctrl.Result{RequeueAfter: requeueAfter}, nil
 		}
 
 		if err := r.patchAppliedActionableRevisionStatus(ctx, req.NamespacedName, ephemeralRunnerSet.Spec.ActionableRevision); err != nil {
@@ -172,22 +216,22 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	if ephemeralRunnerSet.Status.Phase == v1alpha1.EphemeralRunnerSetPhaseOutdated {
-		if _, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log); err != nil {
+		_, requeueAfter, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log)
+		if err != nil {
 			log.Error(err, "Failed to clean up EphemeralRunners")
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{RequeueAfter: requeueAfter}, nil
 	}
 
-	// Create or update proxy secret if needed
-	if _, updated, err := r.reconcileEphemeralRunnerSetProxySecret(ctx, &ephemeralRunnerSet, log); err != nil {
+	// Create or update proxy secret if needed. Secrets are not watched and
+	// runners only reference the proxy secret by name, so carry on in the same
+	// reconcile after writing it instead of delaying the scaling below.
+	if _, _, err := r.reconcileEphemeralRunnerSetProxySecret(ctx, &ephemeralRunnerSet, log); err != nil {
 		log.Error(err, "Unable to reconcile ephemeralRunnerSet proxy secret", "namespace", ephemeralRunnerSet.Namespace, "name", proxyEphemeralRunnerSetSecretName(&ephemeralRunnerSet))
 		return ctrl.Result{}, err
-	} else if updated {
-		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 	}
 
-	// Find all EphemeralRunner with matching namespace and own by this EphemeralRunnerSet.
 	var ephemeralRunnerList v1alpha1.EphemeralRunnerList
 	if err := r.List(
 		ctx,
@@ -258,15 +302,17 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 			return ctrl.Result{}, err
 		}
 
-		if _, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log); err != nil {
+		_, requeueAfter, err := r.cleanUpEphemeralRunners(ctx, &ephemeralRunnerSet, log)
+		if err != nil {
 			log.Error(err, "Failed to clean up EphemeralRunners")
 			return ctrl.Result{}, err
 		}
 
-		return ctrl.Result{}, nil
+		return ctrl.Result{RequeueAfter: requeueAfter}, nil
 	}
 
 	total := ephemeralRunnersByState.scaleTotal()
+	var requeueAfter time.Duration
 	if ephemeralRunnerSet.Spec.PatchID == 0 || ephemeralRunnerSet.Spec.PatchID != ephemeralRunnersByState.latestPatchID {
 		// Spec.Replicas is the count the listener asked for when it published
 		// Spec.PatchID. Deleting finished runners here changes the live count that
@@ -325,21 +371,23 @@ func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.R
 		case ephemeralRunnerSet.Spec.PatchID == 0 && total > ephemeralRunnerSet.Spec.Replicas:
 			count := total - ephemeralRunnerSet.Spec.Replicas
 			log.Info("Deleting ephemeral runners (scale down)", "count", count)
-			if err := r.deleteIdleEphemeralRunners(
+			wait, err := r.deleteIdleEphemeralRunners(
 				ctx,
 				&ephemeralRunnerSet,
 				ephemeralRunnersByState.pending,
 				ephemeralRunnersByState.running,
 				count,
 				log,
-			); err != nil {
+			)
+			if err != nil {
 				log.Error(err, "failed to delete idle runners")
 				return ctrl.Result{}, err
 			}
+			requeueAfter = wait
 		}
 	}
 
-	return ctrl.Result{}, r.updateStatus(ctx, &ephemeralRunnerSet, ephemeralRunnersByState, log)
+	return ctrl.Result{RequeueAfter: requeueAfter}, r.updateStatus(ctx, &ephemeralRunnerSet, ephemeralRunnersByState, log)
 }
 
 // patchAppliedActionableRevisionStatus brings status into line with the runner
@@ -650,16 +698,40 @@ func (r *EphemeralRunnerSetReconciler) updateStatus(ctx context.Context, ephemer
 
 // deleteTerminatedEphemeralRunners deletes runners that have reached a terminal
 // state and are no longer useful, so that the scaling logic can replace them.
+//
+// The deletions are issued in a batch. Each one is an independent request, and
+// the pods they release are what the jobs waiting behind them need, so there is
+// nothing to be gained by making the hundredth runner of a burst wait for the
+// ninety-nine round trips before it.
 func (r *EphemeralRunnerSetReconciler) deleteTerminatedEphemeralRunners(ctx context.Context, ephemeralRunners []*v1alpha1.EphemeralRunner, log logr.Logger) error {
+	return r.deleteEphemeralRunnersInBatches(ctx, ephemeralRunners, log)
+}
+
+// deleteEphemeralRunnersInBatches deletes the given runners with a bounded
+// number of requests in flight, and reports every failure rather than the first.
+func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunnersInBatches(ctx context.Context, ephemeralRunners []*v1alpha1.EphemeralRunner, log logr.Logger) error {
+	if len(ephemeralRunners) == 0 {
+		return nil
+	}
+
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(runnerBatchConcurrency)
+
+	var mu sync.Mutex
 	var errs []error
 	for i := range ephemeralRunners {
-		log.Info("Deleting terminated ephemeral runner", "name", ephemeralRunners[i].Name, "phase", ephemeralRunners[i].Status.Phase)
-		if err := r.Delete(ctx, ephemeralRunners[i]); err != nil {
-			if !kerrors.IsNotFound(err) {
+		ephemeralRunner := ephemeralRunners[i]
+		g.Go(func() error {
+			log.Info("Deleting terminated ephemeral runner", "name", ephemeralRunner.Name, "phase", ephemeralRunner.Status.Phase)
+			if err := r.Delete(ctx, ephemeralRunner); err != nil && !kerrors.IsNotFound(err) {
+				mu.Lock()
 				errs = append(errs, err)
+				mu.Unlock()
 			}
-		}
+			return nil
+		})
 	}
+	_ = g.Wait()
 
 	return multierr.Combine(errs...)
 }
@@ -683,21 +755,28 @@ func (r *EphemeralRunnerSetReconciler) cleanUpProxySecret(ctx context.Context, e
 	return nil
 }
 
-func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) (bool, error) {
+// cleanUpEphemeralRunners deletes the runners of the set except registered
+// runners with reported jobs, reporting whether none are left. A runner whose
+// ID remains unrecorded past the grace period relies on its finalizer to
+// protect a live pod.
+//
+// A positive requeueAfter means runners that have not recorded their runner ID
+// were left alone, and is when the first of them has waited long enough to be
+// deleted without one. See unrecordedRunnerIDGracePeriod.
+func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) (done bool, requeueAfter time.Duration, err error) {
 	ephemeralRunnerList := new(v1alpha1.EphemeralRunnerList)
-	err := r.List(ctx, ephemeralRunnerList, client.InNamespace(ephemeralRunnerSet.Namespace), client.MatchingFields{resourceOwnerKey: ephemeralRunnerSet.Name})
-	if err != nil {
-		return false, fmt.Errorf("failed to list child ephemeral runners: %w", err)
+	if err := r.List(ctx, ephemeralRunnerList, client.InNamespace(ephemeralRunnerSet.Namespace), client.MatchingFields{resourceOwnerKey: ephemeralRunnerSet.Name}); err != nil {
+		return false, 0, fmt.Errorf("failed to list child ephemeral runners: %w", err)
 	}
 
 	// only if there are no ephemeral runners left, return true
 	if len(ephemeralRunnerList.Items) == 0 {
 		err := r.cleanUpProxySecret(ctx, ephemeralRunnerSet, log)
 		if err != nil {
-			return false, err
+			return false, 0, err
 		}
 		log.Info("All ephemeral runners are deleted")
-		return true, nil
+		return true, 0, nil
 	}
 
 	ephemeralRunnerState := newEphemeralRunnersByStates(ephemeralRunnerList, ephemeralRunnerSet.Status.AppliedActionableRevision)
@@ -713,41 +792,48 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 	)
 
 	log.Info("Cleanup terminated ephemeral runners")
-	var errs []error
-	for _, ephemeralRunner := range ephemeralRunnerState.terminated() {
-		log.Info("Deleting ephemeral runner", "name", ephemeralRunner.Name)
-		if err := r.Delete(ctx, ephemeralRunner); err != nil && !kerrors.IsNotFound(err) {
-			errs = append(errs, err)
-		}
-	}
-
-	if len(errs) > 0 {
-		mergedErrs := multierr.Combine(errs...)
-		log.Error(mergedErrs, "Failed to delete ephemeral runners")
-		return false, mergedErrs
+	if err := r.deleteEphemeralRunnersInBatches(ctx, ephemeralRunnerState.terminated(), log); err != nil {
+		log.Error(err, "Failed to delete ephemeral runners")
+		return false, 0, err
 	}
 
 	// avoid fetching the client if we have nothing left to do
 	if len(ephemeralRunnerState.running) == 0 && len(ephemeralRunnerState.pending) == 0 {
-		return false, nil
+		return false, 0, nil
 	}
 
-	actionsClient, err := r.GetActionsService(ctx, ephemeralRunnerSet)
-	if err != nil {
-		return false, err
-	}
-
-	log.Info("Cleanup pending or running ephemeral runners")
-	errs = errs[0:0]
-	for _, ephemeralRunner := range ephemeralRunnerState.pending {
-		log.Info("Removing the ephemeral runner from the service", "name", ephemeralRunner.Name)
-		_, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
-		if err != nil {
-			errs = append(errs, err)
+	getActionsClient := sync.OnceValues(func() (multiclient.Client, error) {
+		return r.GetActionsService(ctx, ephemeralRunnerSet)
+	})
+	deleteRunner := func(ephemeralRunner *v1alpha1.EphemeralRunner) error {
+		var actionsClient multiclient.Client
+		if ephemeralRunner.Status.RunnerID > 0 {
+			var err error
+			actionsClient, err = getActionsClient()
+			if err != nil {
+				return err
+			}
 		}
+		_, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
+		return err
 	}
 
-	for _, ephemeralRunner := range ephemeralRunnerState.running {
+	now := time.Now()
+	waitForRunnerID := func(ephemeralRunner *v1alpha1.EphemeralRunner) bool {
+		wait := unrecordedRunnerIDWait(ephemeralRunner, now)
+		if wait <= 0 {
+			return false
+		}
+		log.Info("Skipping ephemeral runner since its runner ID is not recorded yet", "name", ephemeralRunner.Name, "retryAfter", wait)
+		if requeueAfter == 0 || wait < requeueAfter {
+			requeueAfter = wait
+		}
+		return true
+	}
+
+	var errs []error
+	log.Info("Cleanup pending or running ephemeral runners")
+	for _, ephemeralRunner := range ephemeralRunnerState.pending {
 		if ephemeralRunner.HasJob() {
 			log.Info(
 				"Skipping ephemeral runner since it is running a job",
@@ -757,21 +843,60 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 			)
 			continue
 		}
+		if waitForRunnerID(ephemeralRunner) {
+			continue
+		}
 
-		log.Info("Removing the idle ephemeral runner from the service", "name", ephemeralRunner.Name)
-		_, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
-		if err != nil {
+		log.Info("Cleaning up the ephemeral runner", "name", ephemeralRunner.Name)
+		if err := deleteRunner(ephemeralRunner); err != nil {
 			errs = append(errs, err)
+			var rateLimit *scaleset.RateLimitError
+			if errors.As(err, &rateLimit) {
+				return false, 0, multierr.Combine(errs...)
+			}
+		}
+	}
+
+	for _, ephemeralRunner := range ephemeralRunnerState.running {
+		if waitForRunnerID(ephemeralRunner) {
+			continue
+		}
+		if ephemeralRunner.Status.RunnerID > 0 && ephemeralRunner.HasJob() {
+			log.Info(
+				"Skipping ephemeral runner since it is running a job",
+				"name", ephemeralRunner.Name,
+				"workflowRunId", ephemeralRunner.Status.WorkflowRunID,
+				"jobId", ephemeralRunner.Status.JobID,
+			)
+			continue
+		}
+
+		log.Info("Cleaning up the ephemeral runner", "name", ephemeralRunner.Name)
+		if err := deleteRunner(ephemeralRunner); err != nil {
+			errs = append(errs, err)
+			var rateLimit *scaleset.RateLimitError
+			if errors.As(err, &rateLimit) {
+				return false, 0, multierr.Combine(errs...)
+			}
 		}
 	}
 
 	if len(errs) > 0 {
 		mergedErrs := multierr.Combine(errs...)
 		log.Error(mergedErrs, "Failed to remove ephemeral runners from the service")
-		return false, mergedErrs
+		return false, 0, mergedErrs
 	}
 
-	return false, nil
+	return false, requeueAfter, nil
+}
+
+// unrecordedRunnerIDWait reports how much longer cleanup leaves a runner alone
+// for it to record its runner ID, or 0 if it does not.
+func unrecordedRunnerIDWait(ephemeralRunner *v1alpha1.EphemeralRunner, now time.Time) time.Duration {
+	if ephemeralRunner.Status.RunnerID != 0 {
+		return 0
+	}
+	return max(ephemeralRunner.CreationTimestamp.Add(unrecordedRunnerIDGracePeriod).Sub(now), 0)
 }
 
 func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunnerSetProxySecret(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, log logr.Logger) (done bool, err error) {
@@ -878,29 +1003,52 @@ func (r *EphemeralRunnerSetReconciler) reconcileEphemeralRunnerSetProxySecret(ct
 }
 
 // createEphemeralRunners provisions `count` number of v1alpha1.EphemeralRunner resources in the cluster.
+//
+// The creations are issued in a batch for the same reason the deletions are:
+// they are independent of one another, they all belong to one reconcile of one
+// object, and a job waiting for the last runner of a scale up should not also
+// be waiting for the round trips of every runner created before it.
 func (r *EphemeralRunnerSetReconciler) createEphemeralRunners(ctx context.Context, runnerSet *v1alpha1.EphemeralRunnerSet, count int, log logr.Logger) error {
-	// Track multiple errors at once and return the bundle.
-	errs := make([]error, 0)
-	for i := range count {
-		ephemeralRunner, err := r.newEphemeralRunner(runnerSet)
-		if err != nil {
-			log.Error(err, "failed to build ephemeral runner")
-			errs = append(errs, err)
-			continue
-		}
-		if runnerSet.Spec.EphemeralRunnerSpec.Proxy != nil {
-			ephemeralRunner.Spec.ProxySecretRef = proxyEphemeralRunnerSetSecretName(runnerSet)
-		}
-
-		log.Info("Creating new ephemeral runner", "progress", i+1, "total", count)
-		if err := r.Create(ctx, ephemeralRunner); err != nil {
-			log.Error(err, "failed to make ephemeral runner")
-			errs = append(errs, err)
-			continue
-		}
-
-		log.Info("Created new ephemeral runner", "runner", ephemeralRunner.Name)
+	if count <= 0 {
+		return nil
 	}
+
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(runnerBatchConcurrency)
+
+	// Track multiple errors at once and return the bundle.
+	var mu sync.Mutex
+	var errs []error
+	addErr := func(err error) {
+		mu.Lock()
+		errs = append(errs, err)
+		mu.Unlock()
+	}
+
+	for i := range count {
+		g.Go(func() error {
+			ephemeralRunner, err := r.newEphemeralRunner(runnerSet)
+			if err != nil {
+				log.Error(err, "failed to build ephemeral runner")
+				addErr(err)
+				return nil
+			}
+			if runnerSet.Spec.EphemeralRunnerSpec.Proxy != nil {
+				ephemeralRunner.Spec.ProxySecretRef = proxyEphemeralRunnerSetSecretName(runnerSet)
+			}
+
+			log.Info("Creating new ephemeral runner", "progress", i+1, "total", count)
+			if err := r.Create(ctx, ephemeralRunner); err != nil {
+				log.Error(err, "failed to make ephemeral runner")
+				addErr(err)
+				return nil
+			}
+
+			log.Info("Created new ephemeral runner", "runner", ephemeralRunner.Name)
+			return nil
+		})
+	}
+	_ = g.Wait()
 
 	return multierr.Combine(errs...)
 }
@@ -932,32 +1080,39 @@ func (r *EphemeralRunnerSetReconciler) createProxySecret(ctx context.Context, ep
 }
 
 // deleteIdleEphemeralRunners try to deletes `count` number of v1alpha1.EphemeralRunner resources in the cluster.
-// It will only delete `v1alpha1.EphemeralRunner` that has registered with Actions service
-// which has a `v1alpha1.EphemeralRunner.Status.RunnerId` set.
+// A runner with a `v1alpha1.EphemeralRunner.Status.RunnerId` is deleted once the Actions service removes it.
+// A runner without one waits for unrecordedRunnerIDGracePeriod and is then deleted with its
+// registration finalizer kept, so finalizing it asks the service before a live pod goes.
+// It never records one when its pod cannot start, and no update notifies the set of that,
+// so requeueAfter is when the first waiting runner is due.
 // So, it is possible that this function will not delete enough ephemeral runners
-// if there are not enough ephemeral runners that have registered with Actions service.
+// if there are not enough ephemeral runners that can be removed at this time.
 // When this happens, the next reconcile loop will try to delete the remaining ephemeral runners
 // after we get notified by any of the `v1alpha1.EphemeralRunner.Status` updates.
-func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, pendingEphemeralRunners, runningEphemeralRunners []*v1alpha1.EphemeralRunner, count int, log logr.Logger) error {
+func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Context, ephemeralRunnerSet *v1alpha1.EphemeralRunnerSet, pendingEphemeralRunners, runningEphemeralRunners []*v1alpha1.EphemeralRunner, count int, log logr.Logger) (requeueAfter time.Duration, err error) {
 	if count <= 0 {
-		return nil
+		return 0, nil
 	}
 	runners := newEphemeralRunnerStepper(pendingEphemeralRunners, runningEphemeralRunners)
 	if runners.len() == 0 {
 		log.Info("No pending or running ephemeral runners running at this time for scale down")
-		return nil
+		return 0, nil
 	}
 	actionsClient, err := r.GetActionsService(ctx, ephemeralRunnerSet)
 	if err != nil {
-		return fmt.Errorf("failed to create actions client for ephemeral runner replica set: %w", err)
+		return 0, fmt.Errorf("failed to create actions client for ephemeral runner replica set: %w", err)
 	}
 	var errs []error
 	deletedCount := 0
+	now := time.Now()
 	for runners.next() {
 		ephemeralRunner := runners.object()
 		isDone := ephemeralRunner.IsDone()
-		if !isDone && ephemeralRunner.Status.RunnerID == 0 {
-			log.Info("Skipping ephemeral runner since it is not registered yet", "name", ephemeralRunner.Name)
+		if wait := unrecordedRunnerIDWait(ephemeralRunner, now); !isDone && wait > 0 {
+			log.Info("Skipping ephemeral runner since its runner ID is not recorded yet", "name", ephemeralRunner.Name, "retryAfter", wait)
+			if requeueAfter == 0 || wait < requeueAfter {
+				requeueAfter = wait
+			}
 			continue
 		}
 
@@ -975,6 +1130,10 @@ func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Co
 		ok, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
 		if err != nil {
 			errs = append(errs, err)
+			var rateLimit *scaleset.RateLimitError
+			if errors.As(err, &rateLimit) {
+				return 0, multierr.Combine(errs...)
+			}
 		}
 		if !ok {
 			continue
@@ -982,14 +1141,49 @@ func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Co
 
 		deletedCount++
 		if deletedCount == count {
-			break
+			return 0, multierr.Combine(errs...)
 		}
 	}
 
-	return multierr.Combine(errs...)
+	return requeueAfter, multierr.Combine(errs...)
 }
 
 func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunnerWithActionsClient(ctx context.Context, ephemeralRunner *v1alpha1.EphemeralRunner, actionsClient multiclient.Client, log logr.Logger) (bool, error) {
+	if ephemeralRunner.Status.RunnerID < 0 {
+		return false, fmt.Errorf("invalid runner ID in status: %d", ephemeralRunner.Status.RunnerID)
+	}
+	if ephemeralRunner.Status.RunnerID == 0 {
+		// A zero is not a registration the service can be asked about, and the
+		// runner may already be registered and executing a job: the status
+		// records the runner ID only after the pod exists. Delete it with the
+		// registration finalizer kept, so finalizing resolves the real
+		// registration and asks the service before a live pod goes.
+		log.Info("Deleting ephemeral runner without a recorded runner ID", "name", ephemeralRunner.Name)
+		if err := r.Delete(ctx, ephemeralRunner); err != nil && !kerrors.IsNotFound(err) {
+			return false, err
+		}
+		return true, nil
+	}
+
+	// Dropping the finalizer below wakes the next reconcile, which can run before
+	// the cache has seen the deletion that follows it. Read past the cache so a
+	// runner already on its way out is not removed from the service again.
+	reader := r.APIReader
+	if reader == nil {
+		reader = r.Client
+	}
+	var latest v1alpha1.EphemeralRunner
+	if err := reader.Get(ctx, client.ObjectKeyFromObject(ephemeralRunner), &latest); err != nil {
+		if kerrors.IsNotFound(err) {
+			return true, nil
+		}
+		return false, fmt.Errorf("failed to get the latest ephemeral runner: %w", err)
+	}
+	if !latest.DeletionTimestamp.IsZero() {
+		log.Info("Ephemeral runner is already being deleted, skipping its removal from the service", "name", ephemeralRunner.Name, "runnerId", ephemeralRunner.Status.RunnerID)
+		return true, nil
+	}
+
 	if err := actionsClient.RemoveRunner(ctx, int64(ephemeralRunner.Status.RunnerID)); err != nil {
 		switch {
 		case errors.Is(err, scaleset.JobStillRunningError):

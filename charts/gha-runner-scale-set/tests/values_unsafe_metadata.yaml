@@ -1,0 +1,9 @@
+githubConfigUrl: https://github.com/actions
+githubConfigSecret:
+  github_token: gh_token12345
+controllerServiceAccount:
+  name: arc
+  namespace: arc-system
+
+annotations:
+  unsafe-integer: 9007199254740993

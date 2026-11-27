@@ -110,23 +110,29 @@ func newUnregistrationTestRunner(name string, runnerID int, phase v1alpha1.Ephem
 }
 
 // TestRunnerSelfDeregistered pins the decision the whole change rests on: a
-// runner that exited with code 0 is not asked to be removed from the service.
+// runner that exited with code 0 after running a job is not asked to be removed
+// from the service, and every other runner is.
 func TestRunnerSelfDeregistered(t *testing.T) {
 	tt := map[string]struct {
-		phase v1alpha1.EphemeralRunnerPhase
-		want  bool
+		phase  v1alpha1.EphemeralRunnerPhase
+		hasJob bool
+		want   bool
 	}{
-		"succeeded runner deregistered itself":    {phase: v1alpha1.EphemeralRunnerPhaseSucceeded, want: true},
-		"running runner never got to deregister":  {phase: v1alpha1.EphemeralRunnerPhaseRunning, want: false},
-		"pending runner is registered but idle":   {phase: v1alpha1.EphemeralRunnerPhasePending, want: false},
-		"failed runner never got to deregister":   {phase: v1alpha1.EphemeralRunnerPhaseFailed, want: false},
-		"outdated runner never got to deregister": {phase: v1alpha1.EphemeralRunnerPhaseOutdated, want: false},
-		"runner with no phase yet":                {want: false},
+		"succeeded runner with a job deregistered itself":    {phase: v1alpha1.EphemeralRunnerPhaseSucceeded, hasJob: true, want: true},
+		"succeeded runner without a job is still registered": {phase: v1alpha1.EphemeralRunnerPhaseSucceeded, want: false},
+		"running runner never got to deregister":             {phase: v1alpha1.EphemeralRunnerPhaseRunning, hasJob: true, want: false},
+		"pending runner is registered but idle":              {phase: v1alpha1.EphemeralRunnerPhasePending, want: false},
+		"failed runner never got to deregister":              {phase: v1alpha1.EphemeralRunnerPhaseFailed, hasJob: true, want: false},
+		"outdated runner never got to deregister":            {phase: v1alpha1.EphemeralRunnerPhaseOutdated, want: false},
+		"runner with no phase yet":                           {want: false},
 	}
 
 	for name, tc := range tt {
 		t.Run(name, func(t *testing.T) {
 			runner := newUnregistrationTestRunner("test-runner", 1, tc.phase)
+			if tc.hasJob {
+				runner.Status.JobID = "job-id"
+			}
 			assert.Equal(t, tc.want, runnerSelfDeregistered(runner))
 		})
 	}
@@ -145,6 +151,10 @@ func TestRegisteredRunnerID(t *testing.T) {
 		"runner reports its own ID": {
 			runnerID: 1,
 			want:     1,
+		},
+		"negative status ID is not a registration": {
+			runnerID: -1,
+			wantErr:  true,
 		},
 		"the status is preferred over the secret": {
 			runnerID: 1,
@@ -182,13 +192,39 @@ func TestRegisteredRunnerID(t *testing.T) {
 			)),
 			wantErr: true,
 		},
+		"matching registration has a zero ID": {
+			actionsClient: fake.NewClient(fake.WithGetRunnerByName(
+				&scaleset.RunnerReference{RunnerScaleSetID: 1},
+				nil,
+			)),
+			wantErr: true,
+		},
+		"matching registration has a negative ID": {
+			actionsClient: fake.NewClient(fake.WithGetRunnerByName(
+				&scaleset.RunnerReference{ID: -1, RunnerScaleSetID: 1},
+				nil,
+			)),
+			wantErr: true,
+		},
 		"runner whose Actions client cannot be resolved": {
 			actionsErr: errors.New("configuration cannot be read"),
 			wantErr:    true,
 		},
 		"runner whose secret cannot name a registration": {
-			secret: map[string][]byte{"runnerId": []byte("not-a-number")},
-			want:   0,
+			secret:  map[string][]byte{"runnerId": []byte("not-a-number")},
+			wantErr: true,
+		},
+		"runner whose secret has no ID": {
+			secret:  map[string][]byte{},
+			wantErr: true,
+		},
+		"runner whose secret has a zero ID": {
+			secret:  map[string][]byte{"runnerId": []byte("0")},
+			wantErr: true,
+		},
+		"runner whose secret has a negative ID": {
+			secret:  map[string][]byte{"runnerId": []byte("-1")},
+			wantErr: true,
 		},
 		// An unreadable secret is not an answer. Reporting 0 would drop the
 		// finalizer and lose the last record of a registration that may exist.
@@ -234,7 +270,9 @@ func TestRegisteredRunnerID(t *testing.T) {
 					SecretResolver: &stubSecretResolver{client: tc.actionsClient, err: tc.actionsErr},
 				},
 			}
-			runnerID, err := reconciler.registeredRunnerID(t.Context(), runner, logr.Discard())
+			runnerID, err := reconciler.registeredRunnerID(t.Context(), runner, func() (multiclient.Client, error) {
+				return reconciler.GetActionsService(t.Context(), runner)
+			}, logr.Discard())
 			if tc.wantErr {
 				require.Error(t, err)
 				return

@@ -35,7 +35,7 @@ func (t Transport) log(req *http.Request, resp *http.Response) {
 		return
 	}
 
-	var args []interface{}
+	var args []any
 
 	marked := resp.Header.Get(httpcache.XFromCache) == "1"
 
