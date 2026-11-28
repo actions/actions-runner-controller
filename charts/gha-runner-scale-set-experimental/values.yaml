@@ -42,6 +42,7 @@ secretResolution:
   # Available values:
   # - "kubernetes" - use Kubernetes secrets
   # - "azureKeyVault" - use Azure Key Vault (rendered as the API type "azure_key_vault")
+  # - "gcpSecretManager" - use Google Cloud Secret Manager (rendered as the API type "gcp_secret_manager")
   type: "kubernetes"
   ## Proxy settings when type is NOT "kubernetes"
   # proxy:
@@ -64,6 +65,18 @@ secretResolution:
   #   clientId: ""
   #   tenantId: ""
   #   certificatePath: ""
+
+  ## Configuration for Google Cloud Secret Manager integration.
+  ## auth.secretName is used as the Secret Manager secret ID. The secret payload is a JSON
+  ## document with github_app_id, github_app_installation_id and github_app_private_key,
+  ## or github_token.
+  ## Authentication uses Google Application Default Credentials, e.g. Workload Identity
+  ## Federation for GKE: grant the controller and listener Kubernetes service accounts
+  ## roles/secretmanager.secretAccessor on the secret.
+  # gcpSecretManager:
+  #   projectId: ""
+  #   # Optional, defaults to "latest"
+  #   version: ""
 
 ## Proxy can be used to define proxy settings that will be used by the
 ## controller, the listener and the runner of this scale set.

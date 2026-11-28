@@ -121,3 +121,71 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: "secretResolution.azureKeyVault.secretKey is not supported; use auth.secretName to select the vault secret"
+
+  - it: should render gcpSecretManager vaultConfig when configured
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.secretName: "gha-runners-app"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      secretResolution:
+        type: gcpSecretManager
+        gcpSecretManager:
+          projectId: "my-project"
+          version: "3"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.vaultConfig.type
+          value: gcp_secret_manager
+      - equal:
+          path: spec.githubConfigSecret
+          value: gha-runners-app
+      - equal:
+          path: spec.vaultConfig.gcpSecretManager.projectId
+          value: "my-project"
+      - equal:
+          path: spec.vaultConfig.gcpSecretManager.version
+          value: "3"
+      - notExists:
+          path: spec.vaultConfig.azureKeyVault
+
+  - it: should omit gcpSecretManager version when not set
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.secretName: "gha-runners-app"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      secretResolution:
+        type: gcpSecretManager
+        gcpSecretManager:
+          projectId: "my-project"
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - equal:
+          path: spec.vaultConfig.gcpSecretManager.projectId
+          value: "my-project"
+      - notExists:
+          path: spec.vaultConfig.gcpSecretManager.version
+
+  - it: should fail when gcpSecretManager.projectId is missing
+    set:
+      scaleset.name: "test"
+      auth.url: "https://github.com/org"
+      auth.secretName: "gha-runners-app"
+      controllerServiceAccount.name: "arc"
+      controllerServiceAccount.namespace: "arc-system"
+      secretResolution:
+        type: gcpSecretManager
+    release:
+      name: "test-name"
+      namespace: "test-namespace"
+    asserts:
+      - failedTemplate:
+          errorMessage: "secretResolution.gcpSecretManager.projectId is required when secretResolution.type is gcpSecretManager"

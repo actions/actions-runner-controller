@@ -17179,6 +17179,21 @@ spec:
                         - tenantId
                         - url
                       type: object
+                    gcpSecretManager:
+                      description: |-
+                        GCPSecretManagerConfig configures Google Cloud Secret Manager as the vault.
+                        The GitHub config secret name is used as the Secret Manager secret ID.
+                        Authentication uses Google Application Default Credentials, e.g. Workload Identity Federation for GKE.
+                      properties:
+                        projectId:
+                          description: ProjectID is the Google Cloud project ID or number that owns the secret.
+                          type: string
+                        version:
+                          description: Version is the secret version to access. Defaults to "latest".
+                          type: string
+                      required:
+                        - projectId
+                      type: object
                     proxy:
                       properties:
                         http:
