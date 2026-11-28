@@ -114,8 +114,11 @@ type EphemeralRunnerSetReconciler struct {
 // risk the same issue of patching the status. Responsibility of this controller should only
 // be to bring the count of EphemeralRunners to the desired one, not to patch this resource
 // until it is safe to do so
-func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *EphemeralRunnerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	log := r.Log.WithValues("ephemeralrunnerset", req.NamespacedName)
+	defer func() {
+		result, err = requeueOnRateLimit(ctx, result, err, log)
+	}()
 
 	var ephemeralRunnerSet v1alpha1.EphemeralRunnerSet
 	if err := r.Get(ctx, req.NamespacedName, &ephemeralRunnerSet); err != nil {
@@ -847,6 +850,10 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 		log.Info("Cleaning up the ephemeral runner", "name", ephemeralRunner.Name)
 		if err := deleteRunner(ephemeralRunner); err != nil {
 			errs = append(errs, err)
+			var rateLimit *scaleset.RateLimitError
+			if errors.As(err, &rateLimit) {
+				return false, 0, multierr.Combine(errs...)
+			}
 		}
 	}
 
@@ -867,6 +874,10 @@ func (r *EphemeralRunnerSetReconciler) cleanUpEphemeralRunners(ctx context.Conte
 		log.Info("Cleaning up the ephemeral runner", "name", ephemeralRunner.Name)
 		if err := deleteRunner(ephemeralRunner); err != nil {
 			errs = append(errs, err)
+			var rateLimit *scaleset.RateLimitError
+			if errors.As(err, &rateLimit) {
+				return false, 0, multierr.Combine(errs...)
+			}
 		}
 	}
 
@@ -1119,6 +1130,10 @@ func (r *EphemeralRunnerSetReconciler) deleteIdleEphemeralRunners(ctx context.Co
 		ok, err := r.deleteEphemeralRunnerWithActionsClient(ctx, ephemeralRunner, actionsClient, log)
 		if err != nil {
 			errs = append(errs, err)
+			var rateLimit *scaleset.RateLimitError
+			if errors.As(err, &rateLimit) {
+				return 0, multierr.Combine(errs...)
+			}
 		}
 		if !ok {
 			continue
@@ -1147,6 +1162,25 @@ func (r *EphemeralRunnerSetReconciler) deleteEphemeralRunnerWithActionsClient(ct
 		if err := r.Delete(ctx, ephemeralRunner); err != nil && !kerrors.IsNotFound(err) {
 			return false, err
 		}
+		return true, nil
+	}
+
+	// Dropping the finalizer below wakes the next reconcile, which can run before
+	// the cache has seen the deletion that follows it. Read past the cache so a
+	// runner already on its way out is not removed from the service again.
+	reader := r.APIReader
+	if reader == nil {
+		reader = r.Client
+	}
+	var latest v1alpha1.EphemeralRunner
+	if err := reader.Get(ctx, client.ObjectKeyFromObject(ephemeralRunner), &latest); err != nil {
+		if kerrors.IsNotFound(err) {
+			return true, nil
+		}
+		return false, fmt.Errorf("failed to get the latest ephemeral runner: %w", err)
+	}
+	if !latest.DeletionTimestamp.IsZero() {
+		log.Info("Ephemeral runner is already being deleted, skipping its removal from the service", "name", ephemeralRunner.Name, "runnerId", ephemeralRunner.Status.RunnerID)
 		return true, nil
 	}
 

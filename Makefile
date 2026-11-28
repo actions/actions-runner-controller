@@ -6,7 +6,7 @@ endif
 DOCKER_USER ?= $(shell echo ${DOCKER_IMAGE_NAME} | cut -d / -f1)
 VERSION ?= dev
 COMMIT_SHA = $(shell git rev-parse HEAD)
-RUNNER_VERSION ?= 2.337.0
+RUNNER_VERSION ?= 2.338.2
 TARGETPLATFORM ?= $(shell arch)
 RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
 RUNNER_TAG  ?= ${VERSION}
@@ -65,7 +65,7 @@ endif
 all: manager
 
 lint:
-	docker run --rm -v $(PWD):/app -w /app golangci/golangci-lint:v2.13.2 golangci-lint run
+	docker run --rm -v $(PWD):/app -w /app golangci/golangci-lint:v2.15.0 golangci-lint run
 
 GO_TEST_ARGS ?= -short
 
@@ -341,4 +341,3 @@ setup-envtest:
 		echo "Error: Failed to set up envtest binaries for version $(ENVTEST_K8S_VERSION)."; \
 		exit 1; \
 	}
-

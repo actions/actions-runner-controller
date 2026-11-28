@@ -27,7 +27,7 @@ type Scaleset struct {
 }
 
 type multiClientEntry struct {
-	client  *scaleset.Client
+	client  Client
 	rootCAs *x509.CertPool
 }
 
@@ -73,17 +73,29 @@ func (m *Scaleset) GetClientFor(ctx context.Context, opts *ClientForOptions) (Cl
 		return entry.client, nil
 	}
 
-	client, err := opts.newClient()
+	config := *opts
+	httpClient := scaleset.NewHTTPClient(scaleset.HTTPClientConfig{
+		RootCAs: config.RootCAs,
+		Proxy:   config.ProxyFunc,
+	})
+	newClient := func() (*scaleset.Client, error) {
+		return config.newClient(httpClient)
+	}
+	client, err := newClient()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new client: %w", err)
 	}
 
+	bounded := &boundedClient{
+		Client: client, newClient: newClient,
+		idle: []*scaleset.Client{client},
+	}
 	m.clients[identifier] = &multiClientEntry{
-		client:  client,
+		client:  bounded,
 		rootCAs: opts.RootCAs,
 	}
 
-	return client, nil
+	return bounded, nil
 }
 
 type ClientForOptions struct {
@@ -126,7 +138,7 @@ func (o *ClientForOptions) identifier() (string, error) {
 	return uuid.NewHash(sha256.New(), uuid.NameSpaceOID, []byte(identifier), 6).String(), nil
 }
 
-func (o *ClientForOptions) newClient() (*scaleset.Client, error) {
+func (o *ClientForOptions) newClient(httpClient scaleset.HTTPClient) (*scaleset.Client, error) {
 	systemInfo := scaleset.SystemInfo{
 		System:     "actions-runner-controller",
 		Version:    build.Version,
@@ -135,12 +147,8 @@ func (o *ClientForOptions) newClient() (*scaleset.Client, error) {
 		Subsystem:  "gha-scale-set-controller",
 	}
 
-	var options []scaleset.HTTPOption
-	if o.RootCAs != nil {
-		options = append(options, scaleset.WithRootCAs(o.RootCAs))
-	}
-	if o.ProxyFunc != nil {
-		options = append(options, scaleset.WithProxy(o.ProxyFunc))
+	options := []scaleset.HTTPOption{
+		scaleset.WithHTTPClient(httpClient),
 	}
 
 	if o.AppConfig.Token != "" {

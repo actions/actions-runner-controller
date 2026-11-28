@@ -45,7 +45,7 @@ func TestProxyConfig_ToSecret(t *testing.T) {
 	assert.Equal(t, "noproxy.example.com,noproxy2.example.com", string(result["no_proxy"]))
 }
 
-func TestProxyConfig_ProxyFunc(t *testing.T) {
+func TestProxyConfig_ToHTTPProxyConfig(t *testing.T) {
 	config := &v1alpha1.ProxyConfig{
 		HTTP: &v1alpha1.ProxyServerConfig{
 			Url:                 "http://proxy.example.com:8080",
@@ -70,8 +70,9 @@ func TestProxyConfig_ProxyFunc(t *testing.T) {
 		}, nil
 	}
 
-	result, err := config.ProxyFunc(secretFetcher)
+	proxyConfig, err := config.ToHTTPProxyConfig(secretFetcher)
 	require.NoError(t, err)
+	result := proxyConfig.ProxyFunc()
 
 	tests := []struct {
 		name string
@@ -104,7 +105,7 @@ func TestProxyConfig_ProxyFunc(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			req, err := http.NewRequest("GET", test.in, nil)
 			require.NoError(t, err)
-			u, err := result(req)
+			u, err := result(req.URL)
 			require.NoError(t, err)
 
 			if test.out == "" {

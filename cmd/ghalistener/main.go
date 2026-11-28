@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -90,14 +91,7 @@ func run(ctx context.Context, config *config.Config) error {
 		}
 	}()
 
-	var listenerOptions []listener.Option
 	if metricsExporter != nil {
-		listenerOptions = append(
-			listenerOptions,
-			listener.WithMetricsRecorder(
-				metricsExporter,
-			),
-		)
 		metricsExporter.RecordStatic(config.MinRunners, config.MaxRunners)
 	}
 
@@ -108,7 +102,6 @@ func run(ctx context.Context, config *config.Config) error {
 			MaxRunners: config.MaxRunners,
 			Logger:     logger.With("component", "listener"),
 		},
-		listenerOptions...,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create new listener: %w", err)
@@ -122,6 +115,8 @@ func run(ctx context.Context, config *config.Config) error {
 			MinRunners:                  config.MinRunners,
 			ScalerConfig:                config.ListenerConfig.GetScaler(),
 		},
+		sessionClient,
+		metricsExporter,
 		scaler.WithLogger(logger.With("component", "worker")),
 	)
 	if err != nil {
@@ -135,6 +130,9 @@ func run(ctx context.Context, config *config.Config) error {
 		logger.Info("Starting listener")
 		listnerErr := listener.Run(ctx, scaler)
 		cancelMetrics(fmt.Errorf("listener exited: %w", listnerErr))
+		if ctx.Err() != nil && errors.Is(listnerErr, context.Canceled) {
+			return nil
+		}
 		return listnerErr
 	})
 

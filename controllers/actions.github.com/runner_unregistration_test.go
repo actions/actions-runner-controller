@@ -110,23 +110,29 @@ func newUnregistrationTestRunner(name string, runnerID int, phase v1alpha1.Ephem
 }
 
 // TestRunnerSelfDeregistered pins the decision the whole change rests on: a
-// runner that exited with code 0 is not asked to be removed from the service.
+// runner that exited with code 0 after running a job is not asked to be removed
+// from the service, and every other runner is.
 func TestRunnerSelfDeregistered(t *testing.T) {
 	tt := map[string]struct {
-		phase v1alpha1.EphemeralRunnerPhase
-		want  bool
+		phase  v1alpha1.EphemeralRunnerPhase
+		hasJob bool
+		want   bool
 	}{
-		"succeeded runner deregistered itself":    {phase: v1alpha1.EphemeralRunnerPhaseSucceeded, want: true},
-		"running runner never got to deregister":  {phase: v1alpha1.EphemeralRunnerPhaseRunning, want: false},
-		"pending runner is registered but idle":   {phase: v1alpha1.EphemeralRunnerPhasePending, want: false},
-		"failed runner never got to deregister":   {phase: v1alpha1.EphemeralRunnerPhaseFailed, want: false},
-		"outdated runner never got to deregister": {phase: v1alpha1.EphemeralRunnerPhaseOutdated, want: false},
-		"runner with no phase yet":                {want: false},
+		"succeeded runner with a job deregistered itself":    {phase: v1alpha1.EphemeralRunnerPhaseSucceeded, hasJob: true, want: true},
+		"succeeded runner without a job is still registered": {phase: v1alpha1.EphemeralRunnerPhaseSucceeded, want: false},
+		"running runner never got to deregister":             {phase: v1alpha1.EphemeralRunnerPhaseRunning, hasJob: true, want: false},
+		"pending runner is registered but idle":              {phase: v1alpha1.EphemeralRunnerPhasePending, want: false},
+		"failed runner never got to deregister":              {phase: v1alpha1.EphemeralRunnerPhaseFailed, hasJob: true, want: false},
+		"outdated runner never got to deregister":            {phase: v1alpha1.EphemeralRunnerPhaseOutdated, want: false},
+		"runner with no phase yet":                           {want: false},
 	}
 
 	for name, tc := range tt {
 		t.Run(name, func(t *testing.T) {
 			runner := newUnregistrationTestRunner("test-runner", 1, tc.phase)
+			if tc.hasJob {
+				runner.Status.JobID = "job-id"
+			}
 			assert.Equal(t, tc.want, runnerSelfDeregistered(runner))
 		})
 	}

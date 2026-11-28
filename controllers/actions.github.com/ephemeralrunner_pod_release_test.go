@@ -236,6 +236,7 @@ func TestReconcileReleasesTheRunnerPodWithoutAGracePeriod(t *testing.T) {
 			Phase:      v1alpha1.EphemeralRunnerPhaseRunning,
 			RunnerID:   42,
 			RunnerName: "test-runner",
+			JobID:      "job-id",
 		},
 	}
 
